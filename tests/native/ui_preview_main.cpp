@@ -1,3 +1,8 @@
+#include "scene/ik_constraints.h"
+#include "scene/ik_effects.h"
+#include "runtime/transform_math.h"
+#include <array>
+#include <map>
 #include "mechanisms_fixture.h"
 #include "scene/physics2d_components.h"
 #include "scene/audio.h"
@@ -53,6 +58,7 @@
 #include "scene/path_follow.h"
 #include "ui_software_raster.h"
 #include "kyle_carry_project_fixture.h"
+#include "editor/editor_studio_tools.h"
 #include "core/sha256.h"
 #include "editor/editor_library.h"
 
@@ -1099,7 +1105,7 @@ int main(int argc, char **argv) {
   editor::EditorEntityId selection = editor::kInvalidEntity;
   // No synthetic scene. An optional repository-relative AEMAP uses the same
   // import contract as Android, so every hierarchy row has package geometry.
-  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4]).starts_with("library-"));
+  const bool kylePreview=argc>5&&(std::string(argv[4]).starts_with("studio-kyle")||std::string(argv[4])=="scene-kyle-menu"||std::string(argv[4])=="play-kyle-carry"||std::string(argv[4])=="play-project"||std::string(argv[4])=="import-models"||std::string(argv[4]).starts_with("library-"));
   if(argc>5&&!kylePreview) {
     std::vector<u8> bytes;renderer::MapPackageView package;
     if(!readAsset(argv[5],bytes) || !renderer::decodeMapPackage(bytes,package) ||
@@ -1155,6 +1161,167 @@ int main(int argc, char **argv) {
     session->update();state=session->screen();
     // O main aponta state.document para o documento local: ele vira uma cópia
     // do da sessão, com os mesmos ids, para hierarquia, inspector e menu.
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+  }
+  // Play do "Carregar caixa" com o Robot Kyle real por 20 s: imprime a altura
+  // da caixa, da mesa e do quadril a cada meio segundo, com o pai da caixa e
+  // o erro de quadro, para flagrar a caixa voltando pela mesa num reinício.
+  // import-models <pasta> [máximo]: importa cada FBX/GLB da pasta num projeto
+  // temporário e relata aceito/recusado com o diagnóstico (pacotes de terceiros,
+  // ex.: POLYGON Icons da Synty, antes de levar ao aparelho).
+  if(argc>5 && std::string(argv[4])=="import-models") {
+    namespace fs=std::filesystem;const fs::path dir=fs::absolute(argv[5]);const int limit=argc>6?std::atoi(argv[6]):50;
+    const auto project=fs::temp_directory_path()/("astra-import-models-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    static test::KyleStage stage;
+    fs::create_directories(project/"scenes");fs::create_directories(project/"Sources");
+    if(!session->setProjectDirectory(project.generic_string().c_str())||!stage.library()||!session->importMap(stage.draws,stage.materials,false,stage.vertices,stage.indices,0)) {std::fprintf(stderr,"projeto\n");return 1;}
+    session->setGeometryPublisher([](std::span<const u8> v,std::span<const u32> i,std::span<const renderer::MapDrawRecord> d,std::span<const renderer::MapMaterialRecord> m,std::span<const renderer::SharedAuthoringTexture>,editor::EditorSession::PublishedGeometry &published) {
+      if(!stage.library())return false;
+      const auto vb=static_cast<u32>(stage.vertices.size()/renderer::MapVertexStride),ib=static_cast<u32>(stage.indices.size()),mb=static_cast<u32>(stage.materials.size());
+      stage.vertices.insert(stage.vertices.end(),v.begin(),v.end());stage.indices.insert(stage.indices.end(),i.begin(),i.end());stage.materials.insert(stage.materials.end(),m.begin(),m.end());
+      for(auto draw:d){draw.firstIndex+=ib;draw.vertexOffset+=vb;draw.materialIndex+=mb;stage.draws.push_back(draw);}
+      published={stage.draws,stage.materials,stage.vertices,stage.indices};return true;
+    });
+    std::vector<fs::path> models;std::error_code ec;
+    for(const auto &entry:fs::recursive_directory_iterator(dir,ec)) {
+      if(!entry.is_regular_file())continue;
+      auto ext=entry.path().extension().string();for(auto &c:ext)c=static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+      if(ext==".fbx"||ext==".glb"||ext==".gltf")models.push_back(entry.path());
+    }
+    std::sort(models.begin(),models.end());if(static_cast<int>(models.size())>limit)models.resize(static_cast<usize>(limit));
+    u32 ok=0,refused=0;
+    for(const auto &path:models) {
+      std::vector<u8> bytes;if(!editor::EditorImportTransaction::read(path,bytes)) {std::fprintf(stderr,"  ? %s (leitura)\n",path.filename().string().c_str());continue;}
+      const std::string source="Sources/"+path.filename().string();
+      editor::EditorImportTransaction::write(project/source,bytes);
+      editor::EditorSession::ModelImportReport report;
+      if(session->importModel(bytes,source,{},report)) {++ok;std::fprintf(stderr,"  ok %-40s %s\n",path.filename().string().c_str(),report.diagnostic.c_str());}
+      else {++refused;std::fprintf(stderr,"  RECUSADO %-34s %s\n",path.filename().string().c_str(),report.diagnostic.c_str());}
+    }
+    std::fprintf(stderr,"modelos: %u aceitos, %u recusados de %zu\n",ok,refused,models.size());
+    session->update();state=session->screen();
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+    std::error_code rm;fs::remove_all(project,rm);
+  }
+  // play-project <dir> <personagem> [clipe] [quadros]: abre um projeto real
+  // (ex.: puxado do aparelho), toca o clipe no Play e mede, quadro a quadro, o
+  // maior giro local entre quadros de cada osso do personagem. Saltos acima de
+  // 20° num só quadro (1/60 s) são o que o olho vê como "animação quebrada".
+  if(argc>6 && std::string(argv[4])=="play-project") {
+    namespace fs=std::filesystem;const fs::path dir=fs::absolute(argv[5]);
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    if(!session->setProjectDirectory(dir.string().c_str())) {std::fprintf(stderr,"projeto: %s\n",session->screen().status.c_str());return 1;}
+    std::vector<u8> registry;editor::EditorImportTransaction::read(dir/".astra/assets.astra",registry);
+    if(registry.empty()||!session->loadAssets(std::string_view(reinterpret_cast<const char*>(registry.data()),registry.size()))) {std::fprintf(stderr,"registro de assets\n");return 1;}
+    {std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+     if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)||!session->importMap(draws,materials,false,vertices,indices,0)) {std::fprintf(stderr,"primitivas\n");return 1;}}
+    if(!session->load((dir/"scenes/editor.aescene").string().c_str(),0)) {std::fprintf(stderr,"cena: %s\n",session->screen().status.c_str());return 1;}
+    auto &graph=session->document();
+    const auto byName=[](const runtime::SceneGraph &g,std::string_view name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(const auto id:ids)if(const auto *o=g.find(id);o&&name==o->name)return id;return runtime::ObjectId{};};
+    const auto character=byName(graph,argv[6]);
+    if(!character) {std::fprintf(stderr,"personagem '%s' ausente\n",argv[6]);return 1;}
+    if(argc>7) {
+      const auto *record=session->assets().findByPath(std::string("Clipes/")+argv[7]+".aeclip");
+      if(!record) {std::fprintf(stderr,"clipe '%s' ausente no registro\n",argv[7]);return 1;}
+      auto values=*graph.find(character);
+      auto *animation=static_cast<scene::Animation*>(values.components.find(scene::Animation::descriptor)?values.components.edit(scene::Animation::descriptor):values.components.add(scene::Animation::descriptor));
+      if(!animation->contains(record->guid))animation->appendClip(record->guid);
+      animation->clip=record->guid;animation->playAutomatically=true;
+      if(!graph.applyEntityValues(character,values)) {std::fprintf(stderr,"clipe não aplicado\n");return 1;}
+    }
+    // argv[9]: componentes de IK a retirar do personagem antes do Play, por
+    // vírgula (aim, two_bone, look_at, foot, interaction), para isolar causas.
+    if(argc>9) {
+      const std::string strip=argv[9];std::vector<editor::EditorEntityId> ids;graph.collectSubtree(character,ids);u32 removed=0;
+      for(const auto id:ids) {
+        auto values=*graph.find(id);bool changed=false;
+        const auto drop=[&](const char *key,const scene::ComponentType &type){if(strip.find(key)!=std::string::npos&&values.components.find(type)){values.components.remove(type);changed=true;++removed;}};
+        drop("aim",scene::AimIk::descriptor);drop("two_bone",scene::TwoBoneIk::descriptor);drop("look_at",scene::LookAtIk::descriptor);
+        drop("foot",scene::FootGrounding::descriptor);drop("interaction",scene::InteractionSystem::descriptor);
+        if(changed)graph.applyEntityValues(id,values);
+      }
+      std::fprintf(stderr,"componentes retirados: %u (%s)\n",removed,strip.c_str());
+    }
+    if(!session->startPlay()) {std::fprintf(stderr,"PLAY: %s\n",session->screen().status.c_str());return 1;}
+    const auto &g=session->playScene().document();
+    std::vector<renderer::MapDrawState> drawsOut;
+    session->advanceClock(10);session->extractPlayMap(drawsOut);
+    std::vector<runtime::ObjectId> bones;g.collectSubtree(byName(g,argv[6]),bones);
+    std::map<runtime::ObjectId,std::array<float,4>> last;u32 jumps=0;
+    const int frames=argc>8?std::atoi(argv[8]):180;
+    for(int i=1;i<=frames;++i) {
+      session->advanceClock(10+double(i)/60.0);session->extractPlayMap(drawsOut);
+      float worst=0;const char *worstBone="";
+      for(const auto id:bones) {
+        const auto *o=g.find(id);if(!o)continue;float q[4];runtime::transformRotationQuaternion(o->transform,q);
+        if(const auto it=last.find(id);it!=last.end()) {
+          const float d=std::fabs(q[0]*it->second[0]+q[1]*it->second[1]+q[2]*it->second[2]+q[3]*it->second[3]);
+          const float deg=2*std::acos(std::min(1.f,d))*57.29578f;if(deg>worst){worst=deg;worstBone=o->name;}
+        }
+        last[id]={q[0],q[1],q[2],q[3]};
+      }
+      if(worst>20)++jumps;
+      if(i%30==0||worst>20)std::fprintf(stderr,"q=%3d t=%.2f maior giro num quadro %6.1f° (%s) erro=%s\n",i,double(i)/60.0,worst,worstBone,session->playScene().frameError().c_str());
+      // argv[10]: osso a despejar a cada quadro (rotação local em graus e posição no mundo).
+      if(argc>10) {
+        std::string list=argv[10];
+        for(usize s=0,e;s<=list.size();s=e+1) {
+          e=list.find(',',s);if(e==std::string::npos)e=list.size();const std::string name=list.substr(s,e-s);
+          if(const auto id=byName(g,name)) {
+            const auto *o=g.find(id);float m[16];runtime::worldMatrix(g,id,m);
+            std::fprintf(stderr,"  q=%3d %-28s rot(%7.2f %7.2f %7.2f) pos(%.3f %.3f %.3f) mundo(%.3f %.3f %.3f)\n",i,name.c_str(),o->transform.rotationDegrees[0],o->transform.rotationDegrees[1],o->transform.rotationDegrees[2],
+                         o->transform.position[0],o->transform.position[1],o->transform.position[2],m[12],m[13],m[14]);
+          }
+        }
+      }
+    }
+    std::fprintf(stderr,"saltos >20° num quadro: %u em %d quadros\n",jumps,frames);
+    session->update();state=session->screen();
+    document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
+  }
+  if(argc>5 && std::string(argv[4])=="play-kyle-carry") {
+    namespace fs=std::filesystem;
+    const auto out=fs::temp_directory_path()/("astra-carry-preview-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+    static editor::EditorSession *session=new editor::EditorSession();
+    session->initialize(&font,&icons);session->setSurface({0,0,float(width),float(height)},{});
+    static test::KyleStage stage;
+    if(const int code=stage.open(fs::absolute(argv[5]),out,*session)) {std::fprintf(stderr,"kyle: %d\n",code);return 1;}
+    auto &graph=session->document();std::string error;
+    if(!session->history().begin("Carregar caixa"))return 1;
+    const auto group=session->history().createEntity(graph,graph.root(),editor::EditorEntityKind::Folder,"Carregar caixa");
+    if(!group||!session->addCarrySetupInTransaction(stage.kyle,group,error)) {std::fprintf(stderr,"CARRY: %s\n",error.c_str());session->history().cancel(graph);return 1;}
+    session->history().end();
+    // argv[6]=="lookat": aplica a receita Olhar para alvo antes do Play (o
+    // projeto do aparelho tinha as duas) e mostra onde o alvo nasceu em
+    // relação à cabeça.
+    if(argc>6&&std::string(argv[6])=="lookat") {
+      std::string summary;
+      if(!editor::EditorStudio::setupCharacter(*session,stage.kyle,editor::EditorStudio::CharacterRecipe::LookAt,summary,error)) {std::fprintf(stderr,"LOOKAT: %s\n",error.c_str());return 1;}
+      std::vector<editor::EditorEntityId> ids;graph.collectSubtree(stage.kyle,ids);
+      for(const auto id:ids) {
+        const auto *o=graph.find(id);if(!o)continue;
+        const std::string name(o->name);
+        if(name=="Head"||name.rfind("Olhar",0)==0) {float m[16];runtime::worldMatrix(graph,id,m);std::fprintf(stderr,"%s: (%.3f %.3f %.3f) +Z=(%.2f %.2f %.2f)\n",name.c_str(),m[12],m[13],m[14],m[8],m[9],m[10]);}
+      }
+    }
+    if(!session->startPlay()) {std::fprintf(stderr,"PLAY: %s\n",session->screen().status.c_str());return 1;}
+    const auto &g=session->playScene().document();
+    const auto find=[&](const char *name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(const auto id:ids)if(std::string_view(g.find(id)->name)==name)return id;return runtime::ObjectId{};};
+    const auto height=[&](runtime::ObjectId id){float m[16];if(!id||!runtime::worldMatrix(g,id,m))return -99.f;return m[13];};
+    std::vector<renderer::MapDrawState> draws;
+    for(u32 i=0;i<=1200;++i) {
+      session->advanceClock(10+float(i)/60.f);session->extractPlayMap(draws);
+      if(i%30==0) {
+        const auto box=find("Caixa"),table=find("Mesa"),hip=find("Hip"),point=find("Ponto de carregar");
+        const auto *b=g.find(box);const auto *parent=b?g.find(b->parent):nullptr;
+        std::fprintf(stderr,"t=%5.1f caixa=%.3f mesa=%.3f quadril=%.3f ponto=%.3f pai=%s erro=%s\n",double(i)/60.0,height(box),height(table),height(hip),height(point),
+          parent?parent->name:"?",session->playScene().frameError().c_str());
+      }
+    }
+    session->update();state=session->screen();
     document=session->document();history=session->history();prefabPreviewAssets=session->assets();state.assetRegistry=&prefabPreviewAssets;
   }
   // Biblioteca sobre o pacote UMotion real (argv[5] = pasta UMotionExamples):

@@ -29,7 +29,11 @@ void blend1D(const std::vector<scene::AnimatorMotion> &motions,float value,std::
 // Mistura 2D (BlendSpace2D da Godot): triangulação de Delaunay dos pontos;
 // dentro de um triângulo, coordenadas baricêntricas; fora, o ponto mais
 // próximo da borda, entre os dois vértices daquela aresta.
-void blend2D(const std::vector<scene::AnimatorMotion> &motions,float x,float y,std::vector<WeightedMotion> &out);
+// Os outros modos seguem a Unity 6000.0 (2D blending): Direcional simples
+// escolhe as duas direções vizinhas e mistura o centro pela magnitude;
+// Direcional livre e Cartesiano livre usam a interpolação por bandas de
+// gradiente (Johansen) em coordenadas polares ou cartesianas.
+void blend2D(const std::vector<scene::AnimatorMotion> &motions,float x,float y,std::vector<WeightedMotion> &out,scene::AnimatorBlend2D mode=scene::AnimatorBlend2D::Triangulation);
 // Passagem pelo tempo normalizado `mark` entre dois quadros; em estado em laço
 // e marca abaixo de 1, conta a cada volta.
 bool crossed(float previous,float current,float mark,bool loop);

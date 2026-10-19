@@ -144,12 +144,80 @@ codificar.
   linha de chaves-mestras e o toque longo na chave ficam para E2; o compacto
   (< 900 px) mantém Pose/Novo no cabeçalho por não ter painel lateral.
 - E3 entregue (commit 41216ee1): Importar universal na barra, Biblioteca com
-  trilho/cartões/detalhe. "Recursos importados" (malhas do projeto) ainda é um
-  espaço à parte; a união fica para a próxima rodada.
+  trilho/cartões/detalhe. União com "Recursos importados" feita em 15/10: as
+  malhas do projeto viram cartões no trilho **Projeto** (contagem no trilho,
+  "Na cena" no canto do cartão e no detalhe, pelo mesmo widget do arrasto para
+  a cena), o item do menu Cena passa a "Malhas do projeto" e abre a Biblioteca
+  nesse trilho; a lista de texto "Adicionar malha N" foi removida. Selo
+  **origem sem registro**: um cartão de aviso por raiz importada cuja origem
+  não está em `.astra/assets.astra` (projeto copiado sem a pasta `.astra`), com
+  o diagnóstico em chips e a ação "Importar modelo".
 - Evidência: capturas do preview do host em `estudio-v2/` (studio-kyle*,
   library-*); suítes 71/71, 1569/1569, 126/126, 24/24. Sem aparelho (ADB off).
-- E2 e E4 pendentes. O modo `scene-kyle-menu` do preview mostra "Criar" em vez
-  das ações do objeto por um artefato de seleção do preview, não do editor.
+- E2 entregue: linha de chaves-mestras na metade de baixo da régua (um losango
+  por quadro com chave em qualquer trilha da camada; tocar seleciona o quadro
+  inteiro e leva o cursor; arrastar move todas as chaves do quadro com um
+  único passo de histórico; sem chave perto vale como scrub), toque longo numa
+  chave abre o menu de contexto da chave (`KeyLevel`: Tempo, Valor, Tangente,
+  Curva/Dopesheet, Copiar, Recortar, Excluir) e pinça na timeline faz zoom da
+  régua em torno do ponto médio dos dedos, cancelando o arrasto em curso; o
+  dedo que sobra não faz scrub nem arrasta chave. A faixa própria de 24 px foi
+  descartada porque roubava linhas a 394 px e esvaziava o canvas a 300 px.
+- O modo `scene-kyle-menu` do preview mostra "Criar" em vez das ações do
+  objeto por um artefato de seleção do preview, não do editor.
+
+- Caixa atravessando a mesa no reinício (visto no aparelho na primeira
+  rodada): no host, o modo `play-kyle-carry` do `aether_ui_preview` (Kyle real,
+  mesa, caixa, interação) roda 20 s de Play com a caixa parada no ponto de
+  carregar (1,094 m) desde 1,5 s, pai Robot Kyle, sem erro de quadro — o
+  carregar puro não reinicia. A reprodução fica para o aparelho com o projeto
+  real (ali havia também o clipe "Clipe" gravado no estúdio, em loop de 2 s,
+  que pode estar reposicionando o corpo a cada volta).
+
+## 7. E4 — plugins pelo filtro "só entra o que tem fluxo completo no editor"
+
+Levantamento sobre o código (15/10/2026), não sobre a lista de 11/10:
+
+| Origem | O que existe | Fluxo no editor | Decisão |
+|---|---|---|---|
+| UMotion 1.29 (N01/N02) | dopesheet, curvas, camadas, cues, pose, auto-key, chaves-mestras, menu da chave, pinça, biblioteca de poses, espelho, IK no estúdio, Fixar, Seguir, root motion, bake, GLB | completo pelo estúdio v2 | nada a acrescentar agora; "exibição de ossos" e "editar em Play" são cosméticos ou avançados e ficam fora |
+| Final IK 2.2 | 30 componentes (`astra.ik.*`: two_bone, chain, fabrik_root, look_at, aim, rotation_limit, grounder, foot_grounding, full_body, body_by_targets, finger_curl, hand_poser, offset, twist_relaxer, hit_reaction, recoil, inertia, amplifier, body_tilt, penetration_avoidance, socket, interaction_*) | só pelo Inspector › + (ossos manuais, salvo Interação, Corpo inteiro, Grounder e Apoio do pé); o assistente que monta tudo fica escondido no ⋮ do estúdio; os modelos de cena prontos só servem o manequim | **lacuna real**: não havia caminho de criação sobre o personagem do usuário |
+| BoZo 2.2 | nada nativo (só inventário) | — | fora: exige modelo/runtime modular (N05/N07/N10/N11), não é lacuna de fluxo |
+| POLYGON Icons 1.01 | 520 FBX decodificados; galeria offline | Importar › Pasta de pacote → Biblioteca › Modelos → Na cena | fluxo existe pela Biblioteca v2; galeria própria não entra |
+| VRIK | — | exige rastreamento XR | fora |
+
+Entregue: categoria **Personagem** no menu Criar (e no "+" da Hierarquia) com
+receitas sobre o personagem da seleção, resolvido pelo ancestral que carrega
+animação/Animator/sistema de corpo ou pelo objeto abaixo da raiz com esqueleto
+(sem seleção, o único esqueleto da cena): **Olhar para alvo** (LookAt na cabeça,
+alvo 2 m à frente), **Mirar com as mãos** (Aim em cada mão, alvo 1,5 m no +Z da
+mão), **Mãos ao alvo** (IK de dois ossos com alvo onde a mão está), **Pés no
+chão** (Apoio do pé por pé + Grounder com a pelve), **Corpo inteiro** (pelve,
+peito e até quatro pontas com alvos) e **Carregar caixa** (mesa, caixa com
+pegadas e interação, o mesmo do modelo de cena, numa pasta ao lado do
+personagem). Cada receita é um passo de Desfazer; a categoria fica desligada
+sem personagem; o assistente completo continua no estúdio.
+
+Referências: Unity Animation Rigging 1.3 (TwoBoneIKConstraint, MultiAimConstraint,
+Rig Builder) https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.3/manual/ConstraintComponents.html;
+Final IK 2.2 (LookAtIK, AimIK, LimbIK, Grounder, FullBodyBipedIK, InteractionSystem),
+scripts locais em `analise-plugins`; Godot 4.3 SkeletonIK3D
+https://docs.godotengine.org/en/4.3/classes/class_skeletonik3d.html e LookAtModifier3D
+https://docs.godotengine.org/en/4.3/classes/class_lookatmodifier3d.html.
+- Aparelho (code 82–85, projeto "Kyle – Carregar caixa" gerado no host): o
+  fluxo Animar → osso → chave por canal → campo → arrasto com auto-key foi
+  conferido; enquadramento de abertura passou a usar os ossos (ef01c9a0) e os
+  campos deixaram de mostrar ruído (5acdf468). Capturas `build/device-rig/v82_*`,
+  `v84_*`, `v85_*`.
+- Fechado (code 86): a malha do Kyle não aparecia nem no estúdio nem na cena
+  desse projeto. Causa: a cópia para o aparelho foi feita com `*`, que não
+  inclui `.astra/` (registro `assets.astra` + `imports/<guid>.nodes`); sem o
+  registro o guid do GLB referenciado por `astra.import.link` não resolve e o
+  app recriou o registro só com o clipe. Enviado o `.astra` e o registro
+  fundido (malha + clipe): cena e estúdio desenham o robô (`v86_scene2`,
+  `v86_studio2`). Não é defeito do editor; fica a lacuna de produto: um
+  projeto copiado sem `.astra` perde as malhas em silêncio — a Biblioteca
+  deveria acusar "origem sem registro" no cartão do modelo (próxima rodada).
 
 Referências: UMotion Pro 1.29p04 manual local (`PoseEditor`, `Animation`,
 `Channels`, `Dopesheet`, `AnimatedPropertiesList`, `Playback`); Unity 6000.0

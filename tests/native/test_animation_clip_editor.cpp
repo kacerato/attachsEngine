@@ -2,6 +2,7 @@
 #include "harness.h"
 #include "editor/editor_animation_ik.h"
 #include "editor/editor_studio_tools.h"
+#include "editor/editor_creation_catalog.h"
 #include "editor/editor_scene_template.h"
 #include "editor/editor_humanoid_bones.h"
 #include "editor/editor_umotion_import.h"
@@ -548,6 +549,78 @@ AE_TEST(animation_clip_multiple_selection_uses_real_surface_and_atomic_history) 
       clip_widget::BakeReduction,clip_widget::BakeApply,clip_widget::BakeClose})
     AE_EXPECT_TRUE(clipActionPosition(session,font,action).x>=0,"all bake actions remain reachable on 655 by 300");
   captureClipSurface(session,font,icons,"clip-bake-small.ppm");
+}
+
+// E2 do estúdio v2: chaves-mestras, toque longo na chave e pinça na régua.
+AE_TEST(animation_clip_timeline_master_keys_long_press_menu_and_pinch_zoom) {
+  using namespace editor;using namespace ui;using namespace resources;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production visual resources");
+  session.initialize(&font,&icons);session.setSurface({0,0,853,394},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  const auto owner=session.document().createEntity(session.document().root(),EditorEntityKind::Folder,"Palco");
+  AssetGuid guid;AE_EXPECT_TRUE(session.createAnimationClip(owner,2,guid,error),error.c_str());
+  const auto rotation=session.animationClipAsset(guid)->tracks[1].id;
+  AE_EXPECT_TRUE(session.editAnimationClipAsset(guid,1,[&](auto &candidate) {
+    const float a[]{0,.38268343f,0,.92387953f},b[]{0,.70710678f,0,.70710678f};
+    return candidate.putPose(rotation,.5f,a,error)&&candidate.putPose(rotation,1,b,error);
+  },error)&&session.openAnimationClip(guid,owner,error),error.c_str());session.update();
+  const auto strip=clipActionPosition(session,font,clip_widget::MasterKeys);
+  AE_EXPECT_TRUE(strip.x>=0,"master key strip is drawn above the dopesheet");
+  const auto canvas=session.layout().clipCanvas;
+  const auto &screen=session.screen();
+  const auto xAt=[&](float t){return canvas.x+(t-screen.clipStart)/(screen.clipEnd-screen.clipStart)*canvas.width;};
+  // Tocar o quadro 0.5 s na linha de chaves-mestras seleciona as quatro
+  // componentes da pose e leva o cursor até lá.
+  const UiPoint half{xAt(.5f),strip.y};
+  session.handlePointer({0,UiPointerPhase::Down,half,1});session.handlePointer({0,UiPointerPhase::Up,half,1.1});session.update();
+  AE_EXPECT_EQ(screen.clipSelection.size(),4u,"master key selects every key of the frame");
+  AE_EXPECT_TRUE(std::abs(screen.clipTime-.5f)<1e-4f,"master key seeks the frame");
+  // Arrastar a chave-mestra move o quadro inteiro, com histórico atômico.
+  const UiPoint moved{xAt(.75f),strip.y};
+  session.handlePointer({0,UiPointerPhase::Down,half,2});session.handlePointer({0,UiPointerPhase::Move,moved,2.1});session.update();
+  session.handlePointer({0,UiPointerPhase::Up,moved,2.2});session.update();
+  for(const auto &curve:session.animationClipAsset(guid)->track(rotation)->curves) {
+    bool at75=false,at50=false;
+    for(const auto &k:curve.keys) {at75|=std::abs(k.time-.75f)<1e-4f;at50|=std::abs(k.time-.5f)<1e-4f;}
+    AE_EXPECT_TRUE(at75&&!at50,"master drag moves all components of the frame together");
+  }
+  tapClipAction(session,font,clip_widget::Undo);
+  for(const auto &curve:session.animationClipAsset(guid)->track(rotation)->curves) {
+    bool at50=false;for(const auto &k:curve.keys)at50|=std::abs(k.time-.5f)<1e-4f;
+    AE_EXPECT_TRUE(at50,"one undo restores the whole frame");
+  }
+  // Toque longo numa chave da linha abre o menu da chave no ponto tocado.
+  tapClipAction(session,font,clip_widget::RowsNext);
+  const auto rowCanvas=session.layout().clipCanvas;
+  const UiPoint key{rowCanvas.x+(.5f-screen.clipStart)/(screen.clipEnd-screen.clipStart)*rowCanvas.width,rowCanvas.y+13};
+  session.handlePointer({0,UiPointerPhase::Down,key,3});session.handlePointer({0,UiPointerPhase::Up,key,3.7});session.update();
+  AE_EXPECT_TRUE(screen.contextMenu&&screen.contextMenuLevel==context_menu_widget::KeyLevel,"long press on a key opens the key menu");
+  AE_EXPECT_TRUE(screen.clipKey!=0,"the pressed key stays selected under the menu");
+  const auto tangent=clipActionPosition(session,font,clip_widget::Tangent);
+  AE_EXPECT_TRUE(tangent.x>=0,"key menu exposes the tangent action through the router");
+  session.handlePointer({0,UiPointerPhase::Down,tangent,4});session.handlePointer({0,UiPointerPhase::Up,tangent,4.1});session.update();
+  AE_EXPECT_TRUE(!screen.contextMenu&&screen.clipTangentPicker,"menu action runs the clip action and closes the menu");
+  tapClipAction(session,font,clip_widget::Tangent);
+  // Pinça na timeline: afastar os dedos encurta o intervalo visível e não
+  // arrasta a chave sob o primeiro dedo; o dedo que sobra não faz scrub.
+  const auto pinchCanvas=session.layout().clipCanvas;const float before=screen.clipEnd-screen.clipStart;
+  const UiPoint a{pinchCanvas.x+pinchCanvas.width*.4f,pinchCanvas.y+13},b{pinchCanvas.x+pinchCanvas.width*.6f,pinchCanvas.y+13};
+  const auto keysBefore=session.animationClipAsset(guid)->track(rotation)->curves[0].keys;
+  session.handlePointer({0,UiPointerPhase::Down,a,5});session.handlePointer({1,UiPointerPhase::Down,b,5.05});
+  session.handlePointer({1,UiPointerPhase::Move,{b.x+pinchCanvas.width*.3f,b.y},5.1});session.update();
+  AE_EXPECT_TRUE(screen.clipEnd-screen.clipStart<before*.8f,"spreading two fingers zooms the ruler in");
+  AE_EXPECT_TRUE(screen.clipStart>=0&&screen.clipEnd<=2.0001f,"zoomed window stays inside the clip");
+  session.handlePointer({1,UiPointerPhase::Up,{b.x+pinchCanvas.width*.3f,b.y},5.2});
+  session.handlePointer({0,UiPointerPhase::Move,{a.x+40,a.y},5.3});session.update();
+  const float afterSpan=screen.clipEnd-screen.clipStart;
+  session.handlePointer({0,UiPointerPhase::Up,{a.x+40,a.y},5.4});session.update();
+  AE_EXPECT_TRUE(std::abs(screen.clipEnd-screen.clipStart-afterSpan)<1e-5f,"the remaining finger neither zooms nor drags");
+  const auto keysAfter=session.animationClipAsset(guid)->track(rotation)->curves[0].keys;
+  AE_EXPECT_EQ(keysAfter.size(),keysBefore.size(),"pinch never edits keys");
+  for(usize i=0;i<keysAfter.size()&&i<keysBefore.size();++i)AE_EXPECT_TRUE(keysAfter[i].time==keysBefore[i].time,"pinch never moves keys");
+  captureClipSurface(session,font,icons,"clip-master-keys.ppm");
 }
 
 AE_TEST(animation_clip_mobile_surface_edits_preview_history_and_cancel_are_connected) {
@@ -1818,24 +1891,110 @@ AE_TEST(animation_studio_transfers_clip_to_another_character_with_different_rest
 }
 
 
+// Robô sem nomes: J0 pelve, J1/J2 coluna e cabeça, J3..J5 braço, J6..J8 perna.
+struct StructuralBot {editor::EditorEntityId bot,core,up1,top,a1,a2,a3,l1,l2,l3;};
+StructuralBot buildStructuralBot(editor::EditorDocument &doc) {
+  using namespace editor;StructuralBot b;
+  b.bot=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Bot");
+  b.core=doc.createEntity(b.bot,EditorEntityKind::Folder,"J0");
+  b.up1=doc.createEntity(b.core,EditorEntityKind::Folder,"J1");b.top=doc.createEntity(b.up1,EditorEntityKind::Folder,"J2");
+  b.a1=doc.createEntity(b.up1,EditorEntityKind::Folder,"J3");b.a2=doc.createEntity(b.a1,EditorEntityKind::Folder,"J4");b.a3=doc.createEntity(b.a2,EditorEntityKind::Folder,"J5");
+  b.l1=doc.createEntity(b.core,EditorEntityKind::Folder,"J6");b.l2=doc.createEntity(b.l1,EditorEntityKind::Folder,"J7");b.l3=doc.createEntity(b.l2,EditorEntityKind::Folder,"J8");
+  runtime::Transform t;t.position[1]=1;doc.setTransform(b.core,t);
+  runtime::Transform u;u.position[1]=.5f;doc.setTransform(b.up1,u);doc.setTransform(b.top,u);
+  runtime::Transform s;s.position[0]=.3f;doc.setTransform(b.a1,s);runtime::Transform d;d.position[1]=-.25f;d.position[2]=.05f;doc.setTransform(b.a2,d);doc.setTransform(b.a3,d);
+  runtime::Transform ld;ld.position[1]=-.5f;ld.position[2]=.02f;doc.setTransform(b.l1,ld);doc.setTransform(b.l2,ld);doc.setTransform(b.l3,ld);
+  return b;
+}
+
 AE_TEST(animation_studio_ik_wizard_reads_unnamed_skeletons_by_structure) {
   using namespace editor;
   TemporaryProject project;EditorSession session;std::string error,summary;
   AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
   auto &doc=session.document();
-  const auto bot=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Bot");
-  const auto core=doc.createEntity(bot,EditorEntityKind::Folder,"J0");
-  const auto up1=doc.createEntity(core,EditorEntityKind::Folder,"J1");const auto top=doc.createEntity(up1,EditorEntityKind::Folder,"J2");
-  const auto a1=doc.createEntity(up1,EditorEntityKind::Folder,"J3");const auto a2=doc.createEntity(a1,EditorEntityKind::Folder,"J4");const auto a3=doc.createEntity(a2,EditorEntityKind::Folder,"J5");
-  const auto l1=doc.createEntity(core,EditorEntityKind::Folder,"J6");const auto l2=doc.createEntity(l1,EditorEntityKind::Folder,"J7");const auto l3=doc.createEntity(l2,EditorEntityKind::Folder,"J8");
-  runtime::Transform t;t.position[1]=1;doc.setTransform(core,t);
-  runtime::Transform u;u.position[1]=.5f;doc.setTransform(up1,u);doc.setTransform(top,u);
-  runtime::Transform s;s.position[0]=.3f;doc.setTransform(a1,s);runtime::Transform d;d.position[1]=-.25f;d.position[2]=.05f;doc.setTransform(a2,d);doc.setTransform(a3,d);
-  runtime::Transform ld;ld.position[1]=-.5f;ld.position[2]=.02f;doc.setTransform(l1,ld);doc.setTransform(l2,ld);doc.setTransform(l3,ld);
+  const auto [bot,core,up1,top,a1,a2,a3,l1,l2,l3]=buildStructuralBot(doc);
   AE_EXPECT_TRUE(EditorStudio::setupIk(session,bot,summary,error),error.c_str());
   AE_EXPECT_TRUE(summary.find("Pela estrutura")!=std::string::npos,summary.c_str());
   AE_EXPECT_TRUE(doc.find(a3)->components.find(scene::TwoBoneIk::descriptor)&&doc.find(l3)->components.find(scene::FootGrounding::descriptor)&&
                  doc.find(top)->components.find(scene::LookAtIk::descriptor)&&doc.find(bot)->components.find(scene::GrounderBody::descriptor),summary.c_str());
+}
+
+// Criar › Personagem (E4): as receitas agem sobre o personagem da seleção,
+// cada uma num passo de histórico, e chegam pelo menu de contexto real.
+AE_TEST(character_recipes_in_create_menu_build_ik_from_the_selection) {
+  using namespace editor;using namespace ui;
+  TemporaryProject project;EditorSession session;UiFont font;UiIconAtlas icons;std::string error,summary;
+  const auto fontBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=productionUiBytes("assets/astra-visual/ui/astra-ui-icons.aeui");
+  AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"production visual resources");
+  session.initialize(&font,&icons);session.setSurface({0,0,1386,640},{});
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"isolated project");
+  auto &doc=session.document();
+  const auto b=buildStructuralBot(doc);
+  const auto box=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Caixa");
+  AE_EXPECT_EQ(EditorStudio::characterOf(doc,0),b.bot,"without selection the only skeleton is the character");
+  AE_EXPECT_EQ(EditorStudio::characterOf(doc,b.a3),b.bot,"a bone resolves to its character");
+  AE_EXPECT_EQ(EditorStudio::characterOf(doc,box),EditorEntityId(0),"a plain object is not a character");
+  session.setSelection(b.a3);session.update();
+  AE_EXPECT_EQ(session.screen().characterRecipeTarget,b.bot,"the screen knows the character of the selection");
+  u32 lookIndex=0,aimIndex=0;
+  AE_EXPECT_TRUE(findCreationRecipe("character.look_at",&lookIndex)&&creationAvailable(session.screen(),lookIndex),"look-at recipe is available with a character selected");
+  AE_EXPECT_TRUE(findCreationRecipe("character.aim",&aimIndex)&&editorCreationCatalog[aimIndex].category==kCharacterCreationCategory,"aim recipe lives in the Personagem category");
+  const auto entitiesBefore=doc.entityCount();
+  // Cada receita cria só a sua parte.
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::LookAt,summary,error),error.c_str());
+  AE_EXPECT_TRUE(doc.find(b.top)->components.find(scene::LookAtIk::descriptor)&&!doc.find(b.a3)->components.find(scene::TwoBoneIk::descriptor),"look-at only touches the head");
+  {
+    // O alvo nasce na FRENTE do personagem (sem braços pelo nome: o +Z do
+    // objeto), não ao longo do eixo arbitrário do osso da cabeça.
+    const auto *look=static_cast<const scene::LookAtIk*>(doc.find(b.top)->components.find(scene::LookAtIk::descriptor));
+    float head[16],target[16];
+    AE_EXPECT_TRUE(look&&runtime::worldMatrix(doc,b.top,head)&&runtime::worldMatrix(doc,static_cast<EditorEntityId>(look->target),target),"look target exists");
+    AE_EXPECT_TRUE(std::abs(target[12]-head[12])<1e-3f&&std::abs(target[13]-head[13])<1e-3f&&std::abs(target[14]-head[14]-2)<1e-3f,"look target sits 2 m in front of the head along the character's forward");
+    AE_EXPECT_EQ(look->axis,2u,"the head axis that faces forward is chosen");
+  }
+  // A segunda receita não pode tomar "Olhar · J2" por cabeça nem por ponta.
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::LookAt,summary,error)&&summary.find("Já montado")!=std::string::npos,"look-at twice reports already built instead of targeting its own target");
+  {
+    std::vector<EditorEntityId> ids;doc.collectSubtree(b.bot,ids);u32 nested=0;
+    for(const auto id:ids)if(std::string(doc.find(id)->name).rfind("Olhar · Olhar",0)==0)++nested;
+    AE_EXPECT_EQ(nested,0u,"recipe targets are never treated as bones");
+  }
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Aim,summary,error),error.c_str());
+  const auto *aim=static_cast<const scene::AimIk*>(doc.find(b.a3)->components.find(scene::AimIk::descriptor));
+  AE_EXPECT_TRUE(aim&&aim->target&&doc.find(static_cast<EditorEntityId>(aim->target))&&doc.find(static_cast<EditorEntityId>(aim->target))->parent==b.bot,"aim target is created under the character");
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Hands,summary,error),error.c_str());
+  AE_EXPECT_TRUE(doc.find(b.a3)->components.find(scene::TwoBoneIk::descriptor),"hands recipe adds two-bone IK on the hand");
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Ground,summary,error),error.c_str());
+  AE_EXPECT_TRUE(doc.find(b.l3)->components.find(scene::FootGrounding::descriptor)&&doc.find(b.bot)->components.find(scene::GrounderBody::descriptor),"ground recipe adds foot grounding and the body grounder");
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::FullBody,summary,error),error.c_str());
+  const auto *body=static_cast<const scene::FullBodyIk*>(doc.find(b.bot)->components.find(scene::FullBodyIk::descriptor));
+  AE_EXPECT_TRUE(body&&body->pelvis==b.core&&body->tips[0]==b.a3&&body->tips[1]==b.l3&&body->targets[0]&&body->targets[1],"full body wires pelvis, tips and new targets");
+  const auto entitiesAfter=doc.entityCount();
+  AE_EXPECT_TRUE(!EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Carry,summary,error)&&!error.empty()&&doc.entityCount()==entitiesAfter,"carry refuses a robot without humanoid arms and leaves nothing behind");
+  const auto depth=session.history().undoDepth();
+  AE_EXPECT_TRUE(EditorStudio::setupCharacter(session,b.bot,EditorStudio::CharacterRecipe::Ground,summary,error)&&summary.find("Já montado")!=std::string::npos&&session.history().undoDepth()==depth,"a recipe already applied reports it without an empty history step");
+  // Um passo de histórico por receita.
+  for(u32 i=0;i<5;++i)AE_EXPECT_TRUE(session.history().undo(doc),"undo step");
+  AE_EXPECT_TRUE(!doc.find(b.top)->components.find(scene::LookAtIk::descriptor)&&!doc.find(b.a3)->components.find(scene::AimIk::descriptor)&&
+                 !doc.find(b.a3)->components.find(scene::TwoBoneIk::descriptor)&&!doc.find(b.l3)->components.find(scene::FootGrounding::descriptor)&&
+                 !doc.find(b.bot)->components.find(scene::GrounderBody::descriptor)&&!doc.find(b.bot)->components.find(scene::FullBodyIk::descriptor)&&doc.entityCount()==entitiesBefore,"five undos remove everything the five recipes created");
+  // Pelo menu real: + da Hierarquia → Personagem → Olhar para alvo.
+  const auto tap=[&](u32 widget,const char *what) {
+    UiDrawList list;list.begin(session.screen().surface,font.metrics(UiFontWeight::Regular));UiInputRouter router;router.beginFrame();
+    buildEditorScreen(session.screen(),editorTheme(),list,router);UiPoint point{-1,-1};
+    for(float y=2;y<session.screen().surface.height&&point.x<0;y+=3)for(float x=2;x<session.screen().surface.width;x+=3) {
+      const auto hit=router.hitTest({x,y});if(hit.target==UiPointerTarget::Widget&&hit.widgetId==widget) {point={x,y};break;}
+    }
+    AE_EXPECT_TRUE(point.x>=0,what);
+    session.handlePointer({0,UiPointerPhase::Down,point,1});session.handlePointer({0,UiPointerPhase::Up,point,1.1});session.update();
+  };
+  tap(widgetId(EditorWidget::HierarchyAdd),"hierarchy + opens Criar");
+  tap(context_menu_widget::id(context_menu_widget::Category+kCharacterCreationCategory),"Personagem category is listed");
+  tap(widgetId(EditorWidget::CharacterRecipeBase),"Olhar para alvo is listed and enabled");
+  AE_EXPECT_TRUE(!session.screen().contextMenu&&doc.find(b.top)->components.find(scene::LookAtIk::descriptor),"menu action runs the recipe and closes the menu");
+  AE_EXPECT_EQ(session.screen().selection,b.bot,"the character stays selected after the recipe");
+  AE_EXPECT_TRUE(session.screen().status.find("Cabeça olha")!=std::string::npos,session.screen().status.c_str());
+  captureClipSurface(session,font,icons,"create-character-menu.ppm");
 }
 
 AE_TEST(animation_studio_root_motion_card_creates_and_toggles_the_component) {

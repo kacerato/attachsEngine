@@ -1,0 +1,68 @@
+{
+  "version": "0.3.2-preview.20261016",
+  "versionCode": 30,
+  "package": "dev.aether.editor",
+  "date": "2026-10-16",
+  "dateLabel": "16 de outubro de 2026",
+  "channel": "preview",
+  "filename": "Astra-0.3.2-preview.20261016-android-arm64.apk",
+  "sizeLabel": "109,2 MiB",
+  "bytes": 114520719,
+  "sha256": "769f5bb57edd4fce8d2055d4fa1376b004466b4f683da76bcb02cc665de85b50",
+  "certificateSha256": "cfbd4391d3d9f63f91901dbc22886ec6544de503d7e599543c39a68facd4ef6b",
+  "downloadUrl": "https://github.com/kacerato/AstraDocs/releases/download/astra-android-2026.10.16-r2/Astra-0.3.2-preview.20261016-android-arm64.apk",
+  "releaseUrl": "https://github.com/kacerato/AstraDocs/releases/tag/astra-android-2026.10.16-r2",
+  "checksumUrl": "https://github.com/kacerato/AstraDocs/releases/download/astra-android-2026.10.16-r2/SHA256SUMS.txt",
+  "requirements": {
+    "minSdk": 26,
+    "android": "8.0+",
+    "abi": "arm64-v8a",
+    "graphics": "Vulkan 1.1",
+    "memoryPageBytes": 4096
+  },
+  "buildVerified": true,
+  "signatureVerified": true,
+  "deviceRuntimeVerified": true,
+  "source": {
+    "baselineCommit": "cddc7a4599ae434e32e8aeca39f7eb4a98b32799",
+    "localChangesIncluded": false,
+    "snapshotDate": "2026-10-16",
+    "nativeLibrarySha256": "2102da62e20e0cf4dc5182138d56ea840a9650f931f8e13f20482a967ddae99d",
+    "versionOverrides": {
+      "versionCode": 30,
+      "versionName": "0.3.2-preview.20261016"
+    }
+  },
+  "bundledProjects": {
+    "count": 1,
+    "name": "U07 Laboratório de Controle",
+    "files": 21
+  },
+  "deviceValidation": {
+    "device": "POCO F7 / 25053PC47G",
+    "os": "Android 16",
+    "publicPackage": [
+      "update with existing certificate (versionCode 29 → 30)",
+      "user project files preserved"
+    ],
+    "developmentPackage": {
+      "package": "dev.aether.editor.u07",
+      "sameNativeLibraryAsPublicPackage": true,
+      "acceptances": [
+        "Animator 2D blend modes and synchronized layers through the UI on code 93 (docs/validacao/animator-2026-10-16)",
+        "Play carry without pelvis bobbing or elbow flips on code 95 (docs/validacao/ik-continuidade-2026-10-16)",
+        "POLYGON Icons textured in the scene and BoZo BodyRig with the Humanoid idle in the studio on code 96 (docs/validacao/pacotes-2026-10-16)"
+      ]
+    },
+    "host": {
+      "nativeSuite": "1572/1572 · GUI 126/126 · studio 73/73 · animation runtime 84/84 · Unity 24/24",
+      "managedSuite": "not rerun for this release"
+    },
+    "limits": [
+      "not a universal device compatibility guarantee",
+      "no sustained FPS/thermal measurement",
+      "APK export flow (Exportar APK) still experimental",
+      "Humanoid clip conversion keeps a constant ≈5 cm vertical offset against the UMotion reference; Blend Tree nesting and layer sync timing are not in this preview"
+    ]
+  }
+}

@@ -50,6 +50,19 @@ bool EditorSession::focusAnimationPoseSelection(std::string &error) {
     camera_.distance=std::max(std::sqrt(size)*1.4f,std::sqrt(extent)*1.5f);}
   state_.cameraViewEntity=0;state_.cameraPiloting=false;appearanceChanged_=true;return true;
 }
+// Abertura do estúdio: o personagem inteiro pelos ossos do preview (a malha
+// enquadrava só o tronco), com a mesma distância do foco de um osso.
+void EditorSession::frameAnimationStudio() {
+  float low[3]{},high[3]{};bool any=false;
+  for(const auto bone:state_.clipPreviewJoints) {
+    float world[16];if(!runtime::worldMatrix(evaluatedEditorScene(),bone,world))continue;
+    for(usize axis=0;axis<3;++axis) {low[axis]=any?std::min(low[axis],world[12+axis]):world[12+axis];high[axis]=any?std::max(high[axis],world[12+axis]):world[12+axis];}any=true;
+  }
+  if(!any) {frameSubtree(state_.clipOwner);return;}
+  finishCameraGesture(false);state_.cameraViewEntity=0;state_.cameraPiloting=false;
+  float size=0;for(usize axis=0;axis<3;++axis) {camera_.target[axis]=(low[axis]+high[axis])*.5f;size+=(high[axis]-low[axis])*(high[axis]-low[axis]);}
+  camera_.distance=std::max(std::sqrt(size)*1.4f,.5f);appearanceChanged_=true;
+}
 bool EditorSession::isolateAnimationPoseSelection(bool enabled,std::string &error) {
   error.clear();if(!state_.clipOpen||isPlaying()||(enabled&&state_.clipPoseSelection.empty())) {error="Isolamento exige seleção no preview";return false;}
   state_.clipPoseSelectionIsolated=enabled;appearanceChanged_=true;return true;

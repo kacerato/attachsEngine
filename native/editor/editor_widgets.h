@@ -41,6 +41,9 @@ enum class EditorWidget : u32 {
   GuiCanvasEdit = 0xDB000001u,
   CharacterConversionOpen=0xDB000010u,CharacterConversionApply,CharacterConversionBack,
   SceneTemplatePrevious=0xDB000019u,SceneTemplateNext,
+  // Criar › Personagem: receitas sobre o personagem selecionado
+  // (EditorStudio::CharacterRecipe, a partir de LookAt).
+  CharacterRecipeBase=0xDB000040u,CharacterRecipeEnd=0xDB000046u,
   MotorSetupOpen=0xDB000020u,MotorSetupApply,MotorSetupBack,MotorSetupPreserve,MotorSetupFit,MotorSetupConvex,
   MotorSetupDecompose,MotorBakeStart,MotorBakeCancel,MotorBakeBudgetLow,MotorBakeBudgetMedium,MotorBakeBudgetHigh,
   MotorBakePrevious,MotorBakeNext,MotorBakeSourcesOpen,MotorBakeSourcesDone,MotorBakeSourcesObject,MotorBakeSourcesHierarchy,
@@ -565,12 +568,12 @@ enum : u32 {
   Controller=0x21,ControllerCreate=0x22,ControllerChoose=0x23,ControllerDetach=0x24,
   ControllerEdit=0x25,ControllerReload=0x26,ControllerReset=0x27,
   LayerBlend=0x28,LayerReferenceClip=0x29,LayerReferenceTime=0x2A,LayerReferenceReset=0x2B,LayerRuntimeReset=0x2C,
-  AddMachine=0x2D,EnterMachine=0x2E,NodeParent=0x2F,Navigate=0x800,
+  AddMachine=0x2D,EnterMachine=0x2E,NodeParent=0x2F,LayerSync=0x30,Navigate=0x800,
   OverrideClip=0x7100,OverrideReset=0x7500,ControllerChoice=0x7900,
   OverrideOrphanReset=0x9000,
   LayerTab=0x100,ParameterAdd=0x200,ParameterName=0x300,ParameterValue=0x400,ParameterDelete=0x500,ParameterRow=0x600,
   StateName=0x1000,StateKind=0x1001,StateBlendX=0x1004,StateBlendY=0x1005,StateSpeed=0x1006,StateSpeedParameter=0x1007,
-  StateLoop=0x1008,MotionAdd=0x1009,EventAdd=0x100A,
+  StateLoop=0x1008,MotionAdd=0x1009,EventAdd=0x100A,StateBlendMode=0x100B,
   MotionClip=0x1100,MotionThreshold=0x1200,MotionX=0x1300,MotionY=0x1400,MotionRemove=0x1500,
   EventTime=0x1700,EventTag=0x1800,EventRemove=0x1900,
   TransitionExit=0x2000,TransitionExitTime=0x2001,TransitionDuration=0x2002,ConditionAdd=0x2003,
@@ -600,6 +603,9 @@ inline constexpr u32 WorkspaceLevel=0x100;
 inline constexpr u32 StudioLevel=0x200;
 // Importar universal: modelo, pasta de pacote, textura, ambiente, áudio.
 inline constexpr u32 ImportLevel=0x300;
+// Menu da chave (toque longo numa chave da timeline): tempo, valor, tangente,
+// copiar, recortar e excluir, pelos widgets do clipe.
+inline constexpr u32 KeyLevel=0x400;
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ContextMenuBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ContextMenuBase);}
 } // namespace context_menu_widget
@@ -639,7 +645,7 @@ enum : u32 {
     DriverFirst,DriverSecond,DriverCurvePrevious,DriverCurveNext,DriverCurveAdd,
     DriverCurveDelete,DriverCurveTangent,DriverCurveWeighted,
     DriverConstant=0xb620,DriverCurveValue=0xb630,DriverOperation=0xb640,DriverEntry=0xb650,DriverEnd=0xb660,
-    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,
+    StudioTabKey=0xb668,StudioTabRig,StudioTabPose,StudioTabIk,BoneTreeUp,BoneTreeDown,PoseIk,PoseMirrorRig,PoseIkPoleReset,PoseLibrarySave,PoseGhost,TrackFilter,PoseIkCreate,PoseIkWizard,PosePin,PoseFollowParent,PoseFollow,PoseRootMotion,PoseBake,PoseBakeRoot,PoseExportGlb,TimeRuler,BoneTree,MasterKeys,
     BoneRow=0xb680,PoseLibrary=0xb6e0,
     // Painel do osso: canal (0 posição, 1 rotação, 2 escala) × (X, Y, Z, chave).
     BoneChannel=0xb6f0,StudioMenu=0xb6fc,

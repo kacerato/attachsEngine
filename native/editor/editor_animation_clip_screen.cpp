@@ -406,8 +406,14 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
   button(left(navigation,42),"",w::AddKey,selected!=nullptr,false,UiIcon::AnimationKey);button(left(navigation,42),"",w::DeleteKey,multi||(key&&curve->keys.size()>1),false,UiIcon::UiRemove);
   const auto ruler=top(body,34);layout.clipCanvas=deflate(body,{2,2,8,3});
   const auto &canvas=layout.clipCanvas;router.addRegion(canvas,w::id(w::Canvas));
-  // Regua do tempo: tocar ou arrastar nela move o cursor (scrub).
+  // Regua do tempo: tocar ou arrastar nela move o cursor (scrub). A metade de
+  // baixo é a linha de chaves-mestras (UMotion): um losango por quadro com
+  // chave em qualquer trilha da camada; tocar seleciona o quadro, arrastar
+  // move tudo; sem chave perto, vale como scrub.
   router.addRegion(ruler,w::id(w::TimeRuler));
+  const UiRect master{ruler.x,ruler.y+16,ruler.width,ruler.height-16};
+  list.addRect(master,withAlpha(theme.color.accent,.05f));
+  router.addRegion(master,w::id(w::MasterKeys));
   layout.clipVisibleRows=std::min(64u,std::max(1u,static_cast<u32>(names.height/30)));
   u32 index=0,visible=0;
   struct VisibleRow {const resources::AnimationClipTrack *track;u32 component;};std::vector<VisibleRow> visibleRows;
@@ -446,10 +452,33 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     const auto yAt=[&](double v){return yView(animationCurveViewValue(state,state.clipTrack,state.clipComponent,v));};
     for(u32 i=0;i<=8;++i) {
       const float x=canvas.x+canvas.width*i/8;list.addLine({x,canvas.y},{x,canvas.bottom()},theme.color.lineSoft,1);
-      label({x-25,ruler.y,58,ruler.height},number(state.clipStart+span*i/8,"s"),theme.color.textMuted,UiAlign::Center);
+      label({x-25,ruler.y,58,16},number(state.clipStart+span*i/8,"s"),theme.color.textMuted,UiAlign::Center);
     }
     if(const float head=xAt(state.clipTime);head>=canvas.x&&head<=canvas.right())
-      list.addRect({head-4,ruler.bottom()-8,8,8},theme.color.accent,2);
+      list.addRect({head-3,ruler.y+11,6,6},theme.color.accent,1);
+    {
+      // Chaves-mestras: tempos distintos (ao quadro) com chave em qualquer
+      // trilha visível da camada; o quadro selecionado por inteiro fica aceso.
+      std::vector<float> times;std::unordered_set<u64> selectedKeys;
+      for(const auto &address:state.clipSelection)selectedKeys.insert(address.key);
+      std::vector<float> selectedTimes;
+      for(const auto &t:asset->tracks)if(t.layer==state.clipLayer&&!filtered(t))for(const auto &c:t.curves)for(const auto &k:c.keys) {
+        if(k.time<state.clipStart||k.time>state.clipEnd)continue;
+        times.push_back(std::round(k.time*asset->displayRate)/asset->displayRate);
+        if(selectedKeys.contains(k.id))selectedTimes.push_back(times.back());
+      }
+      std::sort(times.begin(),times.end());times.erase(std::unique(times.begin(),times.end()),times.end());
+      std::sort(selectedTimes.begin(),selectedTimes.end());selectedTimes.erase(std::unique(selectedTimes.begin(),selectedTimes.end()),selectedTimes.end());
+      const float y=master.y+master.height*.5f;const usize step=std::max<usize>(1,(times.size()+255)/256);
+      for(usize i=0;i<times.size();i+=step) {
+        const UiPoint p{xAt(times[i]),y};
+        const bool chosen=state.clipSelection.size()>1&&std::binary_search(selectedTimes.begin(),selectedTimes.end(),times[i]);
+        const UiColor color=chosen?theme.color.accent:theme.color.text;
+        list.addLine({p.x-5,p.y},{p.x,p.y-5},color,2);list.addLine({p.x,p.y-5},{p.x+5,p.y},color,2);
+        list.addLine({p.x+5,p.y},{p.x,p.y+5},color,2);list.addLine({p.x,p.y+5},{p.x-5,p.y},color,2);
+        if(chosen)list.addRect({p.x-3,p.y-3,6,6},color);
+      }
+    }
     list.pushClip(canvas);
     regionBracket(list,theme,canvas,asset->region(state.clipRegion),state.clipStart,state.clipEnd);
     if(state.clipRangeShown) {
@@ -509,7 +538,7 @@ EditorScreenLayout buildAnimationClipScreen(const EditorScreenState &state,const
     std::unordered_set<u64> selectedIds;for(const auto &address:state.clipSelection)selectedIds.insert(address.key);
     const auto diamond=[&](const resources::AnimationCurveKey &k,float y,bool selectedCurve) {
       const UiPoint p{xAt(k.time),y};
-      const bool chosen=state.clipSelectionMode?selectedIds.contains(k.id):selectedCurve&&k.id==state.clipKey;
+      const bool chosen=state.clipSelectionMode||state.clipSelection.size()>1?selectedIds.contains(k.id):selectedCurve&&k.id==state.clipKey;
       const UiColor color=chosen?theme.color.accent:selectedCurve?theme.color.text:theme.color.textDim;
       list.addLine({p.x-5,p.y},{p.x,p.y-5},color,2);list.addLine({p.x,p.y-5},{p.x+5,p.y},color,2);
       list.addLine({p.x+5,p.y},{p.x,p.y+5},color,2);list.addLine({p.x,p.y+5},{p.x-5,p.y},color,2);

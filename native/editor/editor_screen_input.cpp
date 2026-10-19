@@ -739,7 +739,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
       break;
     case EditorWidget::TabGui: state.contextMenu=false;state.workspace=EditorWorkspace::Gui;break;
     case EditorWidget::TabScene: state.contextMenu=false;state.workspace = EditorWorkspace::Scene; break;
-    case EditorWidget::TabAssets: if(state.assetCount) {state.contextMenu=false;state.workspace = EditorWorkspace::Assets;} break;
+    case EditorWidget::TabAssets: if(state.assetCount) {state.contextMenu=false;state.workspace=EditorWorkspace::Library;state.libraryKind=11;} break;
     case EditorWidget::TabLighting: state.contextMenu=false;state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
     case EditorWidget::TabProject:
       state.contextMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;

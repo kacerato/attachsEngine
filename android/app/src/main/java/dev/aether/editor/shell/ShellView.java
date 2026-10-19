@@ -28,6 +28,7 @@ public final class ShellView extends View {
 
     public interface Listener {
         void onProjectPicked(Project project);
+        void onProjectExport(Project project);
         void onNewProjectRequested();
         void onNavUnavailable(String label);
         void onSplashFinished();
@@ -38,6 +39,7 @@ public final class ShellView extends View {
     private static final String[] NAV = { "Projetos", "Novo", "Importar", "Configurações" };
 
     private final ProjectStore store;
+    private final android.graphics.drawable.Drawable exportIcon;
     private Listener listener;
 
     private Screen screen = Screen.SPLASH;
@@ -113,6 +115,7 @@ public final class ShellView extends View {
     public ShellView(Context context, ProjectStore store) {
         super(context);
         this.store = store;
+        exportIcon=context.getDrawable(dev.aether.editor.R.drawable.ic_export_apk);
         dashedPaint.setPathEffect(new android.graphics.DashPathEffect(new float[] { 9f, 8f }, 0f));
         setBackgroundColor(Design.VOID);
     }
@@ -417,6 +420,14 @@ public final class ShellView extends View {
         target.drawRoundRect(box, 12f, 12f, linePaint);
         hits.add(new Hit(left, top, left + w, top + h, () -> {
             if (listener != null) listener.onProjectPicked(project);
+        }));
+        // Separate action on the cover; opening the project keeps its existing tap target.
+        float exportTop=top+coverH-84f;
+        target.drawRect(left+12f,exportTop,left+w-12f,exportTop+72f,surfacePaint);
+        if(exportIcon!=null){exportIcon.setBounds((int)(left+22f),(int)(exportTop+16f),(int)(left+62f),(int)(exportTop+56f));exportIcon.draw(target);}
+        drawCapText(target,"Exportar APK",left+76f,exportTop+25f,cardText);
+        hits.add(new Hit(left+12f,exportTop,left+w-12f,exportTop+72f,()->{
+            if(listener!=null)listener.onProjectExport(project);
         }));
     }
 

@@ -1,6 +1,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_umotion_import.h"
 #include "scene/skinned_mesh.h"
+#include "scene/import_link.h"
 #include <fstream>
 #include "resources/unity_material_import.h"
 #include "resources/unity_import_recipe.h"
@@ -243,6 +244,37 @@ void EditorSession::refreshLibraryRows() {
         }
       }
       state_.libraryRows.push_back({item.id,item.path.substr(slash==item.path.npos?0:slash+1),package.name+" · "+kindName(item.kind),resolved.diagnostic,resolved.state,item.kind});
+    }
+  }
+  // Malhas do projeto (o antigo "Recursos importados"): cartões do trilho
+  // Projeto, cada um indo "Na cena" pelo mesmo caminho do arrasto.
+  const bool projectKind=state_.libraryKind==0||state_.libraryKind==11;
+  if(!state_.libraryPackage.valid())for(u32 i=0;i<mapScene_.assetCount();++i) {
+    std::string name(mapScene_.assetName(i));if(name.empty())name="Malha "+std::to_string(i+1);
+    if(!query.empty()&&lower(name).find(query)==std::string::npos)continue;
+    ++state_.libraryKindCounts[0];++state_.libraryKindCounts[11];
+    if(!projectKind)continue;
+    auto guid=mapScene_.assetGuid(i);if(!guid.valid())guid=resources::assetGuidFromSeed("project-asset-"+std::to_string(i));
+    EditorScreenState::LibraryRow row{guid,name,"Projeto · Malha",{},resources::LibraryResolutionState::Registered,resources::LibraryItemKind::Model};
+    row.projectAsset=i;state_.libraryRows.push_back(std::move(row));
+  }
+  // Origem sem registro: a cena referencia um modelo que .astra/assets.astra
+  // não conhece (projeto copiado sem a pasta .astra). Um cartão de aviso por
+  // raiz importada, para o problema aparecer onde o modelo deveria estar.
+  if(!state_.libraryPackage.valid()) {
+    std::set<resources::AssetGuid> seen;std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
+    for(const auto id:ids) {
+      const auto *o=document_.find(id);if(!o)continue;
+      const auto *link=static_cast<const scene::ImportLink*>(o->components.find(scene::ImportLink::descriptor));
+      if(!link||!link->root||!link->source.valid()||assets_.find(link->source)||!seen.insert(link->source).second)continue;
+      const std::string name(o->name);
+      if(!query.empty()&&lower(name).find(query)==std::string::npos)continue;
+      ++state_.libraryKindCounts[0];++state_.libraryKindCounts[11];
+      if(!projectKind)continue;
+      EditorScreenState::LibraryRow row{link->source,name,"Projeto · origem sem registro",
+        "Registro .astra/assets.astra sem este modelo\nA cena referencia "+link->source.text()+"\nCopie a pasta .astra junto com o projeto ou reimporte o modelo",
+        resources::LibraryResolutionState::MissingDependency,resources::LibraryItemKind::Model};
+      row.unregistered=true;state_.libraryRows.push_back(std::move(row));
     }
   }
   if(state_.libraryPackage.valid()&&!library_.package(state_.libraryPackage)){state_.libraryPackage={};refreshLibraryRows();}

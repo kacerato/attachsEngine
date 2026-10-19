@@ -461,7 +461,9 @@ bool EditorSession::handleRigTool(const ui::UiPointerRouting &routing) {
     if(studio_->rigDirty&&!ui.error&&ui.status!="Alterações não publicadas · toque × de novo para descartar") {
       ui.status="Alterações não publicadas · toque × de novo para descartar";return true;
     }
-    state_.rigToolOpen=false;studio_->rigDraft={};studio_->rigPoses.clear();studio_->rigCaptured=studio_->rigDirty=false;return true;
+    // Fechar o Rig devolve o painel do osso (a aba "Rig" sem conteúdo ficava
+    // no lugar até tocar a seta de voltar).
+    state_.rigToolOpen=false;state_.clipStudioTab=0;studio_->rigDraft={};studio_->rigPoses.clear();studio_->rigCaptured=studio_->rigDirty=false;return true;
   case RigToolAction::Routes: if(studio_->rigCaptured) ui.routesOpen=!ui.routesOpen;return true;
   case RigToolAction::RouteControls: routeTo(RigToolRoute::Controls);break;
   case RigToolAction::RouteMirror: routeTo(RigToolRoute::Mirror);break;

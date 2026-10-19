@@ -6,15 +6,18 @@
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_library.h"
 #include "editor/editor_session.h"
+#include "editor/editor_umotion_import.h"
 #include "renderer/authoring_geometry.h"
 #include "resources/animation_curve.h"
 #include "resources/model_import.h"
 #include "resources/unity_humanoid.h"
 #include "resources/unity_import_recipe.h"
 #include "runtime/transform_math.h"
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <map>
 
 using namespace ae;
 using namespace ae::resources;
@@ -57,7 +60,9 @@ AE_TEST(unity_humanoid_reference_pose_has_known_directions) {
   const auto leftArm=axisY(rest.global[13]),rightArm=axisY(rest.global[14]),leftLeg=axisY(rest.global[1]);
   AE_EXPECT_TRUE(leftArm[0]>.3&&leftArm[1]<0,"neutral left arm goes out to +X and down");
   AE_EXPECT_TRUE(std::abs(leftArm[0]+rightArm[0])<1e-3&&std::abs(leftArm[1]-rightArm[1])<1e-3,"arms are mirror images");
-  AE_EXPECT_TRUE(leftLeg[1]<-.9,"neutral leg points down");
+  if(std::getenv("AE_UMOTION_TRACE"))std::fprintf(stderr,"  neutro: perna (%.3f %.3f %.3f) braço (%.3f %.3f %.3f) quadril global (%.3f %.3f %.3f %.3f) quadril pos (%.3f %.3f %.3f)\n",
+      leftLeg[0],leftLeg[1],leftLeg[2],leftArm[0],leftArm[1],leftArm[2],rest.global[0][0],rest.global[0][1],rest.global[0][2],rest.global[0][3],rest.hips[0],rest.hips[1],rest.hips[2]);
+  AE_EXPECT_TRUE(leftLeg[1]<-.85,"neutral leg points down"); // eixo Y do referencial do músculo, não a direção do osso; corpo normalizado pela pose em T
   AE_EXPECT_TRUE(std::abs(rest.hips[1]-1)<.15&&std::abs(rest.hips[0])<1e-3,"hips near human height, centred");
   Muscles raised{};raised[13][2]=1;
   const auto up=axisY(pose(raised).global[13]);
@@ -105,6 +110,92 @@ AE_TEST(unity_humanoid_retarget_to_the_reference_skeleton_returns_its_rotations)
   }
   AE_EXPECT_EQ(checked,UnityHumanBoneCount,"one rotation track per human bone");
   AE_EXPECT_TRUE(clip.valid(&error),error.c_str());
+}
+
+// Pacote real (opcional): AE_BOZO_PACK aponta para Assets/BoZo_StylizedModularCharacters
+// do BoZo 2.2. O rig Humanoid (BodyRig.fbx, Avatar com 52 ossos no .meta) recebe o
+// clipe Humanoid BMAC_M_Idle.anim: segundo personagem da conversão músculos -> ossos,
+// com proporções estilizadas (cabeça grande, pernas curtas).
+AE_TEST(unity_humanoid_bozo_rig_plays_the_idle_clip_on_its_feet) {
+  const char *pack=std::getenv("AE_BOZO_PACK");
+  if(!pack){std::fprintf(stderr,"  AE_BOZO_PACK ausente: BoZo nao verificado\n");return;}
+  namespace fs=std::filesystem;using namespace editor;
+  const fs::path source=fs::path(pack);
+  const auto project=fs::temp_directory_path()/("astra-bozo-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code ec;fs::remove_all(path,ec);}} cleanup{project};
+  fs::create_directories(project/".astra/import-staging/unity");
+  std::vector<LibrarySourceFile> files;
+  const auto add=[&](const fs::path &from,const std::string &relative) {
+    std::vector<u8> bytes;if(!EditorImportTransaction::read(from,bytes))return false;
+    const auto target=project/".astra/import-staging/unity"/relative;fs::create_directories(target.parent_path());
+    if(!EditorImportTransaction::write(target,bytes))return false;
+    files.push_back({relative,Sha256::hex(bytes),bytes.size(),{}});return true;
+  };
+  const auto model=source/"Outfits/Common/Body/BodyRig.fbx",clip=source/"Animations/BMAC_M_Idle.anim";
+  EditorSession session;
+  std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+  renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials);
+  session.importMap(draws,materials,false,vertices,indices,0);
+  session.setGeometryPublisher([&](std::span<const u8> v,std::span<const u32> i,std::span<const renderer::MapDrawRecord> d,
+      std::span<const renderer::MapMaterialRecord> m,std::span<const renderer::SharedAuthoringTexture>,EditorSession::PublishedGeometry &out) {
+    vertices.clear();indices.clear();draws.clear();materials.clear();
+    if(!renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride,vertices,indices,draws,materials))return false;
+    const auto vb=static_cast<u32>(vertices.size()/renderer::MapVertexStride),ib=static_cast<u32>(indices.size()),mb=static_cast<u32>(materials.size());
+    vertices.insert(vertices.end(),v.begin(),v.end());indices.insert(indices.end(),i.begin(),i.end());materials.insert(materials.end(),m.begin(),m.end());
+    for(auto draw:d){draw.firstIndex+=ib;draw.vertexOffset+=vb;draw.materialIndex+=mb;draw.lodGroupId=static_cast<u32>(draws.size());draws.push_back(draw);}
+    out={draws,materials,vertices,indices};return true;
+  });
+  AE_EXPECT_TRUE(session.setProjectDirectory(project.string().c_str()),"project");
+  AE_EXPECT_TRUE(add(model,"BoZo/BodyRig.fbx")&&add(fs::path(model.string()+".meta"),"BoZo/BodyRig.fbx.meta")&&
+                 add(clip,"BoZo/BMAC_M_Idle.anim")&&add(fs::path(clip.string()+".meta"),"BoZo/BMAC_M_Idle.anim.meta"),"package files");
+  std::string error;auto package=prepareLibraryPackage(project.string(),".astra/import-staging/unity","BoZo",files);
+  AE_EXPECT_TRUE(package.accepted,package.diagnostic.c_str());
+  AE_EXPECT_TRUE(package.accepted&&session.importLibraryPackage(package,error),error.c_str());
+  LibraryItem modelItem,clipItem;
+  for(const auto &item:package.package.items){if(item.path.ends_with("BodyRig.fbx"))modelItem=item;if(item.path.ends_with("BMAC_M_Idle.anim"))clipItem=item;}
+  std::vector<u8> bytes;AE_EXPECT_TRUE(EditorImportTransaction::read(model,bytes),"FBX bytes");
+  GltfImport converted;ImportProfile profile;
+  // O skin do BoZo tem mais de quatro influências por vértice: a redução a
+  // quatro é autorizada explicitamente, como a receita de importação faria.
+  auto limits=applyImportProfile(session.importLimits(),profile);limits.fbxDeformation=true;limits.fbxReduceWeights=true;
+  AE_EXPECT_TRUE(importModelSource(bytes,limits,{},converted),converted.diagnostic.c_str());
+  EditorSession::ModelImportReport report;
+  AE_EXPECT_TRUE(session.commitModelImport(bytes,converted,modelItem.path,Sha256::hex(bytes),report,ImportAmbiguityPolicy::Refuse,{},{},{},{},&profile),report.diagnostic.c_str());
+  AE_EXPECT_TRUE(session.instantiateModel(report.source,report),report.diagnostic.c_str());
+  const auto owner=session.selection();auto &document=session.document();
+  std::vector<EditorEntityId> ids;document.collectSubtree(owner,ids);
+  std::fprintf(stderr,"  BoZo: %zu nós sob o modelo\n",ids.size());
+  const auto converted_clip=session.importUnityAsset(clipItem.path,owner,UnityReimportPolicy::RefuseConflict,error);
+  AE_EXPECT_TRUE(converted_clip.valid(),error.c_str());if(!converted_clip.valid())return;
+  const auto *asset=session.animationClipAsset(converted_clip);AE_EXPECT_TRUE(asset!=nullptr,"converted clip resource");if(!asset)return;
+  std::fprintf(stderr,"  clipe: %.2f s, %zu trilhas\n",asset->duration,asset->tracks.size());
+  AnimationClipPreview preview;AE_EXPECT_TRUE(preview.begin(document,owner,*asset,error),error.c_str());
+  // Ossos pelo Avatar do .meta: hips, pés e cabeça.
+  std::map<std::string,std::string> human;
+  {std::string text;std::vector<u8> metaBytes;EditorImportTransaction::read(fs::path(model.string()+".meta"),metaBytes);text.assign(metaBytes.begin(),metaBytes.end());
+   std::string bone;usize at=0;
+   while((at=text.find("boneName: ",at))!=std::string::npos) {const auto end=text.find('\n',at);bone=text.substr(at+10,end-at-10);while(!bone.empty()&&(bone.back()=='\r'||bone.back()==' '))bone.pop_back();
+     const auto h=text.find("humanName: ",end);if(h==std::string::npos)break;const auto hend=text.find('\n',h);auto name=text.substr(h+11,hend-h-11);while(!name.empty()&&(name.back()=='\r'||name.back()==' '))name.pop_back();human[name]=bone;at=hend;}}
+  const auto named=[&](const std::string &humanName) {
+    const auto it=human.find(humanName);if(it==human.end())return EditorEntityId{};
+    for(const auto id:ids)if(const auto *e=document.find(id);e&&it->second==e->name)return id;
+    return EditorEntityId{};
+  };
+  const auto hips=named("Hips"),leftFoot=named("LeftFoot"),rightFoot=named("RightFoot"),head=named("Head");
+  std::fprintf(stderr,"  Avatar: %zu ossos humanos; Hips=%s LeftFoot=%s Head=%s\n",human.size(),human.count("Hips")?human["Hips"].c_str():"-",human.count("LeftFoot")?human["LeftFoot"].c_str():"-",human.count("Head")?human["Head"].c_str():"-");
+  AE_EXPECT_TRUE(hips&&leftFoot&&rightFoot&&head,"BoZo bones by Avatar names");if(!(hips&&leftFoot&&rightFoot&&head))return;
+  const auto at=[&](EditorEntityId id){float m[16];runtime::worldMatrix(preview.scene(),id,m);return std::array<float,3>{m[12],m[13],m[14]};};
+  float ownerMatrix[16];runtime::worldMatrix(document,owner,ownerMatrix);
+  float worstFeet=0,lowestHead=9;
+  for(float t=0;t<=asset->duration+1e-4f;t+=.1f) {
+    preview.seek(std::min(t,asset->duration),error);
+    const float feet=std::min(at(leftFoot)[1],at(rightFoot)[1])-ownerMatrix[13],headY=at(head)[1]-at(hips)[1];
+    worstFeet=std::max(worstFeet,std::fabs(feet));lowestHead=std::min(lowestHead,headY);
+    if(std::getenv("AE_UMOTION_TRACE"))std::fprintf(stderr,"  t=%.1f pes y=%.3f cabeca-quadril=%.3f quadril=(%.3f %.3f %.3f)\n",t,feet,headY,at(hips)[0],at(hips)[1],at(hips)[2]);
+  }
+  std::fprintf(stderr,"  parado: pior |pés| %.3f m, cabeça acima do quadril no mínimo %.3f m\n",worstFeet,lowestHead);
+  AE_EXPECT_TRUE(worstFeet<.12f,"feet stay near the ground through the idle");
+  AE_EXPECT_TRUE(lowestHead>.2f,"head stays above the hips");
 }
 
 // Pacote real (opcional): AE_UMOTION_EXAMPLES aponta para a pasta UMotionExamples
@@ -164,7 +255,7 @@ AE_TEST(unity_humanoid_kyle_pickup_from_the_umotion_package_follows_the_box) {
   };
   // A caixa do exemplo é filha do Root (o quadril) na cena do UMotion.
   const auto hipsBone=named("Root");AE_EXPECT_TRUE(hipsBone!=0,"Kyle hips bone");
-  const auto box=document.createEntity(hipsBone,EditorEntityKind::Folder,"Cube");
+  const auto box=document.createEntity(hipsBone,EditorEntityKind::Folder,"Cube"); // Root/Cube: a caixa tem curvas próprias no .anim
   const auto converted_clip=session.importUnityAsset(clipItem.path,owner,UnityReimportPolicy::RefuseConflict,error);
   AE_EXPECT_TRUE(converted_clip.valid(),error.c_str());if(!converted_clip.valid())return;
   const auto *asset=session.animationClipAsset(converted_clip);AE_EXPECT_TRUE(asset!=nullptr,"converted clip resource");if(!asset)return;
@@ -182,6 +273,8 @@ AE_TEST(unity_humanoid_kyle_pickup_from_the_umotion_package_follows_the_box) {
     float q[4];runtime::transformRotationQuaternion(document.find(hipsBone)->transform,q);
     std::fprintf(stderr,"  Root descanso Astra (%.4f %.4f %.4f %.4f) pos (%.4f %.4f %.4f)\n",q[0],q[1],q[2],q[3],
                  document.find(hipsBone)->transform.position[0],document.find(hipsBone)->transform.position[1],document.find(hipsBone)->transform.position[2]);
+    for(const char *bone:{"Root","Ribs","Neck","Head","Left_Shoulder_Joint_01","Left_Upper_Arm_Joint_01","Left_Forearm_Joint_01","Left_Wrist_Joint_01","Left_Middle_Finger_Joint_01a","Left_Thigh_Joint_01","Left_Knee_Joint_01","Left_Ankle_Joint_01","Left_Toe_Joint_01"})
+      if(const auto id=named(bone)) {float m[16];runtime::worldMatrix(document,id,m);std::fprintf(stderr,"  repouso %-28s mundo (%.3f %.3f %.3f)\n",bone,m[12],m[13],m[14]);}
     const auto *parent=document.find(document.find(hipsBone)->parent);
     std::fprintf(stderr,"  pai do Root: %s escala %.4f\n",parent?parent->name:"?",parent?parent->transform.scale[0]:0.f);
     for(const char *bone:{"Ribs","Left_Shoulder_Joint_01","Left_Upper_Arm_Joint_01","Left_Forearm_Joint_01","Left_Wrist_Joint_01","Left_Thigh_Joint_01"})
@@ -207,7 +300,86 @@ AE_TEST(unity_humanoid_kyle_pickup_from_the_umotion_package_follows_the_box) {
     sum+=nearest;worst=std::max(worst,nearest);best=std::min(best,nearest);++n;
   }
   std::fprintf(stderr,"  caixa-mão mais próxima em 0,7..2,2 s: média %.3f m, pior %.3f m, melhor %.3f m\n",sum/n,worst,best);
-  AE_EXPECT_TRUE(sum/n<.16,"the box stays near a hand while it is carried");
-  AE_EXPECT_TRUE(worst<.38,"no carried frame leaves the box far from both hands");
-  AE_EXPECT_TRUE(best<.08,"a hand reaches the box");
+  // ---- Verdade de referência: o projeto UMotion do mesmo exemplo ----
+  // O projeto PickUpAnimation.asset importado no mesmo Kyle (FK chave a chave,
+  // alvos de IK e Filho de resolvidos em Play) é a pose que o autor viu no
+  // UMotion. A conversão do .anim Humanoid (músculos -> ossos) é comparada a
+  // ela no mesmo instante: erro de posição das mãos, pés e cabeça e erro
+  // angular local por osso. O cubo do UMotion segue a mão pelo Filho de.
+  {
+    // A caixa do .anim fica fora do ajuste de repouso: o projeto cria o seu Root/Cube.
+    AE_EXPECT_TRUE(document.setName(box,"Caixa do .anim"),"rename the .anim box");
+    const float humanoidDuration=asset->duration; // `asset` aponta para o vetor de clipes, que a importação realoca
+    std::vector<u8> projectBytes;const auto umotionProject=source/"UMotion Projects/PickUpAnimation.asset";
+    AE_EXPECT_TRUE(EditorImportTransaction::read(umotionProject,projectBytes)&&EditorImportTransaction::write(project/"PickUpAnimation.asset",projectBytes),"copy the UMotion project");
+    editor::UMotionImportReport umReport;
+    const bool imported=session.importUMotionProject("PickUpAnimation.asset",owner,umReport,error);
+    AE_EXPECT_TRUE(imported,error.c_str());
+    if(!imported)return;
+    std::fprintf(stderr,"  UMotion: %u ossos, %u auxiliares, %u IK, %u Filho de, erro de repouso %.5f, clipes %zu, silenciadas %zu\n",
+                 umReport.bones,umReport.helpers,umReport.ikChains,umReport.childOf,umReport.restError,umReport.clips.size(),umReport.silencedAnimations.size());
+    AE_EXPECT_TRUE(umReport.restError<2e-3&&umReport.bones>=50&&umReport.ikChains==2&&umReport.childOf==1,"UMotion rig fits the converted Kyle rest pose");
+    const auto *umRecord=umReport.clips.empty()?nullptr:session.assets().findByPath(umReport.clips.front());
+    const auto *umClip=umRecord?session.animationClipAsset(umRecord->guid):nullptr;
+    AE_EXPECT_TRUE(umClip!=nullptr,"UMotion clip asset");if(!umClip)return;
+    std::fprintf(stderr,"  duração: Humanoid %.3f s, UMotion %.3f s\n",humanoidDuration,umClip->duration);
+    // Ossos comparáveis: toda a subárvore do quadril que existe nos dois lados.
+    std::vector<EditorEntityId> boneIds;document.collectSubtree(hipsBone,boneIds);
+    std::vector<std::pair<std::string,EditorEntityId>> bones;
+    for(const auto id:boneIds)if(const auto *e=document.find(id)) {const std::string_view n=e->name;if(n.find("Joint")!=std::string::npos||n=="Root"||n=="Hip"||n=="Ribs"||n=="Neck"||n=="Head")bones.push_back({e->name,id});}
+    AE_EXPECT_TRUE(session.startPlay(),"play the UMotion rig");
+    std::vector<renderer::MapDrawState> draws;
+    session.advanceClock(10);session.extractPlayMap(draws); // arma o relógio e carrega a cena de Play
+    const auto &g=session.playScene().document();
+    const auto playFind=[&](std::string_view name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(auto id:ids)if(const auto *e=g.find(id);e&&name==e->name)return id;return runtime::ObjectId{};};
+    std::vector<runtime::ObjectId> playBones;for(const auto &[name,id]:bones)playBones.push_back(playFind(name));
+    const auto playCube=playFind("Cube"),playOwner=playFind(document.find(owner)->name);
+    AE_EXPECT_TRUE(playCube&&playOwner,"UMotion cube and owner in Play");
+    const auto atPlay=[&](runtime::ObjectId id){float m[16];runtime::worldMatrix(g,id,m);return std::array<float,3>{m[12],m[13],m[14]};};
+    const auto angle=[](const float a[4],const float b[4]){const float d=std::fabs(a[0]*b[0]+a[1]*b[1]+a[2]*b[2]+a[3]*b[3]);return 2*std::acos(std::min(1.f,d))*57.29578f;};
+    struct Stat{double sum=0,worst=0;u32 n=0;void add(double v){sum+=v;worst=std::max(worst,v);++n;}double mean()const{return n?sum/n:0;}};
+    Stat handL,handR,footL,footR,headS,carry;std::vector<Stat> boneStat(bones.size());
+    const float span=std::min(humanoidDuration,umClip->duration);const int frames=static_cast<int>(span*60);
+    const bool trace=std::getenv("AE_UMOTION_TRACE")!=nullptr;
+    for(int i=1;i<=frames;++i) {
+      session.advanceClock(10+(double(i)+.001)/60.0);session.extractPlayMap(draws);
+      const float t=static_cast<float>(i)/60;preview.seek(std::min(t,humanoidDuration),error);
+      const auto po=atPlay(playOwner),eo=std::array<float,3>{ownerMatrix[12],ownerMatrix[13],ownerMatrix[14]};
+      const auto rel=[&](std::array<float,3> p,std::array<float,3> o){return std::array<float,3>{p[0]-o[0],p[1]-o[1],p[2]-o[2]};};
+      const auto cmp=[&](Stat &s,EditorEntityId id,std::string_view name){const double d=distance(rel(at(id),eo),rel(atPlay(playFind(name)),po));s.add(d);return d;};
+      const double eL=cmp(handL,leftHand,"Left_Wrist_Joint_01"),eR=cmp(handR,rightHand,"Right_Wrist_Joint_01");
+      cmp(footL,leftFoot,"Left_Ankle_Joint_01");cmp(footR,rightFoot,"Right_Ankle_Joint_01");cmp(headS,head,"Head");
+      const auto cube=atPlay(playCube);const double nearest=std::min(distance(atPlay(playFind("Left_Wrist_Joint_01")),cube),distance(atPlay(playFind("Right_Wrist_Joint_01")),cube));
+      if(t>=.7f&&t<=2.2f)carry.add(nearest);
+      for(usize b=0;b<bones.size();++b)if(playBones[b]) {
+        float qa[4],qb[4];runtime::transformRotationQuaternion(preview.scene().find(bones[b].second)->transform,qa);runtime::transformRotationQuaternion(g.find(playBones[b])->transform,qb);
+        boneStat[b].add(angle(qa,qb));
+      }
+      if(trace&&i%6==0)std::fprintf(stderr,"  t=%.1f erro maoE %.3f maoD %.3f | UMotion caixa-mao %.3f\n",t,eL,eR,nearest);
+      if(trace&&(i==6||i==90)) {
+        const auto dump=[&](const char *label,std::array<float,3> a,std::array<float,3> b){std::fprintf(stderr,"    %-8s Humanoid (%.3f %.3f %.3f)  UMotion (%.3f %.3f %.3f)\n",label,a[0],a[1],a[2],b[0],b[1],b[2]);};
+        dump("dono",eo,po);dump("quadril",rel(at(hipsBone),eo),rel(atPlay(playFind("Root")),po));
+        dump("peE",rel(at(leftFoot),eo),rel(atPlay(playFind("Left_Ankle_Joint_01")),po));dump("maoE",rel(at(leftHand),eo),rel(atPlay(playFind("Left_Wrist_Joint_01")),po));
+        dump("cabeca",rel(at(head),eo),rel(atPlay(playFind("Head")),po));
+        const auto *pr=g.find(playFind("Root")),*pp=pr?g.find(pr->parent):nullptr;
+        std::fprintf(stderr,"    pai do Root em Play: %s escala %.4f  pos local Root Play (%.3f %.3f %.3f) Humanoid (%.3f %.3f %.3f)\n",pp?pp->name:"?",pp?pp->transform.scale[0]:0.f,
+                     pr->transform.position[0],pr->transform.position[1],pr->transform.position[2],
+                     preview.scene().find(hipsBone)->transform.position[0],preview.scene().find(hipsBone)->transform.position[1],preview.scene().find(hipsBone)->transform.position[2]);
+      }
+    }
+    std::fprintf(stderr,"  Humanoid vs UMotion (%d quadros): maoE media %.3f pior %.3f | maoD media %.3f pior %.3f | peE %.3f | peD %.3f | cabeca %.3f m\n",
+                 frames,handL.mean(),handL.worst,handR.mean(),handR.worst,footL.mean(),footR.mean(),headS.mean());
+    std::fprintf(stderr,"  UMotion caixa-mao mais proxima em 0,7..2,2 s: media %.3f m, pior %.3f m\n",carry.mean(),carry.worst);
+    // Limites da conversão atual (16/10/2026: mãos ≈7 cm, pés ≈7 cm, cabeça ≈6 cm,
+    // dominados por um deslocamento vertical constante de ≈5 cm do centro de
+    // massa). Falham se a conversão regredir.
+    AE_EXPECT_TRUE(handL.mean()<.1&&handR.mean()<.1,"hands within 10 cm of the UMotion ground truth on average");
+    AE_EXPECT_TRUE(footL.mean()<.1&&footR.mean()<.1,"feet within 10 cm of the UMotion ground truth on average");
+    AE_EXPECT_TRUE(handL.worst<.15&&handR.worst<.15,"no frame puts a hand more than 15 cm from the ground truth");
+    std::vector<usize> order(bones.size());for(usize b=0;b<order.size();++b)order[b]=b;
+    std::sort(order.begin(),order.end(),[&](usize a,usize b){return boneStat[a].mean()>boneStat[b].mean();});
+    for(usize k=0;k<std::min<usize>(12,order.size());++k)if(boneStat[order[k]].n)
+      std::fprintf(stderr,"    %-32s erro angular medio %6.2f° pior %6.2f°\n",bones[order[k]].first.c_str(),boneStat[order[k]].mean(),boneStat[order[k]].worst);
+    (void)draws;
+  }
 }

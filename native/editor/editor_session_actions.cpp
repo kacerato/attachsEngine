@@ -19,6 +19,7 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_studio_tools.h"
 #include "editor/editor_texture_history.h"
 #include "editor/editor_property_tween.h"
 #include "scene/property_tween.h"
@@ -1612,12 +1613,21 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::LibraryOpen)) {
       if(!isPlaying()){cameraPreview_.close();state_.workspace=EditorWorkspace::Library;refreshLibraryRows();}return true;
     }
+    // Malhas do projeto: a Biblioteca no trilho Projeto (o antigo espaço de
+    // "Recursos importados" era uma lista de texto à parte).
+    if(key==widgetId(EditorWidget::TabAssets)) {
+      if(!isPlaying()&&mapScene_.assetCount()) {
+        cameraPreview_.close();state_.contextMenu=false;state_.workspace=EditorWorkspace::Library;
+        state_.libraryKind=11;state_.libraryScroll=0;state_.libraryPackage={};refreshLibraryRows();
+      }
+      return true;
+    }
     if(key==widgetId(EditorWidget::LibraryClose)) {state_.workspace=EditorWorkspace::Scene;return true;}
     if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
     if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
     if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;state_.libraryDetailItem={};state_.libraryDetailName.clear();return true;}
-    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%11;state_.libraryScroll=0;refreshLibraryRows();return true;}
-    if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+11) {
+    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%12;state_.libraryScroll=0;refreshLibraryRows();return true;}
+    if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+12) {
       state_.libraryKind=key-widgetId(EditorWidget::LibraryKindBase);state_.libraryScroll=0;refreshLibraryRows();return true;
     }
     if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
@@ -1668,6 +1678,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     if(key>=widgetId(EditorWidget::LibraryItemBase)&&key<widgetId(EditorWidget::LibraryItemBase)+resources::LibraryIndex::MaximumItems) {
       const auto row=key-widgetId(EditorWidget::LibraryItemBase);std::string error;
+      if(row<state_.libraryRows.size()&&(state_.libraryRows[row].projectAsset!=~0u||state_.libraryRows[row].unregistered)) {
+        // Malha do projeto ou origem sem registro: detalhe próprio, sem item de pacote.
+        const auto &item=state_.libraryRows[row];
+        state_.libraryDetailItem=item.id;state_.libraryDetailName=item.name;state_.libraryConflict=false;
+        state_.libraryCanInstantiate=state_.libraryCanAssignController=state_.libraryCanReimport=false;
+        state_.libraryDiagnostic=item.diagnostic;state_.libraryDiagnosticScroll=0;return true;
+      }
       if(row<state_.libraryRows.size()) {const auto id=state_.libraryRows[row].id;if(!openLibraryItem(id,error)) {
         state_.libraryConflict=error.find("Manter local ou Receber origem")!=error.npos;
         state_.status=error;state_.libraryDiagnostic=error;state_.libraryDiagnosticScroll=0;
@@ -3275,6 +3292,18 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::CharacterConversionBack)) {state_.characterConversionTarget=0;state_.propertyPage=0;return true;}
+    if(key>=widgetId(EditorWidget::CharacterRecipeBase)&&key<widgetId(EditorWidget::CharacterRecipeEnd)) {
+      // Criar › Personagem: a receita age sobre o personagem da seleção e
+      // fecha o menu; o resumo ou o erro vai para a barra de estado.
+      state_.creationMenu=false;
+      const auto owner=EditorStudio::characterOf(document_,state_.selection);
+      const auto recipe=static_cast<EditorStudio::CharacterRecipe>(1+key-widgetId(EditorWidget::CharacterRecipeBase));
+      std::string summary,error;
+      if(!owner)state_.status="Selecione um personagem com esqueleto";
+      else if(EditorStudio::setupCharacter(*this,owner,recipe,summary,error)) {state_.status=summary;state_.selection=owner;}
+      else state_.status=error;
+      return true;
+    }
     if(key==widgetId(EditorWidget::CharacterConversionApply)) {
       if(state_.characterConversionTarget!=state_.selection) {state_.status="Seleção mudou; abra a conversão novamente";return true;}
       const auto result=convertToCharacter(state_.selection);

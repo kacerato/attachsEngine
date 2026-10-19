@@ -8,7 +8,8 @@
 
 namespace ae::resources {
 struct AnimatorControllerAsset {
-  static constexpr u32 FormatVersion=3;
+  // v4: grafo do Animator na versão 6 (modo da mistura 2D e camadas sincronizadas).
+  static constexpr u32 FormatVersion=4;
   static constexpr usize MaximumBytes=1024*1024;
   AssetGuid guid{};u32 revision=1;std::string name;
   scene::Animator graph;

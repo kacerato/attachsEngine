@@ -368,6 +368,8 @@ void EditorSession::setSelection(EditorEntityId entity) {
 }
 
 void EditorSession::setCameraPose(const float position[3], float yaw, float pitch) {
+  // Câmera explícita vence o enquadramento pendente do estúdio.
+  clipFrameOnLayout_=false;
   EditorCamera camera;camera.yaw=yaw;camera.pitch=pitch;
   camera.target[0]=position[0]+std::cos(pitch)*std::sin(yaw)*camera.distance;
   camera.target[1]=position[1]-std::sin(pitch)*camera.distance;
@@ -6327,6 +6329,7 @@ void EditorSession::update() {
   if(inputCapture_ && !validateInputCapture()) cancelInputBindingCapture();
   refreshScriptInspection();
   state_.document=playInspecting()?&playScene_.document():&document_;
+  state_.characterRecipeTarget=isPlaying()?0:EditorStudio::characterOf(document_,state_.selection);
   state_.characterRuntime=playInspecting()&&playScene_.active()?&playScene_.physics():nullptr;
   state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
@@ -6488,6 +6491,8 @@ void EditorSession::update() {
   const bool measureColliderUi=state_.colliderTopology||state_.physicsDiagnosticOpen;
   const auto colliderUiStart=measureColliderUi?std::chrono::steady_clock::now():std::chrono::steady_clock::time_point{};
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
+  // Estúdio recém-aberto: enquadra o dono na vista do estúdio, agora conhecida.
+  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameAnimationStudio();}
   // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
   // no Inspector começa do topo.
   if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}
@@ -6547,6 +6552,8 @@ void EditorSession::update() {
       clipPreview_.drawGui(draw,draw.fontMetrics(),view_.frustum,viewport,state_.surface);
   };
   layout_ = buildEditorScreen(state_, state_.workspace==EditorWorkspace::Code?editorCodeTheme():editorTheme(), list_, router_);
+  // Estúdio recém-aberto: enquadra o dono na vista do estúdio, agora conhecida.
+  if(clipFrameOnLayout_&&state_.clipOpen&&!layout_.viewport.isEmpty()) {clipFrameOnLayout_=false;frameAnimationStudio();}
   // A coluna encolheu (cartão fechado): a rolagem volta ao limite; outro objeto
   // no Inspector começa do topo.
   if(inspectorScrollOwner_!=state_.selection) {inspectorScrollOwner_=state_.selection;state_.inspectorScroll=0;}

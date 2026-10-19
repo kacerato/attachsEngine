@@ -268,27 +268,34 @@ void referencePose(const std::array<std::array<double,3>,UnityHumanBoneCount> &m
     local[bone]=norm(mul(pre,muscleRotation(bone,own[0],own[1],own[2])));
   }
   // Corpo para o centro de massa: rotações sem a distribuição, como o Unidot.
-  std::array<V,BodyCount> position{};std::array<Q,BodyCount> rotation{};
-  position[0]={BodyPosition[0][0],BodyPosition[0][1],BodyPosition[0][2]};rotation[0]={};
-  for(u32 body=1;body<BodyCount;++body) {
-    const u32 bone=BodyBone[body],parent=BodyParent[body];
-    const auto &m=muscles[bone];
-    const V offset{BodyPosition[body][0],BodyPosition[body][1],BodyPosition[body][2]};
-    position[body]=position[parent]+rotate(rotation[parent],offset);
-    rotation[body]=norm(mul(rotation[parent],muscleRotation(bone,m[0],m[1],m[2])));
-  }
-  V x=(position[14]+position[1])-(position[15]+position[2]);
-  V y=(position[14]+position[15])-(position[1]+position[2]);
-  x=unit(x);y=unit(y);const V z=unit(cross(x,y));x=cross(y,z);
-  const Q massQ=fromBasis(x,y,z);
-  double sum=1e-6;V massT{};
-  for(u32 body=0;body<BodyCount;++body)if(BodyMass[body]>0) {
-    const V center=position[body]+rotate(rotation[body],V{0,BodyLength[body]/2,0});
-    massT=massT+center*BodyMass[body];sum+=BodyMass[body];
-  }
-  massT=massT*(1/sum);
-  const Q delta=norm(mul(rootQ,conj(massQ)));
-  hips=rootT-rotate(delta,massT-position[0]);
+  const auto body=[&](const std::array<std::array<double,3>,UnityHumanBoneCount> &m,V &massT,Q &massQ) {
+    std::array<V,BodyCount> position{};std::array<Q,BodyCount> rotation{};
+    position[0]={BodyPosition[0][0],BodyPosition[0][1],BodyPosition[0][2]};rotation[0]={};
+    for(u32 b=1;b<BodyCount;++b) {
+      const u32 bone=BodyBone[b],parent=BodyParent[b];
+      const V offset{BodyPosition[b][0],BodyPosition[b][1],BodyPosition[b][2]};
+      position[b]=position[parent]+rotate(rotation[parent],offset);
+      rotation[b]=norm(mul(rotation[parent],muscleRotation(bone,m[bone][0],m[bone][1],m[bone][2])));
+    }
+    V x=(position[14]+position[1])-(position[15]+position[2]);
+    V y=(position[14]+position[15])-(position[1]+position[2]);
+    x=unit(x);y=unit(y);const V z=unit(cross(x,y));x=cross(y,z);
+    massQ=fromBasis(x,y,z);
+    double sum=1e-6;massT={};
+    for(u32 b=0;b<BodyCount;++b)if(BodyMass[b]>0) {
+      const V center=position[b]+rotate(rotation[b],V{0,BodyLength[b]/2,0});
+      massT=massT+center*BodyMass[b];sum+=BodyMass[b];
+    }
+    massT=massT*(1/sum);
+    return position[0];
+  };
+  // A orientação do corpo da Unity é relativa à pose em T: RootQ identidade
+  // é o corpo como no Avatar. Sem normalizar pelo referencial do repouso,
+  // braços atrás das pernas no esqueleto de referência inclinariam o corpo.
+  static const Q massQ0=[&]{V t;Q q;body({},t,q);return q;}();
+  V massT;Q massQ;const V hipsRef=body(muscles,massT,massQ);
+  const Q delta=norm(mul(rootQ,mul(massQ0,conj(massQ))));
+  hips=rootT-rotate(delta,massT-hipsRef);
   global[0]=delta;
   for(const u32 bone:ReferenceOrder)if(bone)global[bone]=norm(mul(global[static_cast<u32>(ReferenceParent[bone])],local[bone]));
 }
@@ -428,12 +435,20 @@ bool appendUnityHumanoidTracks(const UnityHumanoidCurves &curves,const UnityHuma
   }
   if(tposeNodes)report.notes.push_back("Pose em T do Avatar da Unity em "+std::to_string(tposeNodes)+" ossos como referência.");
   const auto restPosition=[&](u32 human,V &out){const i32 i=node[human];if(i<0)return false;const auto &m=restMatrix[static_cast<usize>(i)];out={m[12],m[13],m[14]};return true;};
-  // Alinhamento referência -> alvo pelo corpo (esquerda e cima), o mesmo
-  // referencial do centro de massa. Sem braços e pernas, sem giro.
+  // Alinhamento referência -> alvo pelo corpo (esquerda e cima), como a
+  // orientação do Avatar da Unity (AvatarSetupTool.AvatarComputeOrientation):
+  // quando o lado do tronco já está num eixo, o "cima" é encaixado no eixo mais
+  // próximo. RootT/RootQ vivem nesse referencial da raiz do Avatar; sem o
+  // encaixe, braços atrás dos quadris (Kyle) inclinariam o corpo inteiro.
   Q align;V up{0,1,0};
   V leftArm,rightArm,leftLeg,rightLeg;
   if(restPosition(13,leftArm)&&restPosition(14,rightArm)&&restPosition(1,leftLeg)&&restPosition(2,rightLeg)) {
-    V x=unit((leftArm+leftLeg)-(rightArm+rightLeg)),y=unit((leftArm+rightArm)-(leftLeg+rightLeg));
+    V x=unit(unit(leftLeg-rightLeg)+unit(leftArm-rightArm)),y=unit((leftArm+rightArm)*.5-(leftLeg+rightLeg)*.5);
+    const bool sensible=std::abs(x.x*x.y)<.05&&std::abs(x.y*x.z)<.05&&std::abs(x.z*x.x)<.05;
+    if(sensible) {
+      const double a[3]{std::abs(y.x),std::abs(y.y),std::abs(y.z)};const u32 axis=a[1]>=a[0]&&a[1]>=a[2]?1:a[0]>=a[2]?0:2;
+      const double sign=(axis==0?y.x:axis==1?y.y:y.z)<0?-1:1;y={axis==0?sign:0,axis==1?sign:0,axis==2?sign:0};
+    }
     const V z=unit(cross(x,y));x=cross(y,z);align=fromBasis(x,y,z);up=y;
   } else report.notes.push_back("Braços ou pernas sem osso mapeado: orientação do corpo tomada como a da referência.");
   V hipsRest;restPosition(0,hipsRest);
@@ -467,6 +482,8 @@ bool appendUnityHumanoidTracks(const UnityHumanoidCurves &curves,const UnityHuma
     AnimationCurveSample s;return !curve.keys.empty()&&sampleValidatedAnimationCurve(curve,time,s)?s.value:fallback;
   };
   std::vector<Q> poseLocal(count),poseGlobal(count);std::vector<M> poseMatrix(count);
+  std::array<double,UnityHumanBoneCount> boneMass{};
+  for(u32 body=0;body<BodyCount;++body)boneMass[BodyBone[body]]=BodyMass[body];
   for(const double time:times) {
     std::array<std::array<double,3>,UnityHumanBoneCount> muscles{};
     for(u32 bone=0;bone<UnityHumanBoneCount;++bone)for(u32 axis=0;axis<3;++axis)
@@ -474,23 +491,46 @@ bool appendUnityHumanoidTracks(const UnityHumanoidCurves &curves,const UnityHuma
     V rootT{0,1,0};Q rootQ;
     if(curves.hasRootT) rootT={-sample(curves.rootT[0],time,0),sample(curves.rootT[1],time,1),sample(curves.rootT[2],time,0)};
     if(curves.hasRootQ) rootQ=norm(Q{sample(curves.rootQ[0],time,0),-sample(curves.rootQ[1],time,0),-sample(curves.rootQ[2],time,0),sample(curves.rootQ[3],time,1)});
+    // Root Transform Rotation › Offset da Unity: giro em volta de Y da Unity
+    // aplicado por fora do corpo; no espelho X deste importador o sentido inverte.
+    if(curves.orientationOffsetY!=0) {
+      const double half=-curves.orientationOffsetY*3.14159265358979323846/360;
+      const Q yaw{0,std::sin(half),0,std::cos(half)};rootQ=norm(mul(yaw,rootQ));
+      rootT=rotate(yaw,rootT);
+    }
     std::array<Q,UnityHumanBoneCount> local{},global{};V hips;
     referencePose(muscles,rootT,rootQ,local,global,hips);
     // Alvo: osso humano recebe o mesmo giro de mundo que o da referência fez
     // desde o descanso; os demais ficam no descanso local.
     poseGlobal[0]={};poseMatrix[0]=restMatrix[0];
-    const V hipsTarget=rotate(align,hips*humanScale);
-    for(usize i=1;i<count;++i) {
-      const auto &n=target.nodes[i];const auto p=static_cast<usize>(n.parent);
-      if(n.human>=0) {
-        const u32 bone=static_cast<u32>(n.human);
-        const Q delta=norm(mul(mul(align,mul(global[bone],conj(referenceRest[bone]))),conj(align)));
-        poseGlobal[i]=norm(mul(delta,restGlobal[i]));poseLocal[i]=norm(mul(conj(poseGlobal[p]),poseGlobal[i]));
-      } else {poseLocal[i]=restLocal[i];poseGlobal[i]=norm(mul(poseGlobal[p],poseLocal[i]));}
-      V t=translation[i];
-      if(i==hipsNode) {M parentInverse;if(!inverse(poseMatrix[p],parentInverse))return fail("Pai do quadril sem inversa.");t=point(parentInverse,hipsTarget);hipsTrack.push_back(t);}
-      poseMatrix[i]=multiply(poseMatrix[p],compose(t,poseLocal[i],scale[i]));
+    const auto build=[&](const V *hipsWorld) {
+      for(usize i=1;i<count;++i) {
+        const auto &n=target.nodes[i];const auto p=static_cast<usize>(n.parent);
+        if(n.human>=0) {
+          const u32 bone=static_cast<u32>(n.human);
+          const Q delta=norm(mul(mul(align,mul(global[bone],conj(referenceRest[bone]))),conj(align)));
+          poseGlobal[i]=norm(mul(delta,restGlobal[i]));poseLocal[i]=norm(mul(conj(poseGlobal[p]),poseGlobal[i]));
+        } else {poseLocal[i]=restLocal[i];poseGlobal[i]=norm(mul(poseGlobal[p],poseLocal[i]));}
+        V t=translation[i];
+        if(i==hipsNode&&hipsWorld) {M parentInverse;if(!inverse(poseMatrix[p],parentInverse))return false;t=point(parentInverse,*hipsWorld);hipsTrack.push_back(t);}
+        poseMatrix[i]=multiply(poseMatrix[p],compose(t,poseLocal[i],scale[i]));
+      }
+      return true;
+    };
+    // Corpo da Unity: RootT é o centro de massa do personagem (média das
+    // posições dos ossos humanos pesada pela massa padrão de cada um), em
+    // unidades da escala humana. O quadril vai onde esse centro, medido no
+    // próprio esqueleto do alvo nesta pose, coincide com RootT.
+    build(nullptr);
+    V massCenter{};double massSum=0;
+    for(u32 bone=0;bone<UnityHumanBoneCount;++bone)if(node[bone]>=0&&boneMass[bone]>0) {
+      // Posição da junta, não o meio do segmento: o meio desceu o centro e
+      // afundou os pés do Kyle (medido em 16/10/2026 contra o projeto UMotion).
+      const auto &m=poseMatrix[static_cast<usize>(node[bone])];massCenter=massCenter+V{m[12],m[13],m[14]}*boneMass[bone];massSum+=boneMass[bone];
     }
+    const V hipsNow{poseMatrix[hipsNode][12],poseMatrix[hipsNode][13],poseMatrix[hipsNode][14]};
+    const V hipsTarget=massSum>0?rotate(align,rootT*humanScale)-(massCenter*(1/massSum)-hipsNow):rotate(align,hips*humanScale);
+    if(!build(&hipsTarget))return fail("Pai do quadril sem inversa.");
     for(const auto i:outputs) {
       Q q=poseLocal[i];
       if(!rotations[i].empty()) {const Q &prev=rotations[i].back();if(prev.x*q.x+prev.y*q.y+prev.z*q.z+prev.w*q.w<0)q={-q.x,-q.y,-q.z,-q.w};}

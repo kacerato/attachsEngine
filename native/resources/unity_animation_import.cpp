@@ -194,10 +194,22 @@ bool convertUnityAnimation(const UnityYamlDocument &document,AssetGuid nativeGui
     if(const auto *value=settings->get("m_StartTime");value&&!value->number(start))return fail(diagnostic,"StartTime Unity inválido.");
     if(const auto *value=settings->get("m_StopTime");value&&!value->number(stop))return fail(diagnostic,"StopTime Unity inválido.");
     if(start!=0||stop<clip.duration||stop>86400)return fail(diagnostic,"Recorte Unity não coincide com os canais; converta o intervalo explicitamente.");
-    for(const char *flag:{"m_HasAdditiveReferencePose","m_Mirror","m_LoopBlend","m_LoopBlendOrientation","m_LoopBlendPositionY","m_LoopBlendPositionXZ"})
+    // Root Transform › "Bake Into Pose" (m_LoopBlendOrientation/PositionY/PositionXZ):
+    // ligado, o movimento fica na pose; desligado, a Unity o extrai como root
+    // motion do Animator. A conversão escreve sempre a pose completa, então os
+    // dois valores dão o mesmo clipe aqui (Unity 6000.0, Animation Clip ›
+    // Root Transform). Loop Pose (m_LoopBlend) e Mirror mudam a pose: recusados.
+    for(const char *flag:{"m_HasAdditiveReferencePose","m_Mirror","m_LoopBlend"})
       if(enabled(*settings,flag))return fail(diagnostic,std::string("Configuração Unity sem equivalente nesta conversão: ")+flag);
-    for(const char *offset:{"m_OrientationOffsetY","m_Level","m_CycleOffset"}) {
+    for(const char *offset:{"m_Level","m_CycleOffset"}) {
       double value=0;if(const auto *entry=settings->get(offset);entry&&(!entry->number(value)||value!=0))return fail(diagnostic,std::string("Offset Unity exige transformação explícita: ")+offset);
+    }
+    // Root Transform Rotation › Offset: gira o corpo do clipe Humanoid; num clipe
+    // genérico não há raiz humana a girar.
+    if(const auto *entry=settings->get("m_OrientationOffsetY")) {
+      double value=0;if(!entry->number(value)||!std::isfinite(value))return fail(diagnostic,"Offset Unity inválido: m_OrientationOffsetY");
+      if(value!=0&&!humanoidClip)return fail(diagnostic,"Offset Unity exige transformação explícita: m_OrientationOffsetY");
+      human.orientationOffsetY=value;
     }
     candidate.loop=enabled(*settings,"m_LoopTime");clip.duration=static_cast<float>(stop);
   }
