@@ -216,6 +216,8 @@ public:
       out<<' '<<guid(lm.texture)<<' '<<lm.enabled<<' '<<lm.scale[0]<<' '<<lm.scale[1]
          <<' '<<lm.offset[0]<<' '<<lm.offset[1]<<' '<<lm.intensity;
     }
+    // v10 (G3a): origem da rugosidade de cada slot (rugosidade ou suavidade).
+    for(u32 slot=0;slot<slotCount();++slot) out<<' '<<static_cast<unsigned>(slotChannels(slot).roughnessSource);
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -226,7 +228,7 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>9 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>10 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
     asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};lightmap={};submeshes.clear();
@@ -291,6 +293,12 @@ public:
       if(!(in>>token>>active>>lm.scale[0]>>lm.scale[1]>>lm.offset[0]>>lm.offset[1]>>lm.intensity) ||
          active>1 || !parse(token,lm.texture) || !lm.valid()) return false;
       lm.enabled=active!=0;
+    }
+    // Até a v9 não havia suavidade: a rugosidade herdada é a da fonte.
+    if(version>=10) for(u32 slot=0;slot<slotCount();++slot) {
+      unsigned source=0;
+      if(!(in>>source) || source>MaterialRoughnessSmoothnessBaseAlpha) return false;
+      editSlotChannels(slot)->roughnessSource=static_cast<std::uint8_t>(source);
     }
     return true;
   }
@@ -409,6 +417,10 @@ inline constexpr std::array<ComponentEnumOption,4> materialAlphaSourceOptions{{
   {MaterialAlphaSourceKeep,"Herdar"},{MaterialAlphaSourceBase,"Alfa da cor base"},{MaterialAlphaSourceOpaque,"Sempre opaco"},
   {MaterialAlphaSourceLuminance,"Luminância da cor base"}
 }};
+inline constexpr std::array<ComponentEnumOption,4> materialRoughnessSourceOptions{{
+  {MaterialRoughnessKeep,"Herdar"},{MaterialRoughnessMap,"Rugosidade no canal"},{MaterialRoughnessSmoothnessMap,"Suavidade no canal (1 - canal)"},
+  {MaterialRoughnessSmoothnessBaseAlpha,"Suavidade no alfa da cor base"}
+}};
 inline constexpr std::array<ComponentEnumOption,4> materialUvSetOptions{{
   {MaterialUvKeep,"Herdar"},{MaterialUv0,"UV 0"},{MaterialUv1,"UV 1"},{MaterialUvWorld,"Mundo (triplanar)"}
 }};
@@ -420,7 +432,7 @@ inline constexpr std::array<ComponentEnumOption,3> materialFilterOptions{{
 }};
 
 inline constexpr std::array<ComponentEnumOption,2> lightmapEnabledOptions{{{0,"Desativado"},{1,"Lightmap indireto externo"}}};
-inline constexpr std::array<ComponentSlotEnum,25> meshRendererSlotEnums{{
+inline constexpr std::array<ComponentSlotEnum,26> meshRendererSlotEnums{{
   {"material.override","Material",materialOverrideOptions,detail::meshSlots,
    [](const ComponentValue &v,u32 slot)->u32{return static_cast<const MeshRenderer&>(v).slotMaterial(slot).enabled?1u:0u;},
    [](ComponentValue &v,u32 slot,u32 value)->bool{
@@ -457,6 +469,9 @@ inline constexpr std::array<ComponentSlotEnum,25> meshRendererSlotEnums{{
   AE_SLOT_ENUM("channels.alpha_source","Origem do alfa",materialAlphaSourceOptions,"Canais",
     m.slotChannels(slot).alphaSource,
     {auto *c=m.editSlotChannels(slot);if(!c) return false;c->alphaSource=static_cast<std::uint8_t>(value);return true;}),
+  AE_SLOT_ENUM("channels.roughness_source","Origem da rugosidade",materialRoughnessSourceOptions,"Canais",
+    m.slotChannels(slot).roughnessSource,
+    {auto *c=m.editSlotChannels(slot);if(!c) return false;c->roughnessSource=static_cast<std::uint8_t>(value);return true;}),
   AE_SLOT_ENUM("sampling.uv_set","Conjunto de UV",materialUvSetOptions,"Amostragem",
     m.slotSampling(slot)[0].uvSet,
     {auto *s=m.editSlotSampling(slot);if(!s) return false;for(auto &b:*s) b.uvSet=static_cast<std::uint8_t>(value);return true;}),
@@ -588,7 +603,7 @@ inline const std::array<ComponentSlotNumber,43> meshRendererAllSlotNumbers=[]{
   return all;
 }();
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",9,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
+  "astra.render.mesh",10,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
   meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources,
   meshRendererAllSlotNumbers,meshRendererSlotEnums
 };

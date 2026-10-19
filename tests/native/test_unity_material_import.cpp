@@ -1,6 +1,9 @@
 #include "editor/editor_screen.h"
 #include "harness.h"
 #include "resources/unity_material_import.h"
+#include "renderer/material_override.h"
+#include "scene/mesh_renderer.h"
+#include <sstream>
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "runtime/primitive_object.h"
@@ -46,7 +49,9 @@ AE_TEST(unity_material_converts_effective_factors_surface_and_uv_without_mutatin
     "    m_Colors:\n    - _Color: {r: 0.3, g: 0.4, b: 0.5, a: 1}\n","_ALPHATEST_ON");
   AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&result.supported(),"supported Standard");
   AE_EXPECT_TRUE(std::abs(result.material.values.roughness-.2f)<.0001f,"smoothness inverted");
-  AE_EXPECT_EQ(result.material.values.metallic,.6f,"metallic consumed");
+  // [Gamma] _Metallic: 0,6 sRGB no Inspector chega linear ao shader.
+  AE_EXPECT_TRUE(std::abs(result.material.values.metallic-.31855f)<.0005f,"metallic consumed in linear space");
+  AE_EXPECT_EQ(result.audit(),resources::UnityMaterialAudit::Complete,"plain Standard is a complete conversion");
   AE_EXPECT_EQ(result.material.surface.alphaMode,scene::MaterialAlphaMask,"cutout consumed");
   AE_EXPECT_EQ(result.textures.size(),1u,"texture dependency");
   AE_EXPECT_EQ(result.textures[0].sampling.scale[1],3.f,"UV tiling preserved");
@@ -54,11 +59,15 @@ AE_TEST(unity_material_converts_effective_factors_surface_and_uv_without_mutatin
   resources::MaterialAsset reopened;
   AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(result.material.serialize(),reopened),"native persistence");
 }
-AE_TEST(unity_material_rejects_shader_and_packed_smoothness_instead_of_silent_degradation) {
+AE_TEST(unity_material_rejects_shader_and_incoherent_variants_instead_of_silent_degradation) {
   resources::UnityMaterialImport result;
   auto source=materialSource("    m_TexEnvs:\n    - _MetallicGlossMap:\n"
     "        m_Texture: {fileID: 2800000, guid: 11111111111111111111111111111111, type: 3}\n");
-  AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&!result.supported(),"packed channels rejected");
+  // Sem _METALLICGLOSSMAP o Standard não amostra o mapa: ele não vira dependência.
+  AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&result.supported()&&result.textures.empty(),"inactive metallic map ignored like Unity");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_METALLICGLOSSMAP"),result)&&!result.supported(),"metallic map keyword without texture refused");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _SmoothnessTextureChannel: 1\n"),result)&&!result.supported(),"smoothness channel bookkeeping without the shader variant refused");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_PARALLAXMAP"),result)&&result.audit()==resources::UnityMaterialAudit::Unsupported,"parallax still has no consumer");
   source.replace(source.find("fileID: 46"),10,"fileID: 99");
   AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&!result.supported(),"unknown shader rejected");
   AE_EXPECT_TRUE(!resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Metallic: nan\n"),result),"nonfinite rejected");
@@ -68,7 +77,72 @@ AE_TEST(unity_material_rejects_shader_and_packed_smoothness_instead_of_silent_de
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_ALPHATEST_ON _ALPHABLEND_ON"),result)&&!result.supported(),"incoherent alpha variants refused");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Mode: 2\n    - _SrcBlend: 5\n    - _DstBlend: 10\n    - _ZWrite: 0\n","_ALPHABLEND_ON"),result)&&result.supported()&&result.material.surface.alphaMode==scene::MaterialAlphaBlend,"effective Fade blend accepted");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Colors:\n    - _EmissionColor: {r: 4, g: 1, b: 0, a: 1}\n","_EMISSION_FAKE"),result)&&result.supported()&&result.material.values.emission[0]==0,"keyword substring cannot enable emission");
-  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_SPECULARHIGHLIGHTS_OFF"),result)&&!result.supported(),"effective unsupported shader variant refused even without Inspector bookkeeping");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_SPECULARHIGHLIGHTS_OFF"),result)&&result.supported()&&
+    result.audit()==resources::UnityMaterialAudit::Approximated&&result.material.values.specular==1,"highlights alone converts as a declared approximation");
+}
+// G3a: Standard.shader 2022.3, UnityStandardInput.cginc MetallicGloss/Alpha.
+AE_TEST(unity_material_metallic_gloss_map_becomes_inverted_smoothness_channel) {
+  resources::UnityMaterialImport result;
+  const auto source=materialSource("    m_TexEnvs:\n    - _MainTex:\n"
+    "        m_Texture: {fileID: 2800000, guid: 22222222222222222222222222222222, type: 3}\n"
+    "        m_Scale: {x: 4, y: 4}\n        m_Offset: {x: 0, y: 0}\n"
+    "    - _MetallicGlossMap:\n        m_Texture: {fileID: 2800000, guid: 11111111111111111111111111111111, type: 3}\n"
+    "        m_Scale: {x: 1, y: 1}\n        m_Offset: {x: 0, y: 0}\n"
+    "    m_Floats:\n    - _Metallic: 0.25\n    - _Glossiness: 0.9\n    - _GlossMapScale: 0.6\n","_METALLICGLOSSMAP");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&result.supported(),"metallic/smoothness map converts");
+  // Unity 5 legado: entrada "<noninit>" sem consumidor no shader não recusa.
+  auto legacy=source;legacy.insert(legacy.find("    - _MainTex:"),"    - <noninit>:\n        m_Texture: {fileID: 2800000, guid: 33333333333333333333333333333333, type: 3}\n");
+  resources::UnityMaterialImport legacyResult;
+  AE_EXPECT_TRUE(resources::readUnityMaterial(legacy,legacyResult)&&legacyResult.supported()&&legacyResult.textures.size()==2,"<noninit> ignored");
+  AE_EXPECT_EQ(result.audit(),resources::UnityMaterialAudit::Complete,"no approximation needed");
+  const auto &asset=result.material;
+  AE_EXPECT_EQ(asset.channels.metallic,scene::MaterialChannelR,"metallic from R");
+  AE_EXPECT_EQ(asset.channels.roughness,scene::MaterialChannelA,"smoothness from A");
+  AE_EXPECT_EQ(asset.channels.roughnessSource,scene::MaterialRoughnessSmoothnessMap,"channel read as smoothness");
+  AE_EXPECT_EQ(asset.values.metallic,1.f,"map value is metallic unscaled; _Metallic ignored");
+  AE_EXPECT_TRUE(std::abs(asset.values.roughness-.4f)<.0001f,"factor stores 1 - _GlossMapScale; _Glossiness ignored");
+  bool mapped=false;for(const auto &texture:result.textures)if(texture.property=="_MetallicGlossMap")
+    mapped=texture.binding==2&&texture.sampling.scale[0]==4;
+  AE_EXPECT_TRUE(mapped,"map bound to metal/roughness slot with _MainTex_ST");
+  // Extensão por desenho: linha 10.y diz ao shader que o canal é suavidade.
+  float entry[renderer::MaterialExtensionFloats]{};auto values=asset.values;values.channels=asset.channels;
+  AE_EXPECT_TRUE(renderer::needsMaterialExtension(values),"smoothness requires the material extension");
+  renderer::materialExtensionEntry(values,0,renderer::MaterialExtensionNoTexture,entry);
+  AE_EXPECT_EQ(entry[9*4+0],3.f,"roughness channel index A");AE_EXPECT_EQ(entry[9*4+1],0.f,"metallic channel index R");
+  AE_EXPECT_EQ(entry[10*4+1],1.f,"row 10.y: channel as smoothness");
+  // Persistência v7 e leitura de um v6 antigo sem o campo.
+  resources::MaterialAsset reopened;
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(asset.serialize(),reopened)&&reopened.channels==asset.channels,"v7 round trip");
+  auto old=asset.serialize();old.replace(old.find("ASTRA_MATERIAL 7"),16,"ASTRA_MATERIAL 6");
+  while(!old.empty()&&(old.back()=='\n'||old.back()=='\r'))old.pop_back();
+  old.erase(old.rfind(' '));old+="\n";
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(old,reopened)&&reopened.channels.roughnessSource==scene::MaterialRoughnessKeep,"v6 material keeps inherited roughness");
+}
+AE_TEST(unity_material_albedo_alpha_smoothness_and_forward_options) {
+  resources::UnityMaterialImport result;
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _SmoothnessTextureChannel: 1\n    - _GlossMapScale: 0.8\n    - _Metallic: 1\n",
+    "_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A"),result)&&result.supported(),"albedo alpha smoothness converts");
+  AE_EXPECT_EQ(result.material.channels.roughnessSource,scene::MaterialRoughnessSmoothnessBaseAlpha,"base alpha read as smoothness");
+  AE_EXPECT_EQ(result.material.channels.alphaSource,scene::MaterialAlphaSourceOpaque,"albedo alpha is no longer opacity");
+  AE_EXPECT_TRUE(std::abs(result.material.values.roughness-.2f)<.0001f&&result.material.values.metallic==1,"scale and scalar metallic");
+  float entry[renderer::MaterialExtensionFloats]{};auto values=result.material.values;values.channels=result.material.channels;
+  renderer::materialExtensionEntry(values,0,renderer::MaterialExtensionNoTexture,entry);
+  AE_EXPECT_EQ(entry[10*4+1],2.f,"row 10.y: base alpha as smoothness");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _SpecularHighlights: 0\n    - _GlossyReflections: 0\n",
+    "_SPECULARHIGHLIGHTS_OFF _GLOSSYREFLECTIONS_OFF"),result)&&result.audit()==resources::UnityMaterialAudit::Complete&&result.material.values.specular==0,
+    "both forward options off: dielectric specular 0");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Metallic: 1\n","_SPECULARHIGHLIGHTS_OFF _GLOSSYREFLECTIONS_OFF"),result)&&
+    result.audit()==resources::UnityMaterialAudit::Approximated,"metal keeps reflecting: approximation declared");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _GlossyReflections: 0\n"),result)&&
+    result.audit()==resources::UnityMaterialAudit::Approximated&&result.material.values.specular==1,"reflections alone approximated");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Colors:\n    - _Color: {r: 1, g: 1, b: 1, a: 0.5}\n"),result)&&result.supported(),
+    "opaque mode ignores colour alpha like Unity");
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Mode: 1\n    m_Colors:\n    - _Color: {r: 1, g: 1, b: 1, a: 0.5}\n","_ALPHATEST_ON"),result)&&
+    !result.supported(),"cutout with colour alpha still has no consumer");
+  // Componente de malha v10: a origem por slot volta do texto.
+  scene::MeshRenderer mesh;mesh.channels.roughnessSource=scene::MaterialRoughnessSmoothnessMap;
+  std::ostringstream out;mesh.write(out);scene::MeshRenderer back;std::istringstream in(out.str());
+  AE_EXPECT_TRUE(back.read(in,10)&&back.channels.roughnessSource==scene::MaterialRoughnessSmoothnessMap,"mesh v10 round trip");
 }
 AE_TEST(unity_material_editor_conversion_undo_redo_reopen_and_local_conflict_are_real) {
   Project project;project.write("Example.mat",materialSource("    m_Floats:\n    - _Metallic: 0.2\n"));
@@ -76,7 +150,7 @@ AE_TEST(unity_material_editor_conversion_undo_redo_reopen_and_local_conflict_are
   AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"project");
   std::string diagnostic;const auto guid=session.importUnityMaterial("Example.mat",diagnostic);
   AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
-  AE_EXPECT_EQ(session.findMaterialAsset(guid)->values.metallic,.2f,"shared runtime resource");
+  AE_EXPECT_TRUE(std::abs(session.findMaterialAsset(guid)->values.metallic-.0331f)<.0005f,"shared runtime resource ([Gamma] _Metallic 0,2)");
   AE_EXPECT_TRUE(session.history().undo(session.document()),"undo conversion");
   AE_EXPECT_TRUE(!session.findMaterialAsset(guid)&&!std::filesystem::exists(project.path/"Example.mat.material"),"native resource removed");
   AE_EXPECT_TRUE(std::filesystem::exists(project.path/"Example.mat"),"source preserved");
@@ -85,13 +159,15 @@ AE_TEST(unity_material_editor_conversion_undo_redo_reopen_and_local_conflict_are
   AE_EXPECT_TRUE(reopened.setProjectDirectory(project.path.string().c_str())&&reopened.loadAssets(session.serializeAssets()),"shell cold registry load");
   AE_EXPECT_TRUE(reopened.findMaterialAsset(guid),"native material reopened");
   const auto oldRecipe=reopened.assets().find(guid)->importerParameters;
+  const float initialMetallic=reopened.findMaterialAsset(guid)->values.metallic;
   project.write("Example.mat",materialSource("    m_Floats:\n    - _Metallic: 0.8\n"));
   AE_EXPECT_TRUE(reopened.importUnityMaterial("Example.mat",diagnostic)==guid,diagnostic.c_str());
-  AE_EXPECT_EQ(reopened.findMaterialAsset(guid)->values.metallic,.8f,"same identity source update");
+  const float updatedMetallic=reopened.findMaterialAsset(guid)->values.metallic;
+  AE_EXPECT_TRUE(std::abs(reopened.findMaterialAsset(guid)->values.metallic-.6038f)<.0005f,"same identity source update ([Gamma] 0,8)");
   const auto newRecipe=reopened.assets().find(guid)->importerParameters;
   AE_EXPECT_TRUE(oldRecipe!=newRecipe&&reopened.history().undo(reopened.document()),"undo reimport");
-  AE_EXPECT_TRUE(reopened.findMaterialAsset(guid)->values.metallic==.2f&&reopened.assets().find(guid)->importerParameters==oldRecipe,"undo values and recipe atomically");
-  AE_EXPECT_TRUE(reopened.history().redo(reopened.document())&&reopened.findMaterialAsset(guid)->values.metallic==.8f&&reopened.assets().find(guid)->importerParameters==newRecipe,"redo values and recipe");
+  AE_EXPECT_TRUE(reopened.findMaterialAsset(guid)->values.metallic==initialMetallic&&reopened.assets().find(guid)->importerParameters==oldRecipe,"undo values and recipe atomically");
+  AE_EXPECT_TRUE(reopened.history().redo(reopened.document())&&reopened.findMaterialAsset(guid)->values.metallic==updatedMetallic&&reopened.assets().find(guid)->importerParameters==newRecipe,"redo values and recipe");
   AE_EXPECT_TRUE(reopened.history().undo(reopened.document())&&reopened.importUnityMaterial("Example.mat",diagnostic)==guid,"reimport after undo without false conflict");
   const auto stableMaterial=reopened.findMaterialAsset(guid)->serialize(),stableRegistry=reopened.serializeAssets();
   project.write("Example.mat.material",stableMaterial+"corrupt external edit");
@@ -153,7 +229,7 @@ AE_TEST(unity_material_texture_dependency_resolves_and_touch_applies_real_shared
   session.handlePointer({92,ui::UiPointerPhase::Down,point,2});session.handlePointer({92,ui::UiPointerPhase::Up,point,2.05});session.update();
   const auto *render=meshRenderer(*session.document().find(id));
   AE_EXPECT_TRUE(render&&render->slotMaterialAsset(0)==guid,"touch binds native resource");
-  AE_EXPECT_EQ(session.screen().resources->slotMaterial(*render,0).metallic,.7f,"effective renderer factor");
+  AE_EXPECT_TRUE(std::abs(session.screen().resources->slotMaterial(*render,0).metallic-.4480f)<.0005f,"effective renderer factor ([Gamma] _Metallic 0,7)");
   auto &preview=session.cameraPreview();const auto version=session.sceneVersion();
   AE_EXPECT_TRUE(preview.pinMaterial(session.document(),version,session.mapScene(),parent,guid),"group previews actual child mesh");
   renderer::RenderViewSnapshot request;const auto revision=session.findMaterialAsset(guid)->revision;
@@ -177,7 +253,7 @@ AE_TEST(unity_material_texture_dependency_resolves_and_touch_applies_real_shared
   const auto unusedRevision=unusedMaterial?unusedMaterial->revision:0;
   AE_EXPECT_TRUE(preview.pinStandalone(session.sceneVersion(),session.mapScene(),unused),"unused material has independent geometry");
   AE_EXPECT_TRUE(preview.request(session.document(),session.sceneVersion(),12,true,false,request,&session.mapScene(),unusedRevision)&&request.materialGeometry&&!request.isolatedObjects,"standalone packet owns genuine geometry");
-  AE_EXPECT_TRUE(request.materialGeometry->indices.size()>0&&request.previewMaterial.metallic==.7f,"actual geometry and shared factors consumed");
+  AE_EXPECT_TRUE(request.materialGeometry->indices.size()>0&&std::abs(request.previewMaterial.metallic-.4480f)<.0005f,"actual geometry and shared factors consumed");
   const auto oldPosition=request.frustum.cameraPosition[0];
   AE_EXPECT_TRUE(preview.orbit(.3f,.2f,.8f)&&preview.changeShape(),"independent orbit zoom and shape");
   AE_EXPECT_TRUE(!preview.complete(request,session.sceneVersion(),true,{},unusedRevision),"controls invalidate previous submission lease");

@@ -423,6 +423,23 @@ ICONS["lighting/look-presets"] = (
     f'<rect x="24" y="26" width="80" height="58" rx="9" {stroke(4, extra='opacity=".7"')}/>'
     f'<rect x="12" y="42" width="86" height="66" rx="9" {stroke(6)}/>'
     f'<path d="M22 98l22-24 15 15 12-11 19 20" {stroke(5, ACCENT)}/><circle cx="76" cy="62" r="8" {stroke(5, ACCENT)}/>')
+# G3a: auditoria de materiais importados. A esfera com o brilho especular é o
+# material; o selo no canto diz a classe: lista conferida (relatório), visto
+# (convertido por completo), "≈" (aproximado) e "!" (sem conversão).
+MATERIAL_BALL = (
+    f'<circle cx="52" cy="54" r="34" {stroke(6)}/>'
+    f'<path d="M24 62c14 9 42 9 56 0" {stroke(3, extra='opacity=".6"')}/>'
+    f'<path d="M38 38c4-6 10-9 16-10" {stroke(5)}/>')
+MATERIAL_SEAL = f'<circle cx="94" cy="94" r="24" fill="#15191e" {stroke(5, ACCENT)}/>'
+ICONS["assets/material-audit"] = (
+    MATERIAL_BALL + f'<rect x="76" y="70" width="36" height="46" rx="6" fill="#15191e" {stroke(5, ACCENT)}/>'
+    f'<path d="M84 84h20M84 96h20M84 108h12" {stroke(4, ACCENT)}/>')
+ICONS["assets/material-complete"] = MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M83 95l8 8 15-17" {stroke(6, ACCENT)}/>'
+ICONS["assets/material-approximate"] = (
+    MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M81 88c5-5 9-5 13 0s8 5 13 0M81 101c5-5 9-5 13 0s8 5 13 0" {stroke(5, ACCENT)}/>')
+ICONS["assets/material-unconverted"] = (
+    MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M94 80v16" {stroke(6, ACCENT)}/><circle cx="94" cy="107" r="3.5" fill="{ACCENT}"/>')
+
 
 def browser() -> str:
     candidates = [

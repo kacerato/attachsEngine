@@ -3749,6 +3749,9 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
     /// <summary>Origem do alfa. Opção por slot</summary>
     public uint GetChannelsAlphaSource(uint slot) => Component.GetSlotEnum("channels.alpha_source", slot);
     public void SetChannelsAlphaSource(uint slot, uint value) => Component.SetSlotEnum("channels.alpha_source", value, slot);
+    /// <summary>Origem da rugosidade. Opção por slot</summary>
+    public uint GetChannelsRoughnessSource(uint slot) => Component.GetSlotEnum("channels.roughness_source", slot);
+    public void SetChannelsRoughnessSource(uint slot, uint value) => Component.SetSlotEnum("channels.roughness_source", value, slot);
     /// <summary>Conjunto de UV. Opção por slot</summary>
     public uint GetSamplingUvSet(uint slot) => Component.GetSlotEnum("sampling.uv_set", slot);
     public void SetSamplingUvSet(uint slot, uint value) => Component.SetSlotEnum("sampling.uv_set", value, slot);
