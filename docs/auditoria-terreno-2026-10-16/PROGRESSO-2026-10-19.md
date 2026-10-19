@@ -65,3 +65,21 @@ Referências oficiais já adotadas para o LOD: Godot 4.5,
 Unity 6000.0,
 [Terrain.heightmapPixelError](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Terrain-heightmapPixelError.html).
 Não há declaração de conclusão do bloco ou de paridade com os plugins.
+
+## Publicação
+
+Engine: `62547f30`, enviada à branch de terreno; main da engine preservada.
+Docs: `e4a82c3d0c682e2edd60c017dbcdeef786a9ad09`, publicada na main do
+repositório AstraDocs. Nota `2026-10-19-terreno-integracao-lod-pincel`,
+mantendo intactas as notas anteriormente publicadas.
+
+Build das Docs concluído: 2.434 páginas HTML, 2.433 páginas Markdown, índices
+JSON e 10 exemplos. Checagem final: 594.210 links, zero erros. Revisão no
+navegador em 390×844 e 1280×900. A primeira checagem de links começou antes
+de terminar a exportação e reportou arquivos ausentes; foi repetida somente
+após a conclusão do build. O resultado final usa a saída completa.
+
+Deploy Vercel `dpl_GzCBBBEWzAHfjfpDug9cZhqDFpjk`: **READY**, produção,
+commit das Docs acima, alias `astraengine.com.br`. O
+[guia publicado](https://astraengine.com.br/pt-br/desenvolvimento/2026-10-19/terreno-integracao/)
+foi aberto e conferido no domínio. Servidor local de revisão encerrado.
