@@ -1,4 +1,5 @@
 #include "resources/gltf_import.h"
+#include "resources/shared_decoded_texture.h"
 #include "resources/json_reader.h"
 #include "resources/gltf_codecs.h"
 #include "resources/texture_compression.h"
@@ -750,7 +751,7 @@ struct Importer {
     if (astcImages.insert(source).second) ++out->ktx2Images;
     out->textureBytes += made.mipChain.size();
     result = static_cast<u32>(out->textures.size());
-    out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+    out->textures.push_back(shareDecodedTexture(std::move(made)));
     out->textureImages.push_back(imageLabel(root, source));
     return true;
   }
@@ -786,7 +787,7 @@ struct Importer {
           if (job.dropped) ++out->reducedTextures;
           out->textureBytes += job.made.mipChain.size();
           result = static_cast<u32>(out->textures.size());
-          out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(job.made)));
+          out->textures.push_back(shareDecodedTexture(std::move(job.made)));
           out->textureImages.push_back(imageLabel(root, source));
         } else {
           noteTexture("Não foi possível gerar os mipmaps de uma textura.");
@@ -843,7 +844,7 @@ struct Importer {
             if (dropped) ++out->reducedTextures;
             out->textureBytes += made.mipChain.size();
             result = static_cast<u32>(out->textures.size());
-            out->textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(made)));
+            out->textures.push_back(shareDecodedTexture(std::move(made)));
             out->textureImages.push_back(imageLabel(root, source));
           } else {
             noteTexture("Não foi possível gerar os mipmaps de uma textura.");

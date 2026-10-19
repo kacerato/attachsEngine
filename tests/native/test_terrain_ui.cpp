@@ -135,6 +135,24 @@ struct TerrainUiFixture {
     session.handlePointer({92, ui::UiPointerPhase::Up, p, time + .1});
     return true;
   }
+  bool slide(u32 field,float fraction,u32 column=0) {
+    const auto widget=id(Widget::TerrainSliderBase,field+column*0x100);
+    scroll(-10000);
+    ui::UiPoint p;
+    for(u32 attempt=0;attempt<40;++attempt) {
+      render();if(point(widget,p))break;
+      const auto before=session.screen().terrainScroll;scroll(24);
+      if(before==session.screen().terrainScroll)return false;
+    }
+    render();if(!point(widget,p))return false;
+    auto area=editor::terrainContentRect(session.screen(),editor::terrainPanelRect(session.screen()));
+    if(column){area.width*=.5f;if(column==2)area.x+=area.width;}
+    p.x=area.x+10+(area.width-20)*fraction;
+    time+=1;
+    session.handlePointer({93,ui::UiPointerPhase::Down,p,time});
+    session.handlePointer({93,ui::UiPointerPhase::Up,p,time+.1});
+    return true;
+  }
   bool text(std::string_view part) {
     render();
     for (const auto &command : list.commands())
@@ -157,10 +175,13 @@ struct TerrainUiFixture {
 };
 
 void fields(std::set<u32> &ids, std::initializer_list<u32> indexes) {
-  for (auto index : indexes)
-    for (auto base : {Widget::TerrainNumberBase, Widget::TerrainMinusBase,
-                      Widget::TerrainPlusBase})
-      ids.insert(id(base, index));
+  for(auto index:indexes) {
+    ids.insert(id(Widget::TerrainNumberBase,index));
+    if(index==0 || (index>=11 && index<=13) || index==27) {
+      ids.insert(id(Widget::TerrainMinusBase,index));
+      ids.insert(id(Widget::TerrainPlusBase,index));
+    } else ids.insert(id(Widget::TerrainSliderBase,index));
+  }
 }
 std::set<u32> contentControls(u32 mode, u32 tab, u32 section) {
   std::set<u32> result;
@@ -278,7 +299,9 @@ AE_TEST(
                          "scrolling never covers current action");
             for (float y = panel.y + 2; y < panel.bottom(); y += 4)
               for (float x = panel.x + 2; x < panel.right(); x += 4) {
-                const auto widget = f.router.hitTest({x, y}).widgetId;
+                auto widget = f.router.hitTest({x, y}).widgetId;
+                if(widget>=id(Widget::TerrainSliderBase) && widget<id(Widget::TerrainSliderBase)+0x300)
+                  widget=id(Widget::TerrainSliderBase)+(widget-id(Widget::TerrainSliderBase))%0x100;
                 if (!expected.contains(widget) || (widget==footerId && !window.contains({x,y})))
                   continue;
                 AE_EXPECT_TRUE(window.contains({x, y}),
@@ -309,7 +332,7 @@ AE_TEST(
   }
 }
 
-AE_TEST(terrain_ui_structure_stepper_and_explicit_mode_selection) {
+AE_TEST(terrain_ui_structure_slider_and_explicit_mode_selection) {
   TerrainUiFixture f;
   AE_EXPECT_TRUE(f.ready, "fixture ready");
   AE_EXPECT_TRUE(f.session.screen().terrainDraft.solidBase,
@@ -318,19 +341,19 @@ AE_TEST(terrain_ui_structure_stepper_and_explicit_mode_selection) {
                  "surface button reachable on phone");
   AE_EXPECT_TRUE(!f.session.screen().terrainDraft.solidBase,
                  "surface button opens base");
-  AE_EXPECT_TRUE(!f.tap(id(Widget::TerrainPlusBase, 14)),
+  AE_EXPECT_TRUE(!f.slide(14,.5f),
                  "surface disables base thickness editing");
   AE_EXPECT_TRUE(f.tap(id(Widget::TerrainSolidBase)),
                  "solid base button reachable after scrolling");
   const auto originalDepth = f.session.screen().terrainDraft.baseDepth;
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase, 14)),
+  AE_EXPECT_TRUE(f.slide(14,.5f),
                  "increase thickness via touch");
   AE_EXPECT_TRUE(f.session.screen().terrainDraft.baseDepth > originalDepth,
                  "plus affects serialized base depth");
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMinusBase, 14)),
+  AE_EXPECT_TRUE(f.slide(14,0.f),
                  "decrease thickness via touch");
-  AE_EXPECT_EQ(f.session.screen().terrainDraft.baseDepth, originalDepth,
-               "opposite step restores thickness");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.baseDepth<originalDepth,
+               "slider reaches minimum thickness");
   for (u32 mode : {2u, 0u, 1u}) {
     AE_EXPECT_TRUE(f.tap(id(Widget::TerrainModeBase, mode)),
                    "requested geometry mode has its own touch target");
@@ -401,7 +424,7 @@ AE_TEST(terrain_ui_pending_apply_revert_and_save_follow_real_scene_revision) {
   const auto source =
       scene::importLink(f.session.document().find(root)->components)->source;
   const auto applied = f.session.screen().terrainAppliedRecipe;
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase, 14)),
+  AE_EXPECT_TRUE(f.slide(14,.5f),
                  "edit thickness in real UI");
   AE_EXPECT_TRUE(f.text("Por aplicar"), "footer exposes pending revision");
   AE_EXPECT_EQ(
@@ -423,7 +446,7 @@ AE_TEST(terrain_ui_pending_apply_revert_and_save_follow_real_scene_revision) {
   AE_EXPECT_TRUE(f.text("Aplicado"),
                  "footer clears pending state after revert");
   AE_EXPECT_TRUE(f.visit(0), "return to structure");
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase, 14)),
+  AE_EXPECT_TRUE(f.slide(14,.5f),
                  "edit thickness again");
   const auto expected =
       resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
@@ -603,15 +626,15 @@ AE_TEST(terrain_lod_controls_touch_enable_edit_and_disable_in_compact_and_wide_l
   for(const float width:{655.f,1280.f}) {
     TerrainUiFixture f(width,width<1000?300:720);
     AE_EXPECT_TRUE(f.ready && f.visit(0,2),"open terrain details through actual UI");
-    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase,28)),"LOD plus is reachable by scrolling and touch");
+    AE_EXPECT_TRUE(f.slide(28,1.f/3,1),"LOD plus is reachable by scrolling and touch");
     AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,2u,"touch enables a reduced level");
     const auto before=f.session.screen().terrainDraft.lodRelativeError;
-    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase,29)),"error control is enabled for multiple levels");
+    AE_EXPECT_TRUE(f.slide(29,1,2),"error control is enabled for multiple levels");
     AE_EXPECT_TRUE(f.session.screen().terrainDraft.lodRelativeError>before,"error button changes authored policy");
-    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMinusBase,28)),"LOD minus remains touch reachable");
+    AE_EXPECT_TRUE(f.slide(28,0,1),"LOD minus remains touch reachable");
     AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"touch disables additional levels");
     f.render();ui::UiPoint point;
-    AE_EXPECT_TRUE(!f.point(id(Widget::TerrainPlusBase,29),point) &&
+    AE_EXPECT_TRUE(!f.point(id(Widget::TerrainSliderBase,0x200+29),point) &&
                    !f.point(id(Widget::TerrainNumberBase,29),point),
                    "disabled error field and increment do not receive touch input");
   }
@@ -660,4 +683,40 @@ AE_TEST(terrain_path_handles_follow_applied_surface_and_reopen_without_gpu_previ
   AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview && f.session.screen().terrainPreviewUpdates==publications,"reconstructing handles does not publish duplicate geometry");
   const auto reopened=editor::projectWorldToScreen(f.session.view(),at);
   AE_EXPECT_EQ(f.router.hitTest(reopened.screen).widgetId,id(Widget::TerrainPathNew)+0x101,"reopened handle retains surface alignment");
+}
+
+AE_TEST(terrain_volume_resolution_sliders_keep_the_combined_sampling_budget_valid) {
+  TerrainUiFixture f(1280,720);
+  AE_EXPECT_TRUE(f.ready,"fixture ready");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainModeBase,1)),"select smooth voxel through touch");
+  AE_EXPECT_TRUE(f.slide(7,1),"vertical resolution slider reaches its maximum");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.verticalCells,64u,"vertical steps stay integral");
+  AE_EXPECT_TRUE(f.slide(2,1,2),"horizontal resolution slider respects current vertical density");
+  const auto &draft=f.session.screen().terrainDraft;
+  AE_EXPECT_EQ(draft.cells,88u,"largest valid eight-cell step selected instead of an invalid 128");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(draft,error),error.c_str());
+  AE_EXPECT_TRUE(f.slide(7,0),"reduce vertical density through touch");
+  AE_EXPECT_TRUE(f.slide(2,1,2),"horizontal range expands when budget permits");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.cells,128u,"maximum detail remains available");
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+AE_TEST(terrain_path_curve_sliders_preserve_node_order_and_profile_domains) {
+  TerrainUiFixture f(1280,720);
+  AE_EXPECT_TRUE(f.ready && f.visit(4) && f.tap(id(Widget::TerrainPathNew)),"create path through UI");
+  AE_EXPECT_TRUE(f.visit(4,1) && f.tap(id(Widget::TerrainProfileInsert)),"insert an editable shoulder node");
+  AE_EXPECT_TRUE(f.slide(50,1,1),"node position slider reaches its right boundary");
+  const auto selected=f.session.screen().terrainProfilePoint;
+  const auto &profile=f.session.screen().terrainDraft.paths.front().profile;
+  AE_EXPECT_TRUE(selected>0 && selected+1<profile.size(),"interior node selected");
+  AE_EXPECT_TRUE(profile[selected].x>profile[selected-1].x && profile[selected].x<profile[selected+1].x,"slider cannot cross adjacent nodes");
+  AE_EXPECT_TRUE(f.slide(51,1,2),"geometry profile supports crest values");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.paths.front().profile[selected].y,2.f,"geometry keeps the complete -1 to 2 range");
+  AE_EXPECT_TRUE(f.visit(4,2) && f.tap(id(Widget::TerrainProfileInsert)),"insert paint profile node");
+  AE_EXPECT_TRUE(f.slide(51,1,2),"paint curve has its own normalized scale");
+  const auto &draft=f.session.screen().terrainDraft;
+  AE_EXPECT_EQ(draft.paths.front().textureProfile[f.session.screen().terrainProfilePoint].y,1.f,"paint opacity remains normalized");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(draft,error),error.c_str());
 }

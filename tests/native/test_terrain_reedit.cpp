@@ -880,3 +880,75 @@ AE_TEST(terrain_authored_lod_survives_editor_apply_history_and_scene_reload) {
   AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen after disabling LOD");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"disabled policy also persists");
 }
+
+AE_TEST(terrain_slider_touch_columns_precision_and_scroll) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  f.session.setSurface({0,0,1280,720},{});
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainTabBase)+1));
+  const auto slider=editor::widgetId(editor::EditorWidget::TerrainSliderBase);
+  ui::UiPoint point;
+  AE_EXPECT_TRUE(f.widgetPoint(slider+9,point),"radius is visible before scrolling");
+  AE_EXPECT_TRUE(f.widgetPoint(slider+10,point),"strength is visible before scrolling");
+  const float initial=f.session.screen().terrainBrush.strength;
+  f.session.handlePointer({70,ui::UiPointerPhase::Down,point,1});
+  f.session.handlePointer({70,ui::UiPointerPhase::Move,{point.x,point.y-60},1.2});
+  f.session.handlePointer({70,ui::UiPointerPhase::Up,{point.x,point.y-60},1.3});
+  AE_EXPECT_EQ(f.session.screen().terrainBrush.strength,initial,"vertical scrolling never edits strength");
+  AE_EXPECT_TRUE(f.session.screen().terrainScroll>0,"vertical drag scrolls the panel");
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainTabBase)+0));
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainSectionBase)+2));
+  AE_EXPECT_TRUE(f.widgetPoint(slider+0x100+28,point),"left-column LOD slider routed");
+  const auto area=editor::terrainContentRect(f.session.screen(),editor::terrainPanelRect(f.session.screen()));
+  const ui::UiPoint end{area.x+area.width*.5f-10,point.y};
+  f.session.handlePointer({71,ui::UiPointerPhase::Down,point,2});
+  f.session.handlePointer({71,ui::UiPointerPhase::Move,end,2.2});
+  f.session.handlePointer({71,ui::UiPointerPhase::Up,end,2.3});
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,4u,"left column reaches its discrete maximum");
+  AE_EXPECT_TRUE(f.widgetPoint(slider+0x200+29,point),"dependent right-column slider becomes enabled");
+  const ui::UiPoint right{area.right()-10,point.y};
+  f.session.handlePointer({72,ui::UiPointerPhase::Down,point,3});
+  f.session.handlePointer({72,ui::UiPointerPhase::Move,right,3.2});
+  f.session.handlePointer({72,ui::UiPointerPhase::Up,right,3.3});
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.lodRelativeError-.1f)<.00001f,"right column uses its own scale");
+  AE_EXPECT_TRUE(f.tapWidget(editor::widgetId(editor::EditorWidget::TerrainNumberBase)+29),"value chip opens precise entry");
+  AE_EXPECT_EQ(f.session.screen().numericField,editor::widgetId(editor::EditorWidget::TerrainNumberBase)+29,"precise input retains the selected property");
+}
+
+AE_TEST(terrain_revisions_share_exact_texture_pixels_without_losing_history) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe r;r.cells=8;r.height=0;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  const auto original=f.textures;
+  AE_EXPECT_TRUE(original.size()>=4,"decoded terrain textures published");
+  const auto before=f.session.screen().terrainRetainedBytes;
+  r.strokes.push_back({resources::TerrainTool::Raise,0,0,0,8,.2f,0});
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  AE_EXPECT_EQ(f.textures.size(),original.size(),"source revisions share GPU slots instead of consuming duplicate descriptors");
+  for(usize i=0;i<original.size();++i)
+    AE_EXPECT_TRUE(f.textures[i]==original[i],"identical mips share immutable storage across revisions");
+  for(const auto &material:f.materials)for(const auto slot:material.textureIndices)
+    AE_EXPECT_TRUE(slot==renderer::InvalidMapTexture || slot<f.textures.size(),"every published material binding remains valid");
+  AE_EXPECT_TRUE(f.session.screen().terrainRetainedBytes<before*2,"retained budget counts shared pixels once");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo retains first revision");f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.strokes.empty(),"original geometry recipe restored");
+  AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo retains second revision");f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),usize(1),"edited geometry recipe restored");
+  const auto saved=f.path/"shared-textures.aescene";
+  AE_EXPECT_TRUE(f.session.save(saved.string().c_str(),0) && f.session.load(saved.string().c_str(),0),"real scene reload");
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"terrain editable after reload");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),usize(1),"revision persists with shared pixels");
+  AE_EXPECT_EQ(f.textures.size(),original.size(),"cached project reload also deduplicates GPU texture slots");
+  const auto source=scene::importLink(f.session.document().find(root)->components)->source;
+  auto profile=f.session.importProfileFor(source);profile.textureStreamingPriority=3;
+  AE_EXPECT_TRUE(f.session.saveImportProfile(source,profile),"distinct authoring policy saved");
+  r.strokes.push_back({resources::TerrainTool::Raise,4,0,4,8,.2f,0});
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  AE_EXPECT_EQ(f.textures.size(),original.size()*2,"different streaming priorities retain independent GPU slots");
+  bool defaultPriority=false,highPriority=false;
+  for(const auto &policy:f.session.textureStreamingParameters()) {defaultPriority|=policy.priority==0;highPriority|=policy.priority==3;}
+  AE_EXPECT_TRUE(defaultPriority && highPriority,"deduplication preserves both effective streaming policies");
+}

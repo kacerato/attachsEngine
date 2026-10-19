@@ -1471,6 +1471,7 @@ private:
   std::vector<std::pair<resources::AssetGuid,resources::TextureProfile>> textureProfiles_;
   std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedTextures_;
   std::vector<renderer::TextureStreamingParameters> textureStreamingParameters_;
+  std::vector<u32> publishedSourceTextureSlots_;
   u64 textureStreamingRevision_=0;
   std::vector<u32> textureStreamingDesired_,textureStreamingLoaded_;
   // Seleção da cena quando a textura/gerenciador abriu: mudar a seleção devolve

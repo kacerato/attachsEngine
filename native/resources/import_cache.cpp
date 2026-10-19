@@ -1,3 +1,4 @@
+#include "resources/shared_decoded_texture.h"
 #include "resources/import_cache.h"
 #include "core/sha256.h"
 
@@ -368,7 +369,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
       reader.at += static_cast<usize>(count);
     }
     if (!reader.ok || !texture.valid()) return refuse();
-    model.textures.push_back(std::make_shared<renderer::AuthoringTexture>(std::move(texture)));
+    model.textures.push_back(shareDecodedTexture(std::move(texture)));
   }
   model.textureBytes = reader.u64v();
   if (reader.u32v() != kCounterCount) return refuse();

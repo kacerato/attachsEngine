@@ -1,6 +1,7 @@
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_screen.h"
+#include "editor/terrain_controls.h"
 #include "editor/editor_session.h"
 #include "resources/terrain_textures.generated.h"
 #include "resources/terrain_vertex_index.h"
@@ -9,6 +10,7 @@
 #include "scene/physics_body.h"
 #include "renderer/authoring_texture.h"
 #include <atomic>
+#include <unordered_set>
 #include <cmath>
 #include <map>
 #include <limits>
@@ -57,7 +59,11 @@ double number(const EditorScreenState &s, u32 i) {
                         double(r.lodLevels),double(r.lodRelativeError)*100};
   return i < 30 ? values[i] : 0;
 }
-u64 terrainCandidateBytes(const resources::GltfImport &model) {
+u64 textureRetainedBytes(const renderer::AuthoringTexture &texture) {
+  return sizeof(texture)+texture.mipChain.capacity()+(texture.file?sizeof(*texture.file)+texture.file->path.capacity():0);
+}
+u64 terrainCandidateBytes(const resources::GltfImport &model,
+    std::unordered_set<const renderer::AuthoringTexture *> resident) {
   // Terrain GLBs are static. Count the retained geometry, decoded textures and
   // conservative metadata capacity before stageSource copies the whole library.
   // This bounds growth; it is not a process/GPU peak-memory guarantee.
@@ -77,10 +83,8 @@ u64 terrainCandidateBytes(const resources::GltfImport &model) {
     bytes += 2 * (node.name.capacity()+node.authoredId.capacity()) + storage(node.morphWeights);
   for (const auto *names : {&model.names, &model.materialNames, &model.textureImages})
     for (const auto &name : *names) bytes += name.capacity();
-  for (const auto &texture : model.textures) if (texture) {
-    bytes += sizeof(*texture) + texture->mipChain.capacity();
-    if (texture->file) bytes += sizeof(*texture->file) + texture->file->path.capacity();
-  }
+  for (const auto &texture : model.textures)
+    if (texture && resident.insert(texture.get()).second)bytes+=textureRetainedBytes(*texture);
   return bytes;
 }
 bool terrainSourceCurrent(const EditorDocument &document, EditorEntityId target,
@@ -268,9 +272,12 @@ void EditorSession::refreshTerrainPreview() {
 void EditorSession::refreshTerrainBudget() {
   state_.terrainRetainedBytes = state_.terrainRetainedDraws = 0;
   state_.terrainRetainedBytesKnown = true;
+  std::unordered_set<const renderer::AuthoringTexture *> resident;
   for (const auto &source : importedSources_) {
     state_.terrainRetainedDraws += source.draws.size();
-    const auto bytes = retainedModelBytes(source);
+    auto bytes = retainedModelBytes(source);
+    if(bytes!=std::numeric_limits<u64>::max())for(const auto &texture:source.textures)
+      if(texture && !resident.insert(texture.get()).second)bytes-=textureRetainedBytes(*texture);
     if (bytes == std::numeric_limits<u64>::max() ||
         bytes > std::numeric_limits<u64>::max() - state_.terrainRetainedBytes) {
       state_.terrainRetainedBytesKnown = false;
@@ -545,7 +552,9 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
   }
   refreshTerrainBudget();
   if (!known) {
-    const auto candidateBytes = terrainCandidateBytes(model);
+    std::unordered_set<const renderer::AuthoringTexture *> resident;
+    for(const auto &source:importedSources_)for(const auto &texture:source.textures)if(texture)resident.insert(texture.get());
+    const auto candidateBytes = terrainCandidateBytes(model,std::move(resident));
     const auto byteLimit = EditorScreenState::TerrainRetainedByteLimit;
     const auto drawLimit = EditorScreenState::TerrainRetainedDrawLimit;
     if (!state_.terrainRetainedBytesKnown || candidateBytes == std::numeric_limits<u64>::max()) {
@@ -1146,18 +1155,19 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     state_.terrainBrushArmed=false;state_.terrainMessage="Ponto "+std::to_string(index+1)+" selecionado · arraste ou ajuste XYZ";return true;
   }
   const bool terrainControl = id >= base && id < base + 0x1000;
-  if(id>=widgetId(EditorWidget::TerrainSliderBase) && id<widgetId(EditorWidget::TerrainSliderBase)+20 && !state_.terrainBusy) {
-    const auto field=id-widgetId(EditorWidget::TerrainSliderBase);
+  if(id>=widgetId(EditorWidget::TerrainSliderBase) && id<widgetId(EditorWidget::TerrainSliderBase)+0x300 && !state_.terrainBusy) {
+    const auto encoded=id-widgetId(EditorWidget::TerrainSliderBase);
+    const auto field=encoded%0x100,column=encoded/0x100;
+    const auto range=terrainControlRange(state_,field);
+    if(!range.enabled)return true;
     if(routing.dragging && std::abs(routing.totalDelta.y)>std::abs(routing.totalDelta.x)) {
       if(event.phase==ui::UiPointerPhase::Move)
         state_.terrainScroll=std::clamp(state_.terrainScroll-routing.stepDelta.y,0.f,terrainScrollLimit(state_,terrainPanelRect(state_)));
     } else if(routing.tapped || (routing.dragging && event.phase==ui::UiPointerPhase::Move)) {
       auto area=terrainContentRect(state_,terrainPanelRect(state_));
-      float t=std::clamp((event.position.x-area.x-8)/std::max(1.f,area.width-96),0.f,1.f);
-      if(field==10)t*=t; // More touch travel for gentle strengths; full range retained.
-      const float low=field==9?.1f:field==10?.05f:0;
-      const float high=field==9?std::max(8.f,state_.terrainDraft.size*.25f):field==10?8.f:1.f;
-      if(field==9 || field==10 || field==15 || field==19)setTerrainNumber(field,std::lerp(low,high,t));
+      if(column) {area.width*=.5f;if(column==2)area.x+=area.width;}
+      const float t=(event.position.x-area.x-10)/std::max(1.f,area.width-20);
+      setTerrainNumber(field,range.value(t));
     }
     return true;
   }

@@ -7,6 +7,7 @@
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_session.h"
 #include "editor/editor_screen.h"
+#include "editor/editor_theme.h"
 #include "editor/editor_component_impact.h"
 #include "renderer/authoring_geometry.h"
 #include "renderer/material_override.h"
@@ -206,20 +207,22 @@ const ui::UiIconAtlas &uiIcons() {
 ui::UiPoint locate(EditorSession &session, u32 widget) {
   session.update();
   ui::UiInputRouter router;ui::UiDrawList list;
-  list.begin(session.screen().surface, uiFont().metrics(ui::UiFontWeight::Regular));
-  buildEditorScreen(session.screen(), ui::defaultTheme(), list, router);
-  for (float y = 2; y < session.screen().surface.height; y += 4)
-    for (float x = 2; x < session.screen().surface.width; x += 4) {
-      const auto routed = router.route({99, ui::UiPointerPhase::Down, {x, y}, 0});
-      router.route({99, ui::UiPointerPhase::Up, {x, y}, 0});
-      if (routed.target == ui::UiPointerTarget::Widget && routed.widgetId == widget) return {x, y};
-    }
-  return {-1, -1};
+  const auto metrics = uiFont().metrics(ui::UiFontWeight::Regular);
+  list.begin(session.screen().surface, metrics);
+  buildEditorScreen(session.screen(), editor::editorTheme(), list, router);
+  float left=session.screen().surface.width,right=-1,top=session.screen().surface.height,bottom=-1;
+  for(float y=2;y<session.screen().surface.height;y+=4)
+    for(float x=2;x<session.screen().surface.width;x+=4)
+      if(router.hitTest({x,y}).widgetId==widget) {
+        left=std::min(left,x);right=std::max(right,x);top=std::min(top,y);bottom=std::max(bottom,y);
+      }
+  return right<0?ui::UiPoint{-1,-1}:ui::UiPoint{(left+right)*.5f,(top+bottom)*.5f};
 }
 bool tap(EditorSession &session, u32 widget, bool hold = false) {
   const auto at = locate(session, widget);
   if (at.x < 0) return false;
   session.handlePointer({7, ui::UiPointerPhase::Down, at, 50.0});
+
   session.handlePointer({7, ui::UiPointerPhase::Up, at, 50.0 + (hold ? ui::kUiLongPressSeconds + .05 : .05)});
   session.update();
   return true;
@@ -390,6 +393,11 @@ AE_TEST(files_multi_selection_edits_the_common_texture_profile_in_one_step) {
   AE_EXPECT_TRUE(state.multiAsset.kind == Kind::Mixed && state.multiAsset.groups.size() == 2, "tipos diferentes");
   AE_EXPECT_TRUE(state.workspace != EditorWorkspace::Code, "somar um .md não abre o código");
   AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetNarrowBase) + 0), "estreitar às texturas");
+  if(state.selectedFiles.size()!=2 || state.multiAsset.kind!=Kind::Textures) {
+    std::fprintf(stderr,"narrow: selected=%zu kind=%u active=%s status=%s\n",state.selectedFiles.size(),unsigned(state.multiAsset.kind),state.selectedFile.c_str(),state.status.c_str());
+    for(const auto &path:state.selectedFiles)std::fprintf(stderr,"selected: %s\n",path.c_str());
+    for(const auto &group:state.multiAsset.groups)std::fprintf(stderr,"group: %s %u\n",group.label.c_str(),group.count);
+  }
   AE_EXPECT_TRUE(state.selectedFiles.size() == 2 && state.multiAsset.kind == Kind::Textures, "só as texturas");
   // Tirar uma deixa uma: o Inspector dela volta.
   AE_EXPECT_TRUE(tap(session, widgetId(EditorWidget::MultiAssetRemoveBase) + 1), "tirar o piso");

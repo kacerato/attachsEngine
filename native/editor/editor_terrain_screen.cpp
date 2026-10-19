@@ -1,4 +1,5 @@
 #include "editor/editor_screen.h"
+#include "editor/terrain_controls.h"
 #include "editor/editor_map_scene.h"
 #include <cmath>
 #include "ui/ui_icon_id.h"
@@ -261,6 +262,24 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
   };
   const auto fieldAt = [&](UiRect rect, std::string_view titleText,
                            double value, u32 index, bool enabled = true) {
+    const auto range=terrainControlRange(s,index);
+    if(range.enabled || index==29) {
+      const bool active=enabled && range.enabled && !s.terrainBusy;
+      const float chipWidth=64;
+      text({rect.x,rect.y,rect.width-chipWidth,24},titleText,theme.color.textDim,true);
+      button({rect.right()-chipWidth,rect.y,chipWidth,28},num(value),
+        EditorWidget(widgetId(EditorWidget::TerrainNumberBase)+index),false,active);
+      const UiRect bar{rect.x+10,rect.y+43,rect.width-20,6};
+      const float t=range.position(float(value));
+      list.addRect(bar,theme.color.raised,3);
+      list.addRect({bar.x,bar.y,bar.width*t,bar.height},active?theme.color.accent:theme.color.textMuted,3);
+      list.addRect({bar.x+bar.width*t-8,bar.y-5,16,16},active?theme.color.text:theme.color.textMuted,8);
+      // Encode the column so a drag keeps its original scale across the midpoint.
+      const u32 column=rect.width<window.width*.75f?(rect.x<window.x+window.width*.25f?1u:2u):0u;
+      if(active)router.addRegion({rect.x,rect.y+28,rect.width,36},
+        widgetId(EditorWidget::TerrainSliderBase)+column*0x100+index);
+      return;
+    }
     text(take(rect, 20), titleText, theme.color.textDim, true);
     const float step = 40;
     auto n = rect;
@@ -293,17 +312,8 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     button({line.x + line.width / 2, line.y, line.width / 2, line.height}, b,
            bi, false, en && !s.terrainBusy);
   };
-  const auto slider = [&](const char *name,float value,u32 index,float low,float high) {
-    auto line=row(64);text(take(line,24),name,theme.color.textMuted,true);
-    auto valueBox=UiRect{line.right()-76,line.y,76,36};
-    button(valueBox,num(value),EditorWidget(widgetId(EditorWidget::TerrainNumberBase)+index));
-    UiRect bar{line.x+8,line.y+15,line.width-96,6};
-    list.addRect(bar,theme.color.raised,3);
-    float t=std::clamp((value-low)/(high-low),0.f,1.f);
-    if(index==10)t=std::sqrt(t);
-    list.addRect({bar.x,bar.y,bar.width*t,bar.height},theme.color.accent,3);
-    list.addRect({bar.x+bar.width*t-7,bar.y-5,14,16},theme.color.text,7);
-    router.addRegion({bar.x-4,line.y,bar.width+8,36},widgetId(EditorWidget::TerrainSliderBase)+index);
+  const auto slider = [&](const char *name,float value,u32 index,float,float) {
+    fieldAt(row(64),name,value,index);
   };
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
@@ -389,6 +399,9 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
          "Limite: 200.000 triângulos por terreno.");
     hint("Aplique para atualizar geometria e colisão.");
   } else if (s.terrainTab == 1 && s.terrainSection == 0) {
+    slider("Raio (m)",b.radius,9,.1f,std::max(8.f,r.size*.25f));
+    slider(b.tool==resources::TerrainTool::Terrace?"Altura do degrau (m)":
+      (b.tool==resources::TerrainTool::Raise || b.tool==resources::TerrainTool::Lower)?"Altura por amostra (m)":"Força",b.strength,10,.05f,8.f);
     const char *tools[]{"Elevar","Baixar","Nivelar","Suavizar","Escavar","Adicionar","Pintar","Caminho","Ruído","Terraços","Restaurar","Aguçar","Buraco"};
     const u32 order[]{0,1,2,3,4,5,7,8,9,10,11,12};
     const UiIcon marks[]{UiIcon::TerrainRaise,UiIcon::TerrainLower,UiIcon::TerrainFlatten,UiIcon::TerrainSmooth,
@@ -410,9 +423,6 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     auto shapes=row(48);const char *shape[]{"Elipse","Caixa","Meia","Ponta","Arred."};
     for(u32 i=0;i<5;++i)button({shapes.x+shapes.width*i/5,shapes.y,shapes.width/5,shapes.height},
       shape[i],EditorWidget(widgetId(EditorWidget::TerrainShapeBase)+i),u32(b.shape)==i,volumeBrush||i<2||i==4);
-    slider("Raio (m)",b.radius,9,.1f,std::max(8.f,r.size*.25f));
-    slider(b.tool==resources::TerrainTool::Terrace?"Altura do degrau (m)":
-      (b.tool==resources::TerrainTool::Raise || b.tool==resources::TerrainTool::Lower)?"Altura por amostra (m)":"Força",b.strength,10,.05f,8.f);
     slider("Núcleo rígido · borda suave",b.hardness,15,0,1);
     if(b.tool==resources::TerrainTool::Flatten || b.tool==resources::TerrainTool::Path)
       field("Altura desejada Y (m)",b.y,12);
@@ -526,10 +536,10 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         for(u32 i=0;i<4;++i)button({curveActions.x+i*curveActions.width/4,curveActions.y,curveActions.width/4,44},labels[i],actions[i],false,i==2?curve.size()<32:i==3?selected>0 && selected+1<curve.size():true);
         auto curveValues=row(64);
         fieldAt({curveValues.x,curveValues.y,curveValues.width*.5f,curveValues.height},"Distância normalizada",curve[selected].x,50,selected>0 && selected+1<curve.size());
-        fieldAt({curveValues.x+curveValues.width*.5f,curveValues.y,curveValues.width*.5f,curveValues.height},s.terrainSection==2?"Opacidade (0–1)":"Talude / crista (−1–2)",curve[selected].y,51);
+        fieldAt({curveValues.x+curveValues.width*.5f,curveValues.y,curveValues.width*.5f,curveValues.height},s.terrainSection==2?"Opacidade (0–1)":"Talude / crista",curve[selected].y,51);
         if(s.terrainSection==1) {
         button(row(),path.shape?"Modelagem do terreno: ligada":"Modelagem do terreno: desligada",EditorWidget::TerrainPathShape,path.shape,true,UiIcon::TerrainPathProfile);
-        fields("Largura da pista (m)",path.width,32,"Acostamento total (m)",path.shoulderWidth,33);
+        fields("Largura da pista (m)",path.width,32,"Largura total (m)",path.shoulderWidth,33);
         button(row(),path.keepWidthRatio?"Manter proporção: sim":"Larguras independentes",EditorWidget::TerrainPathRatio,path.keepWidthRatio);
 
         // Cross-section is drawn from the same piecewise-linear profile data.

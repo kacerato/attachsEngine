@@ -2,6 +2,7 @@
 #include "resources/gltf_import.h"
 #include "resources/terrain_asset.h"
 #include "resources/terrain_textures.generated.h"
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 using namespace ae;
@@ -93,4 +94,31 @@ AE_TEST(terrain_indexed_export_preserves_triangles_and_supports_locked_border_lo
   AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,{},bytes,error),error.c_str());
   AE_EXPECT_TRUE(resources::importGlb(bytes,limits,{},model),model.diagnostic.c_str());
   AE_EXPECT_TRUE(model.meshLods.empty(),"authored one-level policy wins over generic import profile");
+}
+
+AE_TEST(terrain_texture_sharing_preserves_sampler_contract_and_lifetime) {
+  resources::TerrainRecipe r;r.cells=8;r.height=0;
+  resources::TerrainMesh mesh;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrain(r,mesh,error),error.c_str());
+  const std::vector<u8> png{std::begin(resources::terrainTexture0),std::end(resources::terrainTexture0)};
+  const std::array<std::vector<u8>,4> textures{png,png,png,png};
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,textures,bytes,error),error.c_str());
+  std::weak_ptr<const renderer::AuthoringTexture> lifetime;
+  {
+    resources::GltfImport first,second,clamped;
+    AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},first),first.diagnostic.c_str());
+    AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},second),second.diagnostic.c_str());
+    AE_EXPECT_TRUE(!first.textures.empty(),"actual PNG decoded");
+    AE_EXPECT_TRUE(first.textures.front()==second.textures.front(),"separate imports share identical immutable pixels");
+    lifetime=first.textures.front();
+    const std::string repeat="10497",clamp="33071";
+    auto found=std::search(bytes.begin(),bytes.end(),repeat.begin(),repeat.end());
+    AE_EXPECT_TRUE(found!=bytes.end(),"export contains explicit repeat sampler");
+    std::copy(clamp.begin(),clamp.end(),found);
+    AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},clamped),clamped.diagnostic.c_str());
+    AE_EXPECT_TRUE(first.textures.front()!=clamped.textures.front(),"different wrap behavior never aliases despite identical pixels");
+    AE_EXPECT_TRUE(first.textures.front()->mipChain==clamped.textures.front()->mipChain,"no mip, resolution or pixel quality change");
+  }
+  AE_EXPECT_TRUE(lifetime.expired(),"interning never retains pixels after their owners are released");
 }

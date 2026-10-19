@@ -4075,14 +4075,6 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
         textures.push_back(std::move(decoded));
       }
   }
-  const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
-  // R4 (T16): o que cada textura do projeto ocupa de fato na GPU, depois do perfil e do orçamento.
-  std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedResidency;
-  for(const auto &binding:bindings)
-    if(binding.index<textures.size() && textures[binding.index]) {
-      const auto &texture=*textures[binding.index];
-      publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
-    }
   // S2: o que cada textura publicada pede ao streaming, pela mesma origem que
   // decidiu os bytes: o perfil de importação da fonte ou o perfil da textura.
   std::vector<renderer::TextureStreamingParameters> streaming(textures.size());
@@ -4100,10 +4092,50 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
         streaming[binding.index].streamable=profile.streamingMipmaps;streaming[binding.index].priority=profile.streamingPriority;
       }
   }
+  // A source revision is a separate asset, but identical immutable pixels with
+  // identical streaming policy need only one GPU image and bindless descriptor.
+  // Keep source-local indices intact; remap only the publication transaction.
+  std::vector<u32> textureSlots(textures.size());
+  std::vector<renderer::SharedAuthoringTexture> uniqueTextures;
+  std::vector<renderer::TextureStreamingParameters> uniqueStreaming;
+  std::unordered_map<const renderer::AuthoringTexture *,std::vector<u32>> candidates;
+  for(u32 i=0;i<textures.size();++i) {
+    auto &matches=candidates[textures[i].get()];
+    u32 slot=static_cast<u32>(uniqueTextures.size());
+    for(const auto candidate:matches) {
+      const auto &a=streaming[i],&b=uniqueStreaming[candidate];
+      if(a.streamable==b.streamable && a.priority==b.priority && a.requestedMip==b.requestedMip) {slot=candidate;break;}
+    }
+    if(slot==uniqueTextures.size()) {
+      // Different residency policies represent two independent GPU allocations;
+      // give the budget planner distinct identities so both are accounted for.
+      uniqueTextures.push_back(matches.empty() || !textures[i]?textures[i]:
+        std::make_shared<renderer::AuthoringTexture>(*textures[i]));
+      matches.push_back(slot);uniqueStreaming.push_back(streaming[i]);
+    }
+    textureSlots[i]=slot;
+  }
+  auto materials=library.materials;
+  for(auto &material:materials)for(auto &slot:material.textureIndices)if(slot!=renderer::InvalidMapTexture) {
+    if(slot>=textureSlots.size()){diagnostic="Material referencia textura fora da biblioteca.";return false;}
+    slot=textureSlots[slot];
+  }
+  for(auto &binding:bindings)binding.index=textureSlots[binding.index];
+  textures=std::move(uniqueTextures);streaming=std::move(uniqueStreaming);
+  const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
+  // R4 (T16): o que cada textura do projeto ocupa de fato na GPU, depois do perfil e do orçamento.
+  std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedResidency;
+  for(const auto &binding:bindings)
+    if(binding.index<textures.size() && textures[binding.index]) {
+      const auto &texture=*textures[binding.index];
+      publishedResidency.push_back({binding,{texture.width,texture.height,texture.levels,texture.expectedBytes(),texture.srgb,texture.samplerFlags}});
+    }
+
   skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
                         library.drawMorphTargets,library.meshLods};
-  const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,library.materials,textures,published);
+  const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,materials,textures,published);
   if(accepted) {
+    publishedSourceTextureSlots_.assign(textureSlots.begin(),textureSlots.begin()+library.textures.size());
     textureStreamingParameters_=std::move(streaming);++textureStreamingRevision_;
     textureStreamingDesired_.clear();textureStreamingLoaded_.clear();
   }
@@ -4301,8 +4333,9 @@ bool EditorSession::refreshSourceTextureViewer() {
   fields={{"Cor",texture.srgb?"sRGB":"Linear (dados)"},{"Formato",format},{"Níveis",std::to_string(texture.levels)},
           {"Memória",texture.partial()?megabytesText(texture.mipChain.size())+" de "+megabytesText(texture.expectedBytes()):
                                        megabytesText(texture.expectedBytes())}};
-  if(entry.library<textureStreamingLoaded_.size() && entry.library<textureStreamingDesired_.size()) {
-    const u32 loaded=textureStreamingLoaded_[entry.library],desired=textureStreamingDesired_[entry.library];
+  const auto slot=entry.library<publishedSourceTextureSlots_.size()?publishedSourceTextureSlots_[entry.library]:~0u;
+  if(slot<textureStreamingLoaded_.size() && slot<textureStreamingDesired_.size()) {
+    const u32 loaded=textureStreamingLoaded_[slot],desired=textureStreamingDesired_[slot];
     const u32 side=std::max(1u,texture.width>>std::min(loaded,31u));
     fields.push_back({"Na GPU",std::to_string(side)+" px (mip "+std::to_string(loaded)+")"});
     state_.textureGpuNote="Na GPU está o mip "+std::to_string(loaded)+" ("+std::to_string(side)+" px); a tela pede o "+
