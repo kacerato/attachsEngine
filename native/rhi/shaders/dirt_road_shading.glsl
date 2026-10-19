@@ -408,7 +408,17 @@ void main() {
     mediump vec3 integratedSpecular=environment.parameters.w>1.5?
         f0*integratedBrdf.x+vec3(f90*integratedBrdf.y):
         fresnel(f0,f90,nv)*integratedBrdf.x;
-    color+=specularEnvironment*integratedSpecular*occlusion;
+    // G3a, oclusão especular: a sonda é o céu aberto, e sem estes termos todo
+    // canto, beiral e interior reflete o céu -- o "tudo brilha". Dois fatores:
+    // horizonte (Jimenez 2016): o normal map pode apontar o reflexo para dentro
+    // da superfície geométrica, onde só há o próprio objeto;
+    // AO -> especular (Lagarde 2014, "Moving Frostbite to PBR"): a oclusão do
+    // material vale mais para reflexos rasantes e lisos do que multiplicada
+    // direto, e chega a zero onde a AO é total.
+    mediump float horizon=min(1.0+dot(reflection,normalize(vNormal)),1.0);
+    mediump float specularOcclusion=horizon*horizon*
+        clamp(pow(nv+occlusion,exp2(-16.0*rough-1.0))-1.0+occlusion,0.0,1.0);
+    color+=specularEnvironment*integratedSpecular*specularOcclusion;
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);
