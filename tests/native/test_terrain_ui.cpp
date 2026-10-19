@@ -599,6 +599,24 @@ AE_TEST(terrain_path_ui_create_edit_preview_apply_and_reopen) {
   AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),serialized,"path and properties survive GLB reediting");
 }
 
+AE_TEST(terrain_lod_controls_touch_enable_edit_and_disable_in_compact_and_wide_layouts) {
+  for(const float width:{655.f,1280.f}) {
+    TerrainUiFixture f(width,width<1000?300:720);
+    AE_EXPECT_TRUE(f.ready && f.visit(0,2),"open terrain details through actual UI");
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase,28)),"LOD plus is reachable by scrolling and touch");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,2u,"touch enables a reduced level");
+    const auto before=f.session.screen().terrainDraft.lodRelativeError;
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainPlusBase,29)),"error control is enabled for multiple levels");
+    AE_EXPECT_TRUE(f.session.screen().terrainDraft.lodRelativeError>before,"error button changes authored policy");
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMinusBase,28)),"LOD minus remains touch reachable");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"touch disables additional levels");
+    f.render();ui::UiPoint point;
+    AE_EXPECT_TRUE(!f.point(id(Widget::TerrainPlusBase,29),point) &&
+                   !f.point(id(Widget::TerrainNumberBase,29),point),
+                   "disabled error field and increment do not receive touch input");
+  }
+}
+
 AE_TEST(terrain_compact_path_profiles_fit_before_scrolling) {
   TerrainUiFixture f;AE_EXPECT_TRUE(f.ready,"compact UI fixture");
   AE_EXPECT_TRUE(f.visit(4) && f.tap(id(Widget::TerrainPathNew)),"new path");

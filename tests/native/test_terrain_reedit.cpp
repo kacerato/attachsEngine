@@ -21,6 +21,7 @@ struct ReeditFixture {
   std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
+  std::vector<renderer::MeshLodLevel> publishedLods;
   std::filesystem::path path;
   bool ready = false;
   ReeditFixture() {
@@ -36,6 +37,8 @@ struct ReeditFixture {
                std::span<const renderer::MapMaterialRecord> m,
                std::span<const renderer::SharedAuthoringTexture>,
                editor::EditorSession::PublishedGeometry &out) {
+          const auto lods=session.skinningPublication().meshLods;
+          publishedLods.assign(lods.begin(),lods.end());
           vertices.clear(); indices.clear(); draws.clear(); materials.clear();
           renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials);
           const auto vb = u32(vertices.size() / renderer::MapVertexStride);
@@ -687,4 +690,95 @@ AE_TEST(terrain_new_revision_budget_refuses_growth_and_reuses_existing_hash) {
                "refusal preserves current terrain geometry revision");
   AE_EXPECT_TRUE(f.session.applyTerrain(recipe, error), "existing immutable hash remains usable above budget");
   AE_EXPECT_EQ(f.session.assets().serialize(), registry, "existing hash adds no retained source");
+}
+
+AE_TEST(terrain_straight_stroke_is_independent_of_touch_event_frequency) {
+  for(const auto mode:{resources::TerrainMode::Heightfield,resources::TerrainMode::SmoothVoxel}) {
+    std::vector<resources::TerrainStroke> reference;
+    resources::TerrainField referenceField;
+    for(u32 eventCount:{1u,8u,32u}) {
+      ReeditFixture f;
+      AE_EXPECT_TRUE(f.ready,"fixture initialized");
+      resources::TerrainRecipe recipe;recipe.mode=mode;recipe.cells=recipe.verticalCells=16;
+      recipe.height=0;recipe.base=4;
+      std::string error;
+      AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+      const auto tool=mode==resources::TerrainMode::Heightfield?resources::TerrainTool::Raise:resources::TerrainTool::Dig;
+      f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(tool)));
+      f.action(editor::EditorWidget::TerrainOpacityTarget);
+      f.action(editor::EditorWidget::TerrainOpacityTarget);
+      AE_EXPECT_TRUE(f.session.setTerrainNumber(9,4) && f.session.setTerrainNumber(10,2),"accumulative brush configured");
+      ui::UiPoint from,to;
+      AE_EXPECT_TRUE(f.brushPoints(from,to),"straight visible stroke available");
+      f.session.handlePointer({41,ui::UiPointerPhase::Down,from,10});
+      for(u32 i=1;i<=eventCount;++i) {
+        const float t=float(i)/eventCount;
+        f.session.handlePointer({41,ui::UiPointerPhase::Move,{std::lerp(from.x,to.x,t),std::lerp(from.y,to.y,t)},10+t});
+      }
+      f.session.handlePointer({41,ui::UiPointerPhase::Up,to,11.1});
+      AE_EXPECT_TRUE(f.finishGeneration(),"stroke completes");
+      const auto &authored=f.session.screen().terrainDraft;
+      AE_EXPECT_TRUE(authored.strokes.size()>1,"pointer routing actually authored a multi-stamp stroke");
+      resources::TerrainField field;
+      AE_EXPECT_TRUE(resources::generateTerrainField(authored,field,error),error.c_str());
+      if(eventCount==1) {reference=authored.strokes;referenceField=field;}
+      else {
+        AE_EXPECT_EQ(authored.strokes.size(),reference.size(),"event density does not add stamps");
+        for(usize i=0;i<reference.size();++i) {
+          const auto &a=authored.strokes[i],&b=reference[i];
+          AE_EXPECT_TRUE(std::abs(a.x-b.x)<.001f && std::abs(a.y-b.y)<.001f && std::abs(a.z-b.z)<.001f,
+                         "same world-space sampling under sparse and dense events");
+        }
+        for(usize i=0;i<field.heights.size();++i)
+          AE_EXPECT_TRUE(std::abs(field.heights[i]-referenceField.heights[i])<.002f,"height effect independent of event frequency");
+        for(usize i=0;i<field.density.size();++i)
+          AE_EXPECT_TRUE(std::abs(field.density[i]-referenceField.density[i])<.002f,"volume effect independent of event frequency");
+      }
+    }
+  }
+}
+
+AE_TEST(terrain_authored_lod_survives_editor_apply_history_and_scene_reload) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells=16;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  const auto originalSource=scene::importLink(f.session.document().find(root)->components)->source;
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(28,2.5) && !f.session.setTerrainNumber(28,5),
+                 "LOD level count rejects fractional and excessive values");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"invalid edits preserve the draft");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(28,3) && f.session.setTerrainNumber(29,2),
+                 "editor accepts authored LOD policy");
+  const auto authored=f.session.screen().terrainDraft;
+  AE_EXPECT_TRUE(f.session.applyTerrain(authored,error),error.c_str());
+  AE_EXPECT_TRUE(!f.publishedLods.empty(),"authored LOD reaches the actual geometry publisher");
+  for(const auto &lod:f.publishedLods) {
+    AE_EXPECT_TRUE(lod.level>0 && lod.level<authored.lodLevels,"published levels obey authored count");
+    AE_EXPECT_TRUE(lod.indexCount>0 && u64(lod.firstIndex)+lod.indexCount<=f.indices.size(),
+                   "published LOD has an accessible index range");
+  }
+  const auto lodSource=scene::importLink(f.session.document().find(root)->components)->source;
+  AE_EXPECT_TRUE(lodSource!=originalSource,"LOD settings create a distinct persisted revision");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo LOD revision");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"Undo restores disabled LOD");
+  AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo LOD revision");
+  f.session.update();
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,3u,"Redo restores authored levels");
+  const auto saved=f.path/"lod-scene.aescene";
+  AE_EXPECT_TRUE(f.session.save(saved.string().c_str(),0) && f.session.load(saved.string().c_str(),0),
+                 "save and reload actual scene");
+  f.action(editor::EditorWidget::TerrainClose);
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen terrain after scene reload");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),
+               resources::serializeTerrainRecipe(authored),"all authored properties survive reload");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(28,1),"disable authored LOD through editor");
+  const auto disabled=f.session.screen().terrainDraft;
+  AE_EXPECT_TRUE(f.session.applyTerrain(disabled,error),error.c_str());
+  f.action(editor::EditorWidget::TerrainClose);
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen after disabling LOD");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.lodLevels,1u,"disabled policy also persists");
 }

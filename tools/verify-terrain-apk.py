@@ -22,7 +22,7 @@ with zipfile.ZipFile(apk) as z:
     native = z.read('lib/arm64-v8a/libaether_android.so')
     assert native[:4] == b'\x7fELF' and native[18:20] == b'\xb7\x00', 'ARM64 ELF required'
     assert native == args.native.read_bytes(), 'packaged native runtime differs from this build'
-    assert b'AETERRAIN5' in native, 'revision 5 terrain recipe implementation missing'
+    assert b'AETERRAIN6' in native, 'revision 6 terrain recipe implementation with authored LOD missing'
     # Optimized literal comparisons need not retain AETERRAIN1 as contiguous ELF bytes.
     # Legacy compatibility is checked by the host migration test and device reopen flow.
     assert 'Terreno e voxel'.encode() in native, 'terrain menu missing'
@@ -81,7 +81,7 @@ with zipfile.ZipFile(apk) as z:
     assert not any('VkLayer_khronos_validation' in n for n in z.namelist()), 'debug validation layer in release'
     result = dict(apk=str(apk), bytes=apk.stat().st_size, sha256=sha(apk.read_bytes()), native_sha256=sha(native),
                   atlas_sha256=sha(atlas), atlas_icon_count=icon_count, terrain_authoring_icons=terrain_icons,
-                  managed=managed, checks=['ZIP CRC', 'ARM64 ELF', 'AETERRAIN5 recipe marker', 'native library equality',
+                  managed=managed, checks=['ZIP CRC', 'ARM64 ELF', 'AETERRAIN6 recipe marker', 'native library equality',
                   'terrain creation menu', 'four embedded terrain textures', 'current UI atlas', 'terrain license and provenance',
                   'twenty terrain authoring icons and matching runtime enum',
                   'managed assembly equality', 'no Vulkan debug validation layer'],
