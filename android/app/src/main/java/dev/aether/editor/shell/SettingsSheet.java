@@ -105,7 +105,15 @@ public final class SettingsSheet extends FrameLayout {
 
         status = label("", 12f, Design.MUTED, 0f);
         status.setLineSpacing(0f, 1.15f);
-        control.addView(status, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
+        // O estado pode somar a mensagem da última ação a duas linhas de fila:
+        // rola dentro do painel em vez de ser cortado pelos botões.
+        ScrollView statusScroller = new ScrollView(context);
+        statusScroller.addView(status);
+        control.addView(statusScroller, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f));
+        LinearLayout buttons = new LinearLayout(context);
+        LinearLayout.LayoutParams buttonsParams = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        buttonsParams.topMargin = dp(10);
+        control.addView(buttons, buttonsParams);
 
         sendNow = new Button(context);
         style(sendNow, "Enviar agora", Design.DIM, panel(Color.TRANSPARENT, 9f, Design.LINE));
@@ -114,14 +122,14 @@ public final class SettingsSheet extends FrameLayout {
             status.setText("Enviando…");
             telemetry.upload(message -> { sendNow.setEnabled(true); refresh(message); });
         });
-        control.addView(sendNow, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(40)));
+        buttons.addView(sendNow, new LinearLayout.LayoutParams(0, dp(40), 1f));
 
         forget = new Button(context);
-        style(forget, "Apagar meus dados", 0xFFFF8A80, panel(Color.TRANSPARENT, 9f, 0x66FF8A80));
+        style(forget, "Apagar dados", 0xFFFF8A80, panel(Color.TRANSPARENT, 9f, 0x66FF8A80));
         forget.setOnClickListener(view -> confirmForget());
-        LinearLayout.LayoutParams forgetParams = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, dp(40));
-        forgetParams.topMargin = dp(8);
-        control.addView(forget, forgetParams);
+        LinearLayout.LayoutParams forgetParams = new LinearLayout.LayoutParams(0, dp(40), 1f);
+        forgetParams.leftMargin = dp(8);
+        buttons.addView(forget, forgetParams);
 
         LinearLayout actions = new LinearLayout(context);
         actions.setGravity(Gravity.END);
@@ -140,8 +148,9 @@ public final class SettingsSheet extends FrameLayout {
             LinearLayout.LayoutParams acceptParams = new LinearLayout.LayoutParams(dp(150), dp(42));
             acceptParams.leftMargin = dp(10);
             actions.addView(accept, acceptParams);
-            // No primeiro contato a escolha é pelos botões; o interruptor só espelha.
-            share.setEnabled(false);
+            // No primeiro contato a escolha é pelos dois botões de baixo; um
+            // interruptor desligado e inerte ao lado deles só confundiria.
+            share.setVisibility(GONE);
         } else {
             Button close = new Button(context);
             style(close, "Fechar", Design.ACCENT_INK, panel(Design.ACCENT, 9f, Design.ACCENT));
@@ -166,8 +175,10 @@ public final class SettingsSheet extends FrameLayout {
             text.append(pending == 0 ? "Nenhuma janela aguardando envio."
                     : pending + (pending == 1 ? " janela aguardando envio." : " janelas aguardando envio."));
             long last = telemetry.lastUploadMillis();
+            long now = System.currentTimeMillis();
             text.append("\nÚltimo envio: ").append(last == 0 ? "ainda não houve"
-                    : DateUtils.getRelativeTimeSpanString(last, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS));
+                    : now - last < DateUtils.MINUTE_IN_MILLIS ? "agora há pouco"
+                    : DateUtils.getRelativeTimeSpanString(last, now, DateUtils.MINUTE_IN_MILLIS));
         }
         status.setText(text);
         sendNow.setVisibility(granted && !firstRun ? VISIBLE : GONE);
@@ -177,8 +188,8 @@ public final class SettingsSheet extends FrameLayout {
     private void confirmForget() {
         if (!"confirm".equals(forget.getTag())) {
             forget.setTag("confirm");
-            forget.setText("Toque de novo para apagar");
-            postDelayed(() -> { forget.setTag(null); forget.setText("Apagar meus dados"); }, 4000);
+            forget.setText("Confirmar");
+            postDelayed(() -> { forget.setTag(null); forget.setText("Apagar dados"); }, 4000);
             return;
         }
         forget.setTag(null);
@@ -186,7 +197,7 @@ public final class SettingsSheet extends FrameLayout {
         forget.setText("Apagando…");
         telemetry.forget(message -> {
             forget.setEnabled(true);
-            forget.setText("Apagar meus dados");
+            forget.setText("Apagar dados");
             refresh(message);
         });
     }
@@ -264,6 +275,9 @@ public final class SettingsSheet extends FrameLayout {
         button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         button.setBackground(background);
         button.setStateListAnimator(null);
+        button.setSingleLine(true);
+        button.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        button.setPadding(dp(10), 0, dp(10), 0);
     }
 
     private GradientDrawable panel(int fill, float radius, int border) {

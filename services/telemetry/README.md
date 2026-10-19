@@ -1,8 +1,8 @@
 # Telemetria de desempenho (GT)
 
 Plano: `docs/planos/DESEMPENHO-GRAFICOS-VIVOS-2026-10-17.md`, bloco GT. Estado em
-18/10/2026: **recepção gravando em produção; app com coleta e envio implementados, ainda
-não validados no aparelho.** O Supabase bateu o
+18/10/2026: **recepção gravando em produção; app com coleta e envio validados no POCO em
+18/10/2026.** O Supabase bateu o
 limite de 2 projetos gratuitos; a recepção foi para uma Neon Function ao lado do banco,
 com `DATABASE_URL` injetada pelo Neon. O site só repassa. A pasta `supabase/` fica como
 referência do esquema original e não é publicada.
@@ -17,10 +17,10 @@ referência do esquema original e não é publicada.
 | Banco | Neon `astra-telemetry` (`dry-bar-61879098`), branch `main`, banco `telemetry`, us-east-1 | esquema v1 criado pela função |
 | Retenção de 180 dias | gatilho `retencao-180-dias`, 04:17 UTC, `POST /retention` | ativo |
 | Janelas de 600 quadros após 5 s de aquecimento; reinicia ao trocar cena, modo ou nível | `native/profiler/telemetry_recorder.{h,cpp}` | `aether_telemetry_tests` 5/5 |
-| Fila em disco: `<sessão>.jsonl` (janelas) e `<sessão>.env.json` (GPU, níveis) | `platform/android/android_telemetry.{h,cpp}` | compila arm64; sem teste no aparelho |
-| Consentimento (primeira abertura) e Configurações › Telemetria de desempenho | `shell/SettingsSheet.java` | sem captura no aparelho |
-| Identidade aleatória, sessão por abertura do editor, envelope do aparelho, envio, "Apagar meus dados" | `shell/Telemetry.java`, `shell/TelemetryQueue.java` | `TelemetryQueueTest` |
-| Jogo exportado sem telemetria | não recebe as opções; `ApkExporter` remove `INTERNET` e recusa o APK se ela sobrar | sem export de teste |
+| Fila em disco: `<sessão>.jsonl` (janelas) e `<sessão>.env.json` (GPU, níveis) | `platform/android/android_telemetry.{h,cpp}` | validado no POCO: 10 janelas edição/Play no Neon |
+| Consentimento (primeira abertura) e Configurações › Telemetria de desempenho | `shell/SettingsSheet.java` | validado no POCO (docs/validacao/gt-telemetria-2026-10-18) |
+| Identidade aleatória, sessão por abertura do editor, envelope do aparelho, envio, "Apagar dados" | `shell/Telemetry.java`, `shell/TelemetryQueue.java` | `TelemetryQueueTest` |
+| Jogo exportado sem telemetria | não recebe as opções; `ApkExporter` remove `INTERNET` e recusa o APK se ela sobrar | export de teste: só VIBRATE |
 
 A URL usa barra final: o site tem `trailingSlash` e responde 308 a `/api/telemetry/ingest`.
 Função direta: `https://br-mute-dawn-b70p1deg-ingest.compute.c-13.us-east-1.aws.neon.tech/`.
@@ -55,7 +55,7 @@ Apagar: `{"schema": "astra.telemetry.delete/1", "installation": "<uuid>"}`.
    por sessão, sem rede.
 4. Ao voltar à lista de projetos, o shell envia em lotes de 120. Erro 400/413 descarta o
    lote; sem rede, 429 ou 5xx guarda o resto para a próxima vez.
-5. "Apagar meus dados" apaga a fila local, pede `astra.telemetry.delete/1` e troca a
+5. "Apagar dados" apaga a fila local, pede `astra.telemetry.delete/1` e troca a
    identidade. Desligar a coleta descarta o que ainda não saiu.
 
 ## Acesso
