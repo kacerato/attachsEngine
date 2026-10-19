@@ -405,6 +405,7 @@ android {
 }
 
 dependencies {
+    implementation(project(":export-core"))
     implementation("androidx.games:games-frame-pacing:2.1.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

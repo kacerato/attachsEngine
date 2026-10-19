@@ -413,6 +413,63 @@ AE_TEST(terrain_brush_touch_drag_is_one_edit_and_cancel_or_limit_preserves_recip
   AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("4096") != std::string::npos, "limit has explicit feedback");
 }
 
+AE_TEST(terrain_apply_reuses_completed_build_and_rebuilds_only_changed_chunks) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells=64;recipe.size=64;recipe.height=0;recipe.base=4;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto original=f.session.screen().terrainPreviewBuild;
+  f.action(editor::EditorWidget::TerrainGenerate);
+  AE_EXPECT_TRUE(f.session.screen().terrainBusy,"apply starts asynchronous generation");
+  AE_EXPECT_TRUE(f.finishGeneration(),"async apply completes");
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild==original,"unchanged apply shares immutable completed geometry");
+  resources::TerrainStroke stroke;
+  stroke.x=-20;stroke.z=-20;stroke.radius=3;stroke.strength=2;
+  recipe.strokes.push_back(stroke);
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto updated=f.session.screen().terrainPreviewBuild;
+  AE_EXPECT_TRUE(updated!=original,"edit creates a new immutable build");
+  AE_EXPECT_TRUE(updated->mesh.rebuiltChunks>0 && updated->mesh.reusedChunks>0,"local apply retains unaffected chunks");
+  resources::TerrainBuild full;
+  AE_EXPECT_TRUE(resources::updateTerrain(recipe,nullptr,full,error),error.c_str());
+  AE_EXPECT_EQ(updated->mesh.parts.size(),full.mesh.parts.size(),"regional commit has full-build part count");
+  for(usize i=0;i<full.mesh.parts.size();++i) {
+    const auto &a=updated->mesh.parts[i].vertices;
+    const auto &b=full.mesh.parts[i].vertices;
+    AE_EXPECT_EQ(a.size(),b.size(),"regional commit preserves triangle count");
+    AE_EXPECT_TRUE(std::memcmp(a.data(),b.data(),a.size()*sizeof(resources::TerrainVertex))==0,"regional commit preserves geometry normals UVs and weights");
+  }
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild==updated,"synchronous apply shares completed geometry");
+}
+
+AE_TEST(terrain_release_commits_the_completed_live_preview_without_remeshing) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe recipe;
+  recipe.cells=16;recipe.height=0;recipe.base=4;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(resources::TerrainTool::Raise)));
+  ui::UiPoint from,to;
+  AE_EXPECT_TRUE(f.brushPoints(from,to),"pickable terrain");
+  f.session.handlePointer({25,ui::UiPointerPhase::Down,from,5});
+  for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i) {
+    f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  // A stationary dab has no residual endpoint to flush on release. A dragged
+  // stroke can legitimately add its final sample and must take the update path.
+  AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,"real preview published before release");
+  const auto preview=f.session.screen().terrainPreviewBuild;
+  AE_EXPECT_TRUE(preview && !preview->recipe.strokes.empty(),"preview contains sculpting");
+  f.session.handlePointer({25,ui::UiPointerPhase::Up,from,5.2});
+  AE_EXPECT_TRUE(f.finishGeneration(),"release completes");
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild==preview,"release commits exact preview snapshot without copying or remeshing");
+  AE_EXPECT_EQ(f.session.screen().terrainAppliedRecipe,resources::serializeTerrainRecipe(preview->recipe),"persisted recipe agrees with visible preview");
+}
+
 AE_TEST(terrain_live_preview_is_visible_before_release_and_cancel_is_atomic) {
   ReeditFixture f;
   AE_EXPECT_TRUE(f.ready,"fixture initialized");

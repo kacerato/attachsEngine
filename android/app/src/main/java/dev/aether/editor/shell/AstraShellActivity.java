@@ -82,6 +82,13 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         beginOpening(project);
     }
 
+    @Override public void onProjectExport(Project project) {
+        Intent intent = new Intent(this, dev.aether.editor.GameExportActivity.class);
+        intent.putExtra("astra.project_name", project.name);
+        intent.putExtra("astra.project_path", project.path);
+        startActivity(intent);
+    }
+
     /**
      * R1: a tela de carregamento cobre a troca de Activity pelo tempo que ela
      * realmente leva. Antes havia 1,8 s de espera fixa com barra inventada antes

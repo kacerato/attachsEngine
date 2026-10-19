@@ -1,9 +1,16 @@
 # Retomada — 16/10/2026
 
+Continuação de 19/10: [aplicação da prévia e integração Android](APLICACAO-2026-10-19.md).
+ADB reautorizado pelo proprietário para validar depois da implementação.
+As restrições de ADB nos checkpoints abaixo são históricas.
+Revisão atual: 58/58 cenários host; Astra Terreno 106 compilado, auditado e
+instalado por atualização. Testes de toque/renderização pendentes porque o
+aparelho permanece bloqueado. Primeiro bloco e plano completo ainda abertos.
+
 Atualização de 19/10: [integração do outro PC e validação no Windows](PROGRESSO-2026-10-19.md).
 Engine publicada em `62547f30`: 56/56 testes integrados, 4/4 do planejador de
 buffers, UI de LOD capturada em 655 e 1280 pixels. Este é o ponto de retomada
-mais recente. O relato de pausa abaixo é histórico; o trabalho foi retomado
+da integração anterior. O relato de pausa abaixo é histórico; o trabalho foi retomado
 por solicitação do proprietário. Sem ADB; primeiro bloco e plano completo abertos.
 
 Atualização de 17/10: [fontes locais confirmadas, caminhos regionais e LOD autoral](PROGRESSO-2026-10-17.md).

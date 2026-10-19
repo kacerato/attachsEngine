@@ -108,7 +108,7 @@ void normalizeTerrainBrush(EditorScreenState &state) {
 } // namespace
 struct EditorSession::TerrainJob {
   resources::TerrainRecipe recipe;
-  std::shared_ptr<resources::TerrainBuild> build=std::make_shared<resources::TerrainBuild>();
+  std::shared_ptr<const resources::TerrainBuild> previous, build;
   resources::GltfImport model;
   std::vector<u8> bytes;
   std::string error, project;
@@ -693,11 +693,17 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
 }
 bool EditorSession::applyTerrain(const resources::TerrainRecipe &r,
                                  std::string &error) {
-  auto build=std::make_shared<resources::TerrainBuild>();
+  std::shared_ptr<const resources::TerrainBuild> build = terrainPreviewCache_;
+  if (!build || build->mesh.parts.empty() ||
+      resources::serializeTerrainRecipe(build->recipe) != resources::serializeTerrainRecipe(r)) {
+    auto updated = std::make_shared<resources::TerrainBuild>();
+    if (!resources::updateTerrain(r, build && !build->mesh.parts.empty() ? build.get() : nullptr,
+                                  *updated, error)) return false;
+    build = std::move(updated);
+  }
   std::vector<u8> bytes;
   resources::GltfImport model;
-  if (!resources::updateTerrain(r, nullptr, *build, error) ||
-      !resources::writeTerrainGlb(r, build->mesh, textures(), bytes, error))
+  if (!resources::writeTerrainGlb(r, build->mesh, textures(), bytes, error))
     return false;
   if (!resources::importGlb(bytes, {}, {}, model)) {
     error = model.diagnostic;
@@ -721,6 +727,8 @@ void EditorSession::startTerrainJob() {
   }
   auto job = std::make_shared<TerrainJob>();
   job->recipe = state_.terrainDraft;
+  if (terrainPreviewCache_ && !terrainPreviewCache_->mesh.parts.empty())
+    job->previous = terrainPreviewCache_;
   job->target = state_.terrainTarget;
   job->epoch = sceneEpoch_;
   job->revision = document_.revision();
@@ -734,8 +742,18 @@ void EditorSession::startTerrainJob() {
       job->progress.store(p * .8f);
       return !job->cancel.load();
     };
-    if (resources::updateTerrain(job->recipe, nullptr, *job->build, job->error,
-                                   progress) &&
+    // Immutable snapshots remain valid even if the UI cancels or replaces its preview.
+    if (job->previous && resources::serializeTerrainRecipe(job->previous->recipe) ==
+                             resources::serializeTerrainRecipe(job->recipe)) {
+      job->build = job->previous;
+      progress(1.f);
+    } else {
+      auto updated = std::make_shared<resources::TerrainBuild>();
+      if (resources::updateTerrain(job->recipe, job->previous.get(), *updated, job->error, progress))
+        job->build = std::move(updated);
+      else if (job->error.empty()) job->error = "Não foi possível gerar o terreno";
+    }
+    if (job->build &&
         !job->cancel &&
         resources::writeTerrainGlb(job->recipe, job->build->mesh, textures(),
                                    job->bytes, job->error)) {
