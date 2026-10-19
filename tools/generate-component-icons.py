@@ -409,6 +409,21 @@ ICONS.update({
     "animation/duplicate": '<path d="M12 12h68v14H26v54H12zM38 38h52l24 24v52H38z" fill="#eef1f5"/><path d="M70 66h12v12h12v12H82v12H70V90H58V78h12z" fill="#a8ff10"/>',
 })
 
+# G2: gradação de cor. O trackball (cor + deslocamento) é o controle do ajuste
+# fino; as molduras empilhadas com paisagem são os perfis prontos.
+ICONS["lighting/color-grading"] = (
+    f'<circle cx="60" cy="52" r="38" {stroke(6)}/>'
+    f'<path d="M60 18v68M26 52h68" {stroke(3, extra='stroke-dasharray="4 7" opacity=".55"')}/>'
+    f'<circle cx="60" cy="52" r="4" fill="{INK}"/>'
+    f'<path d="M64 48l10-10" {stroke(4, ACCENT, 'stroke-dasharray="3 5"')}/>'
+    f'<circle cx="80" cy="32" r="10" fill="{ACCENT}"/>'
+    f'<path d="M16 110h96" {stroke(5)}/><circle cx="84" cy="110" r="9" fill="#15191e" {stroke(5, ACCENT)}/>')
+ICONS["lighting/look-presets"] = (
+    f'<rect x="34" y="12" width="80" height="56" rx="9" {stroke(4, extra='opacity=".45"')}/>'
+    f'<rect x="24" y="26" width="80" height="58" rx="9" {stroke(4, extra='opacity=".7"')}/>'
+    f'<rect x="12" y="42" width="86" height="66" rx="9" {stroke(6)}/>'
+    f'<path d="M22 98l22-24 15 15 12-11 19 20" {stroke(5, ACCENT)}/><circle cx="76" cy="62" r="8" {stroke(5, ACCENT)}/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

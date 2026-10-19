@@ -517,6 +517,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_temporal_upscaler.inl"
 #include "platform/android/instanced_post_fog.inl"
 #include "platform/android/instanced_post_chain.inl"
+#include "platform/android/instanced_color_grading.inl"
 #include "platform/android/instanced_skinning.inl"
 
 bool InstancedRenderer::createPipeline() {
@@ -1901,6 +1902,8 @@ bool InstancedRenderer::createPostResources() {
   sampler.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   if (!postSampler_.initialize(device_, sampler)) return false;
+  // A LUT 3D entra no descritor estático desde a criação; sem ela o pós não monta.
+  if (!createColorGradingResources()) return false;
   rhi::SamplerDesc depthSampler = sampler;
   depthSampler.minFilter = VK_FILTER_NEAREST;
   depthSampler.magFilter = VK_FILTER_NEAREST;
@@ -1957,7 +1960,7 @@ bool InstancedRenderer::createPostResources() {
 
   // 0 cor, 1 histórico, 2 profundidade, 3 UBO, 4 exposição, 5 vetor RG16F,
   // 6 reatividade, 7 composição (entradas temporais unificadas), 8 bloom em
-  // cadeia (nível 1/2), 9 AO em 1/2.
+  // cadeia (nível 1/2), 9 AO em 1/2, 10 LUT 3D da gradação (G2).
   VkDescriptorSetLayoutBinding bindings[kPostBindingCount]{};
   constexpr u32 bindingCount = kPostBindingCount;
   for (u32 index = 0; index < 3; ++index) {
@@ -1988,9 +1991,9 @@ bool InstancedRenderer::createPostResources() {
     return false;
   // Conjuntos: o pós normal, a exibição do resultado ampliado, a entrada com
   // névoa resolvida, o de pré-passe e os da cadeia de bloom (cena, névoa e um
-  // por nível). Cada um tem oito amostradores, um UBO e um SSBO.
+  // por nível). Cada um tem nove amostradores, um UBO e um SSBO.
   constexpr u32 postSetCapacity = 5 + kBloomLevelCount + 2;
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 8 * postSetCapacity},
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9 * postSetCapacity},
                                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, postSetCapacity},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, postSetCapacity}};
   VkDescriptorPoolCreateInfo pool{};
@@ -2057,6 +2060,9 @@ bool InstancedRenderer::createPostResources() {
                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   writes[8]=writes[5];writes[8].dstBinding=8;writes[8].pImageInfo=&auxiliary;
   writes[9]=writes[5];writes[9].dstBinding=9;writes[9].pImageInfo=&auxiliary;
+  const VkDescriptorImageInfo gradingLut{postSampler_.handle(), colorGradingView(0),
+                                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[10]=writes[5];writes[10].dstBinding=10;writes[10].pImageInfo=&gradingLut;
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -2261,6 +2267,8 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
     if(bloomChainThisFrame_) push.texelFlags[2] += 1024.0f;
     if(halfAmbientOcclusionThisFrame_) push.texelFlags[2] += 4096.0f;
   }
+  // Gradação por LUT: vale também depois do ampliador (a parte de exibição é esta).
+  if(colorGradingThisFrame_) push.texelFlags[2] += 65536.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
                        temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
@@ -2393,6 +2401,7 @@ bool InstancedRenderer::recordTemporalHistoryCopy() {
 void InstancedRenderer::destroyPostResources() {
   destroyFogResolveResources();
   destroyPostChainResources();
+  destroyColorGradingResources();
   destroyFsrResources();
   destroyAutoExposureResources();
   if (postPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, postPipeline_, nullptr);
@@ -7031,6 +7040,20 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     autoExposureDiagnostic_="Exposição automática requer pós-processamento dedicado";
   } else autoExposureDiagnostic_.clear();
   endGpuRegion(GpuPassClass::AutoExposure);
+  {
+    // Antes do ampliador temporal: ele e os pré-passes usam cópias do conjunto
+    // do pós, e a LUT precisa estar amostrável (e atualizada) antes de todos.
+    const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+    const auto look=sceneEnvironment_.active?sceneEnvironment_:
+        (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+    colorGradingThisFrame_=postPipeline_!=VK_NULL_HANDLE &&
+        prepareColorGrading(0,look,postEffectsEnabled&&look.active&&look.post);
+    if(colorGradingThisFrame_!=colorGradingReported_) {
+      colorGradingReported_=colorGradingThisFrame_;
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[ColorGrading] LUT 32^3 %s (forcada=%d, montagens=%u).",
+                          colorGradingThisFrame_?"por pixel":"desligada",colorGradingForced_?1:0,colorGradingRebuilds_);
+    }
+  }
   beginGpuRegion(GpuPassClass::TemporalUpscale);
   const bool upscaledFrame=temporalUpscaler_.ready() && recordTemporalUpscale(camera,timeSeconds);
   endGpuRegion(GpuPassClass::TemporalUpscale);

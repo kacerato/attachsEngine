@@ -43,7 +43,7 @@ public:
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 12) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 13) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -95,7 +95,10 @@ public:
       values.autoExposureSpeedDown=defaults.autoExposureSpeedDown;
     }
     if(version<12) values.fogLightEnergy=1.0f;
+    // v13 (G2): gradação de cor. Cena antiga fica neutra: sem LUT, mesma imagem.
+    if(version<13) values.grading={};
     for (const auto &property : descriptor.numbers) {
+      if(version<13 && property.id.starts_with("grading_")) continue;
       if(version<12 && property.id=="fog_light_energy") continue;
       if(version<11 && property.id.starts_with("auto_exposure_")) continue;
       if(version<8 && property.id.starts_with("hdri_")) continue;
@@ -183,13 +186,15 @@ inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
 
 #include "scene/generated/environment_environmentHdriNumbers.inc"
 #include "scene/generated/environment_environmentAutoExposureNumbers.inc"
+#include "scene/generated/environment_environmentGradingNumbers.inc"
 
 // ComponentType recebe um span contínuo. Juntar as duas partes em um único
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
 inline constexpr auto environmentAllNumbers = [] {
   std::array<ComponentNumber, environmentNumbers.size() + environmentTailNumbers.size()+
       environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+
-      environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()> out{};
+      environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()+
+      environmentGradingNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -203,10 +208,15 @@ inline constexpr auto environmentAllNumbers = [] {
   for(usize i=0;i<environmentPhysicalAtmosphereNumbers.size();++i)
     out[environmentNumbers.size()+environmentTailNumbers.size()+environmentAmbientOcclusionNumbers.size()+
         environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+i]=environmentPhysicalAtmosphereNumbers[i];
+  // Exposição, HDRI e gradação ficam no fim, nessa ordem: o arquivo grava os
+  // números na ordem da tabela, e cada versão só acrescentou no fim.
+  const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size();
   for(usize i=0;i<environmentAutoExposureNumbers.size();++i)
-    out[out.size()-environmentHdriNumbers.size()-environmentAutoExposureNumbers.size()+i]=environmentAutoExposureNumbers[i];
+    out[out.size()-tail-environmentAutoExposureNumbers.size()+i]=environmentAutoExposureNumbers[i];
   for(usize i=0;i<environmentHdriNumbers.size();++i)
-    out[out.size()-environmentHdriNumbers.size()+i]=environmentHdriNumbers[i];
+    out[out.size()-tail+i]=environmentHdriNumbers[i];
+  for(usize i=0;i<environmentGradingNumbers.size();++i)
+    out[out.size()-environmentGradingNumbers.size()+i]=environmentGradingNumbers[i];
   return out;
 }();
 
@@ -226,12 +236,18 @@ inline constexpr std::array<ComponentEnum, 4> environmentEnums{{
   {"volume_layer","Camada",environmentLayerOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).layer;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).layer=n;},{"Volume","","Filtro consultado pela câmera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
 }};
 
-inline constexpr std::array<ComponentTriple, 5> environmentTriples{{
+inline constexpr std::array<ComponentTriple, 11> environmentTriples{{
   {"sky_zenith","Cor do zênite",{"sky_zenith.r","sky_zenith.g","sky_zenith.b"},ComponentTripleKind::LinearColor},
   {"sky_horizon","Cor do horizonte",{"sky_horizon.r","sky_horizon.g","sky_horizon.b"},ComponentTripleKind::LinearColor},
   {"ground","Cor do chão",{"ground.r","ground.g","ground.b"},ComponentTripleKind::LinearColor},
   {"fog_color","Cor da neblina",{"fog_color.r","fog_color.g","fog_color.b"},ComponentTripleKind::LinearColor},
   {"box_size","Tamanho da caixa",{"box_size.x","box_size.y","box_size.z"},ComponentTripleKind::Vector},
+  {"grading_lift_color","Cor do lift",{"grading_lift_color.r","grading_lift_color.g","grading_lift_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_gamma_color","Cor do gama",{"grading_gamma_color.r","grading_gamma_color.g","grading_gamma_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_gain_color","Cor do ganho",{"grading_gain_color.r","grading_gain_color.g","grading_gain_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_shadows_color","Cor das sombras",{"grading_shadows_color.r","grading_shadows_color.g","grading_shadows_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_midtones_color","Cor dos médios",{"grading_midtones_color.r","grading_midtones_color.g","grading_midtones_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_highlights_color","Cor dos realces",{"grading_highlights_color.r","grading_highlights_color.g","grading_highlights_color.b"},ComponentTripleKind::LinearColor},
 }};
 
 inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
@@ -252,7 +268,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 12,
+  "astra.render.environment", 13,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

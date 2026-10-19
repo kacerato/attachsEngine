@@ -28,6 +28,8 @@
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
+#include "renderer/color_grading.h"
+#include "resources/environment_looks.h"
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
@@ -4015,6 +4017,134 @@ void buildPathPoints(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   (void)entity;
 }
 
+namespace {
+// G2: cor de uma prévia de perfil. A entrada é cor do monitor em RGB linear,
+// passada pela mesma função que a LUT tabela (renderer/color_grading.cpp);
+// UiColor é sRGB em 0xAARRGGBB.
+UiColor gradedPreviewColor(const renderer::ColorGradingLook &look,float r,float g,float b,float alpha=1.0f) {
+  const float in[3]{r,g,b};float out[3];renderer::gradeDisplayColor(look,in,out);
+  const auto byte=[](float value) {
+    value=std::clamp(value,0.0f,1.0f);
+    value=value<=.0031308f?value*12.92f:1.055f*std::pow(value,1.0f/2.4f)-.055f;
+    return static_cast<u32>(std::lround(value*255.0f));
+  };
+  return (static_cast<u32>(std::lround(std::clamp(alpha,0.0f,1.0f)*255.0f))<<24)|
+         (byte(out[0])<<16)|(byte(out[1])<<8)|byte(out[2]);
+}
+
+// Paisagem de referência (céu do zênite ao horizonte, sol com halo, morros,
+// grama, casa de reboco e telhado) já mapeada para o monitor, graduada como a
+// cena seria. Não é foto da cena do autor: é a mesma paleta para todo cartão,
+// o que deixa a diferença entre perfis legível de relance.
+void drawLookPreview(UiDrawList &list,UiRect area,const renderer::SceneEnvironment &values) {
+  const auto look=renderer::colorGradingLook(values);
+  if(!list.pushClip(area)) return;
+  const auto mixf=[](float a,float b,float t){return a+(b-a)*t;};
+  const float horizon=area.height*.62f;
+  constexpr u32 bands=8;
+  for(u32 band=0;band<bands;++band) {
+    const float t=static_cast<float>(band)/static_cast<float>(bands-1);
+    list.addRect({area.x,area.y+horizon*band/bands,area.width,horizon/bands+1.0f},
+                 gradedPreviewColor(look,mixf(.05f,.62f,t),mixf(.17f,.66f,t),mixf(.50f,.73f,t)));
+  }
+  const float sun=std::max(2.0f,area.height*.11f);
+  const float sunX=area.x+area.width*.74f,sunY=area.y+area.height*.27f;
+  list.addRect({sunX-sun*2.2f,sunY-sun*2.2f,sun*4.4f,sun*4.4f},gradedPreviewColor(look,1.0f,.84f,.58f,.30f),sun*2.2f);
+  list.addRect({sunX-sun,sunY-sun,sun*2,sun*2},gradedPreviewColor(look,1.0f,.94f,.80f),sun);
+  list.addRect({area.x-area.width*.12f,area.y+horizon-area.height*.17f,area.width*.72f,area.height*.42f},
+               gradedPreviewColor(look,.17f,.22f,.30f),area.height*.21f);
+  list.addRect({area.x+area.width*.44f,area.y+horizon-area.height*.11f,area.width*.74f,area.height*.42f},
+               gradedPreviewColor(look,.11f,.18f,.15f),area.height*.21f);
+  list.addRect({area.x,area.y+horizon,area.width,area.height-horizon},gradedPreviewColor(look,.17f,.33f,.09f));
+  list.addRect({area.x,area.y+area.height*.84f,area.width,area.height*.16f+1.0f},gradedPreviewColor(look,.06f,.13f,.05f));
+  const UiRect wall{area.x+area.width*.17f,area.y+horizon-area.height*.05f,area.width*.17f,area.height*.21f};
+  list.addRect({wall.x-2,wall.y-area.height*.09f,wall.width+4,area.height*.10f},gradedPreviewColor(look,.34f,.10f,.07f),1);
+  list.addRect(wall,gradedPreviewColor(look,.68f,.47f,.34f));
+  list.addRect({wall.x+wall.width*.38f,wall.y+wall.height*.42f,wall.width*.26f,wall.height*.58f},gradedPreviewColor(look,.09f,.06f,.05f));
+  if(values.vignette&&values.vignetteIntensity>0) {
+    const u32 alpha=static_cast<u32>(std::lround(std::min(.65f,values.vignetteIntensity*1.5f)*255.0f))<<24;
+    const float edge=area.width*.24f;
+    list.addGradientRect({area.x,area.y,edge,area.height},alpha,0);
+    list.addGradientRect({area.right()-edge,area.y,edge,area.height},0,alpha);
+  }
+  list.popClip();
+}
+
+constexpr std::string_view kEnvironmentFineTuneKey="astra.render.environment/Cor/Ajuste fino";
+
+// Perfis prontos em cartões (7 + Personalizado) e o ajuste fino recolhido.
+// Devolve se o ajuste fino está aberto: só então os campos do grupo aparecem.
+bool buildEnvironmentLooks(ScreenBuilder &builder,UiRect &content,const scene::Environment &environment,u32 index) {
+  const auto &theme=builder.theme;
+  const auto current=resources::matchEnvironmentLook(environment.values);
+  const auto presets=resources::environmentLookPresets();
+  const bool routable=index<32;
+  auto header=takeTop(content,28);
+  builder.list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingLookPresets),theme.color.accent);
+  const std::string_view chosen=current?presets[static_cast<u32>(*current)].name:std::string_view{"Personalizado"};
+  builder.label(takeRight(header,std::min(header.width*.5f,140.0f)),chosen,current?theme.color.accent:theme.color.textDim,
+                theme.type.caption,UiAlign::End);
+  builder.label(header,"Visual",theme.color.text,theme.type.body);
+  takeTop(content,2);
+
+  constexpr u32 columns=4,cards=8;
+  const float cardWidth=content.width/static_cast<float>(columns);
+  const float previewHeight=std::clamp(cardWidth*.56f,30.0f,62.0f);
+  const float cardHeight=previewHeight+30.0f;
+  const UiRect grid=takeTop(content,cardHeight*static_cast<float>(cards/columns));
+  for(u32 slot=0;slot<cards;++slot) {
+    const bool custom=slot==cards-1;
+    UiRect card{grid.x+cardWidth*static_cast<float>(slot%columns),grid.y+cardHeight*static_cast<float>(slot/columns),cardWidth,cardHeight};
+    card=deflate(card,UiInsets::all(3));
+    const bool selected=custom?!current:(current&&static_cast<u32>(*current)==slot);
+    builder.list.addRect(card,selected?withAlpha(theme.color.accent,.16f):theme.color.raised,10);
+    auto values=environment.values;
+    if(!custom) resources::applyEnvironmentLook(values,presets[slot].look);
+    const UiRect preview{card.x+4,card.y+4,card.width-8,previewHeight-6};
+    drawLookPreview(builder.list,preview,values);
+    if(custom) {
+      // O cartão do estado atual: a prévia é a gradação que a cena tem agora.
+      const auto badge=UiRect{preview.x+3,preview.y+3,22,22};
+      builder.list.addRect(badge,withAlpha(theme.color.silhouette,.82f),11);
+      builder.list.addImage(centred(badge,15,15),static_cast<UiImageId>(UiIcon::LightingColorGrading),theme.color.text);
+    }
+    if(selected) {
+      builder.list.addBorder(card,theme.color.accent,2,10);
+      const auto badge=UiRect{preview.right()-21,preview.y+3,18,18};
+      builder.list.addRect(badge,theme.color.accent,9);
+      builder.list.addImage(centred(badge,12,12),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.accentInk);
+    }
+    const UiRect name{card.x+2,card.y+previewHeight,card.width-4,card.height-previewHeight};
+    builder.label(name,fitMiddle(builder.list,std::string(custom?std::string_view{"Personalizado"}:presets[slot].name),name.width,theme.type.caption),
+                  selected?theme.color.text:theme.color.textDim,theme.type.caption,UiAlign::Center);
+    if(routable) builder.router.addRegion(card,custom?widgetId(EditorWidget::EnvironmentGradingFineBase)+index:
+                                               widgetId(EditorWidget::EnvironmentLookBase)+(index<<3)+slot);
+  }
+  takeTop(content,4);
+
+  const bool open=EditorScreenState::listed(builder.state.inspectorSections,std::string(kEnvironmentFineTuneKey));
+  auto row=takeTop(content,38);const auto hit=row;
+  builder.list.addRect(deflate(row,UiInsets::all(2)),open?theme.color.raised:withAlpha(theme.color.raised,.6f),8);
+  builder.list.addImage(centred(takeLeft(row,26),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                        open?theme.color.accent:theme.color.textDim);
+  builder.list.addImage(centred(takeLeft(row,26),18,18),static_cast<UiImageId>(UiIcon::LightingColorGrading),open?theme.color.accent:theme.color.text);
+  // Quantos controles do ajuste fino saíram do neutro: o autor vê que há
+  // gradação manual sem abrir a seção.
+  const scene::Environment neutral;u32 changed=0;
+  for(const auto &number:scene::Environment::descriptor.numbers)
+    if(number.id.starts_with("grading_")&&number.read(environment)!=number.read(neutral)) ++changed;
+  if(changed) {
+    auto chip=takeRight(row,44);chip=centred(chip,36,22);
+    builder.list.addRect(chip,withAlpha(theme.color.accent,.18f),11);
+    builder.label(chip,std::to_string(changed),theme.color.accent,theme.type.caption,UiAlign::Center);
+  }
+  builder.label(row,"Ajuste fino",theme.color.text,theme.type.body);
+  if(routable) builder.router.addRegion(hit,widgetId(EditorWidget::EnvironmentGradingFineBase)+index);
+  if(open) takeTop(content,4);
+  return open;
+}
+} // namespace
+
 // Na coluna rolável `content` chega alto e volta consumido: o que os campos
 // tomaram por cima é a altura do cartão. Fora dela, a página de sempre.
 void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,
@@ -4475,6 +4605,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   // Tudo daqui em diante desenha UM grupo: a página da aba escolhida ou, na
   // coluna, cada subseção aberta, uma depois da outra.
   const auto body=[&](std::string_view group) {
+  // G2: aba Cor do Ambiente. Primeiro os perfis prontos; os campos da gradação
+  // só aparecem com o ajuste fino aberto (a busca continua achando todos).
+  if(entry.type==&scene::Environment::descriptor&&group=="Cor"&&!searching&&
+     !buildEnvironmentLooks(builder,content,static_cast<const scene::Environment&>(*component),index)) return;
   if(tween&&!searching) {
     const auto *live=state.tweenRuntime?state.tweenRuntime->state(entity.id,component->instanceId()):nullptr;
     const bool actions=group=="Tempo"&&state.workspace==EditorWorkspace::Play&&state.tweenRuntime;

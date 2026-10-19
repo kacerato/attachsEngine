@@ -8,6 +8,8 @@
 #include "scene/script_behavior.h"
 #include "scene/import_link.h"
 #include "scene/prefab_link.h"
+#include "scene/environment.h"
+#include "resources/environment_looks.h"
 #include <algorithm>
 #include <cstdio>
 
@@ -361,6 +363,27 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         state.sceneHidden,state.scenePickOff)) {
       state.selection=id;state.textureInspector=false;state.textureViewer=false;state.propertyPage=0;
     }
+    return outcome;
+  }
+  if(widget>=widgetId(EditorWidget::EnvironmentGradingFineBase)&&widget<widgetId(EditorWidget::EnvironmentGradingFineBase)+0x100u) {
+    // Ajuste fino da aba Cor: recolhido por padrão, a escolha vale para todo Ambiente.
+    EditorScreenState::flip(state.inspectorSections,"astra.render.environment/Cor/Ajuste fino");
+    return outcome;
+  }
+  if(widget>=widgetId(EditorWidget::EnvironmentLookBase)&&widget<widgetId(EditorWidget::EnvironmentLookBase)+0x100u) {
+    // Perfil pronto: troca só o grupo Pós do Ambiente, numa edição com Desfazer.
+    const u32 offset=widget-widgetId(EditorWidget::EnvironmentLookBase),at=offset>>3,look=offset&7u;
+    const auto *entity=document.find(state.selection);
+    const auto *component=entity&&at<entity->components.size()?entity->components.at(at):nullptr;
+    const auto presets=resources::environmentLookPresets();
+    if(!component||&component->type()!=&scene::Environment::descriptor||look>=presets.size()) return outcome;
+    if(state.workspace!=EditorWorkspace::Scene||history.isOpen()) {state.status="Escolha o visual fora do Play";return outcome;}
+    auto value=*entity;
+    auto *environment=static_cast<scene::Environment *>(value.components.editInstance(component->instanceId()));
+    if(!environment) return outcome;
+    resources::applyEnvironmentLook(environment->values,presets[look].look);
+    outcome.documentChanged=history.applyValues(document,entity->id,value);
+    if(outcome.documentChanged) state.status=std::string("Visual ")+std::string(presets[look].name);
     return outcome;
   }
   if(widget>=widgetId(EditorWidget::ComponentGroupBase)+0x10000u&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x20000u) {

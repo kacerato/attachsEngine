@@ -25,6 +25,61 @@ enum EnvironmentOverride : u32 {
                            EnvironmentOverrideIndirect,
 };
 
+// G2: gradação de cor depois do tonemap, aplicada por uma LUT 32³ montada na
+// CPU (renderer/color_grading.h). O modelo segue o Volume da URP 17 (White
+// Balance, Lift Gamma Gain e Shadows Midtones Highlights: cor do trackball +
+// deslocamento) e a ordem do Environment da Godot 4.5, que gradua a imagem já
+// mapeada para o monitor. Os valores padrão são neutros: sem LUT, sem custo, e
+// a imagem continua a mesma de antes do G2.
+struct ColorGrading final {
+  // Balanço de branco: -100 (frio/verde) a 100 (quente/magenta).
+  float temperature = 0.0f;
+  float tint = 0.0f;
+  // Trackballs: cor linear (branco é o centro) + deslocamento de -1 a 1.
+  float liftColor[3]{1.0f, 1.0f, 1.0f};
+  float lift = 0.0f;
+  float gammaColor[3]{1.0f, 1.0f, 1.0f};
+  float gamma = 0.0f;
+  float gainColor[3]{1.0f, 1.0f, 1.0f};
+  float gain = 0.0f;
+  float shadowsColor[3]{1.0f, 1.0f, 1.0f};
+  float shadows = 0.0f;
+  float midtonesColor[3]{1.0f, 1.0f, 1.0f};
+  float midtones = 0.0f;
+  float highlightsColor[3]{1.0f, 1.0f, 1.0f};
+  float highlights = 0.0f;
+  // Faixas de luminância (já mapeada) das sombras e dos realces.
+  float shadowsStart = 0.0f;
+  float shadowsEnd = 0.3f;
+  float highlightsStart = 0.55f;
+  float highlightsEnd = 1.0f;
+  // Satura mais as cores apagadas que as já saturadas (pele não estoura).
+  float vibrance = 0.0f;
+
+  bool operator==(const ColorGrading &) const = default;
+  bool neutral() const noexcept {
+    const auto white=[](const float color[3]) {
+      return color[0]==1.0f && color[1]==1.0f && color[2]==1.0f;
+    };
+    return temperature==0.0f && tint==0.0f && vibrance==0.0f &&
+           lift==0.0f && gamma==0.0f && gain==0.0f &&
+           shadows==0.0f && midtones==0.0f && highlights==0.0f &&
+           white(liftColor) && white(gammaColor) && white(gainColor) &&
+           white(shadowsColor) && white(midtonesColor) && white(highlightsColor);
+  }
+  bool valid() const noexcept {
+    const float offsets[]{lift, gamma, gain, shadows, midtones, highlights, vibrance};
+    for (float value : offsets) if (!std::isfinite(value) || value < -1.0f || value > 1.0f) return false;
+    for (const float *color : {liftColor, gammaColor, gainColor, shadowsColor, midtonesColor, highlightsColor})
+      for (u32 channel = 0; channel < 3; ++channel)
+        if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f) return false;
+    const float ranges[]{shadowsStart, shadowsEnd, highlightsStart, highlightsEnd};
+    for (float value : ranges) if (!std::isfinite(value) || value < 0.0f || value > 1.0f) return false;
+    return std::isfinite(temperature) && std::isfinite(tint) &&
+           temperature >= -100.0f && temperature <= 100.0f && tint >= -100.0f && tint <= 100.0f;
+  }
+};
+
 // Resultado autoral já resolvido para uma vista. O componente de cena e o
 // renderer compartilham este contrato sem fazer o backend conhecer o editor.
 struct SceneEnvironment final {
@@ -101,9 +156,10 @@ struct SceneEnvironment final {
   // renderer que dentro de uma sala o céu não chega inteiro: 1 é o legado.
   float indirectDiffuse = 1.0f;
   float indirectSpecular = 1.0f;
+  ColorGrading grading{};
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2) return false;
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid()) return false;
     const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
                           fogLightEnergy, fogDensity, fogStart, fogBaseHeight, fogHeightFalloff,
                           exposureEv, autoExposureMinEv, autoExposureMaxEv,

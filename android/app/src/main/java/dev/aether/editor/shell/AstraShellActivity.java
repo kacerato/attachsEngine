@@ -30,7 +30,8 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         "aether.spatial_geometry", "aether.editor_scene_reuse", "aether.disable_editor_scene_reuse",
         "aether.lock_rendering_quality", "aether.play_post_ui_fusion", "aether.opaque_no_clip",
         "aether.full_detail_sampling", "aether.point_lighting_specialization", "aether.post_fog_resolve",
-        "aether.post_bloom_chain", "aether.post_half_ao", "aether.punctual_light_mask"
+        "aether.post_bloom_chain", "aether.post_half_ao", "aether.punctual_light_mask",
+        "aether.post_grading_force"
     };
     private static final String[] FLOAT_MEASUREMENT_OPTIONS = {
         "aether.resolution_scale", "aether.target_fps", "aether.camera_x", "aether.camera_y",

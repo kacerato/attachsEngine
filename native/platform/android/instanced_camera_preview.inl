@@ -156,7 +156,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
 
-    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,8},
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,9},
                                      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1}};
     pool.maxSets=1;pool.poolSizeCount=3;pool.pPoolSizes=postSizes;
@@ -194,6 +194,9 @@ bool InstancedRenderer::prepareCameraPreview() {
     // Bloom em cadeia e AO em 1/2 não rodam na prévia; o descritor só precisa ser válido.
     postWrites[8]=postWrites[5];postWrites[8].dstBinding=8;
     postWrites[9]=postWrites[5];postWrites[9].dstBinding=9;
+    // A prévia tem a própria LUT: a câmera pode estar em outro volume de ambiente.
+    const VkDescriptorImageInfo gradingLut{postSampler_.handle(),colorGradingView(1),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    postWrites[10]=postWrites[5];postWrites[10].dstBinding=10;postWrites[10].pImageInfo=&gradingLut;
     vkUpdateDescriptorSets(device_,kPostBindingCount,postWrites,0,nullptr);
     bindAutoExposureSource(1,previewSceneColor_.view());
     uiRenderer_.setCameraPreview(previewColor_.view());
@@ -450,6 +453,8 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     return;
   }
 
+  const bool previewGrading=prepareColorGrading(1,previewSceneEnvironment_,
+      previewSceneEnvironment_.active&&previewSceneEnvironment_.post);
   VkRenderPassBeginInfo postBegin{};postBegin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   postBegin.renderPass=previewPostRenderPass_;postBegin.framebuffer=previewPostFramebuffer_;
   postBegin.renderArea.extent={view.width,view.height};
@@ -461,6 +466,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   const bool authoredPost=previewSceneEnvironment_.active&&previewSceneEnvironment_.post;
   post.texelFlags[0]=1.0f/view.width;post.texelFlags[1]=1.0f/view.height;
   post.texelFlags[2]=(authoredPost?previewSceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
+  if(previewGrading) post.texelFlags[2]+=65536.0f;
   post.texelFlags[3]=(renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
                       renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Temporal)?1.0f:0.0f;
   post.bloom[0]=authoredPost?previewSceneEnvironment_.bloomThreshold:renderingPolicy_.post.bloomThreshold;

@@ -6,6 +6,7 @@
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
 #include "renderer/scene_environment.h"
+#include "renderer/color_grading.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
 
@@ -361,6 +362,10 @@ public:
   // padrão até o A/B; precisam valer antes da criação dos recursos do pós.
   void setBloomChainEnabled(bool enabled) { bloomChainEnabled_ = enabled; }
   void setHalfAmbientOcclusionEnabled(bool enabled) { halfAmbientOcclusionEnabled_ = enabled; }
+  // Bancada do G2: liga a LUT mesmo no Neutro, para medir o custo da leitura 3D
+  // e comparar a imagem com o caminho sem LUT (aceite: até 3/255).
+  void setColorGradingForced(bool forced) { colorGradingForced_ = forced; }
+  u32 colorGradingRebuilds() const { return colorGradingRebuilds_; }
   void setOpaqueNoClipEnabled(bool enabled) { opaqueNoClipEnabled_ = enabled; }
   bool opaqueNoClipLastFrame() const { return opaqueNoClipLastFrame_; }
   void setFullDetailSamplingEnabled(bool enabled) { fullDetailSamplingEnabled_ = enabled; }
@@ -729,6 +734,12 @@ private:
   bool recordBloomChain(const platform::FreeCameraState &camera, float threshold);
   VkImageView postBloomView() const;
   VkImageView postAmbientOcclusionView() const;
+  // G2: LUT 32³ de gradação (instanced_color_grading.inl). Vaga 0 = vista
+  // principal, 1 = prévia da Camera, que pode estar em outro volume.
+  bool createColorGradingResources();
+  void destroyColorGradingResources();
+  bool prepareColorGrading(u32 slot, const renderer::SceneEnvironment &look, bool authoredPost);
+  VkImageView colorGradingView(u32 slot) const;
   struct PostBloomState { bool active = false; float threshold = 1.0f; float intensity = 0.0f; };
   PostBloomState postBloomState() const;
   // `upscaledInput`: a cor de entrada é a saída do Arm ASR/FSR 2 na resolução
@@ -986,8 +997,20 @@ private:
   bool fogActiveThisFrame_ = false;
   bool fogResolvedThisFrame_ = false;
   bool fogResolveReported_ = false;
-  // Bloom em cadeia de mips e AO em 1/2 (instanced_post_chain.inl).
-  static constexpr u32 kPostBindingCount = 10;
+  // Bloom em cadeia de mips e AO em 1/2 (instanced_post_chain.inl); 10 é a LUT 3D.
+  static constexpr u32 kPostBindingCount = 11;
+  struct ColorGradingSlot {
+    rhi::VulkanImage image{};
+    rhi::VulkanBuffer staging{};
+    renderer::ColorGradingLook look{};
+    bool uploaded = false;
+  };
+  std::array<ColorGradingSlot, 2> colorGradingSlots_{};
+  bool colorGradingLayoutsReady_ = false;
+  bool colorGradingForced_ = false;
+  bool colorGradingThisFrame_ = false;
+  bool colorGradingReported_ = false;
+  u32 colorGradingRebuilds_ = 0;
   static constexpr u32 kBloomLevelCount = 5;
   std::array<rhi::VulkanImage, kBloomLevelCount> bloomLevels_{};
   std::array<VkExtent2D, kBloomLevelCount> bloomLevelExtents_{};

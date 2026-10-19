@@ -1746,6 +1746,561 @@
           }
         }
       }
+    },
+    {
+      "name": "environmentGradingNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "grading_temperature",
+          "label": "Temperatura",
+          "member": "values.grading.temperature",
+          "min": {
+            "cpp": "-100"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_tint",
+          "label": "Matiz",
+          "member": "values.grading.tint",
+          "min": {
+            "cpp": "-100"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_vibrance",
+          "label": "Vibração",
+          "member": "values.grading.vibrance",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".02f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_lift_color.r",
+          "label": "Lift R",
+          "member": "values.grading.liftColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_lift_color.g",
+          "label": "Lift G",
+          "member": "values.grading.liftColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_lift_color.b",
+          "label": "Lift B",
+          "member": "values.grading.liftColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_lift",
+          "label": "Lift",
+          "member": "values.grading.lift",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gamma_color.r",
+          "label": "Gama R",
+          "member": "values.grading.gammaColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gamma_color.g",
+          "label": "Gama G",
+          "member": "values.grading.gammaColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gamma_color.b",
+          "label": "Gama B",
+          "member": "values.grading.gammaColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gamma",
+          "label": "Gama",
+          "member": "values.grading.gamma",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gain_color.r",
+          "label": "Ganho R",
+          "member": "values.grading.gainColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gain_color.g",
+          "label": "Ganho G",
+          "member": "values.grading.gainColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gain_color.b",
+          "label": "Ganho B",
+          "member": "values.grading.gainColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_gain",
+          "label": "Ganho",
+          "member": "values.grading.gain",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows_color.r",
+          "label": "Sombras R",
+          "member": "values.grading.shadowsColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows_color.g",
+          "label": "Sombras G",
+          "member": "values.grading.shadowsColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows_color.b",
+          "label": "Sombras B",
+          "member": "values.grading.shadowsColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows",
+          "label": "Sombras",
+          "member": "values.grading.shadows",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_midtones_color.r",
+          "label": "Médios R",
+          "member": "values.grading.midtonesColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_midtones_color.g",
+          "label": "Médios G",
+          "member": "values.grading.midtonesColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_midtones_color.b",
+          "label": "Médios B",
+          "member": "values.grading.midtonesColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_midtones",
+          "label": "Médios",
+          "member": "values.grading.midtones",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights_color.r",
+          "label": "Realces R",
+          "member": "values.grading.highlightsColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights_color.g",
+          "label": "Realces G",
+          "member": "values.grading.highlightsColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights_color.b",
+          "label": "Realces B",
+          "member": "values.grading.highlightsColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights",
+          "label": "Realces",
+          "member": "values.grading.highlights",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows_start",
+          "label": "Início das sombras",
+          "member": "values.grading.shadowsStart",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_shadows_end",
+          "label": "Fim das sombras",
+          "member": "values.grading.shadowsEnd",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights_start",
+          "label": "Início dos realces",
+          "member": "values.grading.highlightsStart",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "grading_highlights_end",
+          "label": "Fim dos realces",
+          "member": "values.grading.highlightsEnd",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Cor",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesPost"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.post.color_grading",
+          "consumer": "renderer/color_grading.cpp",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      }
     }
   ],
   "field_groups": [

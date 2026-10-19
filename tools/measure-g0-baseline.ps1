@@ -30,6 +30,9 @@ param(
     [switch]$HalfAo,
     # G1: máscara por desenho das luzes pontuais (aether.punctual_light_mask).
     [switch]$LightMask,
+    # G2: LUT de gradação forçada mesmo no Neutro (aether.post_grading_force):
+    # mede o custo da leitura 3D por pixel e a diferença de imagem contra o caminho sem LUT.
+    [switch]$GradingLut,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -99,6 +102,7 @@ try {
             $launch+=@('--ez','aether.punctual_light_mask',$(if($LightMask){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
+            $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
             else { $launch+=@('--ef','aether.resolution_scale','1') }
             $started=(& $Adb @launch 2>&1 | Out-String)
@@ -126,7 +130,7 @@ try {
             }
             & $Adb logcat -d -s Aether.Android:I | Set-Content (Join-Path $run 'profile.log')
             $logText=Get-Content (Join-Path $run 'profile.log') -Raw
-            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask)\][^\r\n]*') | ForEach-Object Value
+            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask|ColorGrading)\][^\r\n]*') | ForEach-Object Value
             $policy | Set-Content (Join-Path $run 'policy.txt')
             if($PostIsolation -and !($policy -match "\[PostIsolation\] mask=$PostIsolation ")) {
                 throw "A máscara de pós $PostIsolation não foi aplicada ($project/$tier)."
@@ -158,12 +162,16 @@ try {
             if($fogResolved -ne [bool]$FogResolve) { throw "Névoa resolvida=$fogResolved difere do pedido ($project/$tier)." }
             $lightMasked=[bool]($policy -match '\[PunctualLightMask\] por desenho')
             if($lightMasked -ne [bool]$LightMask) { throw "Máscara de luzes=$lightMasked difere do pedido ($project/$tier)." }
+            # A última linha vale: a LUT pode ligar e desligar durante a carga da cena.
+            $gradingLines=@($policy | Where-Object { $_ -match '^\[ColorGrading\]' })
+            $gradingRan=$gradingLines.Count -gt 0 -and [bool]($gradingLines[-1] -match 'por pixel')
+            if($gradingRan -ne [bool]$GradingLut) { throw "LUT de gradação=$gradingRan difere do pedido ($project/$tier)." }
             $bloomChained=[bool]($policy -match '\[PostChain\] bloom em cadeia=1')
             $halfAoRan=[bool]($policy -match '\[PostChain\] .*AO em meia resolucao=1')
             if($bloomChained -ne [bool]$BloomChain -or $halfAoRan -ne [bool]$HalfAo) {
                 throw "Caminho do pós (bloom=$bloomChained, AO=$halfAoRan) difere do pedido ($project/$tier)."
             }
-            $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;gpuIsolation=$GpuIsolation;fogResolve=$fogResolved
+            $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;gpuIsolation=$GpuIsolation;fogResolve=$fogResolved;gradingLut=$gradingRan
                 displayedFps=if($summary){$summary.displayedFps}else{$null}
                 continuous=$state.continuous;internalFps=$capture.presentFps
                 width=$capture.context.width;height=$capture.context.height

@@ -49,6 +49,25 @@ float mix(float from,float to,float amount) {return from+(to-from)*amount;}
 void mixColor(float out[3],const float target[3],float amount) {
   for(u32 channel=0;channel<3;++channel) out[channel]=mix(out[channel],target[channel],amount);
 }
+// A gradação liga a LUT por igualdade exata com o neutro: com peso cheio o
+// resultado tem de ser o alvo bit a bit, não from+(to-from).
+void mixGrading(ColorGrading &out,const ColorGrading &target,float amount) {
+  if(amount>=1.0f) {out=target;return;}
+  out.temperature=mix(out.temperature,target.temperature,amount);
+  out.tint=mix(out.tint,target.tint,amount);
+  mixColor(out.liftColor,target.liftColor,amount);out.lift=mix(out.lift,target.lift,amount);
+  mixColor(out.gammaColor,target.gammaColor,amount);out.gamma=mix(out.gamma,target.gamma,amount);
+  mixColor(out.gainColor,target.gainColor,amount);out.gain=mix(out.gain,target.gain,amount);
+  mixColor(out.shadowsColor,target.shadowsColor,amount);out.shadows=mix(out.shadows,target.shadows,amount);
+  mixColor(out.midtonesColor,target.midtonesColor,amount);out.midtones=mix(out.midtones,target.midtones,amount);
+  mixColor(out.highlightsColor,target.highlightsColor,amount);
+  out.highlights=mix(out.highlights,target.highlights,amount);
+  out.shadowsStart=mix(out.shadowsStart,target.shadowsStart,amount);
+  out.shadowsEnd=mix(out.shadowsEnd,target.shadowsEnd,amount);
+  out.highlightsStart=mix(out.highlightsStart,target.highlightsStart,amount);
+  out.highlightsEnd=mix(out.highlightsEnd,target.highlightsEnd,amount);
+  out.vibrance=mix(out.vibrance,target.vibrance,amount);
+}
 
 void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides,float amount) {
   if(overrides&EnvironmentOverrideSky) {
@@ -105,6 +124,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.bloomIntensity=mix(result.bloomIntensity,target.bloom?target.bloomIntensity:0.0f,amount);
     result.contrast=mix(result.contrast,target.contrast,amount);
     result.saturation=mix(result.saturation,target.saturation,amount);
+    mixGrading(result.grading,target.grading,amount);
     result.vignetteIntensity=mix(result.vignetteIntensity,target.vignette?target.vignetteIntensity:0.0f,amount);
     result.filmGrainIntensity=mix(result.filmGrainIntensity,
         target.filmGrain?target.filmGrainIntensity:0.0f,amount);

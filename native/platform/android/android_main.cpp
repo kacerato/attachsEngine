@@ -2379,6 +2379,9 @@ void android_main(android_app *app) {
       app->activity, "aether.post_bloom_chain"));
   shell.instancedRenderer.setHalfAmbientOcclusionEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_half_ao"));
+  // G2: LUT de gradação também no Neutro, para medir a leitura 3D e comparar imagem.
+  shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.post_grading_force"));
   {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {

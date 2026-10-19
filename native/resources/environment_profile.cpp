@@ -14,6 +14,28 @@ void writeColor(std::ostream &out,const float value[3]) {
 bool readColor(std::istream &in,float value[3]) {
   return static_cast<bool>(in>>value[0]>>value[1]>>value[2]);
 }
+// v9 (G2): gradação de cor no fim da linha. Perfis antigos ficam neutros.
+void writeGrading(std::ostream &out,const renderer::ColorGrading &g) {
+  out<<' '<<g.temperature<<' '<<g.tint;
+  writeColor(out,g.liftColor);out<<' '<<g.lift;
+  writeColor(out,g.gammaColor);out<<' '<<g.gamma;
+  writeColor(out,g.gainColor);out<<' '<<g.gain;
+  writeColor(out,g.shadowsColor);out<<' '<<g.shadows;
+  writeColor(out,g.midtonesColor);out<<' '<<g.midtones;
+  writeColor(out,g.highlightsColor);out<<' '<<g.highlights;
+  out<<' '<<g.shadowsStart<<' '<<g.shadowsEnd<<' '<<g.highlightsStart<<' '<<g.highlightsEnd
+     <<' '<<g.vibrance;
+}
+bool readGrading(std::istream &in,renderer::ColorGrading &g) {
+  return static_cast<bool>(in>>g.temperature>>g.tint) &&
+         readColor(in,g.liftColor)&&static_cast<bool>(in>>g.lift) &&
+         readColor(in,g.gammaColor)&&static_cast<bool>(in>>g.gamma) &&
+         readColor(in,g.gainColor)&&static_cast<bool>(in>>g.gain) &&
+         readColor(in,g.shadowsColor)&&static_cast<bool>(in>>g.shadows) &&
+         readColor(in,g.midtonesColor)&&static_cast<bool>(in>>g.midtones) &&
+         readColor(in,g.highlightsColor)&&static_cast<bool>(in>>g.highlights) &&
+         static_cast<bool>(in>>g.shadowsStart>>g.shadowsEnd>>g.highlightsStart>>g.highlightsEnd>>g.vibrance);
+}
 }
 
 bool EnvironmentProfile::valid() const {
@@ -49,7 +71,9 @@ std::string EnvironmentProfile::serialize() const {
      <<' '<<values.autoExposureLowPercent<<' '<<values.autoExposureHighPercent
      <<' '<<values.autoExposureTargetGrey<<' '<<values.autoExposureSpeedUp
      <<' '<<values.autoExposureSpeedDown<<' '<<values.autoExposureCenterWeighted
-     <<' '<<values.fogLightEnergy<<'\n';
+     <<' '<<values.fogLightEnergy;
+  writeGrading(out,values.grading);
+  out<<'\n';
   return out.str();
 }
 
@@ -98,6 +122,7 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
       candidate.values.autoExposureSpeedUp>>candidate.values.autoExposureSpeedDown>>
       candidate.values.autoExposureCenterWeighted)) return false;
   if(version>=8 && !(in>>candidate.values.fogLightEnergy)) return false;
+  if(version>=9 && !readGrading(in,candidate.values.grading)) return false;
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -158,6 +183,7 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       normalized.ambientOcclusionRadius==expected.ambientOcclusionRadius&&
       normalized.ambientOcclusionIntensity==expected.ambientOcclusionIntensity&&
       normalized.ambientOcclusionPower==expected.ambientOcclusionPower&&
-      normalized.ambientOcclusionBias==expected.ambientOcclusionBias;
+      normalized.ambientOcclusionBias==expected.ambientOcclusionBias&&
+      normalized.grading==expected.grading;
 }
 } // namespace ae::resources

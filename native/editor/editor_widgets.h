@@ -447,6 +447,9 @@ enum class EditorWidget : u32 {
   ProfileInspectorClose=0xCC000300u, ProfileInspectorUses, ProfileGroupBase=0xCC000400u, ProfileRowBase=0xCC000500u,
   // Abre o recurso do Inspector de recurso numa janela focada.
   AssetInspectorFocus=0xCC000600u,
+  // G2, aba Cor do Ambiente: + (componente<<3) + perfil pronto; o ajuste fino
+  // (e o cartão Personalizado) abre e fecha com + componente.
+  EnvironmentLookBase=0xCC000700u, EnvironmentGradingFineBase=0xCC000800u,
   // Camadas na vista da cena (Unity 6000.0 View Options › Layers, Scene
   // visibility e Scene picking): abrir, Tudo/Nada, páginas, olho e seleção.
   SceneLayersOpen=0xC8000000u, SceneLayersClose, SceneLayersShowAll, SceneLayersHideAll, SceneLayersPickAll,

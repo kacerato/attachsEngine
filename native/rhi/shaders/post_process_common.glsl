@@ -12,6 +12,9 @@ layout(set=0,binding=7) uniform sampler2D compositionMask;
 // G2 no G1: bloom em cadeia de mips (nível 1/2 já acumulado) e AO em 1/2.
 layout(set=0,binding=8) uniform sampler2D bloomChain;
 layout(set=0,binding=9) uniform sampler2D halfAmbientOcclusion;
+// G2: LUT 32³ da gradação de cor (renderer/color_grading.cpp), RGBA16F linear,
+// indexada por sqrt(cor do monitor). Só é lida com o bit 65536.
+layout(set=0,binding=10) uniform highp sampler3D gradingLut;
 layout(set=0,binding=4,std430) readonly buffer ExposureState {
   float ev; float targetEv; float meteredEv; uint valid;
 } automaticExposure;
@@ -41,7 +44,8 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
 layout(push_constant) uniform PostPushConstants {
   // z bits: 1 bloom, 2 bicúbica, 4 FSR 1, 8 vetor, 16 cobertura estática,
   // 32 máscaras temporais, 64 só composição HDR (névoa+AO, antes do ampliador
-  // temporal), 128 entrada já composta (depois do ampliador).
+  // temporal), 128 entrada já composta (depois do ampliador), 65536 LUT de
+  // gradação (contraste e saturação passam a vir dela).
   vec4 texelFlags; // xy=1/source extent, z=bits acima, w=AA + debug*4
   vec4 bloom;      // threshold, intensity, sharpen, vignette intensity
   vec4 grade;      // contrast, saturation, encode sRGB, packed transform+feedback
@@ -345,17 +349,33 @@ vec3 toneMap(vec3 color) {
   return astraToneMap(color,environment.scenePost.y);
 }
 
-vec3 displayLinearColor(vec3 color) {
-  if(environment.scenePost.z>0.5) color=toneMap(color);
-  float gray=luma(color);
-  color=mix(vec3(gray),color,post.grade.y);
-  color=(color-0.5)*post.grade.x+0.5;
+vec3 applyVignette(vec3 color) {
   if(post.bloom.w>0.0) {
     vec2 centered=(vUv-environment.postViewport.xy)/environment.postViewport.zw*2.0-1.0;
     float vignette=1.0-smoothstep(0.25,1.25,dot(centered,centered));
     color*=mix(1.0,vignette,post.bloom.w);
   }
   return max(color,vec3(0));
+}
+
+vec3 displayLinearColor(vec3 color) {
+  if(environment.scenePost.z>0.5) color=toneMap(color);
+  // Com a LUT (bit 65536), saturação, contraste e vinheta vêm depois da
+  // resolução temporal, em applyGradingLut, na mesma ordem: o histórico e a
+  // vizinhança do TAA ficam no mesmo espaço sem nove leituras 3D.
+  if(postFlag(65536.0)) return max(color,vec3(0));
+  float gray=luma(color);
+  color=mix(vec3(gray),color,post.grade.y);
+  color=(color-0.5)*post.grade.x+0.5;
+  return applyVignette(color);
+}
+
+// Uma leitura 3D por pixel. sqrt dá às sombras a resolução que um índice linear
+// de 32 passos não daria; meia célula de borda alinha com os centros.
+vec3 applyGradingLut(vec3 color) {
+  if(!postFlag(65536.0)) return color;
+  vec3 coordinate=sqrt(clamp(color,vec3(0.0),vec3(1.0)))*(31.0/32.0)+0.5/32.0;
+  return applyVignette(textureLod(gradingLut,coordinate,0.0).rgb);
 }
 
 #if AETHER_TEMPORAL
@@ -667,6 +687,7 @@ void main() {
   if (post.bloom.z > 0.0)
     color += (displayLinearColor(unfiltered*ao+bloomColor)-
               displayLinearColor(crossAverage*ao+bloomColor))*post.bloom.z;
+  color=applyGradingLut(color);
   float grainIntensity=environment.sceneAoDetail.y;
   if(grainIntensity>0.0 && mod(floor(post.texelFlags.z/4.0),2.0)<0.5) {
     float response=0.35+0.65*(1.0-abs(luma(color)*2.0-1.0));

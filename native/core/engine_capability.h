@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 41> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 42> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -152,6 +152,9 @@ inline constexpr std::array<EngineCapability, 41> engineCapabilities{{
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.post.film_grain", "Grão de filme", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.color_grading", "Gradação de cor por LUT 32³ e perfis prontos", CapabilityState::Implemented,
+   "renderer/color_grading.cpp + rhi/shaders/post_process_common.glsl",
+   "Balanço de branco, lift/gama/ganho, sombras/médios/realces e vibração; sem mixer de canais, curvas nem .cube"},
   {"render.post.ambient_occlusion", "Oclusão ambiente em tela", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.aa.fxaa", "Antisserrilhado espacial", CapabilityState::Implemented,

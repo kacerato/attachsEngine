@@ -2263,6 +2263,18 @@
       "dark_ui_ready": true,
       "generation": "ik-components-v1",
       "source": "tools/generate-ik-component-icons.py; Astra mark primitives"
+    },
+    "lighting/color-grading": {
+      "category": "lighting",
+      "name": "color-grading",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/look-presets": {
+      "category": "lighting",
+      "name": "look-presets",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

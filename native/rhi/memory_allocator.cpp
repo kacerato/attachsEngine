@@ -324,8 +324,8 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
 
   VkImageCreateInfo imageInfo{};
   imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-  imageInfo.imageType = VK_IMAGE_TYPE_2D;
-  imageInfo.extent = {desc.width, desc.height, 1};
+  imageInfo.imageType = desc.depth > 1 ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
+  imageInfo.extent = {desc.width, desc.height, desc.depth};
   imageInfo.mipLevels = desc.mipLevels;
   imageInfo.arrayLayers = 1;
   imageInfo.format = desc.format;
@@ -366,7 +366,7 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   viewInfo.image = image;
-  viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  viewInfo.viewType = desc.depth > 1 ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
   viewInfo.format = desc.format;
   viewInfo.subresourceRange.aspectMask = desc.aspectMask;
   viewInfo.subresourceRange.levelCount = desc.mipLevels;

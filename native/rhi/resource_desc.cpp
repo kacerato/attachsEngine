@@ -20,6 +20,13 @@ bool isImageDescValid(const ImageDesc &desc) {
   if (desc.transient && ((desc.usage & kNonAttachmentUsage) != 0 || desc.mipLevels != 1)) {
     return false;
   }
+  constexpr VkImageUsageFlags kAttachmentUsage =
+      VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
+      VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+  if (desc.depth == 0 ||
+      (desc.depth > 1 && (desc.transient || desc.mipLevels != 1 || (desc.usage & kAttachmentUsage) != 0))) {
+    return false;
+  }
   return desc.width > 0 && desc.height > 0 && desc.format != VK_FORMAT_UNDEFINED &&
          desc.usage != 0 && desc.aspectMask != 0 && validMemoryClass &&
          desc.mipLevels > 0 && desc.mipLevels <= static_cast<u32>(std::bit_width(std::max(desc.width, desc.height)));
