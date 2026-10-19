@@ -242,12 +242,12 @@ inline constexpr std::array<ComponentTriple, 11> environmentTriples{{
   {"ground","Cor do chão",{"ground.r","ground.g","ground.b"},ComponentTripleKind::LinearColor},
   {"fog_color","Cor da neblina",{"fog_color.r","fog_color.g","fog_color.b"},ComponentTripleKind::LinearColor},
   {"box_size","Tamanho da caixa",{"box_size.x","box_size.y","box_size.z"},ComponentTripleKind::Vector},
-  {"grading_lift_color","Cor do lift",{"grading_lift_color.r","grading_lift_color.g","grading_lift_color.b"},ComponentTripleKind::LinearColor},
-  {"grading_gamma_color","Cor do gama",{"grading_gamma_color.r","grading_gamma_color.g","grading_gamma_color.b"},ComponentTripleKind::LinearColor},
-  {"grading_gain_color","Cor do ganho",{"grading_gain_color.r","grading_gain_color.g","grading_gain_color.b"},ComponentTripleKind::LinearColor},
-  {"grading_shadows_color","Cor das sombras",{"grading_shadows_color.r","grading_shadows_color.g","grading_shadows_color.b"},ComponentTripleKind::LinearColor},
-  {"grading_midtones_color","Cor dos médios",{"grading_midtones_color.r","grading_midtones_color.g","grading_midtones_color.b"},ComponentTripleKind::LinearColor},
-  {"grading_highlights_color","Cor dos realces",{"grading_highlights_color.r","grading_highlights_color.g","grading_highlights_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_lift_color","Lift",{"grading_lift_color.r","grading_lift_color.g","grading_lift_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_gamma_color","Gama",{"grading_gamma_color.r","grading_gamma_color.g","grading_gamma_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_gain_color","Ganho",{"grading_gain_color.r","grading_gain_color.g","grading_gain_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_shadows_color","Sombras",{"grading_shadows_color.r","grading_shadows_color.g","grading_shadows_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_midtones_color","Médios",{"grading_midtones_color.r","grading_midtones_color.g","grading_midtones_color.b"},ComponentTripleKind::LinearColor},
+  {"grading_highlights_color","Realces",{"grading_highlights_color.r","grading_highlights_color.g","grading_highlights_color.b"},ComponentTripleKind::LinearColor},
 }};
 
 inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{

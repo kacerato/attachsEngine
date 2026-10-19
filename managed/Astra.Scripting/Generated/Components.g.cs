@@ -4040,37 +4040,37 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => new(Component.GetFloat("box_size.x"), Component.GetFloat("box_size.y"), Component.GetFloat("box_size.z"));
         set => Component.SetVector3("box_size", value);
     }
-    /// <summary>Cor do lift. Cor linear RGB</summary>
+    /// <summary>Lift. Cor linear RGB</summary>
     public Vector3 GradingLiftColor
     {
         get => new(Component.GetFloat("grading_lift_color.r"), Component.GetFloat("grading_lift_color.g"), Component.GetFloat("grading_lift_color.b"));
         set => Component.SetVector3("grading_lift_color", value);
     }
-    /// <summary>Cor do gama. Cor linear RGB</summary>
+    /// <summary>Gama. Cor linear RGB</summary>
     public Vector3 GradingGammaColor
     {
         get => new(Component.GetFloat("grading_gamma_color.r"), Component.GetFloat("grading_gamma_color.g"), Component.GetFloat("grading_gamma_color.b"));
         set => Component.SetVector3("grading_gamma_color", value);
     }
-    /// <summary>Cor do ganho. Cor linear RGB</summary>
+    /// <summary>Ganho. Cor linear RGB</summary>
     public Vector3 GradingGainColor
     {
         get => new(Component.GetFloat("grading_gain_color.r"), Component.GetFloat("grading_gain_color.g"), Component.GetFloat("grading_gain_color.b"));
         set => Component.SetVector3("grading_gain_color", value);
     }
-    /// <summary>Cor das sombras. Cor linear RGB</summary>
+    /// <summary>Sombras. Cor linear RGB</summary>
     public Vector3 GradingShadowsColor
     {
         get => new(Component.GetFloat("grading_shadows_color.r"), Component.GetFloat("grading_shadows_color.g"), Component.GetFloat("grading_shadows_color.b"));
         set => Component.SetVector3("grading_shadows_color", value);
     }
-    /// <summary>Cor dos médios. Cor linear RGB</summary>
+    /// <summary>Médios. Cor linear RGB</summary>
     public Vector3 GradingMidtonesColor
     {
         get => new(Component.GetFloat("grading_midtones_color.r"), Component.GetFloat("grading_midtones_color.g"), Component.GetFloat("grading_midtones_color.b"));
         set => Component.SetVector3("grading_midtones_color", value);
     }
-    /// <summary>Cor dos realces. Cor linear RGB</summary>
+    /// <summary>Realces. Cor linear RGB</summary>
     public Vector3 GradingHighlightsColor
     {
         get => new(Component.GetFloat("grading_highlights_color.r"), Component.GetFloat("grading_highlights_color.g"), Component.GetFloat("grading_highlights_color.b"));
@@ -4405,42 +4405,42 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("grading_vibrance");
         set => Component.SetFloat("grading_vibrance", value);
     }
-    /// <summary>Lift</summary>
+    /// <summary>Brilho do lift</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingLift
     {
         get => Component.GetFloat("grading_lift");
         set => Component.SetFloat("grading_lift", value);
     }
-    /// <summary>Gama</summary>
+    /// <summary>Brilho do gama</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingGamma
     {
         get => Component.GetFloat("grading_gamma");
         set => Component.SetFloat("grading_gamma", value);
     }
-    /// <summary>Ganho</summary>
+    /// <summary>Brilho do ganho</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingGain
     {
         get => Component.GetFloat("grading_gain");
         set => Component.SetFloat("grading_gain", value);
     }
-    /// <summary>Sombras</summary>
+    /// <summary>Brilho das sombras</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingShadows
     {
         get => Component.GetFloat("grading_shadows");
         set => Component.SetFloat("grading_shadows", value);
     }
-    /// <summary>Médios</summary>
+    /// <summary>Brilho dos médios</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingMidtones
     {
         get => Component.GetFloat("grading_midtones");
         set => Component.SetFloat("grading_midtones", value);
     }
-    /// <summary>Realces</summary>
+    /// <summary>Brilho dos realces</summary>
     /// <remarks>Faixa válida: -1 a 1.</remarks>
     public float GradingHighlights
     {

@@ -4041,7 +4041,8 @@ void drawLookPreview(UiDrawList &list,UiRect area,const renderer::SceneEnvironme
   if(!list.pushClip(area)) return;
   const auto mixf=[](float a,float b,float t){return a+(b-a)*t;};
   const float horizon=area.height*.62f;
-  constexpr u32 bands=8;
+  // Faixas de 2 px ou menos: na miniatura o céu lê como degradê, não como listras.
+  const u32 bands=std::clamp(static_cast<u32>(horizon/2.0f),8u,40u);
   for(u32 band=0;band<bands;++band) {
     const float t=static_cast<float>(band)/static_cast<float>(bands-1);
     list.addRect({area.x,area.y+horizon*band/bands,area.width,horizon/bands+1.0f},

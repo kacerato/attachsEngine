@@ -1857,7 +1857,7 @@
         },
         {
           "id": "grading_lift",
-          "label": "Lift",
+          "label": "Brilho do lift",
           "member": "values.grading.lift",
           "min": {
             "cpp": "-1"
@@ -1925,7 +1925,7 @@
         },
         {
           "id": "grading_gamma",
-          "label": "Gama",
+          "label": "Brilho do gama",
           "member": "values.grading.gamma",
           "min": {
             "cpp": "-1"
@@ -1993,7 +1993,7 @@
         },
         {
           "id": "grading_gain",
-          "label": "Ganho",
+          "label": "Brilho do ganho",
           "member": "values.grading.gain",
           "min": {
             "cpp": "-1"
@@ -2061,7 +2061,7 @@
         },
         {
           "id": "grading_shadows",
-          "label": "Sombras",
+          "label": "Brilho das sombras",
           "member": "values.grading.shadows",
           "min": {
             "cpp": "-1"
@@ -2129,7 +2129,7 @@
         },
         {
           "id": "grading_midtones",
-          "label": "Médios",
+          "label": "Brilho dos médios",
           "member": "values.grading.midtones",
           "min": {
             "cpp": "-1"
@@ -2197,7 +2197,7 @@
         },
         {
           "id": "grading_highlights",
-          "label": "Realces",
+          "label": "Brilho dos realces",
           "member": "values.grading.highlights",
           "min": {
             "cpp": "-1"

@@ -449,6 +449,12 @@ no POCO, Vila em Play ≥ 60 FPS na escala da política. Cada item com A/B/B/A p
 
 ### G2 — Pós-processamento v2
 
+> **Estado em 19/10/2026 (itens 2 e 7).** Gradação por LUT 32³ (balanço de branco,
+> lift/gama/ganho, sombras/médios/realces, vibração) e os sete perfis prontos na aba Cor
+> do Ambiente, com Ajuste fino recolhido. Neutro pela LUT: ≤ 3/255 em 99,997% dos pixels
+> estáticos; custo da leitura 3D no POCO ≈ +0,09 ms no mesmo clock. Mixer de canais,
+> curvas e `.cube` ficam para depois. Evidências em `docs/validacao/g2-color-grading-2026-10-19/`.
+
 Substitui o shader monolítico por uma **pilha de passes com variantes por nível**,
 mantendo os campos atuais do `Environment` (migração v12→v13 preserva cenas antigas
 com a mesma aparência).
