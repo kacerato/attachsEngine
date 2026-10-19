@@ -914,7 +914,7 @@
         },
         {
           "id": "sky_zenith.r",
-          "label": "Zênite R",
+          "label": "Tom do céu R",
           "member": "values.skyZenith[0]",
           "min": {
             "cpp": "0"
@@ -940,7 +940,7 @@
         },
         {
           "id": "sky_zenith.g",
-          "label": "Zênite G",
+          "label": "Tom do céu G",
           "member": "values.skyZenith[1]",
           "min": {
             "cpp": "0"
@@ -966,7 +966,7 @@
         },
         {
           "id": "sky_zenith.b",
-          "label": "Zênite B",
+          "label": "Tom do céu B",
           "member": "values.skyZenith[2]",
           "min": {
             "cpp": "0"
@@ -1007,7 +1007,7 @@
             "group": "Atmosfera",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesAtmosphere"
+              "cpp": "environmentNeverVisible"
             },
             "capability": "render.environment.atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
@@ -1033,7 +1033,7 @@
             "group": "Atmosfera",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesAtmosphere"
+              "cpp": "environmentNeverVisible"
             },
             "capability": "render.environment.atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
@@ -1059,7 +1059,7 @@
             "group": "Atmosfera",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesAtmosphere"
+              "cpp": "environmentNeverVisible"
             },
             "capability": "render.environment.atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",

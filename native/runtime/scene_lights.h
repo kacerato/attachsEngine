@@ -11,5 +11,6 @@ namespace ae::runtime {
 // Isto vale tanto para o documento autoral quanto para o mundo em execução:
 // os dois são `SceneGraph`, e é por isso que mexer numa luz por script durante
 // o Play muda a tela sem nenhum caminho separado.
-bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out);
+bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out,
+                        double sceneSeconds = 0.0);
 } // namespace ae::runtime

@@ -1,0 +1,166 @@
+{
+  "format": 1,
+  "source": "native/scene/time_of_day.h",
+  "tables": [
+    {
+      "name": "timeOfDayNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "hour",
+          "label": "Hora",
+          "member": "hour",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "24"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "unit": "h",
+            "help": "Hora solar local; com Duração do dia, avança em Play"
+          }
+        },
+        {
+          "id": "day_length_minutes",
+          "label": "Duração do dia",
+          "member": "dayLengthMinutes",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1440"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "unit": "min",
+            "help": "Minutos reais para 24 h de jogo; 0 congela a hora"
+          }
+        },
+        {
+          "id": "latitude",
+          "label": "Latitude",
+          "member": "latitude",
+          "min": {
+            "cpp": "-90"
+          },
+          "max": {
+            "cpp": "90"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "-15.0f"
+          },
+          "presentation": {
+            "unit": "°",
+            "help": "Altura do sol ao meio-dia e duração da noite; negativo no hemisfério sul"
+          }
+        },
+        {
+          "id": "day_of_year",
+          "label": "Dia do ano",
+          "member": "dayOfYear",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "366"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "default": {
+            "cpp": "172.0f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Estação e fase da lua; 172 é o solstício de junho"
+          }
+        },
+        {
+          "id": "north_degrees",
+          "label": "Norte",
+          "member": "northDegrees",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "360"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "unit": "°",
+            "help": "Gira o caminho do sol em torno do eixo vertical"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "TimeOfDay",
+        "presentation": {
+          "group": "Hora do dia",
+          "capability": "render.environment.time_of_day",
+          "consumer": "runtime/scene_lights.cpp → renderer/time_of_day.cpp",
+          "invalidates": {
+            "cpp": "Invalidate::LightCluster"
+          }
+        }
+      }
+    },
+    {
+      "name": "timeOfDayBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "TimeOfDay",
+        "presentation": {
+          "group": "Hora do dia"
+        }
+      }
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "time_of_day_TimeOfDay_fields0",
+      "type": "TimeOfDay",
+      "properties": [
+        "timeOfDayBooleans/enabled",
+        "timeOfDayNumbers/hour",
+        "timeOfDayNumbers/day_length_minutes",
+        "timeOfDayNumbers/latitude",
+        "timeOfDayNumbers/day_of_year",
+        "timeOfDayNumbers/north_degrees"
+      ]
+    }
+  ]
+}

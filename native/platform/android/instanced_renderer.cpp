@@ -1,5 +1,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
+#include "renderer/procedural_sky.h"
+#include "renderer/time_of_day.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
 #include "renderer/spatial_render_chunks.h"
@@ -167,9 +169,11 @@ struct DirtRoadFrameUniform {
   // G4, corpos celestes (só o céu lê; ver dirt_road_sky.frag): auréola do sol,
   // fase da lua, raio angular da lua em rad, brilho da lua; brilho das estrelas.
   float celestialParameters[4]{};
-  float celestialStars[4]{};
+  float celestialStars[4]{};       // x estrelas, yzw tom do céu procedural
+  float skyParameters[4]{};        // rgb chão do céu procedural, w espessura
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3520);
+static_assert(sizeof(DirtRoadFrameUniform) == 3536);
+static_assert(offsetof(DirtRoadFrameUniform, skyParameters) == 3520);
 static_assert(offsetof(DirtRoadFrameUniform, celestialParameters) == 3488);
 static_assert(offsetof(DirtRoadFrameUniform, celestialStars) == 3504);
 static_assert(offsetof(DirtRoadFrameUniform, temporalCurrentView) == 3328);
@@ -1627,6 +1631,12 @@ bool applySceneEnvironmentLook(
   frame.celestialParameters[2]=look.moonSizeDegrees*0.5f*0.0174532925199433f;
   frame.celestialParameters[3]=look.moonIntensity;
   frame.celestialStars[0]=look.starIntensity;
+  // Céu procedural da Unity: o "zênite" autoral é o Sky Tint, e o chão é o Ground.
+  for(u32 channel=0;channel<3;++channel) {
+    frame.celestialStars[1+channel]=look.skyZenith[channel];
+    frame.skyParameters[channel]=look.ground[channel];
+  }
+  frame.skyParameters[3]=1.0f;
   frame.atmosphereScattering[0]=look.physicalSkyIntensity;
   frame.atmosphereScattering[1]=look.airDensity;
   frame.atmosphereScattering[2]=look.aerosolDensity;
@@ -1669,6 +1679,56 @@ bool applySceneEnvironmentLook(
       frame.environment.sunColorAngularRadius[axis]=sun->color[axis];
     }
     frame.environment.sunDirectionIntensity[3]=sun->intensity;
+    // G4: TimeOfDay no sol dita a fase da lua do céu.
+    if(sun->moonPhase>=0.0f) frame.celestialParameters[1]=sun->moonPhase;
+    // Como "Environment Lighting Source: Skybox" na Unity: a luz ambiente vem
+    // do próprio céu procedural, avaliado no ângulo atual do sol. Girar a luz
+    // escurece o ambiente junto com o céu.
+    if(look.active&&look.sky==renderer::SkyModel::Atmosphere) {
+      renderer::ProceduralSkyParameters sky;
+      std::copy_n(look.skyZenith,3,sky.skyTint);std::copy_n(look.ground,3,sky.ground);
+      float toSun[3];std::copy_n(frame.environment.sunDirectionIntensity,3,toSun);
+      float skyAmbient[3],equator[3],groundAmbient[3];
+      renderer::proceduralSkyAmbient(sky,toSun,skyAmbient,equator,groundAmbient);
+      for(u32 channel=0;channel<3;++channel) {
+        frame.environment.ambientColorStrength[channel]=skyAmbient[channel]*0.4f+equator[channel]*0.6f;
+        frame.environment.groundColorSaturation[channel]=groundAmbient[channel];
+      }
+      // A neblina acompanha a luz do horizonte, como o "Sky Color" da neblina do
+      // HDRP e os ciclos de dia da Unity: cor autoral ao meio-dia, quase apagada
+      // à noite. Sem isso a noite ganha uma faixa clara no horizonte.
+      const float zenithSun[3]{0.0f,1.0f,0.0f};
+      float noonSky[3],noonEquator[3],noonGround[3];
+      renderer::proceduralSkyAmbient(sky,zenithSun,noonSky,noonEquator,noonGround);
+      const auto luminance=[](const float c[3]){return 0.2126f*c[0]+0.7152f*c[1]+0.0722f*c[2];};
+      const float daylight=std::clamp(luminance(equator)/std::max(luminance(noonEquator),1e-4f),0.015f,1.0f);
+      for(u32 channel=0;channel<3;++channel) frame.sceneFogColorDensity[channel]*=daylight;
+    } else if(look.active&&look.sky==renderer::SkyModel::PhysicalAtmosphere) {
+      // Céu físico (como o Physically Based Sky do HDRP): neblina e ambiente
+      // acompanham a irradiância do próprio céu desenhado: a integração da
+      // atmosfera no ângulo atual do sol dividida pela do sol a pino. Uma curva
+      // de outro modelo deixava a praça clara sob um céu já escuro no poente.
+      static renderer::PhysicalAtmosphereGroundIrradianceCache nowCache,noonCache;
+      renderer::PhysicalAtmosphereGroundIrradianceInput now;
+      now.airDensity=look.airDensity;now.aerosolDensity=look.aerosolDensity;
+      now.aerosolAnisotropy=look.aerosolAnisotropy;now.planetRadiusKm=look.planetRadiusKm;
+      now.rayleighScaleHeightKm=look.rayleighScaleHeightKm;
+      now.aerosolScaleHeightKm=look.aerosolScaleHeightKm;
+      now.atmosphereHeightKm=look.atmosphereHeightKm;
+      now.sunIntensity=1.0f;
+      renderer::PhysicalAtmosphereGroundIrradianceInput noon=now;
+      std::copy_n(frame.environment.sunDirectionIntensity,3,now.sunDirection);
+      float irradianceNow[3]{},irradianceNoon[3]{};
+      const auto luminance=[](const float c[3]){return 0.2126f*c[0]+0.7152f*c[1]+0.0722f*c[2];};
+      float daylight=1.0f;
+      if(nowCache.resolve(now,irradianceNow)&&noonCache.resolve(noon,irradianceNoon))
+        daylight=std::clamp(luminance(irradianceNow)/std::max(luminance(irradianceNoon),1e-6f),0.015f,1.0f);
+      for(u32 channel=0;channel<3;++channel) {
+        frame.sceneFogColorDensity[channel]*=daylight;
+        frame.environment.ambientColorStrength[channel]*=daylight;
+        frame.environment.groundColorSaturation[channel]*=daylight;
+      }
+    }
   }
   if(authoredMapActive&&look.sky==renderer::SkyModel::Hdri)
     skyScale=std::exp2(look.hdriExposureEv);

@@ -99,9 +99,10 @@ struct SceneEnvironment final {
   float priority = 0.0f;
   // Linear-light authoring values for a clear daytime procedural sky. Saved
   // environments keep their own colours; this does not retint physical skies.
-  float skyZenith[3]{0.14f, 0.38f, 0.72f};
+  // Sky Tint do céu procedural (Skybox/Procedural da Unity): 0,5 é neutro.
+  float skyZenith[3]{0.5f, 0.5f, 0.5f};
   float skyHorizon[3]{0.46f, 0.66f, 0.82f};
-  float ground[3]{0.18f, 0.32f, 0.50f};
+  float ground[3]{0.369f, 0.349f, 0.341f}; // Ground do Skybox/Procedural da Unity
   float atmosphere = 1.0f;
   float sunDiskDegrees = 0.53f;
   float sunDiskIntensity = 8.0f;

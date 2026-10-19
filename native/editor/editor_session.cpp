@@ -18,6 +18,7 @@
 #include "editor/editor_route_component.h"
 #include "editor/editor_creation_catalog.h"
 #include "renderer/primitive_geometry.h"
+#include "runtime/scene_time_of_day.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
 #include "editor/editor_studio_tools.h"
@@ -6317,6 +6318,10 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   state_.studio=studio_.get();
+  // G4: Hora do dia gira o sol no documento fora do Play, como um script em
+  // [ExecuteAlways] na Unity: mudar a hora move o gizmo e o céu reage.
+  if(!isPlaying())
+    runtime::applyTimeOfDay(document_,0.0,[&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
   refreshAnimationClip();
   if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);
     if(!summary.empty())state_.clipDiagnostic=summary;else if(!error.empty())state_.clipDiagnostic=error;}

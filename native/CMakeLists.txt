@@ -422,6 +422,8 @@ add_library(aether_renderer STATIC
   renderer/environment_map.cpp
   renderer/scene_environment.cpp
   renderer/color_grading.cpp
+  renderer/time_of_day.cpp
+  renderer/procedural_sky.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
@@ -569,6 +571,7 @@ add_library(aether_runtime STATIC
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
+  runtime/scene_time_of_day.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
   runtime/scene_dynamic_motor.cpp
@@ -1167,7 +1170,8 @@ if(NOT ANDROID)
   # entire native test catalogue for a sky authoring change.
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
-    ../tests/native/test_sky_celestial.cpp)
+    ../tests/native/test_sky_celestial.cpp
+    ../tests/native/test_time_of_day.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

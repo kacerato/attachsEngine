@@ -103,7 +103,9 @@ vec3 celestialMoon(vec3 direction,vec3 sunDirection,float pixelAngle,out float c
 vec3 celestialStars(vec3 direction,vec3 sunDirection,vec3 sky,float pixelAngle,float time) {
   float intensity=environment.celestialStars.x;
   if(intensity<=0.0 || direction.y<=-0.02) return vec3(0.0);
-  float night=smoothstep(0.08,-0.14,sunDirection.y);
+  // Como no céu da Unity: nenhuma estrela com o sol acima do horizonte; elas
+  // acendem ao longo do crepúsculo civil (sol até -6 graus, y ~ -0,10).
+  float night=smoothstep(-0.01,-0.10,sunDirection.y);
   float darkness=clamp(1.0-dot(sky,vec3(0.2126,0.7152,0.0722))*10.0,0.0,1.0);
   float horizon=smoothstep(-0.02,0.18,direction.y);
   float visibility=night*darkness*horizon;

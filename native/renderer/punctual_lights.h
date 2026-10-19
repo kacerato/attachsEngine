@@ -100,6 +100,8 @@ struct SceneLight {
   // Intensidade em unidade física (lux, candela, lúmen) em vez da escala
   // interna legada. Só a física pede que céu e ambiente acompanhem o sol.
   bool photometric = false;
+  // G4: fase da lua ditada por TimeOfDay no sol; negativo usa a do Ambiente.
+  float moonPhase = -1.0f;
 };
 
 // Nenhuma luz some em silêncio: o que não coube é contado, por modalidade, e
@@ -270,6 +272,13 @@ inline const SceneLight *selectDirectionalLight(std::span<const SceneLight> ligh
     if (light.modality != LightModality::Directional || !finiteVector(light.position) ||
         !finiteVector(light.direction) || !finiteVector(light.color) ||
         !std::isfinite(light.intensity) || light.intensity < 0) continue;
+    // G4: o sol movido por TimeOfDay (moonPhase >= 0) é o sol da cena mesmo à
+    // noite, com intensidade zero; senão a direcional antiga reacenderia o dia.
+    const bool timed = light.moonPhase >= 0.0f, chosenTimed = chosen && chosen->moonPhase >= 0.0f;
+    if (chosen && timed != chosenTimed) {
+      if (timed) chosen = &light;
+      continue;
+    }
     if (!chosen || light.intensity > chosen->intensity ||
         (light.intensity == chosen->intensity && light.objectId < chosen->objectId))
       chosen = &light;

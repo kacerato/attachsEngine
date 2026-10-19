@@ -1026,7 +1026,8 @@ public:
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
   bool extractLights(std::vector<renderer::SceneLight> &out) const {
-    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out);
+    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,
+                                      isPlaying() && playScene_.active() ? playScene_.world().elapsedSeconds() : 0.0);
   }
   bool extractEnvironment(renderer::SceneEnvironment &out) const {
     return runtime::collectSceneEnvironment(

@@ -26,7 +26,8 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   // G4: auréola do sol, fase da lua, raio angular da lua (rad), brilho da lua;
   // brilho das estrelas. Fim do bloco; os outros shaders não os declaram.
   layout(offset=3488) vec4 celestialParameters;
-  layout(offset=3504) vec4 celestialStars;
+  layout(offset=3504) vec4 celestialStars; // x estrelas, yzw tom do céu procedural
+  layout(offset=3520) vec4 skyParameters;  // rgb chão do céu procedural, w espessura da atmosfera
 } environment;
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(location=0) in vec3 vDirection;
@@ -43,6 +44,7 @@ vec3 linearToSrgb(vec3 color) {
 }
 #include "tone_mapping.glsl"
 #include "sky_celestial.glsl"
+#include "sky_procedural.glsl"
 
 vec2 raySphere(vec3 origin,vec3 direction,float radius) {
   // Solve in radius-normalized coordinates. At Earth scale the unnormalized
@@ -225,42 +227,20 @@ void main() {
   if(environment.sceneSky.w>1.5) {
     color=physicalAtmosphere(visibleDirection,pixelAngle);
   } else if(environment.sceneSky.w>0.5) {
-    float altitude=visibleDirection.y;
-    float height=clamp(altitude,0.0,1.0);
-    float horizonBand=exp(-altitude*altitude*28.0);
-    vec3 upper=mix(environment.skyHorizonCloudDensity.rgb,
-                   environment.skyZenithCloudCoverage.rgb,
-                   smoothstep(0.0,1.0,height));
-    vec3 lower=mix(environment.groundColorSaturation.rgb,
-                   environment.skyHorizonCloudDensity.rgb,
-                   smoothstep(-1.0,0.0,altitude));
-    // Both hemispheres meet at the exact horizon colour with zero gradient.
-    // The old lower blend ended above zero while the upper power curve had
-    // an infinite slope there, producing a visible seam/abrupt dark band.
-    vec3 atmosphereSky=altitude>=0.0?upper:lower;
+    // Como o Skybox/Procedural da Unity: a cor sai do sol (O'Neil), e o tom e o
+    // chão autorais só deslocam o espectro e pintam o chão. Meio-dia, pôr do sol
+    // e noite são o mesmo modelo -- girar a luz direcional muda o céu inteiro.
     vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
+    vec3 atmosphereSky=astraProceduralSky(visibleDirection,sunDirection,environment.celestialStars.yzw,
+        environment.skyParameters.rgb,environment.skyParameters.w,2.4);
     float alignment=clamp(dot(visibleDirection,sunDirection),-1.0,1.0);
-    // Aproximação analítica de espalhamento. Mantém uma única passagem e não
-    // exige LUT, mas acrescenta a separação visual que faltava entre zênite,
-    // horizonte e halo solar no viewport mobile.
-    float rayleighPhase=0.0596831*(1.0+alignment*alignment);
-    const float mieG=0.76;
-    float mieDenominator=max(0.02,1.0+mieG*mieG-2.0*mieG*alignment);
-    float miePhase=0.119366*(1.0-mieG*mieG)*(1.0+alignment*alignment)/
-                   ((2.0+mieG*mieG)*pow(mieDenominator,1.5));
-    float airMass=1.0/(0.12+pow(max(height+0.12,0.001),0.42));
-    float opticalDepth=1.0-exp(-airMass*(0.045+0.18*environment.sceneSky.x));
-    vec3 sunTint=environment.sunColorAngularRadius.rgb;
-    atmosphereSky+=sunTint*(rayleighPhase*(0.35+0.65*horizonBand)+
-                            miePhase*(0.15+1.85*horizonBand))*opticalDepth;
-    atmosphereSky=mix(atmosphereSky,
-                      environment.skyHorizonCloudDensity.rgb+sunTint*0.08,
-                      horizonBand*0.14*environment.sceneSky.x);
     float angularDistance=acos(alignment);
     float radius=max(environment.sceneSky.y,0.0001);
     vec3 disc=celestialSunDisc(angularDistance,radius,pixelAngle);
-    float glare=celestialSunGlare(angularDistance,alignment,radius)*(0.6+0.4*horizonBand);
-    atmosphereSky+=sunTint*(disc+vec3(glare))*environment.sceneSky.z;
+    float glare=celestialSunGlare(angularDistance,alignment,radius);
+    // O disco some abaixo do horizonte, como o sol da Unity atrás do chão.
+    float aboveGround=smoothstep(-0.01,0.01,visibleDirection.y);
+    atmosphereSky+=environment.sunColorAngularRadius.rgb*(disc+vec3(glare))*environment.sceneSky.z*aboveGround;
     color=mix(color,atmosphereSky,clamp(environment.sceneSky.x,0.0,1.0));
   }
   // HDRI e o céu legado usam a proporção relativa skyScale. O modo físico já

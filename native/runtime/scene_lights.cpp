@@ -2,9 +2,11 @@
 #include "runtime/scene_components.h"
 #include "runtime/transform_math.h"
 #include "scene/light.h"
+#include "scene/time_of_day.h"
+#include "renderer/time_of_day.h"
 
 namespace ae::runtime {
-bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out) {
+bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out, double sceneSeconds) {
   std::vector<ObjectId> ids;
   graph.collectSubtree(graph.root(), ids);
   std::vector<renderer::SceneLight> collected;
@@ -36,6 +38,23 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     entry.photometric = light->unit != scene::LightUnit::Engine;
     entry.innerAngle = light->innerAngle;
     entry.outerAngle = light->outerAngle;
+    // G4: a rotação já veio do transform, girado por runtime/scene_time_of_day
+    // (como um script de ciclo na Unity). Aqui só a curva de cor e intensidade
+    // pela elevação e a fase da lua que o céu desenha.
+    if (light->kind == scene::LightKind::Directional) {
+      if (const auto *time = static_cast<const scene::TimeOfDay *>(object->components.find(scene::TimeOfDay::descriptor));
+          time && time->enabled && time->valid()) {
+        renderer::TimeOfDayInput input;
+        input.hour = renderer::advanceTimeOfDayHour(time->hour, time->dayLengthMinutes, sceneSeconds);
+        input.dayOfYear = time->dayOfYear;
+        input.latitude = time->latitude;
+        input.northDegrees = time->northDegrees;
+        const auto sun = renderer::evaluateTimeOfDay(input);
+        for (u32 axis = 0; axis < 3; ++axis) entry.color[axis] *= sun.sunColor[axis];
+        entry.intensity *= sun.sunIntensity;
+        entry.moonPhase = sun.moonPhase;
+      }
+    }
     // Sombra local autoral (G6-B). A direcional projeta pelas cascatas do sol,
     // com politica em Ambiente, entao ela nunca leva pedido de atlas local.
     if (light->kind != scene::LightKind::Directional) {

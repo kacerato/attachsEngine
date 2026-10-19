@@ -2275,6 +2275,12 @@
       "name": "look-presets",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/time-of-day": {
+      "category": "lighting",
+      "name": "time-of-day",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

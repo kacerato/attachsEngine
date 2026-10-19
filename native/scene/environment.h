@@ -43,7 +43,7 @@ public:
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 14) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 15) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -99,6 +99,9 @@ public:
     if(version<13) values.grading={};
     // v14 (G4): sol, lua e estrelas. Cena antiga recebe os padrões novos: o céu
     // dela ganha auréola, lua e estrelas -- é a correção pedida, não um estilo.
+    // v15: o zênite vira o Sky Tint da Unity (0,5 neutro). Uma cor de céu antiga
+    // como tom deixaria o céu saturado; a cena antiga passa ao tom neutro.
+    if(version<15) for(float &channel:values.skyZenith) channel=0.5f;
     if(version<14) {
       const renderer::SceneEnvironment defaults{};
       values.sunGlare=defaults.sunGlare;values.moonPhase=defaults.moonPhase;
@@ -146,6 +149,9 @@ inline bool environmentIsSphere(const ComponentValue &value) {
 inline bool environmentUsesAtmosphere(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.sky == renderer::SkyModel::Atmosphere;
 }
+// O horizonte autoral era do gradiente antigo; o céu procedural (v15, como o
+// Skybox/Procedural da Unity) calcula o horizonte pelo sol. Fica no arquivo.
+inline bool environmentNeverVisible(const ComponentValue &) {return false;}
 inline bool environmentUsesHdri(const ComponentValue &value) {
   return static_cast<const Environment&>(value).values.sky==renderer::SkyModel::Hdri;
 }
@@ -250,7 +256,7 @@ inline constexpr std::array<ComponentEnum, 4> environmentEnums{{
 }};
 
 inline constexpr std::array<ComponentTriple, 11> environmentTriples{{
-  {"sky_zenith","Cor do zênite",{"sky_zenith.r","sky_zenith.g","sky_zenith.b"},ComponentTripleKind::LinearColor},
+  {"sky_zenith","Tom do céu",{"sky_zenith.r","sky_zenith.g","sky_zenith.b"},ComponentTripleKind::LinearColor},
   {"sky_horizon","Cor do horizonte",{"sky_horizon.r","sky_horizon.g","sky_horizon.b"},ComponentTripleKind::LinearColor},
   {"ground","Cor do chão",{"ground.r","ground.g","ground.b"},ComponentTripleKind::LinearColor},
   {"fog_color","Cor da neblina",{"fog_color.r","fog_color.g","fog_color.b"},ComponentTripleKind::LinearColor},
@@ -281,7 +287,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 14,
+  "astra.render.environment", 15,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

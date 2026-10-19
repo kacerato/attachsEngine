@@ -43,3 +43,15 @@ AE_TEST(punctual_light_mask_keeps_only_lights_whose_sphere_reaches_the_draw) {
   AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0u) == 256.0f, "máscara vazia é distinta de sem máscara");
   AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0xffu) == 511.0f, "oito bits exatos em float");
 }
+
+AE_TEST(time_of_day_sun_wins_the_directional_selection_even_at_night) {
+  renderer::SceneLight authored{}, timed{};
+  authored.modality = timed.modality = renderer::LightModality::Directional;
+  authored.objectId = 1;authored.intensity = 5.0f;
+  timed.objectId = 2;timed.intensity = 0.0f;timed.moonPhase = 0.3f; // noite: sol apagado
+  const renderer::SceneLight lights[]{authored, timed};
+  const auto *sun = renderer::selectDirectionalLight(lights);
+  AE_EXPECT_TRUE(sun && sun->objectId == 2, "o sol com hora do dia manda, mesmo apagado");
+  const renderer::SceneLight plain[]{authored};
+  AE_EXPECT_TRUE(renderer::selectDirectionalLight(plain)->objectId == 1, "sem hora do dia, a regra antiga");
+}

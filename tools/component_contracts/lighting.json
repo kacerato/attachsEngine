@@ -10,6 +10,19 @@
       "icon": "lighting/sun",
       "searchTerms": "Light DirectionalLight3D OmniLight3D SpotLight3D Point Spot Sol",
       "apiName": "Light"
+    },
+    {
+      "type": "TimeOfDay",
+      "name": "Hora do dia",
+      "description": "Move o sol pela hora, data e latitude; dia, crepúsculo e noite",
+      "icon": "lighting/time-of-day",
+      "searchTerms": "TimeOfDay DayNight Ciclo dia noite Sol Lua Hora Sky",
+      "consumer": "runtime/scene_lights.cpp → renderer/time_of_day.cpp",
+      "reference": "https://docs.godotengine.org/en/4.5/classes/class_directionallight3d.html",
+      "apiName": "TimeOfDay",
+      "requirements": {
+        "cpp": "timeOfDayRequirements"
+      }
     }
   ],
   "defaults": {

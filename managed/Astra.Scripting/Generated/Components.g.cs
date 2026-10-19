@@ -4010,7 +4010,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
-    /// <summary>Cor do zênite. Cor linear RGB</summary>
+    /// <summary>Tom do céu. Cor linear RGB</summary>
     public Vector3 SkyZenith
     {
         get => new(Component.GetFloat("sky_zenith.r"), Component.GetFloat("sky_zenith.g"), Component.GetFloat("sky_zenith.b"));
@@ -4802,6 +4802,66 @@ public readonly struct Light : IComponentFacade<Light>
     {
         get => (ShadowResolutionOption)Component.GetEnum("shadow_resolution");
         set => Component.SetEnum("shadow_resolution", (uint)value);
+    }
+}
+
+/// <summary>Hora do dia: Move o sol pela hora, data e latitude; dia, crepúsculo e noite. Família Luz · Luzes.</summary>
+/// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_directionallight3d.html</remarks>
+public readonly struct TimeOfDay : IComponentFacade<TimeOfDay>
+{
+    public static string TypeId => "astra.render.time_of_day";
+    public static TimeOfDay Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public TimeOfDay(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Hora (h). Hora solar local; com Duração do dia, avança em Play</summary>
+    /// <remarks>Faixa válida: 0 a 24.</remarks>
+    public float Hour
+    {
+        get => Component.GetFloat("hour");
+        set => Component.SetFloat("hour", value);
+    }
+    /// <summary>Duração do dia (min). Minutos reais para 24 h de jogo; 0 congela a hora</summary>
+    /// <remarks>Faixa válida: 0 a 1440.</remarks>
+    public float DayLengthMinutes
+    {
+        get => Component.GetFloat("day_length_minutes");
+        set => Component.SetFloat("day_length_minutes", value);
+    }
+    /// <summary>Latitude (°). Altura do sol ao meio-dia e duração da noite; negativo no hemisfério sul</summary>
+    /// <remarks>Faixa válida: -90 a 90.</remarks>
+    public float Latitude
+    {
+        get => Component.GetFloat("latitude");
+        set => Component.SetFloat("latitude", value);
+    }
+    /// <summary>Dia do ano. Estação e fase da lua; 172 é o solstício de junho</summary>
+    /// <remarks>Faixa válida: 1 a 366.</remarks>
+    public float DayOfYear
+    {
+        get => Component.GetFloat("day_of_year");
+        set => Component.SetFloat("day_of_year", value);
+    }
+    /// <summary>Norte (°). Gira o caminho do sol em torno do eixo vertical</summary>
+    /// <remarks>Faixa válida: 0 a 360.</remarks>
+    public float NorthDegrees
+    {
+        get => Component.GetFloat("north_degrees");
+        set => Component.SetFloat("north_degrees", value);
+    }
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
     }
 }
 

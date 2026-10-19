@@ -3,6 +3,7 @@
 #include "editor/editor_scene_camera.h"
 #include "renderer/primitive_geometry.h"
 #include "renderer/water_authoring_geometry.h"
+#include "runtime/scene_time_of_day.h"
 #include "runtime/game_world.h"
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
@@ -344,6 +345,13 @@ public:
   void setAudioFocus(bool focused){audioFocused_=focused;updateAudioPause();}
   bool audioWantsFocus()const{return active_&&!paused_&&!applicationPaused_&&applicationFocused_&&audio_.wantsDevice();}
   bool step() {return active_ && paused_ && advanceFrame(1.0/60.0,true);}
+  // G4: a Hora do dia gira o sol pelo relógio da cena, pelo mesmo caminho de
+  // transform que os scripts usam (respeita autoridade e revisão).
+  bool advanceTimeOfDay() {
+    runtime::applyTimeOfDay(world_.graph(),world_.elapsedSeconds(),[&](runtime::ObjectId id,const runtime::Transform &t){
+      return world_.setLocalTransform(world_.handle(id),t)==runtime::WorldStatus::Ok;});
+    return true;
+  }
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -443,7 +451,7 @@ private:
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
-           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.

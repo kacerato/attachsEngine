@@ -424,6 +424,16 @@ ICONS["lighting/look-presets"] = (
     f'<rect x="12" y="42" width="86" height="66" rx="9" {stroke(6)}/>'
     f'<path d="M22 98l22-24 15 15 12-11 19 20" {stroke(5, ACCENT)}/><circle cx="76" cy="62" r="8" {stroke(5, ACCENT)}/>')
 
+# G4: hora do dia. O arco é o caminho do sol sobre o horizonte; o sol no alto e
+# a lua crescente na outra ponta dizem "dia e noite" sem texto.
+ICONS["lighting/time-of-day"] = (
+    f'<path d="M14 92a50 50 0 0 1 100 0" {stroke(4, extra='stroke-dasharray="5 8" opacity=".6"')}/>'
+    f'<path d="M8 100h112" {stroke(6)}/>'
+    f'<circle cx="64" cy="42" r="13" fill="{ACCENT}"/>'
+    f'<path d="M64 18v-6M64 72v-6M40 42h-6M94 42h-6M47 25l-4-4M85 25l4-4" {stroke(4, ACCENT)}/>'
+    f'<path d="M108 70a13 13 0 1 1-12-18 10 10 0 0 0 12 18z" {stroke(5)}/>'
+    f'<circle cx="20" cy="76" r="5" fill="{INK}" opacity=".7"/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),
