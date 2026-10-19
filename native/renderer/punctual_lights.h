@@ -1,6 +1,7 @@
 #pragma once
 #include "core/base.h"
 #include "core/engine_capability.h"
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <span>
@@ -39,6 +40,33 @@ inline bool unshadowedPointLighting(std::span<const PunctualLight> lights) noexc
     if (light.colorIntensity[3] != 0.0f || light.directionOffset[3] != 1.0f ||
         !(light.shadow[0] < -0.5f)) return false;
   return true;
+}
+
+// Máscara por desenho das luzes aceitas que podem alcançá-lo: bit i quando a
+// esfera de influência da luz i (posição, alcance) toca a esfera do desenho.
+// Conservadora para spot (o cone fica dentro da esfera). O fragmento pula as
+// luzes fora da máscara antes até da distância -- medido na Vila em S, o laço
+// das luzes pontuais era 15% do passe opaco.
+inline u32 punctualLightMask(const float center[3], float radius,
+                             std::span<const PunctualLight> lights) noexcept {
+  u32 mask = 0;
+  const u32 count = static_cast<u32>(lights.size()) < MaximumPunctualLights
+                        ? static_cast<u32>(lights.size()) : MaximumPunctualLights;
+  for (u32 i = 0; i < count; ++i) {
+    const float *light = lights[i].positionRange;
+    const float dx = light[0] - center[0], dy = light[1] - center[1], dz = light[2] - center[2];
+    const float reach = std::max(light[3], 0.0f) + std::max(radius, 0.0f);
+    // Raio não finito (desenho sem limites conhecidos) mantém a luz.
+    if (!std::isfinite(reach) || dx * dx + dy * dy + dz * dz <= reach * reach) mask |= 1u << i;
+  }
+  return mask;
+}
+
+// Codificação em GpuMeshInstance::normalColumns[11] (coluna 2 .w): zero é
+// "sem máscara" (todas as luzes), valor de buildNormalMatrix; 256 + bits marca
+// uma máscara calculada. Inteiros até 511 são exatos em float.
+inline float encodePunctualLightMask(u32 mask) noexcept {
+  return static_cast<float>(256u | (mask & 0xffu));
 }
 
 enum class LightModality : u32 { Directional = 0, Point = 1, Spot = 2 };

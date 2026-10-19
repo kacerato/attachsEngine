@@ -6674,6 +6674,33 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         opaqueNoClipLastFrame_ = false;
     }
     const auto *lightingFrame = static_cast<const DirtRoadFrameUniform *>(environmentUniform_.mappedData());
+    // G1: cada desenho visível recebe a máscara das luzes aceitas neste quadro
+    // cuja esfera o alcança; o fragmento pula as demais. Sem a opção, a coluna
+    // fica no zero de buildNormalMatrix, que o shader lê como "todas".
+    if (punctualLightMaskEnabled_ && lightingFrame && instanceBuffer_.mappedData()) {
+      auto *maskInstances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
+      const float acceptedLights = lightingFrame->punctualLightParameters[0];
+      const u32 lightCount = acceptedLights > 0.0f
+          ? std::min(renderer::MaximumPunctualLights, static_cast<u32>(acceptedLights + 0.5f)) : 0u;
+      const std::span<const renderer::PunctualLight> maskLights(lightingFrame->punctualLights, lightCount);
+      bool masksChanged = false;
+      auto applyLightMasks = [&](const std::vector<u32> &order) {
+        for (u32 drawIndex : order) {
+          const auto &draw = dirtRoadResources_.draws()[drawIndex];
+          const float encoded = renderer::encodePunctualLightMask(
+              renderer::punctualLightMask(draw.boundsCenter, draw.boundsRadius, maskLights));
+          if (maskInstances[drawIndex].normalColumns[11] != encoded) {
+            maskInstances[drawIndex].normalColumns[11] = encoded;
+            masksChanged = true;
+          }
+        }
+      };
+      applyLightMasks(visibleSolidDrawOrder_);
+      applyLightMasks(visibleCoverageDrawOrder_);
+      applyLightMasks(visibleTransparentDrawOrder_);
+      if (masksChanged && !memoryAllocator_->flushBuffer(instanceBuffer_))
+        return rhi::SwapchainStatus::FatalError;
+    }
     pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ &&
         pointLightingSpecializationEnabled_ && pointLightingPipeline_ != VK_NULL_HANDLE && lightingFrame &&
         lightingFrame->punctualLightParameters[0] >= 0.0f &&

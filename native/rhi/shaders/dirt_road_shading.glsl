@@ -9,6 +9,8 @@ layout(location=3) in highp vec2 vUv0;
 layout(location=4) in highp vec2 vUv1;
 layout(location=5) in mediump vec4 vColor;
 layout(location=6) in mediump float vDither;
+// Ver dirt_road_vertex.glsl: luzes aceitas cuja esfera alcanca este desenho.
+layout(location=11) flat in mediump uint vLightMask;
 layout(location=0) out vec4 outColor;
 #include "temporal_masks.glsl"
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
@@ -152,6 +154,9 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
   mediump vec3 sum=vec3(0.0);
   for(int i=0;i<PUNCTUAL_LIGHT_LIMIT;++i) {
     if(i>=count) break;
+    // A CPU ja provou que a esfera desta luz nao toca o desenho: nem a
+    // distancia precisa ser calculada. Uniforme por desenho, sem divergencia.
+    if(((vLightMask>>uint(i))&1u)==0u) continue;
     highp vec4 positionRange=environment.punctualLights[i*4];
     mediump vec4 colorIntensity=environment.punctualLights[i*4+1];
     mediump vec4 directionOffset=environment.punctualLights[i*4+2];

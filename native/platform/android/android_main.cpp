@@ -2393,6 +2393,10 @@ void android_main(android_app *app) {
       app->activity, "aether.full_detail_sampling"));
   shell.instancedRenderer.setPointLightingSpecializationEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.point_lighting_specialization", true));
+  shell.instancedRenderer.setPunctualLightMaskEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.punctual_light_mask", false));
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[PunctualLightMask] %s",
+                      shell.instancedRenderer.punctualLightMaskEnabled() ? "por desenho" : "desligada");
   applyRuntimeControls(shell);
 
   // O projeto aberto no editor decide primeiro (painel Qualidade); as opções

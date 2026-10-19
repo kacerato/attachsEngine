@@ -1,0 +1,830 @@
+{
+  "schemaVersion": 4,
+  "scene": "authored-project-play",
+  "gpuPassAttribution": "resolved",
+  "gpuPassMetricsMissing": [],
+  "context": {
+    "schemaVersion": 8,
+    "pid": 8105,
+    "epoch": 6,
+    "scene": "authored-project-play",
+    "content_fingerprint": "0000000000000000",
+    "target_fps": 60,
+    "gpu_isolation": "no-normal",
+    "camera_locked": false,
+    "camera_mode": "free",
+    "camera_route_fingerprint": "0000000000000000",
+    "camera_route_frame_ordinal": 0,
+    "camera_route_tick_count": 0,
+    "camera_pose": [
+      0.0,
+      1.62,
+      -15.5,
+      0.0,
+      -0.0
+    ],
+    "draws": 132,
+    "materials": 77,
+    "textures": 119,
+    "triangles": 224394,
+    "package_version": 0,
+    "render_draws": 165,
+    "lod_groups": 0,
+    "hzb_enabled": false,
+    "lod_enabled": true,
+    "post_ui_fused": false,
+    "spatial_chunks": 0,
+    "opaque_no_clip": true,
+    "full_detail_sampling": false,
+    "point_lighting_specialization": true,
+    "scene_reuse_enabled": true,
+    "rendering_quality_locked": true,
+    "shadow_filter_taps": 25,
+    "lod_error_px": 1.0,
+    "coverage_lod_error_px": 2.0,
+    "render_scale": 1.0,
+    "render_width": 1280,
+    "render_height": 2772,
+    "visible_draws": 105,
+    "culled_draws": 54,
+    "submitted_draw_calls": 105,
+    "visible_triangles": 250522,
+    "submitted_triangles": 250522,
+    "hzb_tested_draws": 0,
+    "hzb_occluded_draws": 0,
+    "hzb_revived_draws": 0,
+    "hzb_motion_skipped_draws": 0,
+    "hzb_budget_skipped_draws": 0,
+    "instances": 165,
+    "width": 2772,
+    "height": 1280
+  },
+  "pid": 8105,
+  "epoch": 6,
+  "build": "optimized",
+  "frames": 1200.0,
+  "elapsedSeconds": 40.078270766,
+  "presentFps": 29.941411569533283,
+  "minimumWindowPresentFps": 29.708205,
+  "pressure": {
+    "dominant": "mixed",
+    "windows": {
+      "within-budget": 0,
+      "cpu": 0,
+      "gpu": 0,
+      "mixed": 2,
+      "presentation": 0,
+      "unknown": 0
+    },
+    "worstCpuP95BudgetRatio": 1.0773,
+    "worstGpuP95BudgetRatio": 2.6022,
+    "worstIntervalP95BudgetRatio": 2.4082,
+    "minimumRenderScale": 1.0,
+    "maximumRenderScale": 1.0,
+    "endingRenderScale": 1.0,
+    "adpf": true,
+    "adpfGpuWork": true,
+    "gameMode": 1,
+    "sustainedPerformanceSupported": false,
+    "sustainedPerformanceEnabled": false,
+    "thermalApi": true,
+    "thermalStatus": 0,
+    "thermalHeadroomValid": true,
+    "thermalHeadroom": 0.703,
+    "thermalPressure": "none"
+  },
+  "memory": {
+    "available": true,
+    "classifications": {
+      "normal": 2,
+      "warning": 0,
+      "critical": 0,
+      "unknown": 0
+    },
+    "ramValid": true,
+    "maximumRssBytes": 840400896.0,
+    "peakRssBytes": 930639872.0,
+    "maximumSwapBytes": 39743488.0,
+    "minimumSystemAvailableBytes": 4113682432.0,
+    "minimumSystemAvailableRatio": 0.349239,
+    "gpuUnifiedMemory": false,
+    "gpuDriverBudgetSupported": false,
+    "gpuHeapSizeBytes": 16073965568.0,
+    "gpuHeapBudgetBytes": 0.0,
+    "maximumGpuDriverUsageBytes": 0.0,
+    "maximumGpuDriverUsageRatio": -1.0,
+    "maximumEngineAllocationBytes": 846812160.0,
+    "peakEngineAllocationBytes": 862073856.0,
+    "endingClasses": {
+      "buffer": {
+        "usedBytes": 29241984,
+        "peakBytes": 29241984,
+        "limitBytes": 2411094835
+      },
+      "texture": {
+        "usedBytes": 430924160,
+        "peakBytes": 430924160,
+        "limitBytes": 6027737088
+      },
+      "renderTarget": {
+        "usedBytes": 386646016,
+        "peakBytes": 386646016,
+        "limitBytes": 2411094835
+      },
+      "staging": {
+        "usedBytes": 0,
+        "peakBytes": 15261696,
+        "limitBytes": 1205547418
+      }
+    }
+  },
+  "metrics": {
+    "interval_ms": {
+      "mean": 33.39854999999999,
+      "worstWindowP95": 40.136,
+      "worstWindowP99": 41.227,
+      "max": 48.4429
+    },
+    "process_cpu_ms": {
+      "mean": 11.257950000000001,
+      "worstWindowP95": 15.159,
+      "worstWindowP99": 16.4971,
+      "max": 25.2943
+    },
+    "thread_cpu_ms": {
+      "mean": 10.289799999999998,
+      "worstWindowP95": 14.0054,
+      "worstWindowP99": 15.5598,
+      "max": 22.4709
+    },
+    "acquire_wall_ms": {
+      "mean": 23.04485,
+      "worstWindowP95": 29.8364,
+      "worstWindowP99": 31.5854,
+      "max": 34.4103
+    },
+    "interop_wall_ms": {
+      "mean": 0.0001,
+      "worstWindowP95": 0.0002,
+      "worstWindowP99": 0.0002,
+      "max": 0.0003
+    },
+    "record_submit_wall_ms": {
+      "mean": 1.2125,
+      "worstWindowP95": 1.6709,
+      "worstWindowP99": 3.1797,
+      "max": 4.9432
+    },
+    "present_wall_ms": {
+      "mean": 0.3933,
+      "worstWindowP95": 0.5991,
+      "worstWindowP99": 0.9332,
+      "max": 2.0279
+    },
+    "gpu_frame_ms": {
+      "mean": 30.969749999999998,
+      "worstWindowP95": 38.1661,
+      "worstWindowP99": 38.4962,
+      "max": 41.1978
+    },
+    "gpu_skinning_ms": {
+      "mean": 1.2232,
+      "worstWindowP95": 5.6299,
+      "worstWindowP99": 5.6519,
+      "max": 5.6721
+    },
+    "gpu_camera_preview_ms": {
+      "mean": 0.0006,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0029
+    },
+    "gpu_water_simulation_ms": {
+      "mean": 0.0005,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0006
+    },
+    "gpu_shadow_ms": {
+      "mean": 3.9797500000000006,
+      "worstWindowP95": 12.0146,
+      "worstWindowP99": 13.789,
+      "max": 13.8778
+    },
+    "gpu_local_shadow_ms": {
+      "mean": 0.018500000000000003,
+      "worstWindowP95": 0.0191,
+      "worstWindowP99": 0.022,
+      "max": 0.2243
+    },
+    "gpu_culling_ms": {
+      "mean": 0.00065,
+      "worstWindowP95": 0.0012,
+      "worstWindowP99": 0.0015,
+      "max": 0.0029
+    },
+    "gpu_opaque_ms": {
+      "mean": 13.85765,
+      "worstWindowP95": 17.0724,
+      "worstWindowP99": 20.3264,
+      "max": 20.9743
+    },
+    "gpu_coverage_ms": {
+      "mean": 0.0006,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0013
+    },
+    "gpu_sky_ms": {
+      "mean": 0.0005499999999999999,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0006
+    },
+    "gpu_transparent_ms": {
+      "mean": 0.00275,
+      "worstWindowP95": 0.0032,
+      "worstWindowP99": 0.0035,
+      "max": 0.0038
+    },
+    "gpu_motion_ms": {
+      "mean": 0.0005499999999999999,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0006
+    },
+    "gpu_auto_exposure_ms": {
+      "mean": 0.0006,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0006
+    },
+    "gpu_temporal_upscale_ms": {
+      "mean": 0.0006,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.0006
+    },
+    "gpu_post_ms": {
+      "mean": 10.01725,
+      "worstWindowP95": 16.9311,
+      "worstWindowP99": 17.554,
+      "max": 17.9079
+    },
+    "gpu_fsr_easu_ms": {
+      "mean": 0.73855,
+      "worstWindowP95": 3.026,
+      "worstWindowP99": 3.1548,
+      "max": 3.1573
+    },
+    "gpu_fsr_rcas_ms": {
+      "mean": 0.8890499999999999,
+      "worstWindowP95": 2.3708,
+      "worstWindowP99": 3.1714,
+      "max": 3.1803
+    },
+    "gpu_ui_ms": {
+      "mean": 0.23794999999999997,
+      "worstWindowP95": 0.2829,
+      "worstWindowP99": 0.285,
+      "max": 0.2863
+    },
+    "gpu_hzb_ms": {
+      "mean": 0.0006,
+      "worstWindowP95": 0.0006,
+      "worstWindowP99": 0.0006,
+      "max": 0.001
+    }
+  },
+  "pocA": {
+    "cpuLimitMsExclusive": 3.0,
+    "cpuStatistic": "maximum process CPU per present interval, after 5s warm-up",
+    "cpuBudgetPassed": false,
+    "targetDisplayedFps": 60,
+    "displayedFpsMeasured": false,
+    "accepted": false,
+    "limitation": "Present retornado mede envio/ritmo, não scanout; não fecha PoC-A sozinho."
+  },
+  "windows": [
+    {
+      "schemaVersion": 8,
+      "pid": 8105,
+      "epoch": 6,
+      "window": 1,
+      "build": "optimized",
+      "instances": 165,
+      "width": 2772,
+      "height": 1280,
+      "frames": 600,
+      "elapsed_ms": 20196.440773,
+      "present_fps": 29.708205,
+      "warmup_samples": 143,
+      "warmup_process_cpu_max_ms": 20.337245,
+      "route_frame": 0,
+      "visible_draws": 128,
+      "visible_triangles": 261781,
+      "scene_reused_frames": 0,
+      "opaque_no_clip_frames": 600,
+      "point_lighting_frames": 600,
+      "interval_ms": {
+        "mean": 33.6607,
+        "p50": 32.4297,
+        "p95": 40.0866,
+        "p99": 41.1344,
+        "max": 43.9084
+      },
+      "process_cpu_ms": {
+        "mean": 12.0891,
+        "p50": 12.0156,
+        "p95": 15.159,
+        "p99": 16.3232,
+        "max": 25.2943
+      },
+      "thread_cpu_ms": {
+        "mean": 10.9643,
+        "p50": 10.8444,
+        "p95": 14.0054,
+        "p99": 14.939,
+        "max": 16.5333
+      },
+      "acquire_wall_ms": {
+        "mean": 22.6677,
+        "p50": 21.8135,
+        "p95": 28.9794,
+        "p99": 30.371,
+        "max": 31.6721
+      },
+      "interop_wall_ms": {
+        "mean": 0.0001,
+        "p50": 0.0002,
+        "p95": 0.0002,
+        "p99": 0.0002,
+        "max": 0.0003
+      },
+      "record_submit_wall_ms": {
+        "mean": 1.3406,
+        "p50": 1.3369,
+        "p95": 1.6709,
+        "p99": 1.9556,
+        "max": 3.1559
+      },
+      "present_wall_ms": {
+        "mean": 0.4241,
+        "p50": 0.4068,
+        "p95": 0.5869,
+        "p99": 0.7007,
+        "max": 1.5005
+      },
+      "gpu_frame_ms": {
+        "mean": 30.9725,
+        "p50": 29.8807,
+        "p95": 37.0419,
+        "p99": 38.0832,
+        "max": 41.1978
+      },
+      "gpu_skinning_ms": {
+        "mean": 1.1953,
+        "p50": 0.5144,
+        "p95": 5.6292,
+        "p99": 5.6519,
+        "max": 5.6676
+      },
+      "gpu_camera_preview_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_water_simulation_ms": {
+        "mean": 0.0005,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_shadow_ms": {
+        "mean": 3.6594,
+        "p50": 3.0452,
+        "p95": 7.0981,
+        "p99": 8.3848,
+        "max": 13.428
+      },
+      "gpu_local_shadow_ms": {
+        "mean": 0.0181,
+        "p50": 0.0173,
+        "p95": 0.0191,
+        "p99": 0.0197,
+        "max": 0.2139
+      },
+      "gpu_culling_ms": {
+        "mean": 0.0007,
+        "p50": 0.0006,
+        "p95": 0.0012,
+        "p99": 0.0015,
+        "max": 0.0029
+      },
+      "gpu_opaque_ms": {
+        "mean": 14.006,
+        "p50": 13.3877,
+        "p95": 16.2976,
+        "p99": 20.1914,
+        "max": 20.8713
+      },
+      "gpu_coverage_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0008
+      },
+      "gpu_sky_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_transparent_ms": {
+        "mean": 0.0028,
+        "p50": 0.0028,
+        "p95": 0.0032,
+        "p99": 0.0035,
+        "max": 0.0037
+      },
+      "gpu_motion_ms": {
+        "mean": 0.0005,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_auto_exposure_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_temporal_upscale_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_post_ms": {
+        "mean": 10.1957,
+        "p50": 9.2297,
+        "p95": 16.9311,
+        "p99": 17.554,
+        "max": 17.9079
+      },
+      "gpu_fsr_easu_ms": {
+        "mean": 0.753,
+        "p50": 0.5814,
+        "p95": 3.026,
+        "p99": 3.1548,
+        "max": 3.1573
+      },
+      "gpu_fsr_rcas_ms": {
+        "mean": 0.8986,
+        "p50": 0.7591,
+        "p95": 2.3708,
+        "p99": 3.1714,
+        "max": 3.1803
+      },
+      "gpu_ui_ms": {
+        "mean": 0.2385,
+        "p50": 0.2351,
+        "p95": 0.2829,
+        "p99": 0.285,
+        "max": 0.2854
+      },
+      "gpu_hzb_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.001
+      },
+      "gpuPassMetricsMissing": [],
+      "gpuPassAttribution": "resolved",
+      "memory_classification": "normal",
+      "ram_valid": true,
+      "ram_virtual_bytes": 20534284288,
+      "ram_rss_bytes": 840400896,
+      "ram_peak_rss_bytes": 930639872,
+      "ram_anon_bytes": 655818752,
+      "ram_file_bytes": 182149120,
+      "ram_shmem_bytes": 2433024,
+      "ram_swap_bytes": 39641088,
+      "system_ram_valid": true,
+      "system_ram_total_bytes": 11779002368,
+      "system_ram_available_bytes": 4113682432,
+      "gpu_budget_supported": false,
+      "gpu_unified": false,
+      "gpu_heap_size_bytes": 16073965568,
+      "gpu_heap_budget_bytes": 0,
+      "gpu_driver_usage_bytes": 0,
+      "gpu_engine_used_bytes": 846812160,
+      "gpu_engine_peak_bytes": 862073856,
+      "gpu_buffer_used_bytes": 29241984,
+      "gpu_buffer_peak_bytes": 29241984,
+      "gpu_buffer_limit_bytes": 2411094835,
+      "gpu_texture_used_bytes": 430924160,
+      "gpu_texture_peak_bytes": 430924160,
+      "gpu_texture_limit_bytes": 6027737088,
+      "gpu_render_target_used_bytes": 386646016,
+      "gpu_render_target_peak_bytes": 386646016,
+      "gpu_render_target_limit_bytes": 2411094835,
+      "gpu_staging_used_bytes": 0,
+      "gpu_staging_peak_bytes": 15261696,
+      "gpu_staging_limit_bytes": 1205547418,
+      "system_ram_available_ratio": 0.349239,
+      "gpu_driver_usage_ratio": -1.0,
+      "gpu_engine_class_ratio": 0.160361,
+      "classification": "mixed",
+      "cpu_p95_ratio": 1.0773,
+      "gpu_p95_ratio": 2.5256,
+      "interval_p95_ratio": 2.4052,
+      "presentation_wait_p95_ms": 29.5663,
+      "frame_budget_ms": 16.6667,
+      "cpu_budget_ms": 13.0,
+      "gpu_budget_ms": 14.6667,
+      "render_scale_min": 1.0,
+      "render_scale_max": 1.0,
+      "render_scale_end": 1.0,
+      "adpf": true,
+      "adpf_gpu_work": true,
+      "game_mode": 1,
+      "sustained_supported": false,
+      "sustained_enabled": false,
+      "thermal_api": true,
+      "thermal_status": 0,
+      "thermal_headroom_valid": true,
+      "thermal_headroom": 0.647,
+      "thermal_pressure": "none"
+    },
+    {
+      "schemaVersion": 8,
+      "pid": 8105,
+      "epoch": 6,
+      "window": 2,
+      "build": "optimized",
+      "instances": 165,
+      "width": 2772,
+      "height": 1280,
+      "frames": 600,
+      "elapsed_ms": 19881.829993,
+      "present_fps": 30.178309,
+      "warmup_samples": 143,
+      "warmup_process_cpu_max_ms": 20.337245,
+      "route_frame": 0,
+      "visible_draws": 128,
+      "visible_triangles": 261781,
+      "scene_reused_frames": 0,
+      "opaque_no_clip_frames": 600,
+      "point_lighting_frames": 600,
+      "interval_ms": {
+        "mean": 33.1364,
+        "p50": 31.3985,
+        "p95": 40.136,
+        "p99": 41.227,
+        "max": 48.4429
+      },
+      "process_cpu_ms": {
+        "mean": 10.4268,
+        "p50": 10.3254,
+        "p95": 14.4236,
+        "p99": 16.4971,
+        "max": 24.2833
+      },
+      "thread_cpu_ms": {
+        "mean": 9.6153,
+        "p50": 9.6297,
+        "p95": 13.146,
+        "p99": 15.5598,
+        "max": 22.4709
+      },
+      "acquire_wall_ms": {
+        "mean": 23.422,
+        "p50": 22.6542,
+        "p95": 29.8364,
+        "p99": 31.5854,
+        "max": 34.4103
+      },
+      "interop_wall_ms": {
+        "mean": 0.0001,
+        "p50": 0.0001,
+        "p95": 0.0002,
+        "p99": 0.0002,
+        "max": 0.0003
+      },
+      "record_submit_wall_ms": {
+        "mean": 1.0844,
+        "p50": 0.9789,
+        "p95": 1.5574,
+        "p99": 3.1797,
+        "max": 4.9432
+      },
+      "present_wall_ms": {
+        "mean": 0.3625,
+        "p50": 0.3382,
+        "p95": 0.5991,
+        "p99": 0.9332,
+        "max": 2.0279
+      },
+      "gpu_frame_ms": {
+        "mean": 30.967,
+        "p50": 29.1995,
+        "p95": 38.1661,
+        "p99": 38.4962,
+        "max": 39.9222
+      },
+      "gpu_skinning_ms": {
+        "mean": 1.2511,
+        "p50": 0.5421,
+        "p95": 5.6299,
+        "p99": 5.6485,
+        "max": 5.6721
+      },
+      "gpu_camera_preview_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0029
+      },
+      "gpu_water_simulation_ms": {
+        "mean": 0.0005,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_shadow_ms": {
+        "mean": 4.3001,
+        "p50": 3.1022,
+        "p95": 12.0146,
+        "p99": 13.789,
+        "max": 13.8778
+      },
+      "gpu_local_shadow_ms": {
+        "mean": 0.0189,
+        "p50": 0.0174,
+        "p95": 0.0189,
+        "p99": 0.022,
+        "max": 0.2243
+      },
+      "gpu_culling_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.001,
+        "p99": 0.0012,
+        "max": 0.0023
+      },
+      "gpu_opaque_ms": {
+        "mean": 13.7093,
+        "p50": 13.1605,
+        "p95": 17.0724,
+        "p99": 20.3264,
+        "max": 20.9743
+      },
+      "gpu_coverage_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0013
+      },
+      "gpu_sky_ms": {
+        "mean": 0.0005,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_transparent_ms": {
+        "mean": 0.0027,
+        "p50": 0.0027,
+        "p95": 0.0032,
+        "p99": 0.0034,
+        "max": 0.0038
+      },
+      "gpu_motion_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_auto_exposure_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_temporal_upscale_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.0006
+      },
+      "gpu_post_ms": {
+        "mean": 9.8388,
+        "p50": 9.2446,
+        "p95": 13.1207,
+        "p99": 17.3331,
+        "max": 17.6973
+      },
+      "gpu_fsr_easu_ms": {
+        "mean": 0.7241,
+        "p50": 0.5855,
+        "p95": 1.4433,
+        "p99": 3.1515,
+        "max": 3.1565
+      },
+      "gpu_fsr_rcas_ms": {
+        "mean": 0.8795,
+        "p50": 0.7594,
+        "p95": 1.5328,
+        "p99": 3.1671,
+        "max": 3.1766
+      },
+      "gpu_ui_ms": {
+        "mean": 0.2374,
+        "p50": 0.2349,
+        "p95": 0.2496,
+        "p99": 0.2848,
+        "max": 0.2863
+      },
+      "gpu_hzb_ms": {
+        "mean": 0.0006,
+        "p50": 0.0006,
+        "p95": 0.0006,
+        "p99": 0.0006,
+        "max": 0.001
+      },
+      "gpuPassMetricsMissing": [],
+      "gpuPassAttribution": "resolved",
+      "memory_classification": "normal",
+      "ram_valid": true,
+      "ram_virtual_bytes": 20534284288,
+      "ram_rss_bytes": 838733824,
+      "ram_peak_rss_bytes": 930639872,
+      "ram_anon_bytes": 655720448,
+      "ram_file_bytes": 180875264,
+      "ram_shmem_bytes": 2138112,
+      "ram_swap_bytes": 39743488,
+      "system_ram_valid": true,
+      "system_ram_total_bytes": 11779002368,
+      "system_ram_available_bytes": 4146601984,
+      "gpu_budget_supported": false,
+      "gpu_unified": false,
+      "gpu_heap_size_bytes": 16073965568,
+      "gpu_heap_budget_bytes": 0,
+      "gpu_driver_usage_bytes": 0,
+      "gpu_engine_used_bytes": 846812160,
+      "gpu_engine_peak_bytes": 862073856,
+      "gpu_buffer_used_bytes": 29241984,
+      "gpu_buffer_peak_bytes": 29241984,
+      "gpu_buffer_limit_bytes": 2411094835,
+      "gpu_texture_used_bytes": 430924160,
+      "gpu_texture_peak_bytes": 430924160,
+      "gpu_texture_limit_bytes": 6027737088,
+      "gpu_render_target_used_bytes": 386646016,
+      "gpu_render_target_peak_bytes": 386646016,
+      "gpu_render_target_limit_bytes": 2411094835,
+      "gpu_staging_used_bytes": 0,
+      "gpu_staging_peak_bytes": 15261696,
+      "gpu_staging_limit_bytes": 1205547418,
+      "system_ram_available_ratio": 0.352033,
+      "gpu_driver_usage_ratio": -1.0,
+      "gpu_engine_class_ratio": 0.160361,
+      "classification": "mixed",
+      "cpu_p95_ratio": 1.0112,
+      "gpu_p95_ratio": 2.6022,
+      "interval_p95_ratio": 2.4082,
+      "presentation_wait_p95_ms": 30.4355,
+      "frame_budget_ms": 16.6667,
+      "cpu_budget_ms": 13.0,
+      "gpu_budget_ms": 14.6667,
+      "render_scale_min": 1.0,
+      "render_scale_max": 1.0,
+      "render_scale_end": 1.0,
+      "adpf": true,
+      "adpf_gpu_work": true,
+      "game_mode": 1,
+      "sustained_supported": false,
+      "sustained_enabled": false,
+      "thermal_api": true,
+      "thermal_status": 0,
+      "thermal_headroom_valid": true,
+      "thermal_headroom": 0.703,
+      "thermal_pressure": "none"
+    }
+  ]
+}

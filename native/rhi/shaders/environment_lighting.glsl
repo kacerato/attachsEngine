@@ -216,12 +216,33 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
     sum+=texture(shadowAtlas,vec3(clamp(atlasUv+vec2( offset.x, offset.y),tileMinimum,tileMaximum),projected.z));
     return sum*0.25;
   }
-  // Kernel largo (UltraSoft): grid 3x3 de buscas filtradas, espacadas de um
-  // texel, cobrindo a vizinhanca 4x4 que o 5x5 nao filtrado cobria.
-  mediump float visible=0.0;
-  for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x)
-    visible+=texture(shadowAtlas,vec3(clamp(atlasUv+vec2(x,y)*texel,
-                                            tileMinimum,tileMaximum),projected.z));
+  // Kernel largo (UltraSoft): a soma de 3x3 buscas filtradas espacadas de um
+  // texel e, exatamente, uma soma ponderada dos 4x4 texels em volta: todas as
+  // buscas compartilham a mesma fracao f dentro do texel, e por eixo os pesos
+  // somam (1-f, 1, 1, f). Quatro textureGather com comparacao devolvem esses
+  // 16 resultados -- 4 buscas no lugar de 9, mesmo valor final. Medido na Vila
+  // em S (POCO F7): a busca da sombra direcional era 20% do passe opaco.
+  highp float atlasSize=1.0/texel;
+  highp vec2 texelPosition=atlasUv*atlasSize-0.5;
+  highp vec2 base=floor(texelPosition);
+  mediump vec2 f=texelPosition-base;
+  // O bloco 4x4 (base-1 .. base+2) fica dentro do tile, como o centro de cada
+  // busca filtrada ficava; na borda a fracao deixa de casar com o bloco, mas
+  // ali a cascata ja esta na faixa de guarda que nenhum fragmento visivel usa.
+  highp vec2 tileStart=tile/grid*atlasSize,tileEnd=(tile+1.0)/grid*atlasSize;
+  base=clamp(base,tileStart+1.0,tileEnd-3.0);
+  // Cada gather devolve (i0,j1),(i1,j1),(i1,j0),(i0,j0) do 2x2 em volta do ponto.
+  mediump vec4 g00=textureGather(shadowAtlas,(base+vec2(0.0,0.0))*texel,projected.z);
+  mediump vec4 g10=textureGather(shadowAtlas,(base+vec2(2.0,0.0))*texel,projected.z);
+  mediump vec4 g01=textureGather(shadowAtlas,(base+vec2(0.0,2.0))*texel,projected.z);
+  mediump vec4 g11=textureGather(shadowAtlas,(base+vec2(2.0,2.0))*texel,projected.z);
+  mediump vec2 low=1.0-f;
+  // Linhas e colunas internas pesam 1; as externas, 1-f e f.
+  mediump float visible=
+      g00.w*low.x*low.y+g00.z*low.y+g00.x*low.x+g00.y+
+      g10.w*low.y+g10.z*f.x*low.y+g10.x+g10.y*f.x+
+      g01.w*low.x+g01.z+g01.x*low.x*f.y+g01.y*f.y+
+      g11.w+g11.z*f.x+g11.x*f.y+g11.y*f.x*f.y;
   return visible*(1.0/9.0);
 }
 

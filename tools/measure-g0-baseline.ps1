@@ -28,6 +28,8 @@ param(
     # Candidatas do G1/G2: bloom em cadeia de mips e AO em meia resolução.
     [switch]$BloomChain,
     [switch]$HalfAo,
+    # G1: máscara por desenho das luzes pontuais (aether.punctual_light_mask).
+    [switch]$LightMask,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -94,6 +96,7 @@ try {
             if($PostIsolation) { $launch+=@('--ei','aether.post_isolation',[string]$PostIsolation) }
             if($GpuIsolation) { $launch+=@('--ei','aether.gpu_isolation',[string]$GpuIsolation) }
             $launch+=@('--ez','aether.post_fog_resolve',$(if($FogResolve){'true'}else{'false'}))
+            $launch+=@('--ez','aether.punctual_light_mask',$(if($LightMask){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
@@ -123,7 +126,7 @@ try {
             }
             & $Adb logcat -d -s Aether.Android:I | Set-Content (Join-Path $run 'profile.log')
             $logText=Get-Content (Join-Path $run 'profile.log') -Raw
-            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain)\][^\r\n]*') | ForEach-Object Value
+            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask)\][^\r\n]*') | ForEach-Object Value
             $policy | Set-Content (Join-Path $run 'policy.txt')
             if($PostIsolation -and !($policy -match "\[PostIsolation\] mask=$PostIsolation ")) {
                 throw "A máscara de pós $PostIsolation não foi aplicada ($project/$tier)."
@@ -153,6 +156,8 @@ try {
             & $Adb shell dumpsys thermalservice | Set-Content (Join-Path $run 'thermal-after.txt')
             $fogResolved=[bool]($policy -match '\[PostFogResolve\] .*por texel')
             if($fogResolved -ne [bool]$FogResolve) { throw "Névoa resolvida=$fogResolved difere do pedido ($project/$tier)." }
+            $lightMasked=[bool]($policy -match '\[PunctualLightMask\] por desenho')
+            if($lightMasked -ne [bool]$LightMask) { throw "Máscara de luzes=$lightMasked difere do pedido ($project/$tier)." }
             $bloomChained=[bool]($policy -match '\[PostChain\] bloom em cadeia=1')
             $halfAoRan=[bool]($policy -match '\[PostChain\] .*AO em meia resolucao=1')
             if($bloomChained -ne [bool]$BloomChain -or $halfAoRan -ne [bool]$HalfAo) {

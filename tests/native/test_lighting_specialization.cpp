@@ -26,3 +26,20 @@ AE_TEST(point_lighting_specialization_tracks_the_uploaded_cone_and_shadow_contra
   pair[1].shadow[0] = -1;
   AE_EXPECT_TRUE(renderer::unshadowedPointLighting(pair), "removing the last tile restores the whole list");
 }
+
+AE_TEST(punctual_light_mask_keeps_only_lights_whose_sphere_reaches_the_draw) {
+  renderer::PunctualLight lights[3];
+  // Lanterna a 10 m com alcance 4; outra colada ao desenho; terceira longe.
+  lights[0].positionRange[0] = 10; lights[0].positionRange[3] = 4;
+  lights[1].positionRange[0] = 1;  lights[1].positionRange[3] = 1;
+  lights[2].positionRange[0] = 100; lights[2].positionRange[3] = 5;
+  const float center[3]{0, 0, 0};
+  AE_EXPECT_TRUE(renderer::punctualLightMask(center, 2.0f, lights) == 0b010u, "só a luz que alcança o raio do desenho");
+  AE_EXPECT_TRUE(renderer::punctualLightMask(center, 6.0f, lights) == 0b011u, "esfera tangente conta como alcançada");
+  AE_EXPECT_TRUE(renderer::punctualLightMask(center, std::numeric_limits<float>::infinity(), lights) == 0b111u,
+                 "desenho sem limites conhecidos mantém todas as luzes");
+  AE_EXPECT_TRUE(renderer::punctualLightMask(center, 2.0f, {lights, 0}) == 0u, "sem luzes aceitas, máscara vazia");
+  // Zero (buildNormalMatrix) é "sem máscara"; a máscara calculada vazia não pode colidir com ele.
+  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0u) == 256.0f, "máscara vazia é distinta de sem máscara");
+  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0xffu) == 511.0f, "oito bits exatos em float");
+}
