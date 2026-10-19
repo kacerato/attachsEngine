@@ -38,3 +38,7 @@ Código funcional `9fc2f719`, publicado na branch. APK `0.3.1-dev.terrain.202610
 - `TerrainQA108` do proprietário permaneceu sem gestos novos. Capturas/evidências são locais, não entram nas docs públicas.
 
 O primeiro bloco e os 71 itens continuam abertos. Este incremento não conclui materiais extensíveis, checkpoints/deltas/GC, vegetação, grafos nem todos os testes de voxel/caminhos no aparelho.
+
+## Publicação das docs
+
+AstraDocs `36bd0b7` publicado na main do site, com nota nova `2026-10-19-terreno-sliders-texturas-compartilhadas` e guia da revisão. Build: 2434 páginas; exportação: 2433 Markdown/JSON e dez exemplos; verificação de 594226 links sem erros. Revisão visual local desktop/mobile realizada. Vercel `dpl_6GFgCmEFqkVAGjWCQDB1zmKdP1zs` READY em produção; domínio `astraengine.com.br` confirmado por HTTP 200, nota/code 110 e seções de sliders/compartilhamento presentes. APK público permanece inalterado; 110 é teste privado. Código da engine continua exclusivamente na branch `codex/terrain-voxel-generator`.
