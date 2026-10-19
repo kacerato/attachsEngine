@@ -24,6 +24,7 @@
 #include "platform/android/astc_encode_probe.h"
 #include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
+#include "platform/android/android_telemetry.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/rendering_settings_file.h"
 #include "renderer/water_fft.h"
@@ -110,6 +111,8 @@ struct AndroidShell final {
   android_app *app = nullptr;
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidFrameProfiler frameProfiler;
+  // GT: telemetria opcional, ligada só pelo shell depois do consentimento.
+  ae::platform::android::AndroidTelemetry telemetry;
   ae::platform::android::AndroidFramePacer framePacer;
   ae::platform::android::AndroidPerformance performance;
   AdpfFrameSample pendingAdpfFrame{};
@@ -1471,6 +1474,8 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   // sem rebuild quando a histerese do monitor autorizar.
   shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
       shell.activeRenderingSettings, capabilities, ae::renderer::ThermalPressure::None);
+  shell.telemetry.writeEnvironment(features, capabilities.qualityRecommendation.profile,
+                                   shell.renderingPolicy.effectiveProfile);
   shell.activeRenderingPolicy = shell.renderingPolicy;
   partialImportTextures.store(shell.renderingPolicy.textures.streaming);
   shell.thermalPolicyApplied = false;
@@ -2332,6 +2337,7 @@ void android_main(android_app *app) {
       ae::platform::android::readBooleanLaunchOption(app->activity,
                                                      "aether.disable_transient_depth"));
   shell.frameProfiler.setEnabled(ae::platform::android::readFrameProfilingOption(app->activity));
+  shell.telemetry.configure(app->activity);
   shell.profileLockRenderingQuality=shell.frameProfiler.enabled() &&
       ae::platform::android::readBooleanLaunchOption(app->activity,"aether.lock_rendering_quality");
   {
@@ -4133,8 +4139,24 @@ void android_main(android_app *app) {
         context.deviceMemory = shell.instancedRenderer.deviceMemorySnapshot();
         shell.frameProfiler.record(shell.instancedRenderer.lastFrameTimings(), context,
                                     shell.instancedRenderer.drawnInstanceCount(), display.width, display.height);
+        if (shell.telemetry.enabled()) {
+          ae::profiler::TelemetryWindowContext window{};
+          window.scene = context.sceneId;
+          window.mode = shell.editorSession.isPlaying() ? "play" : "edit";
+          window.tier = ae::platform::android::telemetryTierName(shell.activeRenderingPolicy.effectiveProfile);
+          window.renderWidth = context.renderWidth;
+          window.renderHeight = context.renderHeight;
+          window.renderScale = context.renderScale;
+          window.thermalStatus = context.thermalStatus;
+          window.thermalHeadroom = context.thermalHeadroomValid ? context.thermalHeadroom : -1.0f;
+          window.targetFps = context.targetFps;
+          window.drawCalls = context.submittedDrawCallCount;
+          window.triangles = context.submittedTriangleCount;
+          shell.telemetry.record(shell.instancedRenderer.lastFrameTimings(), window);
+        }
       } else {
         shell.frameProfiler.reset();
+        shell.telemetry.reset();
       }
       if (frameStatus == ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate ||
           frameStatus == ae::rhi::SwapchainStatus::OutOfDateMustRecreate) {

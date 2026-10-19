@@ -16,6 +16,7 @@ import java.util.zip.ZipFile;
 
 /** One packaging/signing pipeline for Android and desktop; never edits its input APK/project. */
 public final class ApkExporter {
+    static final String INTERNET="android.permission.INTERNET";
     public interface Progress { void report(String stage); }
     public static final class Settings {
         public final String applicationId, label, versionName;
@@ -61,6 +62,9 @@ public final class ApkExporter {
                 manifest.setPackageName(settings.applicationId);
                 manifest.setVersionCode(settings.versionCode);manifest.setVersionName(settings.versionName);manifest.setApplicationLabel(settings.label);
                 ResXmlElement application=manifest.getApplicationElement();
+                // The editor's INTERNET permission exists only for its opt-in telemetry; a game never inherits it.
+                ResXmlElement internet=manifest.getUsesPermission(INTERNET);
+                if(internet!=null)manifest.getManifestElement().removeElementsIf(element->element==internet);
                 // The template contract has only these two activity classes. No editor launcher, aliases or providers are carried over.
                 application.removeElementsIf(element->Arrays.asList("activity","activity-alias","provider","service","receiver","profileable").contains(element.getName()));
                 ResXmlElement boot=manifest.getOrCreateMainActivity("dev.aether.editor.GameBootstrapActivity");
@@ -95,7 +99,8 @@ public final class ApkExporter {
                     !"dev.aether.editor.GameBootstrapActivity".equals(manifest.getMainActivityClassName())||
                     manifest.getActivity("dev.aether.editor.AetherActivity",false)==null||
                     manifest.listApplicationElementsByTag("activity").size()!=2||
-                    !manifest.listApplicationElementsByTag("activity-alias").isEmpty())
+                    !manifest.listApplicationElementsByTag("activity-alias").isEmpty()||
+                    manifest.getUsesPermissions().contains(INTERNET))
                     throw new IOException("Exported Android entry points failed verification");
             }
             GamePackage.extract(signed,new File(work,"verification"));

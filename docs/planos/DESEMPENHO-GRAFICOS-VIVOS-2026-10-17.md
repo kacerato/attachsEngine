@@ -277,6 +277,19 @@ reimportada da fonte oficial sem a autoria antiga de player/luz.
 
 ### GT — Telemetria de desempenho dos testadores
 
+> **Estado em 18/10/2026.** O servidor saiu do Supabase (limite de 2 projetos gratuitos)
+> para uma Neon Function no projeto `astra-telemetry`. O site `astraengine.com.br`
+> só repassa, e a gravação foi validada ponta a ponta em produção. O app já tem
+> consentimento na primeira abertura, Configurações › Telemetria de desempenho,
+> janelas de 600 quadros, fila em disco, envio em lote e "Apagar meus dados".
+> O jogo exportado sai sem a permissão de internet. Nada disso foi testado no
+> aparelho ainda.
+> Recorte desta primeira versão: FPS, intervalo, CPU da thread e do processo, GPU
+> (só quando os timestamps estão ligados; senão `null`), resolução, térmica, draws,
+> triângulos, modelo, GPU, RAM, tela, nível recomendado e resolvido.
+> Fora deste recorte, por enquanto: bateria, ADPF, GPU por passe, falhas e ANR,
+> Astra Bench e "Relatar lentidão". Detalhes em `services/telemetry/README.md`.
+
 Objetivo: transformar cada APK distribuído numa medição. O app já calcula quase
 tudo localmente (`platform/android/android_frame_profiler.h`: FPS, orçamento,
 pressão térmica, ADPF, draws, triângulos, flags de cada otimização); hoje isso só
@@ -686,8 +699,9 @@ ferramenta. Portanto:
 1. ~~Qual celular fraco temos?~~ Respondido em 17/10/2026: só o POCO F7; nível C
    via modo forçado + telemetria dos testadores.
 1a. ~~Servidor da telemetria?~~ Respondido em 17/10/2026: **Supabase**, projeto
-   próprio `astra-telemetry` (desenho no bloco GT). Pendente: autorizar a criação
-   do projeto quando o bloco GT começar.
+   próprio `astra-telemetry` (desenho no bloco GT). Em 18/10/2026 o Supabase recusou
+   o terceiro projeto gratuito; o proprietário escolheu a Vercel, e a recepção ficou
+   numa Neon Function (projeto Neon `astra-telemetry`) atrás de `astraengine.com.br`.
 1b. **Laboratório remoto** (Firebase Test Lab, Game Loop) para os primeiros dados
    de aparelhos fracos: usar ou esperar os testadores?
 2. ~~Meta do nível C?~~ Respondido em 17/10/2026: **60 FPS, mesmo com menos efeitos** (tabela do §7).

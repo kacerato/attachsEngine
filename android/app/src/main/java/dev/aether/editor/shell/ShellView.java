@@ -31,6 +31,7 @@ public final class ShellView extends View {
         void onProjectExport(Project project);
         void onNewProjectRequested();
         void onNavUnavailable(String label);
+        void onSettingsRequested();
         void onSplashFinished();
     }
 
@@ -626,6 +627,7 @@ public final class ShellView extends View {
     private void onNav(int index) {
         if (index == 0) { navIndex = 0; invalidate(); return; }
         if (index == 1) { requestNewProject(); return; }
+        if (index == 3) { if (listener != null) listener.onSettingsRequested(); return; }
         if (listener != null) listener.onNavUnavailable(NAV[index]);
     }
 

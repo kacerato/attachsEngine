@@ -1,7 +1,8 @@
 # Telemetria de desempenho (GT)
 
 Plano: `docs/planos/DESEMPENHO-GRAFICOS-VIVOS-2026-10-17.md`, bloco GT. Estado em
-18/10/2026: **recepção gravando em produção; o app ainda não envia.** O Supabase bateu o
+18/10/2026: **recepção gravando em produção; app com coleta e envio implementados, ainda
+não validados no aparelho.** O Supabase bateu o
 limite de 2 projetos gratuitos; a recepção foi para uma Neon Function ao lado do banco,
 com `DATABASE_URL` injetada pelo Neon. O site só repassa. A pasta `supabase/` fica como
 referência do esquema original e não é publicada.
@@ -15,9 +16,11 @@ referência do esquema original e não é publicada.
 | Endereço estável usado pelo app | AstraDocs `api/telemetry/ingest.js` (repasse) | `https://astraengine.com.br/api/telemetry/ingest/` |
 | Banco | Neon `astra-telemetry` (`dry-bar-61879098`), branch `main`, banco `telemetry`, us-east-1 | esquema v1 criado pela função |
 | Retenção de 180 dias | gatilho `retencao-180-dias`, 04:17 UTC, `POST /retention` | ativo |
-| Consentimento, fila local, envio, "Apagar meus dados", envelope do aparelho | app Android (Java) | pendente |
-| Ligação do nativo ao laço de quadros e ao JNI | `platform/android/android_main.cpp` | pendente |
-| Remoção no jogo exportado (módulo e permissão de internet) | exportador | pendente |
+| Janelas de 600 quadros após 5 s de aquecimento; reinicia ao trocar cena, modo ou nível | `native/profiler/telemetry_recorder.{h,cpp}` | `aether_telemetry_tests` 5/5 |
+| Fila em disco: `<sessão>.jsonl` (janelas) e `<sessão>.env.json` (GPU, níveis) | `platform/android/android_telemetry.{h,cpp}` | compila arm64; sem teste no aparelho |
+| Consentimento (primeira abertura) e Configurações › Telemetria de desempenho | `shell/SettingsSheet.java` | sem captura no aparelho |
+| Identidade aleatória, sessão por abertura do editor, envelope do aparelho, envio, "Apagar meus dados" | `shell/Telemetry.java`, `shell/TelemetryQueue.java` | `TelemetryQueueTest` |
+| Jogo exportado sem telemetria | não recebe as opções; `ApkExporter` remove `INTERNET` e recusa o APK se ela sobrar | sem export de teste |
 
 A URL usa barra final: o site tem `trailingSlash` e responde 308 a `/api/telemetry/ingest`.
 Função direta: `https://br-mute-dawn-b70p1deg-ingest.compute.c-13.us-east-1.aws.neon.tech/`.
@@ -40,6 +43,20 @@ Função direta: `https://br-mute-dawn-b70p1deg-ingest.compute.c-13.us-east-1.aw
 ```
 
 Apagar: `{"schema": "astra.telemetry.delete/1", "installation": "<uuid>"}`.
+
+## Fluxo no app
+
+1. Primeira abertura do shell (fora de bancada): a folha de Configurações pede a escolha
+   ("Compartilhar" / "Agora não"). Depois, ☰ Configurações liga, desliga, envia e apaga.
+2. Com consentimento, cada abertura do editor cria uma sessão (UUID) e passa
+   `aether.telemetry_dir` e `aether.telemetry_session` ao renderer. Execuções com
+   `aether.profile_frames` ou `astra.open_project` não coletam.
+3. O renderer grava uma janela a cada 600 quadros (~10 s a 60 Hz; ~5 s a 120 Hz), até 1 MB
+   por sessão, sem rede.
+4. Ao voltar à lista de projetos, o shell envia em lotes de 120. Erro 400/413 descarta o
+   lote; sem rede, 429 ou 5xx guarda o resto para a próxima vez.
+5. "Apagar meus dados" apaga a fila local, pede `astra.telemetry.delete/1` e troca a
+   identidade. Desligar a coleta descarta o que ainda não saiu.
 
 ## Acesso
 

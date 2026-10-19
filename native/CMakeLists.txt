@@ -390,6 +390,7 @@ add_library(aether_core STATIC
   profiler/frame_pressure.cpp
   profiler/frame_statistics.cpp
   profiler/telemetry_window.cpp
+  profiler/telemetry_recorder.cpp
 )
 target_include_directories(aether_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 add_dependencies(aether_core aether_component_codegen_check)
@@ -783,6 +784,7 @@ if(ANDROID)
     platform/android/android_performance.cpp
     platform/android/android_thermal_monitor.cpp
     platform/android/android_frame_profiler.cpp
+    platform/android/android_telemetry.cpp
     platform/android/android_frame_pacer.cpp
     platform/android/android_swappy_scheduler.cpp
     platform/android/android_window.cpp
@@ -1134,7 +1136,7 @@ if(NOT ANDROID)
   endif()
   add_executable(aether_family_base_tests ../tests/native/family_base_main.cpp ../tests/native/test_family_base.cpp ../tests/native/test_runtime_world.cpp)
   # Telemetria dos testadores (GT): só o núcleo; compila e roda em segundos.
-  add_executable(aether_telemetry_tests ../tests/native/family_base_main.cpp ../tests/native/test_telemetry_window.cpp)
+  add_executable(aether_telemetry_tests ../tests/native/family_base_main.cpp ../tests/native/test_telemetry_window.cpp ../tests/native/test_telemetry_recorder.cpp)
   target_include_directories(aether_telemetry_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_telemetry_tests PRIVATE aether_core)
   # Curve/resource invariants do not need Vulkan, physics or a full editor link.

@@ -49,6 +49,8 @@ public final class AstraShellActivity extends Activity implements ShellView.List
     private ShellView shell;
     private ProjectStore store;
     private NewProjectSheet sheet;
+    private SettingsSheet settings;
+    private Telemetry telemetry;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -57,6 +59,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         getWindow().setNavigationBarColor(Color.BLACK);
 
         store = new ProjectStore(this);
+        telemetry = new Telemetry(this);
         shell = new ShellView(this, store);
         shell.setListener(this);
 
@@ -79,6 +82,23 @@ public final class AstraShellActivity extends Activity implements ShellView.List
             toast("Projeto não encontrado: " + requested);
         }
         shell.showProjects();
+        // Primeiro contato: a escolha da telemetria vem antes de qualquer coleta.
+        if (requested == null && telemetry.consent() == Telemetry.Consent.UNKNOWN) showSettings(true);
+    }
+
+    @Override public void onSettingsRequested() { showSettings(false); }
+
+    private void showSettings(boolean firstRun) {
+        if (settings != null && settings.getParent() != null) return;
+        settings = new SettingsSheet(this, telemetry, firstRun);
+        root.addView(settings, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        // De volta à lista de projetos: o editor terminou e a fila pode sair.
+        telemetry.upload(null);
     }
 
     @Override public void onProjectPicked(Project project) {
@@ -178,6 +198,8 @@ public final class AstraShellActivity extends Activity implements ShellView.List
             if (launch.hasExtra(key)) intent.putExtra(key, launch.getIntExtra(key, 0));
         intent.putExtra("astra.project_path", project.path);
         intent.putExtra("astra.project_name", project.name);
+        telemetry.addLaunchExtras(intent, launch.getBooleanExtra("aether.profile_frames", false)
+                || launch.getStringExtra("astra.open_project") != null);
         startActivity(intent);
         return true;
     }
@@ -188,6 +210,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
 
     @Override public void onBackPressed() {
         if (sheet != null && sheet.getParent() != null) { sheet.dismiss(); return; }
+        if (settings != null && settings.getParent() != null) { settings.dismiss(); return; }
         super.onBackPressed();
     }
 
