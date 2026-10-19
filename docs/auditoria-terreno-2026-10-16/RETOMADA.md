@@ -1,6 +1,6 @@
 # Retomada — 16/10/2026
 
-Em andamento: [sliders e compartilhamento de texturas](INTERFACE-MEMORIA-2026-10-19.md). 64/64 cenários de terreno e 18/18 de publicação passaram no host. APK 110 em compilação; não confundir com validação Android. D09, primeiro bloco e plano de 71 itens continuam abertos.
+Última revisão: [sliders e compartilhamento de texturas](INTERFACE-MEMORIA-2026-10-19.md), código `9fc2f719`. 64/64 cenários de terreno e 18/18 de publicação passaram no host. APK 110 instalado: criação plana, sliders, escultura ao vivo, Undo/Redo e reabertura com LOD conferidos no POCO F7. Biblioteca do projeto antigo: 127,27→43,25 MiB. D09, primeiro bloco e plano de 71 itens continuam abertos.
 
 Última continuação: [base plana, escultura suave e reinício, APK 109](ESCULTURA-2026-10-19.md).
 59/59 testes; APK 109 instalado. Android: fluxo completo conferido no 108;

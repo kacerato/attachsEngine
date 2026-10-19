@@ -1,6 +1,6 @@
 # Interface e memória — 19/10/2026
 
-Estado: implementação local em validação; não é conclusão do primeiro bloco nem dos 71 itens.
+Estado: código publicado e APK 110 testado no POCO F7 nos cenários abaixo; não é conclusão do primeiro bloco nem dos 71 itens.
 
 ## Escopo deste incremento
 
@@ -24,4 +24,17 @@ A referência fundamenta o fluxo tamanho/intensidade e o princípio de dependên
 
 ## Evidência em andamento
 
-64/64 cenários de terreno e 18/18 de publicação de texturas passaram na revisão final. Incluem sampler, vida útil, reabertura por cache, políticas de streaming, sliders de uma/duas colunas, rolagem e limites de curvas/resolução. O auxiliar da suíte de texturas mantinha um ponteiro para métricas temporárias de fonte; sua vida útil foi corrigida, preservando as asserções. Capturas host: `build/terrain-evidence/sliders-final-ui-1280-1.png`, `sliders-final-ui-655-1.png` e `sliders-final-ui-1280-4-s1.png`. Proposta imagegen é hipótese visual, não implementação. APK 110 em compilação; testes Android pendentes.
+64/64 cenários de terreno e 18/18 de publicação de texturas passaram na revisão final. Incluem sampler, vida útil, reabertura por cache, políticas de streaming, sliders de uma/duas colunas, rolagem e limites de curvas/resolução. O auxiliar da suíte de texturas mantinha um ponteiro para métricas temporárias de fonte; sua vida útil foi corrigida, preservando as asserções. Capturas host: `build/terrain-evidence/sliders-final-ui-1280-1.png`, `sliders-final-ui-655-1.png` e `sliders-final-ui-1280-4-s1.png`. Proposta imagegen é hipótese visual, não implementação. A validação posterior do APK 110 está registrada abaixo.
+
+## APK 110 — validação Android
+
+Código funcional `9fc2f719`, publicado na branch. APK `0.3.1-dev.terrain.20261019.5`, code 110, SHA256 `7c03d93805560e0c34e6147d2a4a58adccc13ef955b261d9ee087039157cc654`, instalado por atualização no POCO F7. Auditorias de assinatura, identidade, ZIP/ARM64, atlas e igualdade do binário passaram. Limitação ELF16K anterior permanece.
+
+- Mesmo projeto `TerrenoQA_1510`, 795 operações: biblioteca contabilizada 127,27 MiB no 109 e 43,25 MiB no 110 (84,02 MiB / 66,0% menos). Capturas `device109-history-budget.png` e `device110-history-budget.png`; reedição aberta sem modificar o terreno. Não confundir orçamento da biblioteca com memória total do processo ou desempenho de todos os projetos.
+- Novo `TerrainQA110`: terreno plano sólido criado com 96 células pelo slider (partiu de 64). Raio/força visíveis antes das ferramentas. Intensidade ajustada por arraste e entrada exata 0,5; rolagem vertical não deslocou o valor horizontal.
+- Prévia capturada durante DOWN/MOVE: `device110-live-sculpt.png`; UP concluiu nove amostras. Undo voltou a zero e Redo restaurou nove. Gizmo de objeto ausente durante escultura.
+- LOD por duas colunas: 1→3 habilitou erro; erro ajustado a 1,9891%. Aplicação, salvar, reiniciar processo e reabrir preservaram nove operações e LOD/erro (`device110-reopened-lod.png`). Isso não certifica visualmente todas as transições por distância.
+- Logs `device110-history.log`, `device110-qa.log`, `device110-reopen.log`: sem FATAL EXCEPTION/Fatal signal no roteiro. Há mensagens do framework/vendor, não se afirma log inteiramente limpo.
+- `TerrainQA108` do proprietário permaneceu sem gestos novos. Capturas/evidências são locais, não entram nas docs públicas.
+
+O primeiro bloco e os 71 itens continuam abertos. Este incremento não conclui materiais extensíveis, checkpoints/deltas/GC, vegetação, grafos nem todos os testes de voxel/caminhos no aparelho.
