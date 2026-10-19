@@ -41,10 +41,14 @@ struct TerrainStroke {
   float surfaceDepth = 0;
   bool lockHeight = false, dimensionsLinked = true;
 };
-struct TerrainCurvePoint { float x = 0, y = 0; };
+struct TerrainCurvePoint {
+  float x = 0, y = 0;
+  bool operator==(const TerrainCurvePoint &) const = default;
+};
 struct TerrainPathPoint {
   float x = 0, y = 0, z = 0;
   bool curved = false;
+  bool operator==(const TerrainPathPoint &) const = default;
 };
 enum class TerrainPathCap : u32 { Round, Flat, Square };
 struct TerrainPath {
@@ -64,6 +68,7 @@ struct TerrainPath {
   std::vector<TerrainCurvePoint> profile{{0,1},{1,0}};
   std::vector<TerrainCurvePoint> textureProfile{{0,1},{1,0}};
   std::vector<TerrainCurvePoint> vegetationProfile{{0,1},{1,0}};
+  bool operator==(const TerrainPath &) const = default;
 };
 struct TerrainRecipe {
   TerrainMode mode = TerrainMode::Heightfield;
@@ -77,6 +82,10 @@ struct TerrainRecipe {
   float baseDepth = 8;
   bool blendedSurface = true;
   float macroVariation = .3f;
+  // Level 0 remains the collision surface. Additional render levels lock
+  // chunk borders and use the renderer's existing screen-space error budget.
+  u32 lodLevels = 1;
+  float lodRelativeError = .01f;
   std::vector<TerrainStroke> strokes;
   std::vector<TerrainPath> paths;
 };

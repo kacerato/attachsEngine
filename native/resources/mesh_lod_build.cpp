@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace ae::resources {
 namespace {
@@ -38,6 +39,7 @@ bool buildMeshLods(std::span<const u8> vertices, std::vector<u32> &indices,
   const u32 maximumLevels = std::clamp(settings.maximumLevels, 1u, renderer::MeshLodMaximumLevels);
   double missesBefore = 0, missesAfter = 0, triangles = 0;
   std::vector<u32> scratch, level0;
+  std::vector<float> attributes;
   for (usize d = 0; d < draws.size(); ++d) {
     const auto &draw = draws[d];
     const u32 count = draw.indexCount - draw.indexCount % 3;
@@ -61,6 +63,16 @@ bool buildMeshLods(std::span<const u8> vertices, std::vector<u32> &indices,
     if (count / 3 < settings.minimumTriangles) {++report.skippedSmall; continue;}
     // Cópia do nível 0: acrescentar níveis realoca `indices`.
     level0.assign(range, range + count);
+    attributes.clear();
+    if(settings.preserveSurfaceAttributes) {
+      attributes.resize(usize(localVertices)*7);
+      for(u32 v=0;v<localVertices;++v) {
+        const u8 *vertex=vertices.data()+(u64(draw.vertexOffset)+v)*renderer::MapVertexStride;
+        i16 normal[3];std::memcpy(normal,vertex+12,sizeof(normal));
+        for(u32 k=0;k<3;++k)attributes[usize(v)*7+k]=std::max(-1.f,float(normal[k])/32767.f);
+        for(u32 k=0;k<4;++k)attributes[usize(v)*7+3+k]=float(vertex[44+k])/255.f;
+      }
+    }
     const float scale = meshopt_simplifyScale(positions, localVertices, renderer::MapVertexStride);
     u32 previous = count;
     float previousError = 0;
@@ -69,10 +81,13 @@ bool buildMeshLods(std::span<const u8> vertices, std::vector<u32> &indices,
       const u32 target = std::max<u32>(settings.stopTriangles * 3, (previous / 2) / 3 * 3);
       scratch.resize(count);
       float relative = 0;
-      const u32 produced = static_cast<u32>(meshopt_simplify(scratch.data(), level0.data(), count, positions, localVertices,
-                                                             renderer::MapVertexStride, target,
-                                                             settings.maximumRelativeError, meshopt_SimplifyLockBorder,
-                                                             &relative));
+      constexpr float attributeWeights[]{.5f,.5f,.5f,1,1,1,1};
+      const u32 produced = static_cast<u32>(attributes.empty()
+        ? meshopt_simplify(scratch.data(), level0.data(), count, positions, localVertices,
+                          renderer::MapVertexStride, target,settings.maximumRelativeError,meshopt_SimplifyLockBorder,&relative)
+        : meshopt_simplifyWithAttributes(scratch.data(),level0.data(),count,positions,localVertices,
+                          renderer::MapVertexStride,attributes.data(),7*sizeof(float),attributeWeights,7,nullptr,
+                          target,settings.maximumRelativeError,meshopt_SimplifyLockBorder,&relative));
       // Sem redução real (bordas presas ou teto de erro): o nível seguinte
       // seria o mesmo desenho com outro nome.
       if (produced < 3 || produced > previous * 85 / 100) break;

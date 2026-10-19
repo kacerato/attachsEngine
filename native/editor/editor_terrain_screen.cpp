@@ -27,7 +27,7 @@ float contentHeight(const EditorScreenState &s) {
   if(s.terrainTab==0) {
     if(s.terrainSection==0)return (hf?348.f:298.f)+padding;
     if(s.terrainSection==1)return 410+padding;
-    return (hf?226.f:290.f)+padding;
+    return (hf?364.f:428.f)+padding;
   }
   if(s.terrainTab==4) {
     if(s.terrainDraft.paths.empty())return 104+padding;
@@ -375,6 +375,13 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
            r.collision ? "Colisão triangular: ligada"
                        : "Colisão triangular: desligada",
            EditorWidget::TerrainCollision, r.collision);
+    label("DETALHE À DISTÂNCIA");
+    const auto lodRow=row(64);
+    fieldAt({lodRow.x,lodRow.y,lodRow.width*.5f,lodRow.height},"Níveis · 1–4",r.lodLevels,28);
+    fieldAt({lodRow.x+lodRow.width*.5f,lodRow.y,lodRow.width*.5f,lodRow.height},
+            "Erro máx. (%)",r.lodRelativeError*100,29,r.lodLevels>1);
+    hint("Bordas preservadas · colisão no original.",
+         "Distância segue o erro em pixels de Qualidade.");
     const u64 samples =
         u64(r.cells + 1) * (r.cells + 1) * (hf ? 1 : r.verticalCells + 1);
     hint(std::to_string(samples) + " / 600.000 amostras",

@@ -39,3 +39,25 @@ AE_TEST(buffer_updates_scattered_edits_reconstruct_exactly) {
   AE_EXPECT_EQ(applied,next,"scattered vertex edits have no omitted bytes");
   AE_EXPECT_TRUE(plan.uploadedBytes<next.size()/2,"scattered edits still avoid copying the entire library");
 }
+AE_TEST(buffer_updates_capacity_growth_shrink_regrowth_and_budget) {
+  std::vector<u8> old(16384,7),next=old;
+  const auto capacity=authoringBufferCapacity(old.size(),0);
+  AE_EXPECT_EQ(capacity,u64(20480),"bounded initial headroom");
+  next.resize(18000,19);next[1]=3;
+  auto plan=planBufferUpdate(old,next,capacity);
+  AE_EXPECT_TRUE(plan.valid && !plan.replace && plan.uploadedBytes<2000,"growth only uploads a changed word and unknown tail");
+  std::vector<u8> gpu(capacity,99);std::copy(old.begin(),old.end(),gpu.begin());
+  for(const auto &range:plan.ranges)std::memcpy(gpu.data()+range.offset,next.data()+range.offset,range.bytes);
+  AE_EXPECT_TRUE(std::equal(next.begin(),next.end(),gpu.begin()),"growth reconstructs complete logical geometry");
+  old=next;next.resize(12000);plan=planBufferUpdate(old,next,capacity);
+  AE_EXPECT_TRUE(plan.valid && !plan.replace && plan.ranges.empty(),"shrink changes only logical extent");
+  old=next;next.resize(18000,51);plan=planBufferUpdate(old,next,capacity);
+  AE_EXPECT_EQ(plan.uploadedBytes,u64(6000),"regrowth never trusts the old inactive tail");
+  for(const auto &range:plan.ranges)std::memcpy(gpu.data()+range.offset,next.data()+range.offset,range.bytes);
+  AE_EXPECT_TRUE(std::equal(next.begin(),next.end(),gpu.begin()),"regrowth overwrites stale hidden bytes");
+  next.resize(24000,1);plan=planBufferUpdate(old,next,capacity);
+  AE_EXPECT_TRUE(plan.replace && plan.uploadedBytes==next.size(),"overflow requires a complete new allocation");
+  AE_EXPECT_TRUE(!planBufferUpdate(old,next,old.size()-4).valid,"inconsistent mirror/capacity refused");
+  AE_EXPECT_TRUE(authoringBufferCapacity(4096,64ull<<20)<(1u<<20),"large shrink releases excess allocation");
+  AE_EXPECT_EQ(authoringBufferCapacity(256ull<<20,0)-(256ull<<20),8ull<<20,"large growth has a fixed headroom bound");
+}
