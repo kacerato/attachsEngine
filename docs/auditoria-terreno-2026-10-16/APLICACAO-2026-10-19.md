@@ -92,3 +92,13 @@ Próximo ponto obrigatório: D09, residência/histórico por referências, sem a
 recursos usados em cenas ou Undo; D07 continua parcial. A biblioteca antiga ainda
 satura o limite do renderer. Não resolver aumentando limites ou cortando assets
 sem estudar o gerenciamento. O plano e as propriedades comprometidas permanecem.
+
+## Publicação desta entrega
+
+Engine: `03015d8c`, publicada somente em `codex/terrain-voxel-generator`.
+AstraDocs: `4bbec6909c43b8c2c3786f0c6d3e759703a1b6f8`, publicada na main do site.
+Deploy Vercel `dpl_DKp5aMh89c76BndCp2u6NxuNqHaP`: READY, domínio
+`astraengine.com.br`; nota 107 confirmada no site. Build: 2.434 páginas HTML,
+2.433 Markdown, dez exemplos; verificador: 594.213 links, zero erros.
+Reabertura final do 107 preservou 28 operações (`device107-reopened-final.png`).
+O APK público não foi substituído; 107 é a distribuição de teste instalada via ADB.
