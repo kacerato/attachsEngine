@@ -58,8 +58,9 @@ Captura nativa do cartão: `host-cartao-auditoria.png`.
 4. Aplicado numa esfera e comparado alternando a origem no próprio aparelho (região da esfera,
    luminância média): suavidade no canal **104,4**; alfa da cor base (sempre 1 nesta textura)
    **113,0**; rugosidade no canal sem inversão **113,0**, com pontos de especular saturado. Só a
-   leitura correta tira o brilho uniforme. As capturas da esfera mostram a textura do pacote e
-   ficam fora do repositório por licença. Logcat sem `E Aether.Vulkan`.
+   leitura correta tira o brilho uniforme. Da esquerda para a direita em
+   `poco-esfera-ab-origem-rugosidade.png`; a tela inteira com a origem restaurada está em
+   `poco-esfera-stones.png`. Logcat sem `E Aether.Vulkan`.
 
 ## Lacunas
 
