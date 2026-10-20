@@ -4145,12 +4145,12 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("fog_height_falloff");
         set => Component.SetFloat("fog_height_falloff", value);
     }
-    /// <summary>Compensação (EV)</summary>
+    /// <summary>Compensação (EV). Soma à exposição medida ou fixa: positivo clareia</summary>
     /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float ExposureEv
+    public float ExposureCompensation
     {
-        get => Component.GetFloat("exposure_ev");
-        set => Component.SetFloat("exposure_ev", value);
+        get => Component.GetFloat("exposure_compensation");
+        set => Component.SetFloat("exposure_compensation", value);
     }
     /// <summary>Limiar do bloom</summary>
     /// <remarks>Faixa válida: 0 a 64.</remarks>
@@ -4327,54 +4327,61 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("ground_albedo");
         set => Component.SetFloat("ground_albedo", value);
     }
-    /// <summary>EV mínimo (EV)</summary>
-    /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float AutoExposureMinEv
+    /// <summary>Limite mínimo (EV100). EV100 mais baixo que a medição pode atingir: a noite não vira dia</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureLimitMin
     {
-        get => Component.GetFloat("auto_exposure_min_ev");
-        set => Component.SetFloat("auto_exposure_min_ev", value);
+        get => Component.GetFloat("exposure_limit_min");
+        set => Component.SetFloat("exposure_limit_min", value);
     }
-    /// <summary>EV máximo (EV)</summary>
-    /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float AutoExposureMaxEv
+    /// <summary>Limite máximo (EV100). EV100 mais alto: limita o escurecimento de cenas muito claras</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureLimitMax
     {
-        get => Component.GetFloat("auto_exposure_max_ev");
-        set => Component.SetFloat("auto_exposure_max_ev", value);
+        get => Component.GetFloat("exposure_limit_max");
+        set => Component.SetFloat("exposure_limit_max", value);
     }
-    /// <summary>Corte baixo</summary>
-    /// <remarks>Faixa válida: 0 a 1.</remarks>
-    public float AutoExposureLowPercent
+    /// <summary>Percentual baixo (%). Descarta os pixels mais escuros do histograma</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float ExposureHistogramLow
     {
-        get => Component.GetFloat("auto_exposure_low_percent");
-        set => Component.SetFloat("auto_exposure_low_percent", value);
+        get => Component.GetFloat("exposure_histogram_low");
+        set => Component.SetFloat("exposure_histogram_low", value);
     }
-    /// <summary>Corte alto</summary>
-    /// <remarks>Faixa válida: 0 a 1.</remarks>
-    public float AutoExposureHighPercent
+    /// <summary>Percentual alto (%). Descarta os pixels mais claros do histograma</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float ExposureHistogramHigh
     {
-        get => Component.GetFloat("auto_exposure_high_percent");
-        set => Component.SetFloat("auto_exposure_high_percent", value);
+        get => Component.GetFloat("exposure_histogram_high");
+        set => Component.SetFloat("exposure_histogram_high", value);
     }
-    /// <summary>Cinza alvo</summary>
-    /// <remarks>Faixa válida: 0.01 a 1.</remarks>
-    public float AutoExposureTargetGrey
+    /// <summary>Cinza médio alvo. Cinza para o qual a média medida é mapeada (12,5%, 14% ou 18%)</summary>
+    /// <remarks>Faixa válida: 0.05 a 0.5.</remarks>
+    public float ExposureTargetMidGrey
     {
-        get => Component.GetFloat("auto_exposure_target_grey");
-        set => Component.SetFloat("auto_exposure_target_grey", value);
+        get => Component.GetFloat("exposure_target_mid_grey");
+        set => Component.SetFloat("exposure_target_mid_grey", value);
     }
-    /// <summary>Velocidade ao escurecer (EV/s)</summary>
-    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
-    public float AutoExposureSpeedUp
+    /// <summary>Escuro para claro. Velocidade da adaptação ao sair do escuro para o claro</summary>
+    /// <remarks>Faixa válida: 0.001 a 100.</remarks>
+    public float ExposureSpeedDarkToLight
     {
-        get => Component.GetFloat("auto_exposure_speed_up");
-        set => Component.SetFloat("auto_exposure_speed_up", value);
+        get => Component.GetFloat("exposure_speed_dark_to_light");
+        set => Component.SetFloat("exposure_speed_dark_to_light", value);
     }
-    /// <summary>Velocidade ao clarear (EV/s)</summary>
-    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
-    public float AutoExposureSpeedDown
+    /// <summary>Claro para escuro. Velocidade da adaptação ao entrar no escuro</summary>
+    /// <remarks>Faixa válida: 0.001 a 100.</remarks>
+    public float ExposureSpeedLightToDark
     {
-        get => Component.GetFloat("auto_exposure_speed_down");
-        set => Component.SetFloat("auto_exposure_speed_down", value);
+        get => Component.GetFloat("exposure_speed_light_to_dark");
+        set => Component.SetFloat("exposure_speed_light_to_dark", value);
+    }
+    /// <summary>Exposição fixa (EV100). EV100 da câmera: maior escurece</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureFixed
+    {
+        get => Component.GetFloat("exposure_fixed");
+        set => Component.SetFloat("exposure_fixed", value);
     }
     /// <summary>Rotação HDRI (°)</summary>
     /// <remarks>Faixa válida: -360 a 360.</remarks>
@@ -4605,43 +4612,31 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("fog");
         set => Component.SetBool("fog", value);
     }
-    /// <summary>Pós-processamento. Ativa os overrides autorais desta cena</summary>
+    /// <summary>Pós-processamento ativo. Liga o pós desta vista; a curva vem logo abaixo</summary>
     public bool Post
     {
         get => Component.GetBool("post");
         set => Component.SetBool("post", value);
     }
-    /// <summary>Exposição automática. Mede luminância HDR e adapta a exposição por câmera</summary>
-    public bool AutoExposure
-    {
-        get => Component.GetBool("auto_exposure");
-        set => Component.SetBool("auto_exposure", value);
-    }
-    /// <summary>Peso central. Prioriza o centro da imagem na medição</summary>
-    public bool AutoExposureCenterWeighted
-    {
-        get => Component.GetBool("auto_exposure_center_weighted");
-        set => Component.SetBool("auto_exposure_center_weighted", value);
-    }
-    /// <summary>Bloom. Espalha altas luzes antes do tonemap</summary>
+    /// <summary>Ativo. Espalha altas luzes antes do tonemap</summary>
     public bool Bloom
     {
         get => Component.GetBool("bloom");
         set => Component.SetBool("bloom", value);
     }
-    /// <summary>Vinheta. Escurece gradualmente as bordas</summary>
+    /// <summary>Ativo. Escurece gradualmente as bordas</summary>
     public bool Vignette
     {
         get => Component.GetBool("vignette");
         set => Component.SetBool("vignette", value);
     }
-    /// <summary>Grão de filme. Adiciona grão sensível à luminância depois da resolução temporal</summary>
+    /// <summary>Ativo. Adiciona grão sensível à luminância depois da resolução temporal</summary>
     public bool FilmGrain
     {
         get => Component.GetBool("film_grain");
         set => Component.SetBool("film_grain", value);
     }
-    /// <summary>Oclusão ambiente. Escurece contatos e concavidades a partir da profundidade da câmera</summary>
+    /// <summary>Ativo. Escurece contatos e concavidades a partir da profundidade da câmera</summary>
     public bool AmbientOcclusion
     {
         get => Component.GetBool("ambient_occlusion");
@@ -4659,7 +4654,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_fog");
         set => Component.SetBool("override_fog", value);
     }
-    /// <summary>Sobrescrever pós. Participa da mistura de exposição e pós</summary>
+    /// <summary>Sobrescrever Tonemapping. Este volume decide o Tonemapping e a chave geral do pós</summary>
     public bool OverridePost
     {
         get => Component.GetBool("override_post");
@@ -4671,7 +4666,49 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_indirect");
         set => Component.SetBool("override_indirect", value);
     }
-    /// <summary>Sobrescrever nuvens. Participa da mistura do Cloud Layer, separado do céu</summary>
+    /// <summary>Sobrescrever exposição. Marcado: este volume decide exposição. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideExposure
+    {
+        get => Component.GetBool("override_exposure");
+        set => Component.SetBool("override_exposure", value);
+    }
+    /// <summary>Sobrescrever bloom. Marcado: este volume decide bloom. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideBloom
+    {
+        get => Component.GetBool("override_bloom");
+        set => Component.SetBool("override_bloom", value);
+    }
+    /// <summary>Sobrescrever vinheta. Marcado: este volume decide vinheta. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideVignette
+    {
+        get => Component.GetBool("override_vignette");
+        set => Component.SetBool("override_vignette", value);
+    }
+    /// <summary>Sobrescrever ajustes de cor. Marcado: este volume decide ajustes de cor. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideColorAdjustments
+    {
+        get => Component.GetBool("override_color_adjustments");
+        set => Component.SetBool("override_color_adjustments", value);
+    }
+    /// <summary>Sobrescrever cor. Marcado: este volume decide cor. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideColorGrading
+    {
+        get => Component.GetBool("override_color_grading");
+        set => Component.SetBool("override_color_grading", value);
+    }
+    /// <summary>Sobrescrever grão de filme. Marcado: este volume decide grão de filme. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideFilmGrain
+    {
+        get => Component.GetBool("override_film_grain");
+        set => Component.SetBool("override_film_grain", value);
+    }
+    /// <summary>Sobrescrever oclusão ambiente. Marcado: este volume decide oclusão ambiente. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideAmbientOcclusion
+    {
+        get => Component.GetBool("override_ambient_occlusion");
+        set => Component.SetBool("override_ambient_occlusion", value);
+    }
+    /// <summary>Sobrescrever nuvens. Marcado: este volume decide as nuvens. Desmarcado: herda do volume de prioridade menor</summary>
     public bool OverrideClouds
     {
         get => Component.GetBool("override_clouds");
@@ -4730,6 +4767,53 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     {
         get => (VolumeShapeOption)Component.GetEnum("volume_shape");
         set => Component.SetEnum("volume_shape", (uint)value);
+    }
+    public enum ExposureModeOption : uint
+    {
+        Fixa = 0,
+        Automatica = 1,
+        AutomaticaPorHistograma = 2,
+    }
+    /// <summary>Modo. Fixa usa o EV100 informado; as automáticas medem a luminância da câmera a cada quadro</summary>
+    public ExposureModeOption ExposureMode
+    {
+        get => (ExposureModeOption)Component.GetEnum("exposure_mode");
+        set => Component.SetEnum("exposure_mode", (uint)value);
+    }
+    public enum ExposureMeteringOption : uint
+    {
+        Media = 0,
+        Pontual = 1,
+        PesoNoCentro = 2,
+    }
+    /// <summary>Medição. Quais pixels pesam na média: a imagem toda, um círculo no centro ou peso que cai até a borda</summary>
+    public ExposureMeteringOption ExposureMetering
+    {
+        get => (ExposureMeteringOption)Component.GetEnum("exposure_metering");
+        set => Component.SetEnum("exposure_metering", (uint)value);
+    }
+    public enum ExposureAdaptationOption : uint
+    {
+        Imediata = 0,
+        Progressiva = 1,
+    }
+    /// <summary>Adaptação. Imediata salta para a medição; progressiva acompanha como o olho</summary>
+    public ExposureAdaptationOption ExposureAdaptation
+    {
+        get => (ExposureAdaptationOption)Component.GetEnum("exposure_adaptation");
+        set => Component.SetEnum("exposure_adaptation", (uint)value);
+    }
+    public enum ExposureTargetMidGreyChoiceOption : uint
+    {
+        Cinza125 = 0,
+        Cinza14 = 1,
+        Cinza18 = 2,
+    }
+    /// <summary>Cinza médio alvo. Tom para o qual a média medida é levada</summary>
+    public ExposureTargetMidGreyChoiceOption ExposureTargetMidGreyChoice
+    {
+        get => (ExposureTargetMidGreyChoiceOption)Component.GetEnum("exposure_target_mid_grey_choice");
+        set => Component.SetEnum("exposure_target_mid_grey_choice", (uint)value);
     }
     public enum VolumeLayerOption : uint
     {

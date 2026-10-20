@@ -56,7 +56,7 @@ std::string EnvironmentProfile::serialize() const {
   out<<' '<<values.atmosphere<<' '<<values.sunDiskDegrees<<' '<<values.sunDiskIntensity;
   writeColor(out,values.fogColor);
   out<<' '<<values.fogDensity<<' '<<values.fogStart<<' '<<values.fogBaseHeight
-     <<' '<<values.fogHeightFalloff<<' '<<values.exposureEv
+     <<' '<<values.fogHeightFalloff<<' '<<values.exposureCompensation
      <<' '<<values.bloomThreshold<<' '<<values.bloomIntensity<<' '<<values.contrast
      <<' '<<values.saturation<<' '<<values.vignetteIntensity<<' '<<values.filmGrainIntensity
      <<' '<<values.ambientOcclusionRadius<<' '<<values.ambientOcclusionIntensity
@@ -67,10 +67,12 @@ std::string EnvironmentProfile::serialize() const {
      <<' '<<values.atmosphereHeightKm<<' '<<values.groundAlbedo
      <<' '<<(values.environmentMap.valid()?values.environmentMap.text():"-")
      <<' '<<values.hdriRotationDegrees<<' '<<values.hdriExposureEv
-     <<' '<<values.autoExposure<<' '<<values.autoExposureMinEv<<' '<<values.autoExposureMaxEv
-     <<' '<<values.autoExposureLowPercent<<' '<<values.autoExposureHighPercent
-     <<' '<<values.autoExposureTargetGrey<<' '<<values.autoExposureSpeedUp
-     <<' '<<values.autoExposureSpeedDown<<' '<<values.autoExposureCenterWeighted
+     <<' '<<static_cast<u32>(values.exposureMode)<<' '<<static_cast<u32>(values.exposureMetering)
+     <<' '<<static_cast<u32>(values.exposureAdaptation)<<' '<<values.fixedExposure
+     <<' '<<values.exposureLimitMin<<' '<<values.exposureLimitMax
+     <<' '<<values.exposureHistogramLow<<' '<<values.exposureHistogramHigh
+     <<' '<<values.exposureTargetMidGrey<<' '<<values.exposureSpeedDarkToLight
+     <<' '<<values.exposureSpeedLightToDark
      <<' '<<values.fogLightEnergy;
   writeGrading(out,values.grading);
   out<<' '<<values.sunGlare<<' '<<values.moonPhase<<' '<<values.moonSizeDegrees
@@ -107,7 +109,7 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
      !readColor(in,candidate.values.fogColor) ||
      !(in>>candidate.values.fogDensity>>candidate.values.fogStart)) return false;
   if(version>=6 && !(in>>candidate.values.fogBaseHeight>>candidate.values.fogHeightFalloff)) return false;
-  if(!(in>>candidate.values.exposureEv>>
+  if(!(in>>candidate.values.exposureCompensation>>
        candidate.values.bloomThreshold>>candidate.values.bloomIntensity>>candidate.values.contrast>>
        candidate.values.saturation>>candidate.values.vignetteIntensity)) return false;
   if(version>=2 && !(in>>candidate.values.filmGrainIntensity)) return false;
@@ -124,11 +126,22 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
     if(!(in>>map>>candidate.values.hdriRotationDegrees>>candidate.values.hdriExposureEv) ||
        (map!="-"&&!AssetGuid::parse(map,candidate.values.environmentMap))) return false;
   }
-  if(version>=7 && !(in>>candidate.values.autoExposure>>candidate.values.autoExposureMinEv>>
-      candidate.values.autoExposureMaxEv>>candidate.values.autoExposureLowPercent>>
-      candidate.values.autoExposureHighPercent>>candidate.values.autoExposureTargetGrey>>
-      candidate.values.autoExposureSpeedUp>>candidate.values.autoExposureSpeedDown>>
-      candidate.values.autoExposureCenterWeighted)) return false;
+  // v12: Exposure do HDRP (modo, metering, adaptação, EV100). Da v7 à v11 o
+  // arquivo trazia a exposição automática antiga, convertida no fim.
+  bool legacyAuto=false,legacyCenter=false;
+  auto &v=candidate.values;
+  if(version>=12) {
+    u32 mode=0,metering=0,adaptation=0;
+    if(!(in>>mode>>metering>>adaptation>>v.fixedExposure>>v.exposureLimitMin>>v.exposureLimitMax>>
+         v.exposureHistogramLow>>v.exposureHistogramHigh>>v.exposureTargetMidGrey>>
+         v.exposureSpeedDarkToLight>>v.exposureSpeedLightToDark) || mode>2 || metering>2 || adaptation>1)
+      return false;
+    v.exposureMode=static_cast<renderer::ExposureMode>(mode);
+    v.exposureMetering=static_cast<renderer::ExposureMetering>(metering);
+    v.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(adaptation);
+  } else if(version>=7 && !(in>>legacyAuto>>v.exposureLimitMin>>v.exposureLimitMax>>
+      v.exposureHistogramLow>>v.exposureHistogramHigh>>v.exposureTargetMidGrey>>
+      v.exposureSpeedDarkToLight>>v.exposureSpeedLightToDark>>legacyCenter)) return false;
   if(version>=8 && !(in>>candidate.values.fogLightEnergy)) return false;
   if(version>=9 && !readGrading(in,candidate.values.grading)) return false;
   // v10 (G4): corpos celestes. Perfil antigo fica com os padrões novos.
@@ -143,6 +156,7 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
        !(in>>clouds.exposureEv>>clouds.windOrientationDegrees>>clouds.windSpeedKmh>>clouds.density>>
          clouds.ambientDimmer>>clouds.shadowMultiplier)) return false;
   }
+  if(version<12) renderer::migrateLegacyExposure(v,version>=7,legacyAuto,legacyCenter);
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -186,16 +200,18 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       normalized.groundAlbedo==expected.groundAlbedo&&normalized.fogDensity==expected.fogDensity&&
       normalized.fogStart==expected.fogStart&&normalized.fogBaseHeight==expected.fogBaseHeight&&
       normalized.fogHeightFalloff==expected.fogHeightFalloff&&
-      normalized.fogLightEnergy==expected.fogLightEnergy&&normalized.exposureEv==expected.exposureEv&&
-      normalized.autoExposure==expected.autoExposure&&
-      normalized.autoExposureMinEv==expected.autoExposureMinEv&&
-      normalized.autoExposureMaxEv==expected.autoExposureMaxEv&&
-      normalized.autoExposureLowPercent==expected.autoExposureLowPercent&&
-      normalized.autoExposureHighPercent==expected.autoExposureHighPercent&&
-      normalized.autoExposureTargetGrey==expected.autoExposureTargetGrey&&
-      normalized.autoExposureSpeedUp==expected.autoExposureSpeedUp&&
-      normalized.autoExposureSpeedDown==expected.autoExposureSpeedDown&&
-      normalized.autoExposureCenterWeighted==expected.autoExposureCenterWeighted&&
+      normalized.fogLightEnergy==expected.fogLightEnergy&&
+      normalized.exposureMode==expected.exposureMode&&normalized.exposureMetering==expected.exposureMetering&&
+      normalized.exposureAdaptation==expected.exposureAdaptation&&
+      normalized.fixedExposure==expected.fixedExposure&&
+      normalized.exposureCompensation==expected.exposureCompensation&&
+      normalized.exposureLimitMin==expected.exposureLimitMin&&
+      normalized.exposureLimitMax==expected.exposureLimitMax&&
+      normalized.exposureHistogramLow==expected.exposureHistogramLow&&
+      normalized.exposureHistogramHigh==expected.exposureHistogramHigh&&
+      normalized.exposureTargetMidGrey==expected.exposureTargetMidGrey&&
+      normalized.exposureSpeedDarkToLight==expected.exposureSpeedDarkToLight&&
+      normalized.exposureSpeedLightToDark==expected.exposureSpeedLightToDark&&
       normalized.bloomThreshold==expected.bloomThreshold&&normalized.bloomIntensity==expected.bloomIntensity&&
       normalized.contrast==expected.contrast&&normalized.saturation==expected.saturation&&
       normalized.vignetteIntensity==expected.vignetteIntensity&&

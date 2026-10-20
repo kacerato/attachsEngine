@@ -52,7 +52,7 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
       renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,view.frustum.cameraPosition,
                                         view.environmentLayerMask);
   if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_))
-    previewSceneEnvironment_.autoExposure=false;
+    previewSceneEnvironment_.exposureMode=renderer::ExposureMode::Fixed;
   renderer::SharedEnvironmentMap selected;
   if(previewSceneEnvironment_.active && previewSceneEnvironment_.environmentMap.valid()) {
     for(const auto &[guid,resource]:environmentMaps_)
@@ -248,7 +248,7 @@ bool InstancedRenderer::prepareCameraPreview() {
   vkUpdateDescriptorSets(device_,waterSubpassActive_?2u:1u,writes,0,nullptr);
   if(!prepareCameraPreviewEnvironment()) return false;
   if(previewSceneEnvironment_.active && previewSceneEnvironment_.post &&
-     previewSceneEnvironment_.autoExposure &&
+     previewSceneEnvironment_.automaticExposure() &&
      (!hdrSceneColor_ || !autoExposurePipelines_[0] || !autoExposurePipelines_[1])) {
     previewDiagnostic_="Exposição automática requer HDR e compute";
     return false;

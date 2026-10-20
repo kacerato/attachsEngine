@@ -5897,13 +5897,20 @@ bool EditorSession::createSceneTemplate(u32 index) {
     std::copy(volume.size,volume.size+3,environment->boxSize);
     environment->blendDistance=volume.blendDistance;
     environment->values.priority=volume.priority;
-    environment->values.exposureEv=volume.exposureEv;
+    // Exposição fixa do modelo (EV de clareamento) em EV100, como a Fixed da Unity.
+    environment->values.exposureMode=renderer::ExposureMode::Fixed;
+    environment->values.fixedExposure=-volume.exposureEv-std::log2(1.2f);
     environment->values.post=true;
     environment->values.indirectDiffuse=volume.indirectDiffuse;
     environment->values.indirectSpecular=volume.indirectSpecular;
     // A caixa do interior só troca a exposição: céu e neblina continuam os do
     // dia, que é o que se vê pela porta.
-    if(volume.box) {environment->overrideSky=false;environment->overrideFog=false;}
+    if(volume.box) {
+      environment->overrideSky=false;environment->overrideFog=false;
+      environment->overrideBloom=environment->overrideVignette=environment->overrideColorAdjustments=
+          environment->overrideColorGrading=environment->overrideFilmGrain=
+          environment->overrideAmbientOcclusion=false;
+    }
     if(!history_.applyValues(document_,id,values)) complete=false;
   }
   if(!complete) {

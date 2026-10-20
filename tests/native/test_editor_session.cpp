@@ -4528,7 +4528,7 @@ AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
     for(u32 i=0;i<groups.size();++i) if(groups[i]==name) return i;
     return 0xffffffffu;
   };
-  AE_EXPECT_TRUE(groupOf("Neblina")!=0xffffffffu && groupOf("Pós")!=0xffffffffu,"grupos do esquema");
+  AE_EXPECT_TRUE(groupOf("Neblina")!=0xffffffffu && groupOf("Tonemapping")!=0xffffffffu,"grupos do esquema");
   const auto rowOf=[&](std::string_view id) {
     for(u32 i=0;i<state.profileRows.size();++i) if(state.profileRows[i].id==id) return i;
     return 0xffffffffu;
@@ -4558,7 +4558,7 @@ AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
   AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.1 0.2 0.3",true),"trio aceito");
   AE_EXPECT_TRUE(std::abs(profile()->values.fogColor[2]-.3f)<1e-5f,"cor gravada no perfil");
   // Opção: tonemapping cicla.
-  goTo(groupOf("Pós"));
+  goTo(groupOf("Tonemapping"));
   if(rowOf("tone_mapper")!=0xffffffffu) {
     const auto before=profile()->values.toneMapper;
     revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
@@ -5953,7 +5953,7 @@ AE_TEST(multiple_environment_profiles_preserve_other_fields_and_synchronize_thei
     auto *environment=static_cast<scene::Environment*>(entity.components.add(scene::Environment::descriptor));
     environment->values.fog=true;environment->values.fogColor[0]=i?.8f:.2f;
     environment->values.fogColor[1]=.3f;environment->values.fogColor[2]=.4f;
-    environment->values.exposureEv=static_cast<float>(i);environment->weight=.6f;
+    environment->values.exposureCompensation=static_cast<float>(i);environment->weight=.6f;
     const auto instance=environment->instanceId();
     AE_EXPECT_TRUE(doc.applyEntityValues(entities[i],entity),"ambiente real");
     guids[i]=session.createEnvironmentProfile(entities[i],instance,diagnostic);
@@ -5978,7 +5978,7 @@ AE_TEST(multiple_environment_profiles_preserve_other_fields_and_synchronize_thei
   for(u32 i=0;i<2;++i) {
     const auto *profile=session.findEnvironmentProfile(guids[i]);
     AE_EXPECT_TRUE(std::abs(profile->values.fogColor[0]-.2f)<1e-5f,"perfil recebe propriedade");
-    AE_EXPECT_EQ(profile->values.exposureEv,static_cast<float>(i),"exposição individual preservada");
+    AE_EXPECT_EQ(profile->values.exposureCompensation,static_cast<float>(i),"exposição individual preservada");
     const auto *environment=static_cast<const scene::Environment*>(doc.find(entities[i])->components.find(scene::Environment::descriptor));
     AE_EXPECT_TRUE(std::abs(environment->values.fogColor[0]-.2f)<1e-5f && std::abs(environment->weight-.6f)<1e-5f,"consumidor sincronizado sem alterar volume");
   }

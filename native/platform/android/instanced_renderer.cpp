@@ -1696,7 +1696,10 @@ bool applySceneEnvironmentLook(
   frame.sceneFog[1]=look.fogStart;
   frame.sceneFog[2]=look.fogBaseHeight;
   frame.sceneFog[3]=look.fogHeightFalloff;
-  frame.scenePost[0]=look.active&&look.post&&postEnabled?look.exposureEv:0.0f;
+  // Fixa: o EV100 vira EV de clareamento aqui. Automática: o estado da GPU
+  // (instanced_auto_exposure.inl) já traz compensação, adaptação e limites.
+  frame.scenePost[0]=look.active&&look.post&&postEnabled&&!look.automaticExposure()?
+      look.fixedBrighteningEv():0.0f;
   frame.scenePost[1]=look.active&&look.post&&postEnabled?
       static_cast<float>(look.toneMapper):static_cast<float>(renderer::ToneMapper::Aces);
   frame.scenePost[3]=look.active&&look.post&&postEnabled?1.0f:0.0f;
@@ -6261,14 +6264,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
 
-  const auto cachedLook=sceneEnvironment_.active?sceneEnvironment_:
-      renderer::defaultSceneViewEnvironment();
+  // A exposição automática não impede o reaproveitamento: ele exige o mesmo
+  // tempo, e com dt zero o estado adaptado da câmera não muda.
   const bool sceneCacheEligible=editorSceneReuseEnabled_ && editorBackground_ && dirtRoadPreview_ &&
       renderingPolicy_.post.dedicatedPass && postPipeline_!=VK_NULL_HANDLE &&
       !temporalInputsActive_ && !temporalUpscaler_.ready() &&
       waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
-      !textureStreamingDebugView_ &&
-      !cachedLook.autoExposure;
+      !textureStreamingDebugView_;
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
       (textureStreamingDebugView_?32u:0u);
@@ -7154,7 +7156,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(renderingPolicy_.post.dedicatedPass) {
     auto look=sceneEnvironment_.active?sceneEnvironment_:
         (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
-    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.autoExposure=false;
+    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.exposureMode=renderer::ExposureMode::Fixed;
     const auto record=[&](const renderer::SceneEnvironment &environment) {
       return recordAutoExposure(0,environment,camera,timeSeconds,physicalSceneViewport(),
                                 renderWidth(),renderHeight(),renderTargetWidth(),renderTargetHeight(),
@@ -7162,11 +7164,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     };
     if(!record(look)) {
       const std::string diagnostic=autoExposureDiagnostic_;
-      look.autoExposure=false;
+      look.exposureMode=renderer::ExposureMode::Fixed;
       if(!record(look)) return rhi::SwapchainStatus::FatalError;
       autoExposureDiagnostic_=diagnostic;
     }
-  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.autoExposure) {
+  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.automaticExposure()) {
     autoExposureDiagnostic_="Exposição automática requer pós-processamento dedicado";
   } else autoExposureDiagnostic_.clear();
   endGpuRegion(GpuPassClass::AutoExposure);

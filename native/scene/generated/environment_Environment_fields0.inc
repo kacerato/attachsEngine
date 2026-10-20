@@ -5,3 +5,10 @@
   bool overridePost = true;
   bool overrideIndirect = true;
   bool overrideClouds = true;
+  bool overrideExposure = true;
+  bool overrideBloom = true;
+  bool overrideVignette = true;
+  bool overrideColorAdjustments = true;
+  bool overrideColorGrading = true;
+  bool overrideFilmGrain = true;
+  bool overrideAmbientOcclusion = true;

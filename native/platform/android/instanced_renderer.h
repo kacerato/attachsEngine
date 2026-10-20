@@ -953,6 +953,7 @@ private:
     u32 activeWidth=0,activeHeight=0,allocatedWidth=0,allocatedHeight=0;
     u64 sceneEpoch=0;
     u32 cameraEntity=0;
+    float lastLog=-1.0e9f;
   };
   std::array<AutoExposureView,2> autoExposureViews_{};
   VkDescriptorSetLayout autoExposureSetLayout_=VK_NULL_HANDLE;

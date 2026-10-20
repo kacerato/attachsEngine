@@ -4148,6 +4148,17 @@ bool buildEnvironmentLooks(ScreenBuilder &builder,UiRect &content,const scene::E
 
 // Na coluna rolável `content` chega alto e volta consumido: o que os campos
 // tomaram por cima é a altura do cartão. Fora dela, a página de sempre.
+// Override do Volume da Unity: a caixa "override_*" de um grupo vai para o
+// cabeçalho da subseção, como a caixa de cada override no Volume Profile.
+// Marcada, o volume decide o grupo; desmarcada, o grupo herda dos volumes de
+// prioridade menor e, por fim, dos padrões do mundo.
+u32 componentGroupOverride(const scene::ComponentType &type,std::string_view group) {
+  if(group=="Volume") return ~0u;
+  for(u32 i=0;i<type.booleans.size();++i)
+    if(type.booleans[i].presentation.group==group&&std::string_view(type.booleans[i].id).starts_with("override_")) return i;
+  return ~0u;
+}
+
 void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
@@ -4712,6 +4723,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   if(!searching && entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
   if(!mesh || builder.state.meshTab!=1 || searching) {
     for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)&&
+      !(stacked&&!searching&&componentGroupOverride(*entry.type,entry.type->booleans[i].presentation.group)==i)&&
       !((constantForce||tween||audio||entry.type==&scene::PathFollow::descriptor||std::string_view(entry.type->id).starts_with("astra.physics2d."))&&!searching&&entry.type->booleans[i].id=="enabled")) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
       if(!show(entry.type->enums[i].presentation)) continue;
@@ -5547,12 +5559,25 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   for(u32 g=0;g<groups.size();++g) {
     const auto key=typeKey+"/"+std::string(groups[g]);
     const bool open=!EditorScreenState::listed(state.inspectorSections,key);
-    auto row=takeTop(content,36);const auto hit=row;
+    auto row=takeTop(content,36);
     builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
+    const u32 overrideField=componentGroupOverride(*entry.type,groups[g]);
+    bool overridden=true;
+    if(overrideField!=~0u&&index<256&&overrideField<256) {
+      // A caixa fica fora da área que dobra a subseção: tocar nela só alterna o override.
+      const auto &property=entry.type->booleans[overrideField];
+      overridden=property.read(*component);
+      auto check=takeRight(row,40);
+      builder.checkbox(centred(check,32,32),overridden,widgetId(EditorWidget::ComponentBooleanBase)+index+(overrideField<<8),
+                       property.presentation.isEditable(*component)&&state.workspace!=EditorWorkspace::Play,
+                       builder.mixed(multiKey(component->instanceId(),property.id)));
+      if(!overridden) builder.label(takeRight(row,64),"Herdado",theme.color.textFaint,theme.type.caption,UiAlign::End);
+    }
+    const auto hit=row;
     builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
                           open?theme.color.accent:theme.color.textDim);
     const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
-    builder.label(row,spring?std::string_view{"Mola"}:groups[g],open?theme.color.text:theme.color.textDim,theme.type.body);
+    builder.label(row,spring?std::string_view{"Mola"}:groups[g],open&&overridden?theme.color.text:theme.color.textDim,theme.type.body);
     if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
     if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
   }

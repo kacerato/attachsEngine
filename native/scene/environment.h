@@ -38,13 +38,17 @@ public:
         << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect
         << ' ' << values.physicalAtmosphereHighQuality
         << ' ' << (values.environmentMap.valid()?values.environmentMap.text():"-")
-        << ' ' << values.autoExposure << ' ' << values.autoExposureCenterWeighted
+        << ' ' << static_cast<u32>(values.exposureMode) << ' ' << static_cast<u32>(values.exposureMetering)
+        << ' ' << static_cast<u32>(values.exposureAdaptation)
+        << ' ' << overrideExposure << ' ' << overrideBloom << ' ' << overrideVignette
+        << ' ' << overrideColorAdjustments << ' ' << overrideColorGrading << ' ' << overrideFilmGrain
+        << ' ' << overrideAmbientOcclusion
         << ' ' << values.clouds.enabled << ' ' << values.clouds.castShadows << ' ' << overrideClouds;
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 16) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 17) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -82,18 +86,32 @@ public:
       std::string token;
       if(!(in>>token)||(token!="-"&&!resources::AssetGuid::parse(token,values.environmentMap))) return false;
     }
-    if(version>=11) {
-      if(!(in>>values.autoExposure>>values.autoExposureCenterWeighted)) return false;
-    } else {
-      values.autoExposure=false;values.autoExposureCenterWeighted=false;
+    // v17: Exposure do HDRP (modo, metering, adaptação) e um override por
+    // efeito de pós. Antes, uma chave só (overridePost) valia para todos.
+    bool legacyAuto=false,legacyCenter=false;
+    {
       const renderer::SceneEnvironment defaults{};
-      values.autoExposureMinEv=defaults.autoExposureMinEv;
-      values.autoExposureMaxEv=defaults.autoExposureMaxEv;
-      values.autoExposureLowPercent=defaults.autoExposureLowPercent;
-      values.autoExposureHighPercent=defaults.autoExposureHighPercent;
-      values.autoExposureTargetGrey=defaults.autoExposureTargetGrey;
-      values.autoExposureSpeedUp=defaults.autoExposureSpeedUp;
-      values.autoExposureSpeedDown=defaults.autoExposureSpeedDown;
+      values.exposureMode=defaults.exposureMode;values.exposureMetering=defaults.exposureMetering;
+      values.exposureAdaptation=defaults.exposureAdaptation;values.fixedExposure=defaults.fixedExposure;
+      values.exposureLimitMin=defaults.exposureLimitMin;values.exposureLimitMax=defaults.exposureLimitMax;
+      values.exposureHistogramLow=defaults.exposureHistogramLow;
+      values.exposureHistogramHigh=defaults.exposureHistogramHigh;
+      values.exposureTargetMidGrey=defaults.exposureTargetMidGrey;
+      values.exposureSpeedDarkToLight=defaults.exposureSpeedDarkToLight;
+      values.exposureSpeedLightToDark=defaults.exposureSpeedLightToDark;
+    }
+    if(version>=17) {
+      u32 mode=0,metering=0,adaptation=0;
+      if(!(in>>mode>>metering>>adaptation>>overrideExposure>>overrideBloom>>overrideVignette>>
+           overrideColorAdjustments>>overrideColorGrading>>overrideFilmGrain>>overrideAmbientOcclusion) ||
+         mode>2 || metering>2 || adaptation>1) return false;
+      values.exposureMode=static_cast<renderer::ExposureMode>(mode);
+      values.exposureMetering=static_cast<renderer::ExposureMetering>(metering);
+      values.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(adaptation);
+    } else {
+      if(version>=11 && !(in>>legacyAuto>>legacyCenter)) return false;
+      overrideExposure=overrideBloom=overrideVignette=overrideColorAdjustments=
+          overrideColorGrading=overrideFilmGrain=overrideAmbientOcclusion=overridePost;
     }
     // v16 (G4b): Cloud Layer. Cena antiga fica sem nuvens: o mesmo céu de antes.
     if(version>=16) {
@@ -119,7 +137,8 @@ public:
                         property.id.starts_with("star_"))) continue;
       if(version<13 && property.id.starts_with("grading_")) continue;
       if(version<12 && property.id=="fog_light_energy") continue;
-      if(version<11 && property.id.starts_with("auto_exposure_")) continue;
+      if(version<17 && property.id=="exposure_fixed") continue;
+      if(version<11 && property.id.starts_with("exposure_") && property.id!="exposure_compensation") continue;
       if(version<8 && property.id.starts_with("hdri_")) continue;
       if(version<10 && (property.id=="fog_base_height" || property.id=="fog_height_falloff")) continue;
       if(version<5 && property.id=="film_grain_intensity") continue;
@@ -133,13 +152,15 @@ public:
           property.id=="priority" || property.id.starts_with("sky_") ||
           property.id.starts_with("ground.") || property.id=="atmosphere" ||
           property.id.starts_with("sun_disk_") || property.id.starts_with("fog_") ||
-          property.id=="exposure_ev" || property.id.starts_with("bloom_") ||
+          property.id=="exposure_compensation" || property.id.starts_with("bloom_") ||
           property.id=="contrast" || property.id=="saturation" || property.id=="vignette_intensity" ||
           property.id.starts_with("indirect_"))
         if (!(in >> *property.write(*this))) return false;
     }
+    if(version<17) renderer::migrateLegacyExposure(values,version>=11,legacyAuto,legacyCenter);
     return valid();
   }
+
 };
 
 inline bool environmentIsLocal(const ComponentValue &value) {
@@ -182,7 +203,19 @@ inline bool environmentUsesPost(const ComponentValue &value) {
 }
 inline bool environmentUsesAutoExposure(const ComponentValue &value) {
   const auto &environment=static_cast<const Environment &>(value).values;
-  return environment.post&&environment.autoExposure;
+  return environment.post&&environment.automaticExposure();
+}
+inline bool environmentUsesFixedExposure(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&!environment.automaticExposure();
+}
+inline bool environmentUsesExposureHistogram(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.exposureMode==renderer::ExposureMode::AutomaticHistogram;
+}
+inline bool environmentUsesProgressiveExposure(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environmentUsesAutoExposure(value)&&environment.exposureAdaptation==renderer::ExposureAdaptation::Progressive;
 }
 inline bool environmentUsesBloom(const ComponentValue &value) {
   const auto &environment = static_cast<const Environment &>(value).values;
@@ -265,10 +298,18 @@ inline constexpr std::array<ComponentEnumOption,8> environmentLayerOptions{{
   {0,"Ambiente 0"},{1,"Ambiente 1"},{2,"Ambiente 2"},{3,"Ambiente 3"},
   {4,"Ambiente 4"},{5,"Ambiente 5"},{6,"Ambiente 6"},{7,"Ambiente 7"}
 }};
-inline constexpr std::array<ComponentEnum, 4> environmentEnums{{
+inline constexpr std::array<ComponentEnumOption,3> exposureModeOptions{{{0,"Fixa"},{1,"Automática"},{2,"Automática por histograma"}}};
+inline constexpr std::array<ComponentEnumOption,3> exposureMeteringOptions{{{0,"Média"},{1,"Pontual"},{2,"Peso no centro"}}};
+inline constexpr std::array<ComponentEnumOption,2> exposureAdaptationOptions{{{0,"Imediata"},{1,"Progressiva"}}};
+inline constexpr std::array<ComponentEnumOption,3> exposureMidGreyOptions{{{0,"Cinza 12,5%"},{1,"Cinza 14%"},{2,"Cinza 18%"}}};
+inline constexpr std::array<ComponentEnum, 8> environmentEnums{{
   {"sky", "Céu", skyOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sky);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sky=static_cast<renderer::SkyModel>(n);}, {"Atmosfera","","Fonte visual do céu",nullptr,nullptr,"render.environment.atmosphere","rhi/shaders/dirt_road_sky.frag",Invalidate::Draw}},
-  {"tone_mapper", "Tonemapping", toneOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.toneMapper);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.toneMapper=static_cast<renderer::ToneMapper>(n);}, {"Pós","","Curva aplicada ao HDR antes da saída",environmentUsesPost,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
+  {"tone_mapper", "Tonemapping", toneOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.toneMapper);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.toneMapper=static_cast<renderer::ToneMapper>(n);}, {"Tonemapping","","Curva aplicada ao HDR antes da saída",environmentUsesPost,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
   {"volume_shape","Modo",environmentShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).shape);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).shape=static_cast<renderer::EnvironmentVolumeShape>(n);},{"Volume","","Global afeta toda vista; formas usam o Transform do objeto",nullptr,nullptr,"render.environment.volumes","runtime/scene_environment.cpp",Invalidate::Draw}},
+  {"exposure_mode","Modo",exposureModeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureMode);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureMode=static_cast<renderer::ExposureMode>(n);},{"Exposição","","Fixa usa o EV100 informado; as automáticas medem a luminância da câmera a cada quadro",environmentUsesPost,nullptr,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy}},
+  {"exposure_metering","Medição",exposureMeteringOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureMetering);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureMetering=static_cast<renderer::ExposureMetering>(n);},{"Exposição","","Quais pixels pesam na média: a imagem toda, um círculo no centro ou peso que cai até a borda",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_histogram.comp",Invalidate::Policy}},
+  {"exposure_adaptation","Adaptação",exposureAdaptationOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureAdaptation);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(n);},{"Exposição","","Imediata salta para a medição; progressiva acompanha como o olho",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_reduce.comp",Invalidate::Policy}},
+  {"exposure_target_mid_grey_choice","Cinza médio alvo",exposureMidGreyOptions,[](const ComponentValue &v){const float g=static_cast<const Environment&>(v).values.exposureTargetMidGrey;return g<.1325f?0u:g<.16f?1u:2u;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureTargetMidGrey=n==0?.125f:n==1?.14f:.18f;},{"Exposição","","Tom para o qual a média medida é levada",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_reduce.comp",Invalidate::Policy}},
   {"volume_layer","Camada",environmentLayerOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).layer;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).layer=n;},{"Volume","","Filtro consultado pela câmera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
 }};
 
@@ -305,7 +346,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 16,
+  "astra.render.environment", 17,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources
