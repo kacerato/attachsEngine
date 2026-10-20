@@ -315,12 +315,21 @@ android {
                 // unidades ja compiladas entre builds; sem a variavel, nada muda.
                 // Também por `astra.ccache=<caminho>` em android/local.properties
                 // (fora do Git), para não depender da variável em cada terminal.
-                val astraCcache = System.getenv("ASTRA_CCACHE") ?: rootProject.file("local.properties").takeIf { it.exists() }?.let { local ->
-                    Properties().apply { local.inputStream().use { stream -> load(stream) } }.getProperty("astra.ccache")
+                val localProperties = rootProject.file("local.properties").takeIf { it.exists() }?.let { local ->
+                    Properties().apply { local.inputStream().use { stream -> load(stream) } }
                 }
+                val astraCcache = System.getenv("ASTRA_CCACHE") ?: localProperties?.getProperty("astra.ccache")
                 astraCcache?.takeIf { it.isNotBlank() && file(it).exists() }?.let {
                     arguments += listOf("-DCMAKE_C_COMPILER_LAUNCHER=$it", "-DCMAKE_CXX_COMPILER_LAUNCHER=$it")
                 }
+                // O ninja do AGP usa todos os núcleos (12 aqui) e cada clang do
+                // editor passa de 1 GB: o notebook estourava 16 GB. Um job pool do
+                // CMake limita a compilação nativa; ajuste com ASTRA_NATIVE_JOBS ou
+                // `astra.nativeJobs` em android/local.properties (padrão 4).
+                val nativeJobs = (System.getenv("ASTRA_NATIVE_JOBS") ?: localProperties?.getProperty("astra.nativeJobs"))
+                    ?.toIntOrNull()?.takeIf { it > 0 } ?: 4
+                arguments += listOf("-DCMAKE_JOB_POOLS=astra_compile=$nativeJobs;astra_link=1",
+                                    "-DCMAKE_JOB_POOL_COMPILE=astra_compile", "-DCMAKE_JOB_POOL_LINK=astra_link")
                 targets += listOf("aether_android", "aether_transform")
             }
         }
