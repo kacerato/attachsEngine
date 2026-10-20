@@ -1040,6 +1040,15 @@ public:
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
+  // Câmeras visíveis no Play, de baixo para cima (Depth/Priority). Vazio fora do Play.
+  std::vector<SceneCameraPose> sceneCameraStack() const {
+    if(!isPlaying()||!playScene_.active()) return {};
+    return resolveSceneCameraStack(playScene_.document());
+  }
+  // Vista independente da câmera de cima quando há mais de uma na tela: o
+  // retângulo dela em pixels, a lente efetiva e a saída (fundo, máscara, pós).
+  bool playStackView(renderer::RenderViewSnapshot &out);
+  void setPlayStackImage(bool ready) {state_.playStackReady=ready&&!state_.playStackRect.isEmpty();}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
@@ -1624,6 +1633,8 @@ private:
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
   float pixelsPerUnit_=1,dpi_=0;
+  u64 playStackSerial_=0;
+  bool playStackWarned_=false;
   std::string scenePath_;
   // Impressão digital com que a cena aberta foi lida/salva; cenas carregadas
   // em Play são lidas com a mesma. Distinta de packageFingerprint_ (primitivas).

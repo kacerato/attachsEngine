@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 44> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -148,6 +148,25 @@ inline constexpr std::array<EngineCapability, 44> engineCapabilities{{
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
+
+  // --- Câmera (PK-7) -------------------------------------------------------
+  {"render.camera.background", "Fundo da câmera: céu, cor sólida ou sem limpeza", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", ""},
+  {"render.camera.culling_mask", "Culling Mask por camada de objeto", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp",
+   "Esconde o desenho e a sombra do objeto nesta câmera; luzes ainda não filtram por camada"},
+  {"render.camera.viewport", "Viewport Rect e várias câmeras na tela por prioridade", CapabilityState::Implemented,
+   "editor/editor_scene_camera.h + platform/android/android_main.cpp",
+   "Até duas câmeras visíveis ao mesmo tempo; a de cima sai sem sombras e sem TAA"},
+  {"render.camera.post", "Pós, sombras, HDR e antisserrilhado por câmera", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", "TAA por câmera só quando o projeto já aloca o histórico"},
+  {"render.camera.physical", "Câmera física: focal, sensor e Gate Fit", CapabilityState::Implemented,
+   "scene/camera.h", "Sem deslocamento de lente, abertura, ISO ou obturador"},
+  {"render.camera.stack", "Camera Stack (Overlay) e Target Texture", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp",
+   "Exige composição com alfa sobre a câmera Base e um recurso Render Texture amostrável por material"},
+  {"render.camera.msaa", "MSAA por câmera", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp", "O renderer não tem passe multiamostrado; AA é FXAA ou TAA"},
 
   // --- Pós-processamento ---------------------------------------------------
   {"render.post.tonemap", "Exposição e mapeamento de tom", CapabilityState::Implemented,

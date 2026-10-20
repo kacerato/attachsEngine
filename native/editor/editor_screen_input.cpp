@@ -29,6 +29,11 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
+  if(&type==&scene::Camera::descriptor) {
+    const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
   if(&type==&scene::EventConnection::descriptor) {
     const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};
@@ -453,6 +458,25 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     const u32 option=widget-widgetId(EditorWidget::ComponentEnumOptionBase);
     if(!component || enumIndex>=component->type().enums.size() || history.isOpen()) return outcome;
     const auto &property=component->type().enums[enumIndex];
+    if(property.flags) {
+      // Máscara: 0 = Nada, 1 = Tudo, 2+i alterna o bit da opção i. A lista fica
+      // aberta para marcar várias camadas, como o LayerMask da Unity.
+      state.enumPicker=field;
+      const u32 all=scene::componentEnumFlagBits(property),current=property.read(*component);
+      u32 next=current;
+      if(option==0) next=0;
+      else if(option==1) next=all;
+      else if(option-2<property.options.size()) next=current^property.options[option-2].value;
+      else return outcome;
+      if(next==current) return outcome;
+      auto value=*entity;
+      if(scene::setComponentProperty(value.components,component->type().id,property.id,next,
+                                     component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
+        state.status="Esta máscara não é aceita com os valores atuais";return outcome;
+      }
+      outcome.documentChanged=history.applyValues(document,entity->id,value);
+      return outcome;
+    }
     if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
     auto value=*entity;
     if(scene::setComponentProperty(value.components,component->type().id,property.id,property.options[option].value,
@@ -568,6 +592,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->booleans.size()) return outcome;
         const auto &property=entry.type->booleans[field];
         if(scene::setComponentProperty(value.components,entry.type->id,property.id,!property.read(*component),instance)!=scene::ComponentPropertyStatus::Applied) return outcome;
+        // Câmera física ligada: a focal nasce do campo vertical atual no sensor
+        // (Camera.FieldOfViewToFocalLength), como na Unity.
+        if(property.id=="physical_camera" && entry.type==&scene::Camera::descriptor && !property.read(*component)) {
+          const auto &camera=static_cast<const scene::Camera&>(*component);
+          scene::setComponentProperty(value.components,entry.type->id,"focal_length",
+              scene::cameraFocalLengthForFov(camera.verticalFov,camera.sensorHeight),instance);
+        }
       } else if(operation==widgetId(EditorWidget::ComponentEnumBase)) {
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->enums.size()) return outcome;
         state.enumPicker=widget;return outcome;

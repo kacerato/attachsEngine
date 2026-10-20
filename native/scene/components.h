@@ -3,6 +3,7 @@
 #include "core/engine_capability.h"
 #include "resources/asset_registry.h"
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <span>
@@ -107,7 +108,38 @@ struct ComponentEnum {
   void (*write)(ComponentValue &,u32);
   PropertyPresentation presentation{};
   bool animationSafe=false;
+  // Máscara de bits (Unity LayerMask / [Flags]): cada opção é um bit e o valor
+  // é qualquer combinação deles, inclusive nenhum. O seletor alterna bits em vez
+  // de escolher um valor só, e a validação aceita subconjuntos das opções.
+  bool flags=false;
 };
+inline u32 componentEnumFlagBits(const ComponentEnum &property) {
+  u32 bits=0;for(const auto &option:property.options) bits|=option.value;return bits;
+}
+// Valor que o campo aceita: uma das opções, ou, numa máscara, qualquer
+// combinação dos bits declarados.
+inline bool componentEnumAccepts(const ComponentEnum &property,u32 value) {
+  if(property.flags) return (value&~componentEnumFlagBits(property))==0;
+  for(const auto &option:property.options) if(option.value==value) return true;
+  return false;
+}
+// Rótulo de uma máscara como o LayerMask da Unity: Nada, Tudo, o nome da
+// única camada ligada ou "Misto". `name` permite trocar o rótulo de cada bit
+// (nomes de camada do projeto); nulo usa o da opção.
+template<class Name>
+inline std::string componentEnumMaskLabel(const ComponentEnum &property,u32 value,const Name &name) {
+  const u32 bits=componentEnumFlagBits(property);value&=bits;
+  if(!value) return "Nada";
+  if(value==bits) return "Tudo";
+  u32 count=0;std::string single;
+  for(const auto &option:property.options) if(option.value && (value&option.value)==option.value) {++count;single=name(option);}
+  return count==1?single:"Misto ("+std::to_string(count)+")";
+}
+inline std::string componentEnumLabel(const ComponentEnum &property,u32 value) {
+  if(property.flags) return componentEnumMaskLabel(property,value,[](const ComponentEnumOption &o){return std::string(o.name);});
+  for(const auto &option:property.options) if(option.value==value) return option.name;
+  return "Valor inválido";
+}
 // Descendant: um objeto ABAIXO deste na hierarquia, nunca ele mesmo — é o que
 // um LOD Group pede para cada nível (os renderers LOD0, LOD1... são filhos).
 enum class ObjectReferenceScope { Any, SelfOrAncestor, Other, Descendant, OtherNonDescendant };

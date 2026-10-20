@@ -68,6 +68,9 @@ namespace {
 
 using namespace ae::ui;
 
+// Rótulos de enumeração com máscara (Culling Mask com nomes de camada).
+std::string enumValueLabel(const EditorScreenState &state,const scene::ComponentEnum &property,u32 value);
+
 // Medidas em DP, e a distinção importa. Os masters foram desenhados numa tela de
 // 1672×941; um telefone real em paisagem tem cerca de 853×394 dp, porque a
 // densidade é 3× e não 1,66×. Copiar os números do master daria uma barra
@@ -5134,7 +5137,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         const auto enumHit=slot;auto box=deflate(slot,UiInsets::all(2));
         builder.list.addRect(box,theme.color.raised,theme.radius.control);
         builder.list.addImage(centred(takeRight(box,16),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
-        const char *label="Inválido";for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+        std::string label=property.flags?enumValueLabel(builder.state,property,property.read(*component)):"Inválido";
+        if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
         if(builder.mixed(multiKey(component->instanceId(),property.id))) label="—";
         builder.label(box,label,theme.color.text,theme.type.caption,UiAlign::Center);
         if(property.presentation.isEditable(*component)) builder.router.addRegion(enumHit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.second<<8));
@@ -5193,8 +5197,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     } else if(f.kind==1) {
       const auto &property=entry.type->enums[f.index];
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
-      const char *label="Valor inválido";
-      for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+      std::string label=enumValueLabel(builder.state,property,property.read(*component));
       if(builder.mixed(multiKey(component->instanceId(),property.id))) label="\xE2\x80\x94";
       // Aparência de lista suspensa: o toque abre as opções, não cicla às cegas.
       const bool editable=property.presentation.isEditable(*component);
@@ -6992,6 +6995,36 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   }
 }
 
+// Rótulo de um bit de máscara: a Culling Mask mostra o nome da camada do
+// projeto, como o LayerMask da Unity; as outras máscaras, o nome da opção.
+std::string enumMaskOptionName(const EditorScreenState &state,const scene::ComponentEnum &property,const scene::ComponentEnumOption &option) {
+  if(property.id=="culling_mask" && state.document) {
+    u32 bit=0;while(bit<31 && !(option.value&(1u<<bit))) ++bit;
+    const auto &layers=state.document->layers();
+    if(layers.named(bit)) return std::string(layers.name(bit));
+  }
+  return option.name;
+}
+std::string enumValueLabel(const EditorScreenState &state,const scene::ComponentEnum &property,u32 value) {
+  if(!property.flags) return scene::componentEnumLabel(property,value);
+  return scene::componentEnumMaskLabel(property,value,[&](const scene::ComponentEnumOption &o){return enumMaskOptionName(state,property,o);});
+}
+// Bits que a lista de uma máscara oferece. Na Culling Mask, só camadas com
+// nome no projeto e as que já estão ligadas (uma camada apagada não some do
+// valor sem o autor ver).
+std::vector<u32> enumMaskRows(const EditorScreenState &state,const scene::ComponentEnum &property,u32 value) {
+  std::vector<u32> rows;
+  for(u32 i=0;i<property.options.size();++i) {
+    const auto &option=property.options[i];
+    if(property.id=="culling_mask" && state.document) {
+      u32 bit=0;while(bit<31 && !(option.value&(1u<<bit))) ++bit;
+      if(!state.document->layers().named(bit) && !(value&option.value)) continue;
+    }
+    rows.push_back(i);
+  }
+  return rows;
+}
+
 // Lista de opções de um campo de enumeração, aberta sobre a tela. A opção
 // atual vem marcada; tocar fora fecha sem mudar nada.
 void buildEnumPicker(ScreenBuilder &builder) {
@@ -7005,6 +7038,53 @@ void buildEnumPicker(ScreenBuilder &builder) {
   builder.list.addRect(state.surface,withAlpha(theme.color.voidBlack,.5f));
   builder.router.addBlocker(state.surface);
   builder.router.addRegion(state.surface,widgetId(EditorWidget::ComponentEnumPickerClose));
+  if(property.flags) {
+    // Máscara (LayerMask): Nada e Tudo no topo, depois uma linha por bit com
+    // caixa de marcar. Tocar alterna e a lista continua aberta; tocar fora fecha.
+    const auto bits=enumMaskRows(state,property,current);
+    const u32 all=scene::componentEnumFlagBits(property);
+    const float available=state.surface.height-24-52-48;
+    const u32 columns=bits.size()*44.f>available&&state.surface.width>=520?2u:1u;
+    const u32 lines=static_cast<u32>((bits.size()+columns-1)/columns);
+    const float height=std::min(state.surface.height-24,52+48+lines*44.f);
+    const UiRect sheet=centred(state.surface,std::min(columns==2?560.f:360.f,state.surface.width-24),height);
+    builder.list.addRect(sheet,theme.color.surface,theme.radius.card);
+    builder.list.addBorder(sheet,theme.color.line,1,theme.radius.card);
+    builder.router.addBlocker(sheet);
+    auto content=deflate(sheet,UiInsets::all(8));
+    auto header=takeTop(content,36);
+    builder.label(takeLeft(header,header.width*.5f),property.name,theme.color.text,theme.type.cardName);
+    builder.label(header,enumValueLabel(state,property,current),theme.color.textDim,theme.type.caption,UiAlign::End);
+    auto quick=takeTop(content,48);
+    const char *quickLabels[]{"Nada","Tudo"};
+    for(u32 q=0;q<2;++q) {
+      auto cell=deflate(takeLeft(quick,q?quick.width:quick.width*.5f),UiInsets::all(3));
+      const bool on=q?(current&all)==all:(current&all)==0;
+      builder.list.addRect(cell,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      builder.label(cell,quickLabels[q],on?theme.color.text:theme.color.textDim,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(cell,widgetId(EditorWidget::ComponentEnumOptionBase)+q);
+    }
+    builder.list.pushClip(content);
+    const float columnWidth=content.width/columns;
+    for(u32 r=0;r<bits.size();++r) {
+      const u32 column=r/lines,line=r%lines;
+      const UiRect cellArea{content.x+column*columnWidth,content.y+line*44.f,columnWidth,44};
+      if(cellArea.bottom()>content.bottom()+1) continue;
+      auto row=deflate(cellArea,UiInsets{2,2,2,2});
+      const auto &option=property.options[bits[r]];
+      const bool on=(current&option.value)==option.value;
+      builder.list.addRect(row,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      auto mark=centred(takeLeft(row,36),18,18);
+      builder.list.addRect(mark,on?theme.color.accent:theme.color.surface,4);
+      builder.list.addBorder(mark,on?theme.color.accent:theme.color.line,1,4);
+      if(on) builder.list.addImage(centred(mark,12,12),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.surface);
+      takeLeft(row,4);
+      builder.label(row,enumMaskOptionName(state,property,option),on?theme.color.text:theme.color.textDim,theme.type.body);
+      builder.router.addRegion(row,widgetId(EditorWidget::ComponentEnumOptionBase)+2+bits[r]);
+    }
+    builder.list.popClip();
+    return;
+  }
   const float rows=static_cast<float>(property.options.size());
   const float height=std::min(state.surface.height-24,52+rows*44);
   const UiRect sheet=centred(state.surface,std::min(360.f,state.surface.width-24),height);
@@ -11109,6 +11189,10 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
 
 void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layout,bool debug) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+    // Segunda câmera do Play (Viewport Rect): a imagem dela cobre a principal
+    // no próprio retângulo, abaixo dos controles e da GUI do jogo.
+    if(state.playStackReady && !state.playStackRect.isEmpty())
+      list.addImage(state.playStackRect,kUiCameraPreviewImage,0xffffffff,0);
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
     const bool hasSecondary=!state.playSecondaryActionLabel.empty();
     const bool showJump=hasSecondary||state.playHasCharacter?state.playHasCharacter:

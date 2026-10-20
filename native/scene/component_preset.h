@@ -100,6 +100,7 @@ inline std::vector<FieldDelta> componentDelta(const ComponentValue &current, con
     row.label = property.name;
     row.group = property.presentation.group;
     const auto name = [&](u32 value) {
+      if (property.flags) return componentEnumLabel(property, value);
       for (const auto &option : property.options) if (option.value == value) return std::string(option.name);
       return std::to_string(value);
     };
@@ -250,9 +251,7 @@ inline ComponentApplyOutcome applyComponentFields(Components &components, const 
         matched = true;
         if (!property.write || !property.presentation.isEditable(*current)) { ++outcome.rejected; break; }
         const u32 value = property.read(source);
-        bool known = false;
-        for (const auto &option : property.options) if (option.value == value) known = true;
-        if (!known) { ++outcome.rejected; break; }
+        if (!componentEnumAccepts(property, value)) { ++outcome.rejected; break; }
         property.write(*candidate, value);
         ++outcome.applied;
       }

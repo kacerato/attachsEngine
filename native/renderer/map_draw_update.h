@@ -25,6 +25,8 @@ struct MapDrawState {
   MapDrawUpdate pose{};
   bool visible = true;
   bool castShadow = true;
+  // Camada de objeto (runtime::GameplayLayers): a Culling Mask da câmera filtra por ela.
+  u8 layer = 0;
   MaterialOverride material{};
   // G6-B: paleta do skin deste desenho (16 floats coluna principal por junta,
   // no espaço do desenho: inversa(modelo) * mundo(junta) * bind inversa).

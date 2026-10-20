@@ -31,14 +31,22 @@ struct GameView {
   GameViewPlatform platform=GameViewPlatform::Host;
   u64 camera=0;                     // objeto da câmera autorada; zero = câmera do editor
   renderer::PerspectiveFrustum frustum{};
+  // Camera.pixelRect: o retângulo da câmera dentro da vista (Viewport Rect),
+  // em pixels com origem inferior esquerda. Largura zero = a vista inteira.
+  float pixelX=0,pixelY=0,pixelWidth=0,pixelHeight=0;
+  void pixelRect(float &x,float &y,float &w,float &h) const {
+    if(pixelWidth>0&&pixelHeight>0) {x=pixelX;y=pixelY;w=pixelWidth;h=pixelHeight;}
+    else {x=0;y=0;w=width;h=height;}
+  }
 };
 
 // Raio pelo pixel (x,y). Origem no mundo; direção normalizada.
 inline bool gameViewScreenRay(const GameView &view,float x,float y,float origin[3],float direction[3]) {
   if(!view.valid || !view.frustum.valid || view.width<=0 || view.height<=0 || !std::isfinite(x) || !std::isfinite(y)) return false;
-  const float ndcX=x/view.width*2.f-1.f;
+  float rx,ry,rw,rh;view.pixelRect(rx,ry,rw,rh);
+  const float ndcX=(x-rx)/rw*2.f-1.f;
   // NDC do contrato tem y para baixo (ver camera_ray.h); a tela tem y para cima.
-  const float ndcY=1.f-y/view.height*2.f;
+  const float ndcY=1.f-(y-ry)/rh*2.f;
   const renderer::HzbScreenTransform identity{};
   const auto ray=renderer::cameraRayFromNdc(view.frustum,identity,ndcX,ndcY);
   if(!ray.valid) return false;
@@ -65,8 +73,9 @@ inline bool gameViewWorldToScreen(const GameView &view,const float world[3],floa
     planeX=local[0]/(local[2]*view.frustum.tangentHalfHorizontal);
     planeY=local[1]/(local[2]*view.frustum.tangentHalfVertical);
   }
-  screen[0]=(planeX*.5f+.5f)*view.width;
-  screen[1]=(planeY*.5f+.5f)*view.height;
+  float rx,ry,rw,rh;view.pixelRect(rx,ry,rw,rh);
+  screen[0]=rx+(planeX*.5f+.5f)*rw;
+  screen[1]=ry+(planeY*.5f+.5f)*rh;
   screen[2]=local[2];
   return std::isfinite(screen[0]) && std::isfinite(screen[1]) && std::isfinite(screen[2]);
 }

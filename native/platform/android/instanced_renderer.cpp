@@ -1889,6 +1889,8 @@ void InstancedRenderer::recordUiContents() {
 }
 
 float InstancedRenderer::sceneAspectRatio() const {
+  // Gate Fit "Nenhum" da câmera física: a projeção estica o sensor na vista.
+  if(sceneAspectOverride_>0) return sceneAspectOverride_;
   const auto extent = swapchain_->displayExtent();
   const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
   return sceneViewport_.isEmpty() ? aspect : aspect * sceneViewport_.width / sceneViewport_.height;
@@ -2317,7 +2319,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
                           0, 1, upscaledInput ? &upscaledDescriptorSet_ :
                           fogResolvedThisFrame_ ? &fogResolveDescriptorSet_ : &postDescriptorSet_, 0, nullptr);
   PostPushConstants push{};
-  const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+  const bool postEffectsEnabled=viewPostEnabled();
   const auto look=sceneEnvironment_.active?sceneEnvironment_:
       (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
@@ -2342,6 +2344,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if(colorGradingThisFrame_) push.texelFlags[2] += 65536.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
+                       sceneAntialiasing_==1 ? 0.0f : sceneAntialiasing_==2 ? 1.0f :
                        temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
                            ? 3.0f
                            : temporalAaActive_ || (renderingPolicy_.post.antiAliasing ==
@@ -4973,6 +4976,7 @@ void InstancedRenderer::shutdown() {
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();authoredDrawIdentities_.clear();
+  authoredBaseVisibility_.clear();authoredLayers_.clear();
   authoredUvTransformEntries_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
@@ -5274,6 +5278,7 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   pendingScene_.clear();pendingMapPoseCount_=0;pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
   authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();
+  authoredBaseVisibility_.clear();authoredLayers_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
@@ -5386,7 +5391,10 @@ bool InstancedRenderer::rebuildDrawOrders() {
   profileSourceTriangleCount_ = 0;
   for (const auto &draw : sourceMapDraws_) profileSourceTriangleCount_ += draw.indexCount / 3;
   sourceDrawUvMetric_.assign(sourceMapDraws_.size(),-1.0f);
-  if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
+  if(emptyScene_) {
+    authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0);
+    authoredBaseVisibility_.assign(sourceMapDraws_.size(),0);authoredLayers_.assign(sourceMapDraws_.size(),0);
+  }
   instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
   for (u32 index = 0; index < instanceCount_; ++index) {
     const u32 material = dirtRoadResources_.draws()[index].materialIndex;
@@ -5536,6 +5544,7 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     state.material=draws[i].material;
     state.visible=draws[i].visible;
     state.castShadow=draws[i].castShadow;
+    state.layer=draws[i].layer;
   }
   pendingAuthoredStateValid_=true;
   queueSkinPalettes(draws);
@@ -5591,6 +5600,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   if(!instances) return false;
   std::vector<renderer::MapDrawRecord> records;records.reserve(count);
   authoredVisibility_.resize(count);authoredShadows_.resize(count);authoredMaterials_.resize(count);
+  authoredBaseVisibility_.resize(count);authoredLayers_.resize(count);
   authoredDrawIdentities_.resize(count);
   routeVertices_=std::move(nextVertices);routeIndices_=std::move(nextIndices);authoredWaterLayers_.resize(count);
   authoredWaterFlowDepth_.resize(count);
@@ -5601,7 +5611,8 @@ bool InstancedRenderer::commitAuthoredScene() {
   cameraWaterHorizonFillActive_=false;
   for(u32 i=0;i<count;++i) {
     const auto &state=pendingScene_[i];records.push_back(state.pose.draw);instances[i]=state.pose.instance;
-    authoredVisibility_[i]=state.visible;authoredShadows_[i]=state.castShadow;authoredMaterials_[i]=state.material;
+    authoredBaseVisibility_[i]=state.visible;authoredLayers_[i]=state.layer&31u;
+    authoredVisibility_[i]=authoredVisibleIn(i,sceneCullingMask_);authoredShadows_[i]=state.castShadow;authoredMaterials_[i]=state.material;
     authoredDrawIdentities_[i]={state.objectId,state.sourceDrawIndex,state.route};
     std::copy(state.waterLayers,state.waterLayers+4,authoredWaterLayers_[i].begin());
     std::copy(state.waterFlowDepth,state.waterFlowDepth+4,authoredWaterFlowDepth_[i].begin());
@@ -5610,7 +5621,7 @@ bool InstancedRenderer::commitAuthoredScene() {
     if(state.pose.draw.lodLevel!=0) continue;
     // R4: a fila segue o modo de alfa efetivo (trocado na instância ou no material do projeto).
     const auto flags=renderer::applyMaterialOverride(dirtRoadResources_.materials()[state.pose.draw.materialIndex],state.material).flags;
-    if(state.visible && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
+    if(authoredVisibility_[i] && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
     if(flags & renderer::MapMaterialWater) waterDrawOrder_.push_back(i);
     else if(flags & renderer::MapMaterialBlend) transparentDrawOrder_.push_back(i);
     else if(flags & renderer::MapMaterialAlphaMask) coverageDrawOrder_.push_back(i);
@@ -5623,6 +5634,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   }
   if(!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
   if(!writeAuthoredUvTransforms()) return false;
+  appliedCullingMask_=sceneCullingMask_;
   pendingScene_.clear();shadowCascadeDirtyMask_=0xffffffffu;
   return true;
 }
@@ -5741,17 +5753,30 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         std::min<usize>(pendingAuthoredState_.size(), authoredMaterials_.size()));
     for (u32 i = 0; i < states; ++i) {
       const auto &state = pendingAuthoredState_[i];
-      if (!(authoredMaterials_[i] == state.material) || authoredVisibility_[i] != state.visible ||
-          authoredShadows_[i] != state.castShadow) {
+      const bool baseVisible = i<authoredBaseVisibility_.size() ? authoredBaseVisibility_[i]!=0 : authoredVisibility_[i]!=0;
+      const u8 layer = i<authoredLayers_.size() ? authoredLayers_[i] : 0;
+      if (!(authoredMaterials_[i] == state.material) || baseVisible != state.visible ||
+          layer != (state.layer&31u) || authoredShadows_[i] != state.castShadow) {
         shadowCascadeDirtyMask_ = 0xffffffffu;
         authoredAppearanceChanged=true;
       }
       authoredMaterials_[i] = state.material;
-      authoredVisibility_[i] = state.visible;
+      if (i<authoredBaseVisibility_.size()) {
+        authoredBaseVisibility_[i] = state.visible;
+        authoredLayers_[i] = state.layer&31u;
+        authoredVisibility_[i] = authoredVisibleIn(i,sceneCullingMask_);
+      } else authoredVisibility_[i] = state.visible;
       authoredShadows_[i] = state.castShadow;
     }
     if (!writeAuthoredUvTransforms()) return rhi::SwapchainStatus::FatalError;
     pendingAuthoredStateValid_ = false;
+    appliedCullingMask_ = sceneCullingMask_;
+  }
+  // Culling Mask trocada sem mudar a cena (outra câmera, script): a mesma
+  // invalidação de uma troca de visibilidade, inclusive cascatas e HZB.
+  if (sceneCullingMask_ != appliedCullingMask_ && applySceneCullingMask()) {
+    shadowCascadeDirtyMask_ = 0xffffffffu;
+    authoredAppearanceChanged = true;
   }
   if (pendingMapPoseCount_ != 0) {
     auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
@@ -5857,7 +5882,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Pixel -> NDC físico do Vulkan (y desce, como na imagem das bibliotecas).
     temporalCurrentJitter_[0]=2.0f*temporalUpscalerJitterPixels_[0]/std::max(1.0f,renderWidth()*jitterViewport.width);
     temporalCurrentJitter_[1]=2.0f*temporalUpscalerJitterPixels_[1]/std::max(1.0f,renderHeight()*jitterViewport.height);
-  } else if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_) {
+  } else if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_ && sceneAntialiasing_==0) {
     if(temporalStaticFrameCount_>=9u) {
       temporalCurrentJitter_[0]=temporalCurrentJitter_[1]=0.0f;
     } else {
@@ -5916,7 +5941,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
     const auto &mapDescription=dirtRoadResources_.environmentMapDescription();
     const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
-    const bool editorPost=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+    const bool editorPost=viewPostEnabled();
     const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
         ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
     if(!applySceneEnvironmentLook(*frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
@@ -5928,7 +5953,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
     fogActiveThisFrame_=frame->sceneFog[0]>0.5f;
     aoActiveThisFrame_=frame->sceneAo[0]>0.5f;
-    frame->scenePost[2]=hdrSceneColor_?1.0f:0.0f;
+    // HDR desligado na câmera: o shader de cena tonaliza na hora e nada passa
+    // de 1 antes do pós, como num alvo LDR da Unity.
+    frame->scenePost[2]=hdrSceneColor_&&sceneHdr_?1.0f:0.0f;
     const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
     const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
     const float row1[4] = {basis.row1[0],basis.row1[1],basis.row1[2],0};
@@ -6064,7 +6091,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->localShadowParameters[0] = 0.0f;
       frame->localShadowParameters[1] = localShadowAtlas_.width() > 0
           ? 1.0f / static_cast<float>(localShadowAtlas_.width()) : 1.0f;
-      if (renderingPolicy_.shadows.enabled && localShadowRenderPass_ != VK_NULL_HANDLE &&
+      if (renderingPolicy_.shadows.enabled && sceneShadows_ && localShadowRenderPass_ != VK_NULL_HANDLE &&
           localShadowAtlas_.width() > 1) {
         renderer::ShadowCaster casters[renderer::MaximumPunctualLights]{};
         u32 casterCount = 0;
@@ -6147,7 +6174,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowTransitionParameters[2] = 1.0f/std::tan(sceneFieldOfView()*.5f);
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
-    if (renderingPolicy_.shadows.enabled) {
+    // Render Shadows da câmera: sem cascatas nem atlas, o shader não amostra sombra.
+    if (renderingPolicy_.shadows.enabled && sceneShadows_) {
       renderer::ShadowCascadeInput input{};
       std::memcpy(input.cameraPosition, camera.position, sizeof(input.cameraPosition));
       std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
@@ -6277,6 +6305,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
   VkClearValue clearValues[4]{};
   clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};
+  // Background Type da câmera de jogo. Fora do Viewport Rect nenhuma câmera
+  // desenha: preto. Dentro, a cor sólida limpa só o retângulo, mais abaixo.
+  const bool cameraSolid=!editorBackground_ && sceneBackground_==1;
+  if(!editorBackground_ && (sceneBackgroundPartial_ || sceneBackground_==2))
+    clearValues[0].color = VkClearColorValue{{0.0f,0.0f,0.0f,1.0f}};
+  else if(cameraSolid)
+    clearValues[0].color = VkClearColorValue{{sceneBackgroundColor_[0],sceneBackgroundColor_[1],sceneBackgroundColor_[2],1.0f}};
   clearValues[1].depthStencil = {1.0f, 0};
 
   VkRenderPassBeginInfo renderPassInfo{};
@@ -6339,6 +6374,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   scissor.extent = {std::min(renderWidth() - static_cast<u32>(scissor.offset.x), static_cast<u32>(std::ceil(viewport.width))),
                     std::min(renderHeight() - static_cast<u32>(scissor.offset.y), static_cast<u32>(std::ceil(viewport.height)))};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+  if(cameraSolid && sceneBackgroundPartial_ && scissor.extent.width && scissor.extent.height) {
+    VkClearAttachment fill{};fill.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;fill.colorAttachment=0;
+    fill.clearValue.color=VkClearColorValue{{sceneBackgroundColor_[0],sceneBackgroundColor_[1],sceneBackgroundColor_[2],1.0f}};
+    const VkClearRect area{scissor,0,1};
+    vkCmdClearAttachments(commandBuffer_,1,&fill,1,&area);
+  }
 
   if (dirtRoadPreview_) {
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -6978,7 +7019,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
-    if(!editorBackground_||(editorSceneEffects_&&editorSceneSky_))
+    // Câmera de jogo com fundo de cor ou não inicializado não desenha o céu.
+    if(editorBackground_?(editorSceneEffects_&&editorSceneSky_):sceneBackground_==0)
       vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
 
     // A grade editorial, depois da geometria opaca e antes do transparente: ela
@@ -7095,7 +7137,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(renderingPolicy_.post.dedicatedPass) {
     auto look=sceneEnvironment_.active?sceneEnvironment_:
         (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
-    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.autoExposure=false;
+    if(!viewPostEnabled()) look.autoExposure=false;
     const auto record=[&](const renderer::SceneEnvironment &environment) {
       return recordAutoExposure(0,environment,camera,timeSeconds,physicalSceneViewport(),
                                 renderWidth(),renderHeight(),renderTargetWidth(),renderTargetHeight(),
@@ -7114,7 +7156,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   {
     // Antes do ampliador temporal: ele e os pré-passes usam cópias do conjunto
     // do pós, e a LUT precisa estar amostrável (e atualizada) antes de todos.
-    const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+    const bool postEffectsEnabled=viewPostEnabled();
     const auto look=sceneEnvironment_.active?sceneEnvironment_:
         (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
     colorGradingThisFrame_=postPipeline_!=VK_NULL_HANDLE &&

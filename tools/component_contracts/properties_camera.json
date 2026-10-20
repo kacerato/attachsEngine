@@ -28,7 +28,7 @@
               "cpp": "nullptr"
             },
             "visible": {
-              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}"
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Camera&>(v);return c.projection==CameraProjection::Perspective&&!c.physicalCamera;}"
             }
           },
           "tweenable": {
@@ -94,8 +94,11 @@
             "cpp": "1"
           },
           "presentation": {
-            "group": "Saída",
-            "unit": ""
+            "group": "Renderização",
+            "unit": "",
+            "help": "Ordem de desenho (Depth): a maior fica por cima; empate pelo objeto mais novo",
+            "capability": "render.camera.viewport",
+            "consumer": "editor/editor_scene_camera.h → pilha de câmeras da tela"
           },
           "default": {
             "cpp": "0"
@@ -128,6 +131,275 @@
           "default": {
             "cpp": "5"
           }
+        },
+        {
+          "id": "focal_length",
+          "label": "Distância focal",
+          "member": "focalLength",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "mm",
+            "help": "Com o sensor, define o campo de visão (Physical Camera)",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Camera&>(v);return c.projection==CameraProjection::Perspective&&c.physicalCamera;}"
+            },
+            "capability": "render.camera.physical",
+            "consumer": "editor/editor_scene_camera.h → campo de visão efetivo"
+          },
+          "default": {
+            "cpp": "20.7846097f"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "sensor_width",
+          "label": "Sensor · largura",
+          "member": "sensorWidth",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "mm",
+            "help": "Padrão 36 × 24 mm (full frame)",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Camera&>(v);return c.projection==CameraProjection::Perspective&&c.physicalCamera;}"
+            },
+            "capability": "render.camera.physical",
+            "consumer": "editor/editor_scene_camera.h → campo de visão efetivo"
+          },
+          "default": {
+            "cpp": "36"
+          }
+        },
+        {
+          "id": "sensor_height",
+          "label": "Sensor · altura",
+          "member": "sensorHeight",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Lente",
+            "unit": "mm",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Camera&>(v);return c.projection==CameraProjection::Perspective&&c.physicalCamera;}"
+            },
+            "capability": "render.camera.physical",
+            "consumer": "editor/editor_scene_camera.h → campo de visão efetivo"
+          },
+          "default": {
+            "cpp": "24"
+          }
+        },
+        {
+          "id": "viewport_x",
+          "label": "Viewport X",
+          "member": "viewportX",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Saída",
+            "unit": "",
+            "help": "Fração da tela a partir da esquerda",
+            "capability": "render.camera.viewport",
+            "consumer": "platform/android/android_main.cpp → retângulo da câmera na tela"
+          },
+          "default": {
+            "cpp": "0"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "viewport_y",
+          "label": "Viewport Y",
+          "member": "viewportY",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Saída",
+            "unit": "",
+            "help": "Fração da tela a partir de baixo",
+            "capability": "render.camera.viewport",
+            "consumer": "platform/android/android_main.cpp → retângulo da câmera na tela"
+          },
+          "default": {
+            "cpp": "0"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "viewport_width",
+          "label": "Viewport L",
+          "member": "viewportWidth",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Saída",
+            "unit": "",
+            "help": "Largura em fração da tela",
+            "capability": "render.camera.viewport",
+            "consumer": "platform/android/android_main.cpp → retângulo da câmera na tela"
+          },
+          "default": {
+            "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "viewport_height",
+          "label": "Viewport A",
+          "member": "viewportHeight",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Saída",
+            "unit": "",
+            "help": "Altura em fração da tela",
+            "capability": "render.camera.viewport",
+            "consumer": "platform/android/android_main.cpp → retângulo da câmera na tela"
+          },
+          "default": {
+            "cpp": "1"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "background_color.r",
+          "label": "Fundo R",
+          "member": "backgroundColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).background==CameraBackground::SolidColor;}"
+            },
+            "capability": "render.camera.background",
+            "consumer": "platform/android/instanced_renderer.cpp → cor de limpeza da cena"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "background_color.g",
+          "label": "Fundo G",
+          "member": "backgroundColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).background==CameraBackground::SolidColor;}"
+            },
+            "capability": "render.camera.background",
+            "consumer": "platform/android/instanced_renderer.cpp → cor de limpeza da cena"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "background_color.b",
+          "label": "Fundo B",
+          "member": "backgroundColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).background==CameraBackground::SolidColor;}"
+            },
+            "capability": "render.camera.background",
+            "consumer": "platform/android/instanced_renderer.cpp → cor de limpeza da cena"
+          },
+          "tweenable": {
+            "cpp": "true"
+          }
         }
       ],
       "defaults": {
@@ -144,6 +416,65 @@
           "id": "enabled",
           "label": "Usar no Play",
           "member": "enabled"
+        },
+        {
+          "id": "physical_camera",
+          "label": "Câmera física",
+          "member": "physicalCamera",
+          "presentation": {
+            "group": "Lente",
+            "help": "Lente por distância focal e sensor, como uma câmera real",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){return static_cast<const Camera&>(v).projection==CameraProjection::Perspective;}"
+            },
+            "capability": "render.camera.physical",
+            "consumer": "editor/editor_scene_camera.h → campo de visão efetivo"
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "post_processing",
+          "label": "Pós-processamento",
+          "member": "postProcessing",
+          "presentation": {
+            "group": "Renderização",
+            "help": "Bloom, gradação, vinheta e exposição automática dos volumes",
+            "capability": "render.camera.post",
+            "consumer": "platform/android/instanced_renderer.cpp → passe de pós"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "render_shadows",
+          "label": "Renderizar sombras",
+          "member": "renderShadows",
+          "presentation": {
+            "group": "Renderização",
+            "help": "Sombras do sol e das luzes locais nesta câmera",
+            "capability": "render.camera.post",
+            "consumer": "platform/android/instanced_renderer.cpp → cascatas e atlas local"
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "hdr",
+          "label": "HDR",
+          "member": "hdr",
+          "presentation": {
+            "group": "Saída",
+            "help": "Desligado, a cena é tonalizada no próprio shader e nada passa de 1 antes do pós",
+            "capability": "render.camera.post",
+            "consumer": "platform/android/instanced_renderer.cpp → cor de cena linear"
+          },
+          "default": {
+            "cpp": "true"
+          }
         }
       ],
       "defaults": {
@@ -174,12 +505,12 @@
         },
         {
           "id": "environment_mask",
-          "label": "Ambientes",
+          "label": "Volumes",
           "type": "Camera",
           "member": "environmentMask",
           "options": "cameraEnvironmentMaskOptions",
           "presentation": {
-            "group": "Saída",
+            "group": "Ambiente",
             "unit": "",
             "help": "Volumes que esta câmera consulta",
             "visible": {
@@ -193,6 +524,62 @@
             "invalidates": {
               "cpp": "Invalidate::Draw"
             }
+          }
+        },
+        {
+          "id": "background_type",
+          "label": "Fundo",
+          "type": "Camera",
+          "member": "background",
+          "options": "cameraBackgroundOptions",
+          "presentation": {
+            "group": "Ambiente",
+            "help": "O que preenche a tela antes da cena (Background Type)",
+            "capability": "render.camera.background",
+            "consumer": "platform/android/instanced_renderer.cpp → céu ou cor de limpeza"
+          }
+        },
+        {
+          "id": "culling_mask",
+          "label": "Camadas visíveis",
+          "type": "Camera",
+          "member": "cullingMask",
+          "options": "cameraCullingMaskOptions",
+          "presentation": {
+            "group": "Renderização",
+            "help": "Culling Mask: só objetos destas camadas aparecem nesta câmera",
+            "capability": "render.camera.culling_mask",
+            "consumer": "platform/android/instanced_renderer.cpp → visibilidade por camada"
+          },
+          "flags": true
+        },
+        {
+          "id": "antialiasing",
+          "label": "Antisserrilhado",
+          "type": "Camera",
+          "member": "antialiasing",
+          "options": "cameraAntialiasingOptions",
+          "presentation": {
+            "group": "Renderização",
+            "help": "Do projeto usa a política de qualidade; TAA só quando o projeto já usa TAA",
+            "capability": "render.camera.post",
+            "consumer": "platform/android/instanced_renderer.cpp → AA do pós"
+          }
+        },
+        {
+          "id": "gate_fit",
+          "label": "Ajuste do sensor",
+          "type": "Camera",
+          "member": "gateFit",
+          "options": "cameraGateFitOptions",
+          "presentation": {
+            "group": "Lente",
+            "help": "Como o sensor encaixa na proporção da tela (Gate Fit)",
+            "visible": {
+              "cpp": "[](const ComponentValue &v){const auto &c=static_cast<const Camera&>(v);return c.projection==CameraProjection::Perspective&&c.physicalCamera;}"
+            },
+            "capability": "render.camera.physical",
+            "consumer": "editor/editor_scene_camera.h → campo de visão efetivo"
           }
         }
       ]
@@ -221,6 +608,29 @@
       "type": "Camera",
       "properties": [
         "cameraNumbers/orthographic_half_height"
+      ]
+    },
+    {
+      "name": "camera_Camera_fields3",
+      "type": "Camera",
+      "properties": [
+        "cameraNumbers/focal_length",
+        "cameraNumbers/sensor_width",
+        "cameraNumbers/sensor_height",
+        "cameraNumbers/viewport_x",
+        "cameraNumbers/viewport_y",
+        "cameraNumbers/viewport_width",
+        "cameraNumbers/viewport_height"
+      ]
+    },
+    {
+      "name": "camera_Camera_fields4",
+      "type": "Camera",
+      "properties": [
+        "cameraBooleans/physical_camera",
+        "cameraBooleans/post_processing",
+        "cameraBooleans/render_shadows",
+        "cameraBooleans/hdr"
       ]
     }
   ]
