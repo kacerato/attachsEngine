@@ -32,7 +32,7 @@ namespace ae::scene {
 // estáveis porque a UI guarda a família escolhida; família sem tipo registrado
 // simplesmente não aparece.
 enum class ComponentFamily : u32 {
-  Logic, Rendering, Lighting, Camera, Physics3D, Animation, Physics2D, Audio, Navigation, Count
+  Logic, Rendering, Lighting, Camera, Physics3D, Animation, Physics2D, Audio, Navigation, Effects, Count
 };
 inline constexpr const char *componentFamilyName(ComponentFamily family) {
   switch (family) {
@@ -45,6 +45,7 @@ inline constexpr const char *componentFamilyName(ComponentFamily family) {
   case ComponentFamily::Physics2D: return "Física 2D";
   case ComponentFamily::Audio: return "Áudio";
   case ComponentFamily::Navigation: return "Navegação";
+  case ComponentFamily::Effects: return "Efeitos";
   case ComponentFamily::Count: break;
   }
   return "";
@@ -62,6 +63,7 @@ inline constexpr std::string_view componentFamilyIcon(ComponentFamily family) {
   case ComponentFamily::Physics2D: return "physics/body-2d";
   case ComponentFamily::Audio: return "audio/source";
   case ComponentFamily::Navigation: return "navigation/surface";
+  case ComponentFamily::Effects: return "component/particle-system";
   case ComponentFamily::Count: break;
   }
   return "";

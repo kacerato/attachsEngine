@@ -124,6 +124,7 @@ constexpr const char *kNames[] = {
     "component/look",
     "component/look-at-constraint",
     "component/parent-constraint",
+    "component/particle-system",
     "component/path-follow",
     "component/penetration-avoidance",
     "component/physics",

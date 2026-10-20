@@ -30,6 +30,8 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/color_grading.h"
 #include "resources/environment_looks.h"
+#include "editor/editor_particle_inspector.h"
+#include "runtime/scene_particles.h"
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
@@ -4784,6 +4786,68 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
   }
+  // Sistema de partículas: linhas de curva e gradiente logo abaixo do modo que
+  // as liga, a prévia no topo de Principal e a ordem dos módulos da Unity.
+  if(entry.type==&scene::ParticleSystem::descriptor&&!searching) {
+    const auto &system=scene::particleSystem(*component);
+    const auto curves=scene::ParticleSystem::curveSlots();
+    const auto gradients=scene::ParticleSystem::gradientSlots();
+    for(u32 i=0;i<curves.size();++i)
+      if(particleSlotGroup(curves[i].id)==group&&particleCurveRowVisible(system,curves[i])) fields.push_back({30,i});
+    for(u32 i=0;i<gradients.size();++i)
+      if(particleSlotGroup(gradients[i].id)==group&&particleGradientRowVisible(system,gradients[i])) fields.push_back({31,i});
+    if(group=="Principal") fields.push_back({32,0});
+    const auto fieldId=[&](const Field &f)->std::string_view {
+      switch(f.kind) {
+      case 0: return entry.type->booleans[f.index].id;
+      case 1: return entry.type->enums[f.index].id;
+      case 2: return entry.type->numbers[f.index].id;
+      case 5: return entry.type->triples[f.index].id;
+      case 30: return curves[f.index].id;
+      case 31: return gradients[f.index].id;
+      case 32: return kParticlePreviewRow;
+      default: return {};
+      }
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){
+      return particleInspectorRank(fieldId(a))<particleInspectorRank(fieldId(b));});
+    // Min/Max numa linha só (valor ou par + chip do modo), rajada numa linha e,
+    // em coluna, o interruptor do módulo vai para o cabeçalho da seção.
+    const auto numberIndex=[&](const std::string &id)->u32 {
+      for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) return i;
+      return 0xffffu;
+    };
+    const auto hasMode=[&](const std::string &base) {
+      for(const auto &e:entry.type->enums) if(e.id==base+"_mode") return true;
+      return false;
+    };
+    std::vector<Field> compact;
+    for(const auto &f:fields) {
+      if(f.kind==1) {
+        const std::string id(entry.type->enums[f.index].id);
+        // Só modos de Min/Max (há um número com o mesmo nome base); "Modo" de
+        // renderização e "Ordenação" continuam listas comuns.
+        if(id.ends_with("_mode")&&numberIndex(id.substr(0,id.size()-5))!=0xffffu) {
+          const auto base=id.substr(0,id.size()-5);
+          compact.push_back({33,f.index,(numberIndex(base+"_min")&0xffffu)|(numberIndex(base+"_multiplier")<<16),numberIndex(base)});
+          continue;
+        }
+      }
+      if(f.kind==2) {
+        const std::string id(entry.type->numbers[f.index].id);
+        if(hasMode(id)) continue;
+        if(id.ends_with("_min")&&hasMode(id.substr(0,id.size()-4))) continue;
+        if(id.ends_with("_multiplier")&&hasMode(id.substr(0,id.size()-11))) continue;
+        if(id.starts_with("burst_")&&id!="burst_count") {
+          if(id.ends_with("_time")) compact.push_back({34,static_cast<u32>(id[6]-'0')});
+          continue;
+        }
+      }
+      if(stacked&&f.kind==0&&particleModuleToggle(group)==entry.type->booleans[f.index].id) continue;
+      compact.push_back(f);
+    }
+    fields=std::move(compact);
+  }
   // Câmera virtual e Cérebro: o interruptor que liga o grupo e a escolha de modo
   // vêm antes dos valores que eles mostram; os alvos fecham a aba Geral.
   if((entry.type==&scene::VirtualCamera::descriptor||entry.type==&scene::CameraBrain::descriptor)&&!searching) {
@@ -5039,7 +5103,87 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       builder.router.addRegion(button,widgetId(EditorWidget::ComponentFieldResetBase)+index+(f.kind<<8)+(f.index<<12)+(f.slot<<20));
     }
     const auto hit=slot;
-    if(f.kind==8) {
+    if(f.kind==30||f.kind==31) {
+      // Curva ou gradiente do componente: miniatura do valor; o toque abre o
+      // editor de curva/gradiente do projeto com bibliotecas e histórico.
+      const auto &system=scene::particleSystem(*component);
+      const bool curve=f.kind==30;
+      const auto slotId=curve?scene::ParticleSystem::curveSlots()[f.index].id:scene::ParticleSystem::gradientSlots()[f.index].id;
+      const char *rowName=curve?particleCurveRowLabel(system,scene::ParticleSystem::curveSlots()[f.index]):
+                                particleGradientRowLabel(system,scene::ParticleSystem::gradientSlots()[f.index]);
+      builder.label(takeLeft(slot,std::min(120.f,slot.width*.42f)),rowName,theme.color.textDim,theme.type.caption);
+      auto box=deflate(slot,UiInsets{2,6,2,6});
+      builder.list.addRect(box,theme.color.silhouette,theme.radius.control);
+      const auto inner=deflate(box,UiInsets::all(4));
+      if(curve) drawCurveThumbnail(builder,inner,*system.curve(slotId),theme.color.accent);
+      else drawGradientBar(builder,inner,*system.gradient(slotId),32);
+      const bool editable=builder.state.workspace!=EditorWorkspace::Play;
+      if(editable) builder.router.addRegion(hit,widgetId(curve?EditorWidget::ParticleCurveRowBase:EditorWidget::ParticleGradientRowBase)+f.index);
+    } else if(f.kind==33||f.kind==34) {
+      // Células numéricas compactas: rótulo pequeno em cima, valor embaixo; o
+      // toque edita pelo mesmo widget do número refletido.
+      const auto cell=[&](UiRect area,u32 field,const char *top) {
+        if(field>=entry.type->numbers.size()) return;
+        const auto &p=entry.type->numbers[field];
+        builder.list.addRect(deflate(area,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+        if(top) builder.label(takeTop(area,15),top,theme.color.textDim,theme.type.caption,UiAlign::Center);
+        char value[32];std::snprintf(value,sizeof value,"%.6g%s%s",static_cast<double>(p.read(*component)),
+                                     p.presentation.unit.empty()||top?"":" ",top?"":std::string(p.presentation.unit).c_str());
+        builder.label(area,builder.mixed(multiKey(component->instanceId(),p.id))?"\xE2\x80\x94":value,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(p.presentation.isEditable(*component)) builder.router.addRegion(area,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));
+      };
+      if(f.kind==33) {
+        const auto &mode=entry.type->enums[f.index];
+        const u32 current=mode.read(*component),minimum=f.slot&0xffffu,multiplier=f.slot>>16;
+        builder.label(takeLeft(slot,slot.width*.36f),f.second<entry.type->numbers.size()?entry.type->numbers[f.second].name:mode.name,
+                      theme.color.textDim,theme.type.caption);
+        auto chip=takeRight(slot,82);
+        auto chipBox=deflate(chip,UiInsets::all(2));
+        builder.list.addRect(chipBox,withAlpha(theme.color.accent,.14f),theme.radius.control);
+        builder.list.addImage(centred(takeRight(chipBox,18),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.accent);
+        builder.label(chipBox,particleModeChip(current),theme.color.accent,theme.type.caption,UiAlign::Center);
+        if(mode.presentation.isEditable(*component)) builder.router.addRegion(chip,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+        if(current==2) {const float w=slot.width*.5f;cell(takeLeft(slot,w),minimum,nullptr);cell(slot,f.second,nullptr);}
+        else if(current==1||current==3) cell(slot,multiplier,nullptr);
+        else cell(slot,f.second,nullptr);
+      } else {
+        char title[16];std::snprintf(title,sizeof title,"Rajada %u",f.index+1);
+        builder.label(takeLeft(slot,58),title,theme.color.textDim,theme.type.caption);
+        static constexpr const char *parts[]{"time","count_min","count_max","cycles","interval","probability"};
+        static constexpr const char *tops[]{"tempo","mín","máx","ciclos","interv.","chance"};
+        const float w=slot.width/6;
+        for(u32 k=0;k<6;++k) {
+          char id[40];std::snprintf(id,sizeof id,"burst_%u_%s",f.index,parts[k]);
+          u32 field=0xffffu;
+          for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) field=i;
+          cell(k<5?takeLeft(slot,w):slot,field,tops[k]);
+        }
+      }
+    } else if(f.kind==32) {
+      // Prévia: o que o sistema está fazendo agora na vista, e reiniciar.
+      runtime::SceneParticles::Status live;
+      const auto *particles=builder.state.particleRuntime;
+      const bool known=particles&&particles->peek(entity.id,component->instanceId(),live);
+      const u32 capacity=particles?particles->capacityOf(entity.id,component->instanceId()):0;
+      const auto &system=scene::particleSystem(*component);
+      const bool limited=known&&capacity<static_cast<u32>(system.maxParticles);
+      auto card=deflate(slot,UiInsets::all(2));
+      builder.list.addRect(card,withAlpha(theme.color.accent,.10f),8);
+      auto inside=deflate(card,UiInsets{6,8,6,4});
+      const bool editing=builder.state.workspace!=EditorWorkspace::Play;
+      if(editing) {
+        auto restart=takeRight(inside,40);
+        builder.list.addRect(deflate(restart,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+        builder.list.addImage(centred(restart,18,18),static_cast<UiImageId>(UiIcon::RuntimePlay),theme.color.accent);
+        builder.router.addRegion(restart,widgetId(EditorWidget::ParticlePreviewRestart));
+      }
+      builder.list.addImage(centred(takeLeft(inside,24),18,18),static_cast<UiImageId>(UiIcon::ComponentParticleSystem),theme.color.accent);
+      char text[128];
+      if(!known) std::snprintf(text,sizeof text,"%s",editing?"Prévia parada":"Sem simulação");
+      else std::snprintf(text,sizeof text,"%s · %u vivas%s · %.2f ms",live.paused?"Pausado":live.playing?(live.emitting?"Emitindo":"Terminando"):"Parado",
+                         live.alive,limited?" · teto do aparelho":"",static_cast<double>(builder.state.particleSimulationMs));
+      builder.label(inside,text,limited?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==8) {
       std::string summary="Influência indisponível";bool warning=true;
       std::vector<renderer::SceneEnvironmentVolume> volumes;
       if(builder.state.view && runtime::collectSceneEnvironmentVolumes(*builder.state.document,volumes))
@@ -5552,8 +5696,19 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
                           open?theme.color.accent:theme.color.textDim);
     const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
+    // Partículas: o interruptor do módulo no cabeçalho, registrado depois do
+    // dobrar para ganhar o toque dentro do próprio retângulo.
+    u32 moduleToggle=~u32{0};UiRect toggleArea{};
+    if(entry.type==&scene::ParticleSystem::descriptor)
+      for(u32 b=0;b<entry.type->booleans.size();++b)
+        if(entry.type->booleans[b].id==particleModuleToggle(groups[g])) {moduleToggle=b;toggleArea=takeRight(row,44);}
     builder.label(row,spring?std::string_view{"Mola"}:groups[g],open?theme.color.text:theme.color.textDim,theme.type.body);
     if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
+    if(moduleToggle!=~u32{0}) {
+      const auto &property=entry.type->booleans[moduleToggle];
+      builder.checkbox(centred(toggleArea,28,28),property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(moduleToggle<<8),
+                       property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+    }
     if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
   }
 }

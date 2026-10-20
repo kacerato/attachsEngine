@@ -453,6 +453,8 @@ add_library(aether_renderer STATIC
   renderer/water_fft.cpp
   renderer/water_spectrum.cpp
   renderer/water_cascades.cpp
+  renderer/particles/particle_simulation.cpp
+  renderer/particles/particle_textures.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # O render graph deixa de ser alvo apenas de teste: a politica de anexos do
@@ -573,6 +575,7 @@ add_library(aether_runtime STATIC
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
   runtime/scene_time_of_day.cpp
+  runtime/scene_particles.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
   runtime/scene_dynamic_motor.cpp
@@ -914,6 +917,7 @@ if(NOT ANDROID)
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_runtime_world.cpp
+    ../tests/native/test_particle_system.cpp
     ../tests/native/test_primitives.cpp
     ../tests/native/test_prefab.cpp
     ../tests/native/test_runtime_physics_access.cpp
@@ -1147,6 +1151,13 @@ if(NOT ANDROID)
   add_executable(aether_telemetry_tests ../tests/native/family_base_main.cpp ../tests/native/test_telemetry_window.cpp ../tests/native/test_telemetry_recorder.cpp)
   target_include_directories(aether_telemetry_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_telemetry_tests PRIVATE aether_core)
+  # G5 partículas: componente, simulação, mundo da cena e texturas, sem editor nem Vulkan.
+  add_executable(aether_particle_tests ../tests/native/family_base_main.cpp ../tests/native/test_particle_system.cpp)
+  target_include_directories(aether_particle_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_particle_tests PRIVATE aether_core aether_renderer aether_runtime aether_resources)
+  if(MINGW)
+    target_compile_options(aether_particle_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
   # Curve/resource invariants do not need Vulkan, physics or a full editor link.
   # The same cases are also part of aether_tests for integration builds.
   add_executable(aether_animation_clip_resource_tests ../tests/native/family_base_main.cpp

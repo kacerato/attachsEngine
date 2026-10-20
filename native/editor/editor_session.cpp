@@ -3324,6 +3324,7 @@ void EditorSession::saveGradientLibraries() {
 }
 
 bool EditorSession::commitGradientEditor() {
+  if(state_.gradientType==kParticleGradientType) return commitParticleValue(false);
   const auto *entity=document_.find(state_.gradientEntity);
   bool hdr=false;scene::scriptGradientType(scene::scriptArrayElementType(state_.gradientType).empty()?
       std::string_view(state_.gradientType):scene::scriptArrayElementType(state_.gradientType),&hdr);
@@ -3512,7 +3513,37 @@ void EditorSession::saveCurveLibraries() {
   if(!files_.rootPath().empty() && !curveLibraries_.save(error)) state_.status=error;
 }
 
+// Curva/gradiente de um Sistema de partículas: o valor inteiro volta ao
+// componente num passo de histórico, como qualquer edição do inspetor.
+bool EditorSession::commitParticleValue(bool curve) {
+  const auto entityId=curve?state_.curveEntity:state_.gradientEntity;
+  const auto instance=curve?state_.curveInstance:state_.gradientInstance;
+  const auto &slot=curve?state_.curveProperty:state_.gradientProperty;
+  auto &field=curve?state_.curveField:state_.gradientField;
+  const auto *entity=document_.find(entityId);
+  if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
+    field=0;state_.status=curve?"Curva cancelada: a cena mudou":"Gradiente cancelado: a cena mudou";return true;
+  }
+  auto value=*entity;
+  auto *component=value.components.editInstance(instance);
+  if(!component||&component->type()!=&scene::ParticleSystem::descriptor) {field=0;return false;}
+  auto &system=scene::particleSystem(*component);
+  if(curve) {
+    auto *target=system.curve(slot);
+    if(!target) {field=0;return false;}
+    *target=curveEdit_;
+  } else {
+    auto *target=system.gradient(slot);
+    if(!target) {field=0;return false;}
+    *target=gradientEdit_;
+  }
+  if(!system.valid()) {state_.status=curve?"Curva recusada pelo componente":"Gradiente recusado pelo componente";return false;}
+  if(!history_.applyValues(document_,entity->id,value)) {state_.status="Edição recusada";return false;}
+  field=0;return true;
+}
+
 bool EditorSession::commitCurveEditor() {
+  if(state_.curveType==kParticleCurveType) return commitParticleValue(true);
   const auto *entity=document_.find(state_.curveEntity);
   if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
     state_.curveField=0;state_.status="Curva cancelada: a cena mudou";return true;
@@ -6333,6 +6364,8 @@ void EditorSession::update() {
   state_.characterRuntime=playInspecting()&&playScene_.active()?&playScene_.physics():nullptr;
   state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
+  state_.particleRuntime=isPlaying()&&playScene_.active()?&playScene_.particles():&previewParticles_;
+  state_.particleSimulationMs=state_.particleRuntime->lastSimulationMs();
   state_.tweenSequenceRuntime=playInspecting()&&playScene_.active()?&playScene_.tweenSequences():nullptr;
   state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
   state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;

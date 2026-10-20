@@ -31,6 +31,7 @@ class SceneVirtualCameras;
 class SceneAnimatorGraphs;
 class SceneNavigation;
 class SceneIk;
+class SceneParticles;
 
 struct ComponentOperationServices {
   GameWorld *world=nullptr;
@@ -45,6 +46,7 @@ struct ComponentOperationServices {
   SceneAnimatorGraphs *animators=nullptr;
   SceneNavigation *navigation=nullptr;
   SceneIk *ik=nullptr;
+  SceneParticles *particles=nullptr;
 };
 
 using ComponentMethodInvoke=WorldStatus (*)(const ComponentOperationServices &,ComponentHandle,

@@ -241,18 +241,24 @@ inline const CreationComponent navigationAgent[]{{character},{navAgent}};
 inline const CreationComponent navigationObstacle[]{{navObstacle}};
 inline const CreationValue navigationLinkValues[]{{navLink,"start_z",-1.5f},{navLink,"end_z",1.5f}};
 inline const CreationComponent navigationLink[]{{navLink,navigationLinkValues}};
+// Partículas (G5): o cone padrão (+Z, convenção da Unity) é girado pela própria
+// forma para subir, sem girar o objeto — o gizmo continua alinhado ao mundo.
+inline constexpr std::string_view particleSystem="astra.effects.particle_system";
+inline const CreationValue particleValues[]{{particleSystem,"shape_rotation_x",-90.f}};
+inline const CreationComponent particles[]{{particleSystem,particleValues}};
 } // namespace recipe
 
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem"};
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Efeitos"};
 // Ícones das categorias no trilho da folha de criação (nomes do catálogo do atlas).
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
-  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface","component/character"};
+  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface","component/character","component/particle-system"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // Categoria Personagem: receitas sobre o personagem selecionado (ação
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,98> editorCreationCatalog{{
+inline constexpr unsigned kEffectsCreationCategory=10;
+inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -276,6 +282,10 @@ inline const std::array<EditorCreationEntry,98> editorCreationCatalog{{
   {"import.model",EditorWidget::ImportModel,1,"Importar modelo","Abre um .glb do aparelho e traz suas malhas.",ui::UiIcon::AssetsImport},
   // Modelos de cena (Scene Templates da Unity, aplicados à cena aberta).
   {"basic.scene_template",EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers},
+  {"effect.particles",EditorWidget::None,kEffectsCreationCategory,"Partículas","Emissor de partículas: fogo, faíscas, fumaça, magia.",
+    ui::UiIcon::ComponentParticleSystem,runtime::ObjectKind::Folder,recipe::particles,CreationPose::ViewTarget,0.5f,{},{},
+    "ParticleSystem Shuriken GPUParticles3D CPUParticles3D VFX Efeito Fogo Faisca Fumaca Particulas",scene::PrimitiveType::Count,false,{},
+    recipe::particleSystem},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,

@@ -1,0 +1,2791 @@
+{
+  "format": 1,
+  "source": "native/scene/particle_system.h",
+  "tables": [
+    {
+      "name": "particleSystemNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "duration",
+          "label": "Duração",
+          "type": "ParticleSystem",
+          "member": "duration",
+          "min": {
+            "cpp": "0.05f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Comprimento de um ciclo de emissão"
+          }
+        },
+        {
+          "id": "start_delay",
+          "label": "Atraso inicial",
+          "type": "ParticleSystem",
+          "member": "startDelay.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Espera antes de começar a emitir",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::startDelay>"
+            }
+          }
+        },
+        {
+          "id": "start_delay_min",
+          "label": "Atraso inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "startDelay.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::startDelay>"
+            }
+          }
+        },
+        {
+          "id": "start_lifetime",
+          "label": "Vida inicial",
+          "type": "ParticleSystem",
+          "member": "startLifetime.constantMax",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quanto tempo cada partícula vive",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::startLifetime>"
+            }
+          }
+        },
+        {
+          "id": "start_lifetime_min",
+          "label": "Vida inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "startLifetime.constantMin",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::startLifetime>"
+            }
+          }
+        },
+        {
+          "id": "start_lifetime_multiplier",
+          "label": "Vida inicial · multiplicador",
+          "type": "ParticleSystem",
+          "member": "startLifetime.multiplier",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::startLifetime>"
+            }
+          }
+        },
+        {
+          "id": "start_speed",
+          "label": "Velocidade inicial",
+          "type": "ParticleSystem",
+          "member": "startSpeed.constantMax",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Velocidade na direção da forma",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::startSpeed>"
+            }
+          }
+        },
+        {
+          "id": "start_speed_min",
+          "label": "Velocidade inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "startSpeed.constantMin",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::startSpeed>"
+            }
+          }
+        },
+        {
+          "id": "start_speed_multiplier",
+          "label": "Velocidade inicial · multiplicador",
+          "type": "ParticleSystem",
+          "member": "startSpeed.multiplier",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::startSpeed>"
+            }
+          }
+        },
+        {
+          "id": "start_size",
+          "label": "Tamanho inicial",
+          "type": "ParticleSystem",
+          "member": "startSize.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Lado do quadrado da partícula",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::startSize>"
+            }
+          }
+        },
+        {
+          "id": "start_size_min",
+          "label": "Tamanho inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "startSize.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::startSize>"
+            }
+          }
+        },
+        {
+          "id": "start_size_multiplier",
+          "label": "Tamanho inicial · multiplicador",
+          "type": "ParticleSystem",
+          "member": "startSize.multiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::startSize>"
+            }
+          }
+        },
+        {
+          "id": "start_rotation",
+          "label": "Rotação inicial",
+          "type": "ParticleSystem",
+          "member": "startRotation.constantMax",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Giro da partícula no plano da tela",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::startRotation>"
+            }
+          }
+        },
+        {
+          "id": "start_rotation_min",
+          "label": "Rotação inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "startRotation.constantMin",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::startRotation>"
+            }
+          }
+        },
+        {
+          "id": "start_rotation_multiplier",
+          "label": "Rotação inicial · multiplicador",
+          "type": "ParticleSystem",
+          "member": "startRotation.multiplier",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::startRotation>"
+            }
+          }
+        },
+        {
+          "id": "start_color_r",
+          "label": "Cor inicial R",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMax[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Cor linear; acima de 1 é HDR",
+            "visible": {
+              "cpp": "particleGradientShowsColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_g",
+          "label": "Cor inicial G",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMax[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Cor linear; acima de 1 é HDR",
+            "visible": {
+              "cpp": "particleGradientShowsColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_b",
+          "label": "Cor inicial B",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMax[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Cor linear; acima de 1 é HDR",
+            "visible": {
+              "cpp": "particleGradientShowsColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_a",
+          "label": "Opacidade inicial",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMax[3]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleGradientShowsColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_min_r",
+          "label": "Cor mínima R",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMin[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Outra ponta do sorteio de cor",
+            "visible": {
+              "cpp": "particleGradientShowsMinColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_min_g",
+          "label": "Cor mínima G",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMin[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Outra ponta do sorteio de cor",
+            "visible": {
+              "cpp": "particleGradientShowsMinColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_min_b",
+          "label": "Cor mínima B",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMin[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Outra ponta do sorteio de cor",
+            "visible": {
+              "cpp": "particleGradientShowsMinColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "start_color_min_a",
+          "label": "Opacidade mínima",
+          "type": "ParticleSystem",
+          "member": "startColor.colorMin[3]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleGradientShowsMinColor<&ParticleSystemSettings::startColor>"
+            }
+          }
+        },
+        {
+          "id": "gravity_modifier",
+          "label": "Gravidade",
+          "type": "ParticleSystem",
+          "member": "gravityModifier.constantMax",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Fração da gravidade de 9,81 m/s² para baixo",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::gravityModifier>"
+            }
+          }
+        },
+        {
+          "id": "gravity_modifier_min",
+          "label": "Gravidade mínimo",
+          "type": "ParticleSystem",
+          "member": "gravityModifier.constantMin",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::gravityModifier>"
+            }
+          }
+        },
+        {
+          "id": "gravity_modifier_multiplier",
+          "label": "Gravidade · multiplicador",
+          "type": "ParticleSystem",
+          "member": "gravityModifier.multiplier",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::gravityModifier>"
+            }
+          }
+        },
+        {
+          "id": "simulation_speed",
+          "label": "Velocidade da simulação",
+          "type": "ParticleSystem",
+          "member": "simulationSpeed",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "max_particles",
+          "label": "Máximo de partículas",
+          "type": "ParticleSystem",
+          "member": "maxParticles",
+          "min": {
+            "cpp": "1.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Teto autoral; o nível do aparelho pode reduzir sem apagar este valor"
+          }
+        },
+        {
+          "id": "random_seed",
+          "label": "Semente",
+          "type": "ParticleSystem",
+          "member": "randomSeed",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "16777215.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Mesma semente, mesma sequência de partículas",
+            "visible": {
+              "cpp": "particleManualSeed"
+            }
+          }
+        },
+        {
+          "id": "emission_rate",
+          "label": "Taxa por segundo",
+          "type": "ParticleSystem",
+          "member": "emissionRate.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Partículas novas por segundo",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::emissionRate>"
+            }
+          }
+        },
+        {
+          "id": "emission_rate_min",
+          "label": "Taxa por segundo mínimo",
+          "type": "ParticleSystem",
+          "member": "emissionRate.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::emissionRate>"
+            }
+          }
+        },
+        {
+          "id": "emission_rate_multiplier",
+          "label": "Taxa por segundo · multiplicador",
+          "type": "ParticleSystem",
+          "member": "emissionRate.multiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::emissionRate>"
+            }
+          }
+        },
+        {
+          "id": "burst_count",
+          "label": "Rajadas",
+          "type": "ParticleSystem",
+          "member": "burstCount",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "4.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quantas rajadas o ciclo tem (até 4)"
+          }
+        },
+        {
+          "id": "burst_0_time",
+          "label": "Rajada 1 · tempo",
+          "type": "ParticleSystem",
+          "member": "bursts[0].time",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Momento no ciclo",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_0_count_min",
+          "label": "Rajada 1 · mínimo",
+          "type": "ParticleSystem",
+          "member": "bursts[0].countMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Partículas, sorteadas até o máximo",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_0_count_max",
+          "label": "Rajada 1 · máximo",
+          "type": "ParticleSystem",
+          "member": "bursts[0].countMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_0_cycles",
+          "label": "Rajada 1 · ciclos",
+          "type": "ParticleSystem",
+          "member": "bursts[0].cycles",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "0 repete enquanto emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_0_interval",
+          "label": "Rajada 1 · intervalo",
+          "type": "ParticleSystem",
+          "member": "bursts[0].interval",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Entre ciclos da mesma rajada",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_0_probability",
+          "label": "Rajada 1 · chance",
+          "type": "ParticleSystem",
+          "member": "bursts[0].probability",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Chance de cada ciclo emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<0>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_time",
+          "label": "Rajada 2 · tempo",
+          "type": "ParticleSystem",
+          "member": "bursts[1].time",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Momento no ciclo",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_count_min",
+          "label": "Rajada 2 · mínimo",
+          "type": "ParticleSystem",
+          "member": "bursts[1].countMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Partículas, sorteadas até o máximo",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_count_max",
+          "label": "Rajada 2 · máximo",
+          "type": "ParticleSystem",
+          "member": "bursts[1].countMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_cycles",
+          "label": "Rajada 2 · ciclos",
+          "type": "ParticleSystem",
+          "member": "bursts[1].cycles",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "0 repete enquanto emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_interval",
+          "label": "Rajada 2 · intervalo",
+          "type": "ParticleSystem",
+          "member": "bursts[1].interval",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Entre ciclos da mesma rajada",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_1_probability",
+          "label": "Rajada 2 · chance",
+          "type": "ParticleSystem",
+          "member": "bursts[1].probability",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Chance de cada ciclo emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<1>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_time",
+          "label": "Rajada 3 · tempo",
+          "type": "ParticleSystem",
+          "member": "bursts[2].time",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Momento no ciclo",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_count_min",
+          "label": "Rajada 3 · mínimo",
+          "type": "ParticleSystem",
+          "member": "bursts[2].countMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Partículas, sorteadas até o máximo",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_count_max",
+          "label": "Rajada 3 · máximo",
+          "type": "ParticleSystem",
+          "member": "bursts[2].countMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_cycles",
+          "label": "Rajada 3 · ciclos",
+          "type": "ParticleSystem",
+          "member": "bursts[2].cycles",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "0 repete enquanto emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_interval",
+          "label": "Rajada 3 · intervalo",
+          "type": "ParticleSystem",
+          "member": "bursts[2].interval",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Entre ciclos da mesma rajada",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_2_probability",
+          "label": "Rajada 3 · chance",
+          "type": "ParticleSystem",
+          "member": "bursts[2].probability",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Chance de cada ciclo emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<2>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_time",
+          "label": "Rajada 4 · tempo",
+          "type": "ParticleSystem",
+          "member": "bursts[3].time",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Momento no ciclo",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_count_min",
+          "label": "Rajada 4 · mínimo",
+          "type": "ParticleSystem",
+          "member": "bursts[3].countMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Partículas, sorteadas até o máximo",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_count_max",
+          "label": "Rajada 4 · máximo",
+          "type": "ParticleSystem",
+          "member": "bursts[3].countMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_cycles",
+          "label": "Rajada 4 · ciclos",
+          "type": "ParticleSystem",
+          "member": "bursts[3].cycles",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "0 repete enquanto emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_interval",
+          "label": "Rajada 4 · intervalo",
+          "type": "ParticleSystem",
+          "member": "bursts[3].interval",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Entre ciclos da mesma rajada",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "burst_3_probability",
+          "label": "Rajada 4 · chance",
+          "type": "ParticleSystem",
+          "member": "bursts[3].probability",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Chance de cada ciclo emitir",
+            "visible": {
+              "cpp": "particleBurstVisible<3>"
+            }
+          }
+        },
+        {
+          "id": "shape_radius",
+          "label": "Raio",
+          "type": "ParticleSystem",
+          "member": "shapeRadius",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Na aresta, é meio comprimento",
+            "visible": {
+              "cpp": "particleShapeRadius"
+            }
+          }
+        },
+        {
+          "id": "shape_radius_thickness",
+          "label": "Espessura do raio",
+          "type": "ParticleSystem",
+          "member": "shapeRadiusThickness",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "0 emite da borda; 1 emite do volume inteiro",
+            "visible": {
+              "cpp": "particleShapeThickness"
+            }
+          }
+        },
+        {
+          "id": "shape_angle",
+          "label": "Ângulo",
+          "type": "ParticleSystem",
+          "member": "shapeAngle",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "90.0f"
+          },
+          "step": {
+            "cpp": "0.5f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Abertura do cone",
+            "visible": {
+              "cpp": "particleShapeCone"
+            }
+          }
+        },
+        {
+          "id": "shape_arc",
+          "label": "Arco",
+          "type": "ParticleSystem",
+          "member": "shapeArc",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Fatia da volta usada",
+            "visible": {
+              "cpp": "particleShapeArc"
+            }
+          }
+        },
+        {
+          "id": "shape_length",
+          "label": "Comprimento",
+          "type": "ParticleSystem",
+          "member": "shapeLength",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Altura do volume do cone",
+            "visible": {
+              "cpp": "particleShapeConeVolume"
+            }
+          }
+        },
+        {
+          "id": "shape_box_x",
+          "label": "Caixa X",
+          "type": "ParticleSystem",
+          "member": "shapeBox[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleShapeBox"
+            }
+          }
+        },
+        {
+          "id": "shape_box_y",
+          "label": "Caixa Y",
+          "type": "ParticleSystem",
+          "member": "shapeBox[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleShapeBox"
+            }
+          }
+        },
+        {
+          "id": "shape_box_z",
+          "label": "Caixa Z",
+          "type": "ParticleSystem",
+          "member": "shapeBox[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleShapeBox"
+            }
+          }
+        },
+        {
+          "id": "shape_position_x",
+          "label": "Posição X",
+          "type": "ParticleSystem",
+          "member": "shapePosition[0]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_position_y",
+          "label": "Posição Y",
+          "type": "ParticleSystem",
+          "member": "shapePosition[1]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_position_z",
+          "label": "Posição Z",
+          "type": "ParticleSystem",
+          "member": "shapePosition[2]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_rotation_x",
+          "label": "Rotação X",
+          "type": "ParticleSystem",
+          "member": "shapeRotation[0]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_rotation_y",
+          "label": "Rotação Y",
+          "type": "ParticleSystem",
+          "member": "shapeRotation[1]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_rotation_z",
+          "label": "Rotação Z",
+          "type": "ParticleSystem",
+          "member": "shapeRotation[2]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "°",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_random_direction",
+          "label": "Direção aleatória",
+          "type": "ParticleSystem",
+          "member": "shapeRandomDirection",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Mistura a direção com uma direção sorteada"
+          }
+        },
+        {
+          "id": "shape_spherize_direction",
+          "label": "Direção esférica",
+          "type": "ParticleSystem",
+          "member": "shapeSpherizeDirection",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Mistura a direção com a saída do centro"
+          }
+        },
+        {
+          "id": "size_over_lifetime",
+          "label": "Tamanho no tempo",
+          "type": "ParticleSystem",
+          "member": "sizeOverLifetime.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Tamanho no tempo",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::sizeOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "size_over_lifetime_min",
+          "label": "Tamanho no tempo mínimo",
+          "type": "ParticleSystem",
+          "member": "sizeOverLifetime.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Tamanho no tempo",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::sizeOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "size_over_lifetime_multiplier",
+          "label": "Tamanho no tempo · multiplicador",
+          "type": "ParticleSystem",
+          "member": "sizeOverLifetime.multiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Tamanho no tempo",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::sizeOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "rotation_over_lifetime",
+          "label": "Velocidade angular",
+          "type": "ParticleSystem",
+          "member": "rotationOverLifetime.constantMax",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Rotação no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleCurveShowsConstant<&ParticleSystemSettings::rotationOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "rotation_over_lifetime_min",
+          "label": "Velocidade angular mínimo",
+          "type": "ParticleSystem",
+          "member": "rotationOverLifetime.constantMin",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Rotação no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleCurveShowsMin<&ParticleSystemSettings::rotationOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "rotation_over_lifetime_multiplier",
+          "label": "Velocidade angular · multiplicador",
+          "type": "ParticleSystem",
+          "member": "rotationOverLifetime.multiplier",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Rotação no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleCurveShowsCurve<&ParticleSystemSettings::rotationOverLifetime>"
+            }
+          }
+        },
+        {
+          "id": "stretch_velocity_scale",
+          "label": "Escala da velocidade",
+          "type": "ParticleSystem",
+          "member": "stretchVelocityScale",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Renderização",
+            "unit": "s",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Comprimento extra por m/s",
+            "visible": {
+              "cpp": "particleStretched"
+            }
+          }
+        },
+        {
+          "id": "stretch_length_scale",
+          "label": "Escala do comprimento",
+          "type": "ParticleSystem",
+          "member": "stretchLengthScale",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Renderização",
+            "unit": "×",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Comprimento em tamanhos de partícula",
+            "visible": {
+              "cpp": "particleStretched"
+            }
+          }
+        },
+        {
+          "id": "sorting_fudge",
+          "label": "Ajuste de ordem",
+          "type": "ParticleSystem",
+          "member": "sortingFudge",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Renderização",
+            "unit": "m",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Desloca o sistema na ordem entre sistemas; positivo desenha antes (atrás)"
+          }
+        },
+        {
+          "id": "max_particle_size",
+          "label": "Tamanho máximo na tela",
+          "type": "ParticleSystem",
+          "member": "maxParticleSize",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Renderização",
+            "unit": "",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Fração da altura da tela; limita o custo de partículas perto da câmera"
+          }
+        },
+        {
+          "id": "material_tint_r",
+          "label": "Tinta R",
+          "type": "ParticleSystem",
+          "member": "materialTint[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          },
+          "tweenable": true
+        },
+        {
+          "id": "material_tint_g",
+          "label": "Tinta G",
+          "type": "ParticleSystem",
+          "member": "materialTint[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          },
+          "tweenable": true
+        },
+        {
+          "id": "material_tint_b",
+          "label": "Tinta B",
+          "type": "ParticleSystem",
+          "member": "materialTint[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          },
+          "tweenable": true
+        },
+        {
+          "id": "material_emission",
+          "label": "Emissão",
+          "type": "ParticleSystem",
+          "member": "materialEmission",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "×",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Intensidade HDR; acima de 1 alimenta o brilho estourado"
+          },
+          "tweenable": true
+        },
+        {
+          "id": "material_scroll_x",
+          "label": "Rolagem X",
+          "type": "ParticleSystem",
+          "member": "materialScroll[0]",
+          "min": {
+            "cpp": "-64.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "/s",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          }
+        },
+        {
+          "id": "material_scroll_y",
+          "label": "Rolagem Y",
+          "type": "ParticleSystem",
+          "member": "materialScroll[1]",
+          "min": {
+            "cpp": "-64.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "/s",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          }
+        },
+        {
+          "id": "material_noise_scale",
+          "label": "Escala do ruído",
+          "type": "ParticleSystem",
+          "member": "materialNoiseScale",
+          "min": {
+            "cpp": "0.05f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "×",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "visible": {
+              "cpp": "particleNoiseOn"
+            }
+          }
+        },
+        {
+          "id": "material_noise_scroll_x",
+          "label": "Rolagem do ruído X",
+          "type": "ParticleSystem",
+          "member": "materialNoiseScroll[0]",
+          "min": {
+            "cpp": "-64.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "/s",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "visible": {
+              "cpp": "particleNoiseOn"
+            }
+          }
+        },
+        {
+          "id": "material_noise_scroll_y",
+          "label": "Rolagem do ruído Y",
+          "type": "ParticleSystem",
+          "member": "materialNoiseScroll[1]",
+          "min": {
+            "cpp": "-64.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "/s",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "visible": {
+              "cpp": "particleNoiseOn"
+            }
+          }
+        },
+        {
+          "id": "material_noise_strength",
+          "label": "Recorte do ruído",
+          "type": "ParticleSystem",
+          "member": "materialNoiseStrength",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Quanto o ruído apaga a opacidade",
+            "visible": {
+              "cpp": "particleNoiseOn"
+            }
+          }
+        },
+        {
+          "id": "material_noise_distortion",
+          "label": "Distorção do ruído",
+          "type": "ParticleSystem",
+          "member": "materialNoiseDistortion",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Quanto o ruído desloca a textura principal",
+            "visible": {
+              "cpp": "particleNoiseOn"
+            }
+          }
+        },
+        {
+          "id": "material_center_glow",
+          "label": "Brilho central",
+          "type": "ParticleSystem",
+          "member": "materialCenterGlow",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "16.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Clareia o miolo denso, como fogo quente"
+          }
+        },
+        {
+          "id": "material_center_glow_power",
+          "label": "Concentração do brilho",
+          "type": "ParticleSystem",
+          "member": "materialCenterGlowPower",
+          "min": {
+            "cpp": "1.0f"
+          },
+          "max": {
+            "cpp": "32.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag"
+          }
+        },
+        {
+          "id": "material_soft_distance",
+          "label": "Partícula suave",
+          "type": "ParticleSystem",
+          "member": "materialSoftDistance",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "m",
+            "capability": "render.particles.soft",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Esmaece perto das superfícies; 0 desliga"
+          }
+        }
+      ]
+    },
+    {
+      "name": "particleSystemBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "looping",
+          "label": "Repetir",
+          "type": "ParticleSystem",
+          "member": "looping",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Recomeça o ciclo ao terminar a duração"
+          }
+        },
+        {
+          "id": "prewarm",
+          "label": "Pré-aquecer",
+          "type": "ParticleSystem",
+          "member": "prewarm",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Começa como se já tivesse rodado um ciclo inteiro",
+            "visible": {
+              "cpp": "particleLooping"
+            }
+          }
+        },
+        {
+          "id": "play_on_awake",
+          "label": "Tocar ao iniciar",
+          "type": "ParticleSystem",
+          "member": "playOnAwake",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Começa sozinho ao entrar em Play e na prévia da cena"
+          }
+        },
+        {
+          "id": "auto_random_seed",
+          "label": "Semente automática",
+          "type": "ParticleSystem",
+          "member": "autoRandomSeed",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Semente derivada do objeto; desligue para fixar"
+          }
+        },
+        {
+          "id": "emission_enabled",
+          "label": "Emissão ativa",
+          "type": "ParticleSystem",
+          "member": "emissionEnabled",
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_enabled",
+          "label": "Forma ativa",
+          "type": "ParticleSystem",
+          "member": "shapeEnabled",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Desligada: nascem no centro, para a frente (+Z)"
+          }
+        },
+        {
+          "id": "color_over_lifetime_enabled",
+          "label": "Cor no tempo ativa",
+          "type": "ParticleSystem",
+          "member": "colorOverLifetimeEnabled",
+          "presentation": {
+            "group": "Cor no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Multiplica a cor pela idade da partícula"
+          }
+        },
+        {
+          "id": "size_over_lifetime_enabled",
+          "label": "Tamanho no tempo ativo",
+          "type": "ParticleSystem",
+          "member": "sizeOverLifetimeEnabled",
+          "presentation": {
+            "group": "Tamanho no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Multiplica o tamanho pela idade da partícula"
+          }
+        },
+        {
+          "id": "rotation_over_lifetime_enabled",
+          "label": "Rotação no tempo ativa",
+          "type": "ParticleSystem",
+          "member": "rotationOverLifetimeEnabled",
+          "presentation": {
+            "group": "Rotação no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        }
+      ]
+    },
+    {
+      "name": "particleSystemEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "start_delay_mode",
+          "label": "Atraso inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startDelay.mode",
+          "options": "particleConstantModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "start_lifetime_mode",
+          "label": "Vida inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startLifetime.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "start_speed_mode",
+          "label": "Velocidade inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startSpeed.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "start_size_mode",
+          "label": "Tamanho inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startSize.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "start_rotation_mode",
+          "label": "Rotação inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startRotation.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "start_color_mode",
+          "label": "Cor inicial · modo",
+          "type": "ParticleSystem",
+          "member": "startColor.mode",
+          "options": "particleGradientModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Cor fixa, gradiente no tempo do ciclo, sorteio entre duas cores ou dois gradientes"
+          }
+        },
+        {
+          "id": "gravity_modifier_mode",
+          "label": "Gravidade · modo",
+          "type": "ParticleSystem",
+          "member": "gravityModifier.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "simulation_space",
+          "label": "Espaço",
+          "type": "ParticleSystem",
+          "member": "simulationSpace",
+          "options": "particleSpaceOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Local: as partículas acompanham o objeto. Mundo: ficam onde nasceram"
+          }
+        },
+        {
+          "id": "stop_action",
+          "label": "Ao parar",
+          "type": "ParticleSystem",
+          "member": "stopAction",
+          "options": "particleStopActionOptions",
+          "presentation": {
+            "group": "Principal",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "O que acontece quando o sistema termina e não há partículas vivas"
+          }
+        },
+        {
+          "id": "emission_rate_mode",
+          "label": "Taxa por segundo · modo",
+          "type": "ParticleSystem",
+          "member": "emissionRate.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Emissão",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "shape_type",
+          "label": "Forma",
+          "type": "ParticleSystem",
+          "member": "shapeType",
+          "options": "particleShapeOptions",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "shape_cone_emit_from",
+          "label": "Emitir do",
+          "type": "ParticleSystem",
+          "member": "shapeConeEmitFrom",
+          "options": "particleConeEmitOptions",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleShapeCone"
+            }
+          }
+        },
+        {
+          "id": "shape_box_emit_from",
+          "label": "Emitir da",
+          "type": "ParticleSystem",
+          "member": "shapeBoxEmitFrom",
+          "options": "particleBoxEmitOptions",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "visible": {
+              "cpp": "particleShapeBox"
+            }
+          }
+        },
+        {
+          "id": "color_over_lifetime_mode",
+          "label": "Cor no tempo · modo",
+          "type": "ParticleSystem",
+          "member": "colorOverLifetime.mode",
+          "options": "particleLifetimeGradientModeOptions",
+          "presentation": {
+            "group": "Cor no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp"
+          }
+        },
+        {
+          "id": "size_over_lifetime_mode",
+          "label": "Tamanho no tempo · modo",
+          "type": "ParticleSystem",
+          "member": "sizeOverLifetime.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Tamanho no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "rotation_over_lifetime_mode",
+          "label": "Velocidade angular · modo",
+          "type": "ParticleSystem",
+          "member": "rotationOverLifetime.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Rotação no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula"
+          }
+        },
+        {
+          "id": "render_mode",
+          "label": "Modo",
+          "type": "ParticleSystem",
+          "member": "renderMode",
+          "options": "particleRenderModeOptions",
+          "presentation": {
+            "group": "Renderização",
+            "unit": "",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Billboard encara a câmera; esticado alonga na direção da velocidade"
+          }
+        },
+        {
+          "id": "sort_mode",
+          "label": "Ordenação",
+          "type": "ParticleSystem",
+          "member": "sortMode",
+          "options": "particleSortOptions",
+          "presentation": {
+            "group": "Renderização",
+            "unit": "",
+            "capability": "render.particles.billboard",
+            "consumer": "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert",
+            "help": "Ordem das partículas deste sistema na mistura"
+          }
+        },
+        {
+          "id": "material_blend",
+          "label": "Mistura",
+          "type": "ParticleSystem",
+          "member": "materialBlend",
+          "options": "particleBlendOptions",
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Mistura cobre o fundo pela opacidade; Aditivo soma luz (fogo, magia)"
+          }
+        },
+        {
+          "id": "material_texture",
+          "label": "Textura",
+          "type": "ParticleSystem",
+          "member": "materialTexture",
+          "options": "particleTextureOptions",
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Textura própria da engine"
+          }
+        },
+        {
+          "id": "material_noise",
+          "label": "Ruído",
+          "type": "ParticleSystem",
+          "member": "materialNoise",
+          "options": "particleNoiseOptions",
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Textura de ruído que recorta e deforma a principal"
+          }
+        },
+        {
+          "id": "material_mask",
+          "label": "Máscara",
+          "type": "ParticleSystem",
+          "member": "materialMask",
+          "options": "particleMaskOptions",
+          "presentation": {
+            "group": "Material",
+            "unit": "",
+            "capability": "render.particles.material",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Multiplica a opacidade por uma forma fixa na partícula"
+          }
+        }
+      ]
+    }
+  ]
+}

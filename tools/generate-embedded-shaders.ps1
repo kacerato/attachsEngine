@@ -45,6 +45,8 @@ if ($All) {
         instanced = @('vert', 'frag')
         material_fallback = @('frag')
         material_preview = @('vert', 'frag')
+        particle_billboard = @('vert')
+        particle_material = @('frag')
         post_process = @('vert', 'frag')
         post_process_temporal = @('frag')
         temporal_camera_motion = @('frag')

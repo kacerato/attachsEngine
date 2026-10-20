@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 46> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 54> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -176,6 +176,22 @@ inline constexpr std::array<EngineCapability, 46> engineCapabilities{{
   {"render.upscale.temporal", "Ampliação temporal Arm ASR / AMD FSR 2", CapabilityState::DeviceLimited,
    "rhi/temporal_upscaler.cpp + platform/android/instanced_temporal_upscaler.inl",
    "Exige float16/int16, formatos de storage e subgrupos no aparelho; recusa com motivo quando falta"},
+
+  // --- Partículas (G5) -----------------------------------------------------
+  {"render.particles.simulation", "Simulação de partículas em CPU", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
+   "Main, Emission (taxa e rajadas), Shape (6 formas) e Cor/Tamanho/Rotação ao longo da vida; jobs por sistema, SoA, semente determinística"},
+  {"render.particles.billboard", "Partículas billboard e esticadas", CapabilityState::Implemented,
+   "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert", "Ordenação por sistema e dentro do sistema; desenhadas depois dos transparentes da malha"},
+  {"render.particles.material", "Material de partícula mistura/aditivo", CapabilityState::Implemented,
+   "rhi/shaders/particle_material.frag + renderer/particles/particle_textures.cpp",
+   "Texturas próprias da engine (8 formas, 3 ruídos, 3 máscaras); textura do projeto ainda não"},
+  {"render.particles.soft", "Partícula suave por profundidade", CapabilityState::DeviceLimited,
+   "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
+  {"render.particles.mesh", "Partícula de malha", CapabilityState::Planned, "renderer/particles/", "Pacote P2"},
+  {"render.particles.trails", "Rastros, TrailRenderer e LineRenderer", CapabilityState::Planned, "renderer/particles/", "Pacote P3"},
+  {"render.particles.collision", "Colisão de partículas", CapabilityState::Planned, "renderer/particles/", "Pacote P4"},
+  {"render.particles.compute", "Simulação de partículas em compute (níveis A/S)", CapabilityState::Planned, "renderer/particles/", "Pacote P5"},
 
   // --- Animação ------------------------------------------------------------
   {"animation.clip", "Clipe de animação por nós", CapabilityState::Implemented,
