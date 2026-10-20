@@ -50,6 +50,12 @@ Capacidades estudadas na Unity 6000.0: [AnimationCurve](https://docs.unity3d.com
 - Assets/atlas: **3 testes Python** passaram, com bytes/mtime estáveis em execução idêntica e recusa de conflito sem publicação parcial. Preparação de neve: **1 teste** contra os quatro TGA reais passou; continua staging, fora do catálogo ativo.
 - Revisão focada de código: nenhum erro funcional grave concreto encontrado em curvas assinadas, domínio/cache, tabela/relocação ou shader; não substitui testes no aparelho.
 - Os 44 shaders embutidos foram regenerados e validados. Sem erro novo; os avisos preexistentes de precisão em água permanecem.
-- Editor integrado: **132/132**; **82 capturas executáveis**. **17/17 unidades Android ARM64** passaram em compilação sintática; não é link ou execução Android. Publicação ainda em andamento.
+- Editor integrado: **132/132**; **82 capturas executáveis**. **17/17 unidades Android ARM64** passaram em compilação sintática; não é link ou execução Android. Publicação confirmada conforme registro abaixo.
 
 Sem ADB e sem APK novo; APK 110 é anterior a estas mudanças. Os 71 itens e o primeiro bloco continuam abertos.
+
+## Checkpoint publicado
+
+Engine `03b8f10a` publicada na branch `codex/terrain-voxel-generator`, sem mesclar main. AstraDocs `2236df2815defbfca20248c0dc7909940a3c2024` publicada em main; Vercel `dpl_Akh1U17TxzJMkBgghKToWYKgw34i` READY com alias astraengine.com.br. Guia HTML, Markdown, feed JSON e Atualizações responderam HTTP200 com o conteúdo esperado em 20/10/2026.
+
+Build público: 2439 páginas, 2438 Markdown e 595395 links com zero erros; guia conferido em navegador desktop/390 px, sem overflow horizontal. Nota identifica disponibilidade de desenvolvimento e não modifica APK instalado. Implementações seguintes devem manter este checkpoint distinto dos dados locais ainda não validados.
