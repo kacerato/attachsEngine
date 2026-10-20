@@ -1,5 +1,16 @@
 # Retomada — 16/10/2026
 
+Publicação M13 confirmada em20/10: engine `78ff1825` na branch
+`codex/terrain-voxel-generator`, AstraDocs `ce156ff9`, Vercel
+`dpl_5YJ5ukrWPTuPkzqt1icC3nSbGoCf` READY/produção; HTML, Markdown,
+feed e Atualizações HTTP200 com conteúdo novo em `astraengine.com.br`.
+Evidência local `build/terrain-evidence/terrain-fx-domain-verification.json`.
+O parágrafo seguinte registra o aceite anterior à publicação. Continuação
+M14/chuva em integração local,310 cenários GPU aprovados em overlay;
+não declarar UI/runtime/aparelho aceitos antes dos respectivos testes.
+Usuário liberou ADB somente para esta próxima entrega antes das próximas docs;
+depois continuar sem ADB até terminar o plano. Plano71 permanece aberto.
+
 Aceite local mais recente: [M13 estático, pintura FX, umidade e poças](FX-ESTATICO-2026-10-20.md), com [revisão da UI](UI-FX-2026-10-20.md). Recipe9/SurfaceV4, pincel RGBA independente, barras/precisão, modos exclusivos, cursor sobre o relevo, preview vivo, Wetness/Puddle/porosidade/Snow clearing, cache/histórico e atlas640. **213/213 editor,103/103 Core,252 GPU,11/11 pipeline incluindo2048² íntegro,26/26 Android sintático+1/1 visual final,44 shaders e42 capturas finais**. Corrigidos rolagem/cancelamento, reabertura, gizmo/câmera, rodapé aplicado e estado Prévia. Sem commit/push/Atualizações próprios confirmados ainda; sem APK/ADB. M13 integral/primeiro bloco/71 itens continuam abertos. Streams/Lava têm overlay renderer com284 GPU aprovados, assets originais e UI congelados em staging; chuva/specularFade têm302 GPU aprovados em overlay separado. Dinâmica/scene/controller/altura/renderer por instância seguem em staging, com aceite completo e ligação Android pendentes. CSV conserva71/28 linhas, todas as propriedades e colunas históricas. Os checkpoints seguintes são históricos.
 
 Continuação mais recente: [M11–M12, neve, qualidade autoral e busca](NEVE-QUALIDADE-BUSCA-2026-10-20.md). Off/Simple/Rich, fontes originais, RGB/RG/GA, iluminação/transmissão fina, barras, filtro por finalidade e miniaturas reais integrados. **158/158 editor,72/72 Core,238 modos GPU,36/36 publicação,11/11 residência focada**,21/21 Android sintático+4/4 na revisão final,44 shaders,4+1 testes de assets;130 capturas base+28 refinadas. Catálogo82/152 e atlas636, originais intactos. **Publicação confirmada: engine `a3d27687`, Docs `4b5264a9`, Vercel READY e domínio HTML/Markdown/feed/Atualizações HTTP200; sem APK/ADB.** Os71 itens e M11/M12 continuam abertos para autoridades/poças/tracks/adjacentes e aceite Android real. Próxima dependência: [M13–M15](PROXIMO-M13-M15-2026-10-20.md), com arquitetura/UI versionadas e código apenas staging: fundação9/9 e SurfaceV4 4/4 isolados passaram; Recipe9/persistência/UI/renderer ainda não aceitos. Os registros abaixo são históricos.

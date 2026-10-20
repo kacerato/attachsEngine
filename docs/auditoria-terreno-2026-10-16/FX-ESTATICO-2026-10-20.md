@@ -3,8 +3,12 @@
 Revisão com aceite local na branch `codex/terrain-voxel-generator`. Este documento
 registra implementação e evidências por camada; não encerra M13–M15, o primeiro
 bloco nem os71 itens. Sem APK/ADB. A revisão anterior de neve está publicada em
-`a3d27687`/`8f402594`; o pacote deste documento ainda depende de commit/push
-próprios e publicação nas Atualizações do site.
+`a3d27687`/`8f402594`. Este pacote foi publicado em `78ff1825` na mesma branch;
+AstraDocs `ce156ff90441e71cba2e3ac2a6f1258474fe019c`, deployment
+`dpl_5YJ5ukrWPTuPkzqt1icC3nSbGoCf` READY em produção. Em20/10 foram
+conferidos HTML, Markdown, feed e Atualizações com HTTP200 e conteúdo novo em
+`astraengine.com.br`. Nota `2026-10-20-terreno-fx-umidade-pocas`,98 notas no total;
+as97 anteriores foram preservadas. Sem novo APK distribuído neste checkpoint.
 
 ## Implementado no código
 
