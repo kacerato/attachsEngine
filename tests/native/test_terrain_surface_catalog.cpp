@@ -1,6 +1,7 @@
 #include "harness.h"
 #include "resources/json_reader.h"
 #include "resources/terrain_surface_catalog.h"
+#include "core/sha256.h"
 #include <fstream>
 #include <iterator>
 #include <set>
@@ -29,7 +30,7 @@ AE_TEST(terrain_surface_catalog_committed_inventory_and_all_materials) {
   AE_EXPECT_TRUE(loadTerrainSurfaceCatalog(text, c, e), e.c_str());
   AE_EXPECT_EQ(c.materials.size(), size_t(82),
                "actual committed material inventory");
-  AE_EXPECT_EQ(c.textures.size(), size_t(146),
+  AE_EXPECT_EQ(c.textures.size(), size_t(148),
                "actual committed texture inventory");
   std::set<AssetGuid> identities;
   for (auto &t : c.textures) {
@@ -89,6 +90,33 @@ AE_TEST(terrain_surface_catalog_committed_inventory_and_all_materials) {
   AE_EXPECT_EQ(selected.surface.layers[1].identity,
                c.materials[0].layer.identity,
                "second explicit choice retained");
+}
+AE_TEST(terrain_surface_catalog_original_geo_pair_provenance_and_bytes) {
+  TerrainSurfaceCatalog c;std::string error;
+  AE_EXPECT_TRUE(loadTerrainSurfaceCatalog(catalogText(),c,error),error.c_str());
+  const char *guids[]{"863f19b183b2443859f959a96f7dce32","192aaea3237044f608d663c9884e0c70"};
+  const char *hashes[]{"a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a","ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62"};
+  const char *names[]{"microsplat_def_geomap_01.png","microsplat_def_geomap_norm_01.png"};
+  const size_t lengths[]{15544,16092};
+  for(size_t i=0;i<2;++i) {
+    const TerrainCatalogTexture *found=nullptr;
+    for(const auto &texture:c.textures)if(texture.identity.text()==guids[i])found=&texture;
+    AE_EXPECT_TRUE(found,"supplied Geo GUID exists in real catalog");
+    if(!found)return;
+    AE_EXPECT_EQ(found->id,std::string(hashes[i]),"content identity exact");
+    AE_EXPECT_EQ(found->sourceHash,std::string(hashes[i]),"source digest exact");
+    AE_EXPECT_EQ(found->runtimeHash,std::string(hashes[i]),"runtime uses original bytes");
+    AE_EXPECT_EQ(found->sourcePath,std::string("sources/")+hashes[i]+".png","original path exact");
+    AE_EXPECT_EQ(found->runtimePath,found->sourcePath,"no quality derivative substituted");
+    AE_EXPECT_EQ(found->originalAssetPath,std::string("Packages/com.jbooth.microsplat.global-texture/Textures/")+names[i],"source provenance exact");
+    AE_EXPECT_EQ(found->archiveHash,std::string("071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772"),"supplied archive provenance exact");
+    AE_EXPECT_EQ(found->width,ae::u32(1),"original width");
+    AE_EXPECT_EQ(found->height,ae::u32(256),"original height");
+    std::ifstream file("assets/terrain/library/"+found->runtimePath,std::ios::binary);
+    std::vector<ae::u8> bytes{std::istreambuf_iterator<char>(file),std::istreambuf_iterator<char>()};
+    AE_EXPECT_EQ(bytes.size(),lengths[i],"original encoded length");
+    AE_EXPECT_EQ(ae::Sha256::hex(std::span<const ae::u8>(bytes)),std::string(hashes[i]),"actual original bytes verified");
+  }
 }
 AE_TEST(terrain_surface_catalog_exact_resolved_channels_and_raw_sources) {
   auto text = catalogText();

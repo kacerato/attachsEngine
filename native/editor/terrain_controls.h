@@ -1,5 +1,6 @@
 #pragma once
 #include "editor/editor_terrain_noise_controls.h"
+#include "editor/editor_terrain_modules_controls.h"
 #include <algorithm>
 #include <cmath>
 
@@ -46,6 +47,41 @@ TerrainControlRange terrainControlRange(const State &s, unsigned field) {
       range = {0, 8, 0, range.enabled};
     else
       range = {0, 1, 0, range.enabled};
+    return range;
+  }
+  if(terrainModuleField(field)) {
+    range.enabled=terrainModuleNumberAvailable(s,field);
+    if(!range.enabled || field==255) return {0,1,0,false};
+    const auto &geo=r.surface.geo;
+    if(field==193 || field==199) return {.0001f,2048,0,true,true};
+    if(field==194 || field==200 || field==219 || field==220) return {-2048,2048,0,true};
+    if(field==201) return {-180,180,0,true};
+    if(field==202) return {0,32,0,true,true};
+    if(field==204) return {-1,1,0,true};
+    if(field==192 || field==212 || field==215 || field==216 || field==222) return {0,8,0,true};
+    if(field==221 && terrainModuleGlobal(s.terrainMaterialView)!=0) return {0,2,0,true};
+    if(field==217 || field==218) return {-8,8,0,true};
+    if(field>=195 && field<=198) {
+      const auto i=field-195;
+      return {i?geo.range[i-1]:std::min(-2048.f,geo.range[0]),i<3?geo.range[i+1]:std::max(2048.f,geo.range[i]),0,true};
+    }
+    if(field==213 || field==214) {
+      const auto &global=r.surface.globalMaps[terrainModuleGlobal(s.terrainMaterialView)];
+      if(field==213) return {0,std::min(2048.f,std::nextafter(global.fadeEnd,0.f)),0,true,true};
+      const auto low=std::nextafter(global.fadeStart,1e8f);return {low,std::max(2048.f,low),0,true,true};
+    }
+    if(field>=206 && field<=211) {
+      const auto index=std::min<usize>(s.terrainProfilePoint,geo.curve.keys.size()-1);
+      const auto &key=geo.curve.keys[index];
+      if(field==206) {
+        const auto low=index?std::nextafter(geo.curve.keys[index-1].time,key.time):std::min(-1.f,key.time);
+        const auto high=index+1<geo.curve.keys.size()?std::nextafter(geo.curve.keys[index+1].time,key.time):std::max(2.f,key.time);
+        return {low,high,0,low<=high};
+      }
+      if(field==207) return {-4,4,0,true};
+      if(field==208 || field==209) return {-16,16,0,field==208?unsigned(key.incoming)==0:unsigned(key.outgoing)==0};
+      if(field==210 || field==211) return {0,1,0,field==210?key.weightedIn:key.weightedOut};
+    }
     return range;
   }
   if(terrainClusterField(field)) {

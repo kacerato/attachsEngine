@@ -1320,7 +1320,7 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
   if(surface) {
     std::string encoded;
     if(!serializeTerrainSurface(r.surface,encoded,error))return false;
-    surfaceMetadata << ",\"surfaceRecipe\":\"" << terrainSurfaceHex(encoded) << "\",\"localMetersPerUv\":" << r.textureScale << ",\"surfaceImages\":[";
+    surfaceMetadata << ",\"surfaceRecipe\":\"" << terrainSurfaceHex(encoded) << "\",\"localMetersPerUv\":" << r.textureScale << ",\"terrainDomain\":[" << -r.size*.5f << "," << -r.size*.5f << "," << r.size << "," << r.size << "],\"surfaceImages\":[";
     for(const auto &ref:terrainSurfaceTextureRefs(r.surface)) {
       if(std::any_of(selectedImages.begin(),selectedImages.end(),[&](const auto *image){return image->identity==ref.identity;}))continue;
       const TerrainSurfaceImage *found=nullptr;

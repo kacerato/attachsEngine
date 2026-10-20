@@ -3,6 +3,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_noise_controls.h"
+#include "editor/editor_terrain_modules_controls.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
 #include "scene/import_link.h"
@@ -118,7 +119,7 @@ struct TerrainUiFixture {
     ui::UiPoint p;
     if (!point(widget, p) && seek) {
       scroll(-10000);
-      for (u32 attempt = 0; attempt < 32; ++attempt) {
+      for (u32 attempt = 0; attempt < 96; ++attempt) {
         render();
         if (point(widget, p))
           break;
@@ -140,7 +141,7 @@ struct TerrainUiFixture {
     const auto widget=id(Widget::TerrainSliderBase,field+column*0x100);
     scroll(-10000);
     ui::UiPoint p;
-    for(u32 attempt=0;attempt<40;++attempt) {
+    for(u32 attempt=0;attempt<96;++attempt) {
       render();if(point(widget,p))break;
       const auto before=session.screen().terrainScroll;scroll(24);
       if(before==session.screen().terrainScroll)return false;
@@ -805,10 +806,10 @@ AE_TEST(terrain_m05_noise_touch_sources_exact_input_and_independent_settings) {
   AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].distanceNoise.strength-1.f)<.001f,"local distance adjusted");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.distanceNoise.strength,6.f,"local distance preserves global distance");
   AE_EXPECT_TRUE(f.tap(noiseId(44)) && f.tap(noiseId(2)),"return to global distance");
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainLayerBase,1)) && f.slide(132,.5f),"participation follows selected layer");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(63)),false) && f.slide(132,.5f),"participation follows selected layer");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].globalDistanceParticipation,1.f,"first layer remains unchanged");
   AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[1].globalDistanceParticipation-.5f)<.001f,"second layer receives distance participation");
-  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMaterialLibrary)),"material library remains accessible after texture pagination");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61)),false) && f.tap(id(Widget::TerrainMaterialLibrary)),"material library remains accessible after texture pagination");
   AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,0u,"material page is reset independently of prior texture page");
 }
 
@@ -967,4 +968,282 @@ AE_TEST(terrain_m08_clusters_use_actual_distinct_materials_seven_maps_and_precis
   AE_EXPECT_TRUE(!cluster.enabled && cluster.stochastic,"incomplete cluster disables while base stochastic remains authored");
   std::string error;
   AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+
+AE_TEST(terrain_m09_geo_original_sources_ranges_layer_filter_and_weighted_curve_authoring) {
+  TerrainUiFixture f(655,300);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(moduleId(0)),"compact UI discovers real Geo module");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.heightContrast,10.f,"actual source default contrast is ten");
+  AE_EXPECT_TRUE(f.tap(moduleId(60)) && f.tap(moduleId(9)) && f.tap(moduleId(49)),"explicit original plugin pair authoring");
+  auto geo=f.session.screen().terrainDraft.surface.geo;
+  resources::AssetGuid originalAlbedo,originalNormal;
+  resources::AssetGuid::parse("863f19b183b2443859f959a96f7dce32",originalAlbedo);
+  resources::AssetGuid::parse("192aaea3237044f608d663c9884e0c70",originalNormal);
+  AE_EXPECT_TRUE(geo.mode==resources::TerrainGeoMode::AlbedoNormal && geo.albedo.texture==originalAlbedo && geo.normal.texture==originalNormal,"real Geo GUIDs reach model");
+  AE_EXPECT_TRUE(f.slide(191,.5f) && f.slide(192,.25f),"Geo color and normal strengths are independent routed sliders");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,193)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"250",true),"exact vertical metres per repetition");
+  AE_EXPECT_TRUE(f.tap(moduleId(60)) && f.tap(moduleId(11)) && f.tap(moduleId(25)),"Geo normal channel selector switches RGB/RG");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.geo.normal.channel==resources::TerrainSurfaceChannel::NormalRG,"Geo normal RG persisted in map");
+  for(u32 field:{223u,224u,227u,228u,231u,232u,235u,236u}) AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"Geo normal RG rejects hidden scalar/blue/alpha fields");
+  AE_EXPECT_TRUE(f.tap(moduleId(22)) && f.tap(moduleId(5)) && f.tap(moduleId(6)),"open and enable four-height range");
+  AE_EXPECT_TRUE(f.slide(195,1) && f.slide(196,1) && f.slide(197,0),"range edges retain nondecreasing order including coincidence");
+  geo=f.session.screen().terrainDraft.surface.geo;
+  AE_EXPECT_TRUE(geo.range[0]<=geo.range[1] && geo.range[1]<=geo.range[2] && geo.range[2]<=geo.range[3],"all four world heights remain ordered");
+  AE_EXPECT_TRUE(f.tap(moduleId(12)) && f.tap(moduleId(55)),"selected layer owns Geo height filter");
+  AE_EXPECT_TRUE(f.slide(203,.25f) && f.slide(204,.25f) && f.slide(205,.75f),"layer influence and signed threshold and filter strength authoring");
+  const auto &layer=f.session.screen().terrainDraft.surface.layers[0];
+  AE_EXPECT_EQ(layer.geoParticipation,.25f,"Geo participation is per layer");
+  AE_EXPECT_EQ(layer.geoHeightThreshold,-.5f,"negative threshold is preserved as inverse filter");
+  AE_EXPECT_EQ(layer.geoHeightStrength,.75f,"filter strength is independent");
+  AE_EXPECT_TRUE(f.tap(moduleId(7)) && f.tap(moduleId(8)) && f.tap(moduleId(42)),"enable real AnimationCurve and split exact segment");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.curve.keys.size(),usize(3),"key insertion preserves endpoint keys");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,207)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"1.25",true),"precise curve output uses stratum UV units");
+  AE_EXPECT_TRUE(f.tap(moduleId(57)),"dedicated selected-key tangent authoring is reachable by compact touch");
+  auto current=[&]() -> const resources::AnimationCurveKey & {return f.session.screen().terrainDraft.surface.geo.curve.keys[f.session.screen().terrainProfilePoint];};
+  if(!current().broken) AE_EXPECT_TRUE(f.tap(moduleId(44)),"break tangent coupling");
+  for(u32 attempt=0;attempt<7 && current().incoming!=resources::AnimationTangentMode::Free;++attempt) AE_EXPECT_TRUE(f.tap(moduleId(45)),"choose incoming Free mode");
+  for(u32 attempt=0;attempt<7 && current().outgoing!=resources::AnimationTangentMode::Free;++attempt) AE_EXPECT_TRUE(f.tap(moduleId(46)),"choose outgoing Free mode");
+  if(!current().weightedIn) AE_EXPECT_TRUE(f.tap(moduleId(47)),"enable weighted incoming handle");
+  if(!current().weightedOut) AE_EXPECT_TRUE(f.tap(moduleId(48)),"enable weighted outgoing handle");
+  AE_EXPECT_TRUE(f.slide(208,.75f) && f.slide(209,.25f) && f.slide(210,.7f) && f.slide(211,.6f),"independent slopes and Bezier handle weights are real sliders");
+  AE_EXPECT_EQ(current().inSlope,8.f,"incoming slope changed");
+  AE_EXPECT_EQ(current().outSlope,-8.f,"outgoing slope changed independently");
+  AE_EXPECT_TRUE(std::abs(current().inWeight-.7f)<.001f && std::abs(current().outWeight-.6f)<.001f,"weighted handle fractions persisted");
+  std::set<unsigned> modes;
+  for(u32 attempt=0;attempt<7;++attempt) {modes.insert(unsigned(current().incoming));AE_EXPECT_TRUE(f.tap(moduleId(45)),"all incoming tangent modes cycle");}
+  AE_EXPECT_EQ(modes.size(),usize(7),"all seven existing AnimationCurve tangent modes are available");
+  AE_EXPECT_TRUE(f.tap(moduleId(59)) && f.tap(moduleId(54)),"curve graph hit testing selects a real authored key");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,255)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"2",true),"exact key selector accesses persisted key identity without truncation");
+  AE_EXPECT_EQ(f.session.screen().terrainProfilePoint,1u,"key index selects middle key");
+  AE_EXPECT_TRUE(f.tap(moduleId(58)),"curve axis has a compact separate authoring page");
+  AE_EXPECT_TRUE(f.slide(201,.75f),"curve axis rotation is authored in degrees");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.curveRotationDegrees,90.f,"rotation degrees persist");
+  std::string encoded,error;resources::TerrainSurfaceAsset restored;
+  AE_EXPECT_TRUE(resources::serializeTerrainSurface(f.session.screen().terrainDraft.surface,encoded,error) && resources::deserializeTerrainSurface(encoded,restored,error),error.c_str());
+  AE_EXPECT_EQ(restored.geo.curve.keys.size(),usize(3),"all curve keys persist through new format");
+  AE_EXPECT_EQ(restored.geo.curve.keys[1].value,1.25f,"curve UV output persists cold");
+  AE_EXPECT_TRUE(restored.geo.curve.keys[1].weightedIn && restored.geo.curve.keys[1].weightedOut,"weighted tangent flags persist cold");
+}
+
+AE_TEST(terrain_m10_four_global_maps_use_real_sources_saom_channels_domain_and_influences) {
+  TerrainUiFixture f(1280,720);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(0,0) && f.tap(id(Widget::TerrainNumberBase,1)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"128",true),"terrain domain derives actual authored recipe size");
+  AE_EXPECT_TRUE(f.visit(2) && f.tap(moduleId(13)),"open global map hub");
+  f.scroll(500);
+  AE_EXPECT_TRUE(f.text("128 m"),"hub displays actual terrain domain instead of a fixed UV extent");
+  for(u32 role=0;role<4;++role) {
+    AE_EXPECT_TRUE(f.tap(moduleId(14+role)) && f.tap(moduleId(21)),"open each independent global source editor");
+    AE_EXPECT_TRUE(f.tap(moduleId(23)) && f.tap(moduleId(32)),"select transported real texture for global role");
+    if(role==0) for(u32 field:{223u,224u}) AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"Tint rejects hidden scalar remaps");
+    if(role==2) {
+      for(u32 field=225;field<=236;++field) AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"SAOM rejects hidden color factor/remap properties");
+      AE_EXPECT_TRUE(f.tap(moduleId(56)),"explicit packed-source reuse retains independent SAOM metadata");
+      AE_EXPECT_TRUE(f.slide(223,.25f,1) && f.slide(224,.75f,2),"SAOM scalar remaps are authored");
+      AE_EXPECT_TRUE(f.tap(moduleId(26)),"smoothness inversion is independently authored");
+      for(u32 channel=0;channel<4;++channel) {
+        const auto &g=f.session.screen().terrainDraft.surface.globalMaps[2];
+        const auto &map=channel==0?g.smoothness:channel==1?g.ao:channel==2?g.metallic:g.mask;
+        AE_EXPECT_EQ(unsigned(map.channel),channel,"SAOM default channels explicitly R/G/B/A");
+        if(channel<3) AE_EXPECT_TRUE(f.tap(moduleId(29)),"select next independent packed role");
+      }
+    }
+    if(role==3) {
+      const auto before=f.session.screen().terrainDraft.surface.globalMaps[3].map;
+      for(u32 field:{228u,232u,236u}) {
+        AE_EXPECT_TRUE(!f.tap(id(Widget::TerrainNumberBase,field)),"Emission alpha fields have no executable UI control");
+        AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"exact API rejects hidden Emission alpha edits");
+      }
+      const auto &after=f.session.screen().terrainDraft.surface.globalMaps[3].map;
+      AE_EXPECT_TRUE(before.colorFactor[3]==after.colorFactor[3] && before.colorRemapMin[3]==after.colorRemapMin[3] && before.colorRemapMax[3]==after.colorRemapMax[3],"inactive alpha properties remain preserved");
+    }
+    if(role==1) {
+      AE_EXPECT_TRUE(f.tap(moduleId(25)),"normal map has RGB/RG packing control");
+      AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.globalMaps[1].map.channel==resources::TerrainSurfaceChannel::NormalRG,"global normal RG is a real enum");
+      for(u32 field:{223u,224u,227u,228u,231u,232u,235u,236u}) AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"global normal RG rejects hidden scalar/blue/alpha controls");
+    }
+    AE_EXPECT_TRUE(f.tap(moduleId(22)) && f.tap(moduleId(18)),"enable source-backed global role");
+    AE_EXPECT_TRUE(f.slide(212,.25f) && f.slide(215,.125f) && f.slide(216,.375f),"independent intensity and near/far strengths");
+    AE_EXPECT_TRUE(f.slide(213,1,1) && f.slide(214,0,2) && f.slide(214,1,2),"global fade edges remain strictly ordered and responsive");
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,217)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"16",true),"exact global UV scale outside practical slider");
+    AE_EXPECT_TRUE(f.slide(218,0,2),"global UV scale slider supports mirroring");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.globalMaps[role].scaleY,-8.f,"negative UV scale reaches actual map");
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,218)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"0",true),"exact zero UV scale supports constant coordinate");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.globalMaps[role].scaleY,0.f,"zero UV scale is preserved");
+    AE_EXPECT_TRUE(f.slide(221,.75f),"current layer global influence is routed");
+    const auto &surface=f.session.screen().terrainDraft.surface;
+    AE_EXPECT_TRUE(surface.globalMaps[role].enabled,"all four role enable switches retained");
+    AE_EXPECT_EQ(surface.globalMaps[role].scaleX,16.f,"UV scale per map retained");
+    AE_EXPECT_EQ(surface.layers[0].globalMapParticipation[role],role==0?.75f:1.5f,"source-specific layer participation ranges preserved");
+    if(role==0) {std::set<unsigned> blends;for(u32 i=0;i<4;++i) {blends.insert(unsigned(f.session.screen().terrainDraft.surface.globalMaps[0].blend));AE_EXPECT_TRUE(f.tap(moduleId(19)),"Tint blend cycles actual modes");}AE_EXPECT_EQ(blends.size(),usize(4),"all four Tint blends supported");}
+    if(role==1) AE_EXPECT_TRUE(f.tap(moduleId(20)),"normal RNM/Crossfade is independent from color blend enum");
+    AE_EXPECT_TRUE(f.tap(moduleId(13)),"return to four-map hub");
+  }
+  const auto &g=f.session.screen().terrainDraft.surface.globalMaps[2];
+  AE_EXPECT_TRUE(g.smoothness.texture==g.ao.texture && g.smoothness.texture==g.metallic.texture && g.smoothness.texture==g.mask.texture,"compatible SAOM roles share actual source GUID");
+  AE_EXPECT_TRUE(g.smoothness.invert && !g.ao.invert,"SAOM remap/inversion metadata remain independent despite shared source");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+
+AE_TEST(terrain_m09_m10_direct_module_entry_initializes_fresh_and_legacy_drafts_only) {
+  for(u32 action:{0u,13u}) for(bool applied:{false,true}) {
+    TerrainUiFixture f(1280,720);
+    AE_EXPECT_TRUE(f.ready,"direct-entry fixture");
+    if(applied) {
+      resources::TerrainRecipe legacy;legacy.cells=8;legacy.controlCells=0;legacy.surface.layers.clear();
+      std::string error;AE_EXPECT_TRUE(f.session.applyTerrain(legacy,error),error.c_str());
+      const auto root=f.session.screen().terrainTarget;
+      AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen applied legacy recipe");
+    }
+    const auto history=f.session.history().undoDepth();
+    const auto target=f.session.screen().terrainTarget;
+    AE_EXPECT_TRUE(f.visit(2) && f.tap(id(editor::terrainModuleAction(action))),"direct Geo/Global link opens without visiting old material/noise initialization");
+    AE_EXPECT_EQ(f.session.screen().terrainMaterialView,action==0?120u:159u,"requested module opened");
+    AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers.size(),usize(4),"four legacy layer definitions initialized in draft");
+    AE_EXPECT_TRUE(f.session.screen().terrainDraft.blendedSurface,"advanced surface consumer selected in draft");
+    AE_EXPECT_EQ(f.session.history().undoDepth(),history,"opening authoring does not commit scene history");
+    AE_EXPECT_EQ(f.session.screen().terrainTarget,target,"opening authoring preserves applied entity identity");
+  }
+}
+
+
+AE_TEST(terrain_geo_signed_empty_single_curve_authoring_preserves_all_keys_and_weights) {
+  TerrainUiFixture f(655,300);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(moduleId(0)) && f.tap(moduleId(60)) && f.tap(moduleId(9)) && f.tap(moduleId(49)) && f.tap(moduleId(7)) && f.tap(moduleId(8)),"open enabled Geo curve through real compact UI");
+  AE_EXPECT_TRUE(f.tap(moduleId(43)),"delete first key without endpoint lock");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.curve.keys.size(),usize(1),"one key remains as a constant curve");
+  AE_EXPECT_TRUE(f.tap(moduleId(43)),"delete the final authored key");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.geo.curve.keys.empty(),"empty curve is preserved as zero output");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(206,-1) && !f.session.setTerrainNumber(207,1) && !f.session.setTerrainNumber(255,1),"empty numeric entry rejects without invalid indexing");
+  AE_EXPECT_TRUE(!f.tap(moduleId(54)),"empty flat graph does not expose fake key selection");
+  f.scroll(-10000);f.render();ui::UiPoint addAt;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"empty curve can return to zero scroll");
+  AE_EXPECT_TRUE(f.point(moduleId(42),addAt),"Add first key is visible alongside empty graph at zero scroll");
+  AE_EXPECT_TRUE(f.tap(moduleId(42),false),"Add key works from empty curve");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.curve.keys.size(),usize(1),"first key created");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,206)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"-2.5",true),"single key accepts exact signed time");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,207)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"1.75",true),"single key value authored");
+  resources::AnimationCurveSample sample;
+  AE_EXPECT_TRUE(resources::sampleValidatedAnimationCurve(f.session.screen().terrainDraft.surface.geo.curve,0,sample),"single key uses existing constant evaluator");
+  AE_EXPECT_EQ(sample.value,1.75,"single key is constant throughout LUT domain");
+  const auto firstId=f.session.screen().terrainDraft.surface.geo.curve.keys[0].id;
+  AE_EXPECT_TRUE(f.tap(moduleId(42)),"Add key extends single-key curve");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.geo.curve.keys.size(),usize(2),"second key created without dropping original");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,206)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"3",true),"last key accepts exact time beyond LUT one");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,207)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"-0.5",true),"outside key affects real curve data");
+  const auto lastId=f.session.screen().terrainDraft.surface.geo.curve.keys.back().id;
+  AE_EXPECT_TRUE(f.tap(moduleId(40)),"select first signed key");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,206)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"-3",true),"first time remains editable without normalized endpoint lock");
+  AE_EXPECT_TRUE(f.tap(moduleId(42)),"insert exact weighted curve subdivision between signed keys");
+  const auto &curve=f.session.screen().terrainDraft.surface.geo.curve;
+  AE_EXPECT_EQ(curve.keys.size(),usize(3),"interior key added without truncation");
+  AE_EXPECT_TRUE(curve.keys.front().id==firstId && curve.keys.back().id==lastId,"existing signed key identities preserved");
+  const auto domain=editor::terrainGeoCurveDomain(curve);
+  AE_EXPECT_EQ(domain[0],-3.f,"graph includes all negative key times");
+  AE_EXPECT_EQ(domain[1],3.f,"graph includes all key times beyond LUT one");
+  AE_EXPECT_TRUE(f.tap(moduleId(57)),"weighted tangent page works on signed domain");
+  const auto current=[&]() -> const resources::AnimationCurveKey & {return f.session.screen().terrainDraft.surface.geo.curve.keys[f.session.screen().terrainProfilePoint];};
+  if(!current().broken) AE_EXPECT_TRUE(f.tap(moduleId(44)),"enable independent tangents");
+  for(u32 i=0;i<7 && current().incoming!=resources::AnimationTangentMode::Free;++i) AE_EXPECT_TRUE(f.tap(moduleId(45)),"choose signed incoming Free mode");
+  for(u32 i=0;i<7 && current().outgoing!=resources::AnimationTangentMode::Free;++i) AE_EXPECT_TRUE(f.tap(moduleId(46)),"choose signed outgoing Free mode");
+  if(!current().weightedIn) AE_EXPECT_TRUE(f.tap(moduleId(47)),"weighted incoming handle");
+  if(!current().weightedOut) AE_EXPECT_TRUE(f.tap(moduleId(48)),"weighted outgoing handle");
+  AE_EXPECT_TRUE(f.slide(208,.75f) && f.slide(209,.25f) && f.slide(210,.7f) && f.slide(211,.6f),"signed curve preserves full weighted authoring");
+  std::string encoded,error;resources::TerrainSurfaceAsset restored;
+  AE_EXPECT_TRUE(resources::serializeTerrainSurface(f.session.screen().terrainDraft.surface,encoded,error) && resources::deserializeTerrainSurface(encoded,restored,error),error.c_str());
+  AE_EXPECT_EQ(restored.geo.curve.keys.size(),usize(3),"cold read keeps all signed/outside keys");
+  AE_EXPECT_EQ(restored.geo.curve.keys.front().time,-3.f,"negative time survives serialization");
+  AE_EXPECT_EQ(restored.geo.curve.keys.back().time,3.f,"outside time survives serialization");
+  AE_EXPECT_TRUE(restored.geo.curve.keys[1].weightedIn && restored.geo.curve.keys[1].weightedOut,"full weighted flags survive serialization");
+  AE_EXPECT_TRUE(std::abs(restored.geo.curve.keys[1].inWeight-.7f)<.001f && std::abs(restored.geo.curve.keys[1].outWeight-.6f)<.001f,"weights survive serialization");
+}
+
+
+AE_TEST(terrain_compact_module_context_shows_live_controls_graph_sources_and_layer_navigation_at_zero_scroll) {
+  TerrainUiFixture f(655,300);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(moduleId(0)),"compact Geo opens from painting");
+  AE_EXPECT_TRUE(f.tap(moduleId(60)) && f.tap(moduleId(9)),"Fontes offers actual original Geo pair");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,121u,"dedicated real Fontes page");
+  for(u32 action:{1u,2u,3u,4u}) AE_EXPECT_TRUE(f.tap(moduleId(action)),"all source-backed Geo modes and blend are reachable");
+  AE_EXPECT_TRUE(f.tap(moduleId(10)) && f.tap(moduleId(22)),"albedo map editor returns to Fontes");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,121u,"source return preserves authoring context");
+  AE_EXPECT_TRUE(f.tap(moduleId(11)) && f.tap(moduleId(22)),"normal map editor remains reachable");
+  AE_EXPECT_TRUE(f.tap(moduleId(49)),"numeric Geo defaults replace stacked navigation");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"new context opens at zero scroll");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainNumberBase,191),point),"first real editable Geo value is visible without scrolling");
+  AE_EXPECT_TRUE(!f.point(id(Widget::TerrainTabBase,2),point),"root tab row does not consume compact module viewport");
+  const auto before=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  for(u32 layer=1;layer<=4;++layer) {
+    AE_EXPECT_TRUE(f.tap(moduleId(63),false),"pinned next-layer selector is always reachable");
+    AE_EXPECT_EQ(f.session.screen().terrainBrush.layer,layer%4,"all four real layer channels cycle");
+  }
+  AE_EXPECT_TRUE(f.tap(moduleId(62),false),"pinned previous layer selector is reachable");
+  AE_EXPECT_EQ(f.session.screen().terrainBrush.layer,3u,"previous wraps actual layer channel");
+  AE_EXPECT_TRUE(f.tap(moduleId(7)),"open real curve authoring");
+  f.render();AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"curve begins at zero scroll");
+  AE_EXPECT_TRUE(f.point(moduleId(54),point),"real curve graph is visible immediately on 655 by300");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainNumberBase,255),point),"selected curve key is visible alongside graph at zero scroll");
+  AE_EXPECT_TRUE(f.tap(moduleId(61),false),"Back Pintura restores root authoring");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,0u,"breadcrumb returns to painting");
+  f.render();AE_EXPECT_TRUE(f.point(id(Widget::TerrainTabBase,2),point),"normal root tabs are restored");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),before,"navigation and layer cycling preserve every authored property");
+  AE_EXPECT_TRUE(f.tap(moduleId(13)),"global entry opens a real role directly on compact viewport");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,160u,"Tint role is compact global entry");
+  f.render();AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"global role begins at zero scroll");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainNumberBase,212),point),"global intensity is visible at zero scroll");
+  for(u32 role=0;role<4;++role) {
+    AE_EXPECT_TRUE(f.tap(moduleId(14+role),false),"all four global roles remain in pinned navigation");
+    AE_EXPECT_EQ(f.session.screen().terrainMaterialView,160u+role,"global role selection is actual model context");
+  }
+}
+
+
+AE_TEST(terrain_compact_empty_global_role_explains_missing_source_and_enables_only_real_texture) {
+  TerrainUiFixture f(655,300);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(moduleId(13)),"compact global entry on a fresh draft");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"empty role opens at zero scroll");
+  AE_EXPECT_TRUE(f.text("Sem fonte"),"missing source state is explicit before numeric authoring");
+  AE_EXPECT_TRUE(!f.point(moduleId(18),point),"missing source cannot activate a fake map");
+  AE_EXPECT_TRUE(f.point(moduleId(21),point),"real source CTA visible at zero scroll");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainNumberBase,212),point),"intensity stays visible beside source state");
+  AE_EXPECT_TRUE(f.tap(moduleId(21),false) && f.tap(moduleId(23)) && f.tap(moduleId(32)),"CTA chooses a transported original texture");
+  AE_EXPECT_TRUE(f.tap(moduleId(22)),"return to prepared global role");
+  f.render();AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"source return resets scroll");
+  AE_EXPECT_TRUE(f.point(moduleId(18),point),"source-backed actual enable control becomes available");
+  AE_EXPECT_TRUE(f.tap(moduleId(18),false),"toggle activates actual global map");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.globalMaps[0].enabled && f.session.screen().terrainDraft.surface.globalMaps[0].map.texture.valid(),"enabled state and real reference reach consumer model");
+  AE_EXPECT_TRUE(f.slide(212,.25f),"authored intensity changes after activation");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.globalMaps[0].intensity,2.f,"actual intensity value persists");
+}
+
+
+AE_TEST(terrain_compact_legacy_noise_and_pbr_maps_keep_real_controls_visible_at_zero_scroll) {
+  TerrainUiFixture f(655,300);
+  const auto moduleId=[](u32 action){return id(editor::terrainModuleAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(editor::terrainNoiseAction(0))),"open existing Noise through real painting navigation");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"Noise starts at zero scroll");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainSliderBase,128),point),"existing frequency slider is visible and draggable immediately");
+  AE_EXPECT_TRUE(f.point(id(editor::terrainNoiseAction(10)),point),"existing source picker remains in pinned Noise context");
+  const auto before=f.session.screen().terrainDraft.surface.detailNoise.scale;
+  AE_EXPECT_TRUE(f.slide(128,.5f),"actual Noise frequency slider input");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.detailNoise.scale!=before,"existing Noise parameter still changes");
+  AE_EXPECT_TRUE(f.tap(moduleId(61),false) && f.tap(id(Widget::TerrainMaterialMaps)),"Back root opens existing PBR map editor");
+  f.render();AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"PBR map page starts at zero scroll");
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainMapChannel),point),"actual linked-texture channel control is visible immediately");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].texture.valid(),"existing map control refers to real transported legacy texture");
+  const auto channel=f.session.screen().terrainDraft.surface.layers[0].maps[0].channel;
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMapChannel),false),"existing source channel receives actual touch");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].channel!=channel,"map source interpretation changes in real model");
+  AE_EXPECT_TRUE(f.tap(moduleId(61),false),"legacy map context returns to painting root");
+  f.render();AE_EXPECT_TRUE(f.point(id(Widget::TerrainTabBase,2),point),"unchanged root tabs are restored");
 }

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Whole terrain map overlay</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="12,28 48,10 84,28 48,46 12,28"/>
+    <polyline points="12,28 12,68 48,86 84,68 84,28"/>
+    <polyline points="48,46 48,86"/>
+    <polyline points="30,19 66,37"/>
+    <polyline points="30,37 66,19"/>
+    <polyline points="12,50 48,68 84,50"/>
+  </g>
+</svg>

@@ -14,6 +14,11 @@ inline std::vector<TerrainSurfaceTextureRef> terrainSurfaceTextureRefs(const Ter
   };
   const auto noise=[&](const TerrainSurfaceNoise &n,bool normal=false){add(n.map,normal);};
   noise(surface.detailNoise);noise(surface.distanceNoise);
+  add(surface.geo.albedo);add(surface.geo.normal,true);
+  for(u32 role=0;role<surface.globalMaps.size();++role){
+    const auto &global=surface.globalMaps[role];add(global.map,role==1);
+    add(global.smoothness);add(global.ao);add(global.metallic);add(global.mask);
+  }
   for(const auto &n:surface.normalNoise)noise(n,true);
   for(const auto &entry:surface.antiTileArray.entries){noise(entry.normal,true);noise(entry.detail);noise(entry.distance);}
   for(const auto &layer:surface.layers) {

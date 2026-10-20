@@ -12,10 +12,13 @@ inline constexpr usize AdvancedHeaderRows=2, LayerDirectoryRows=2, NoiseHeaderRo
 inline constexpr usize GlobalRows=AdvancedHeaderRows+NoiseCount*NoiseRows;
 inline constexpr usize LayerRows=LayerDirectoryRows+NoiseCount*NoiseRows;
 inline constexpr usize LayerExtraRows=3, AntiEntryRows=3*NoiseRows, AntiDirectoryRows=1;
-inline constexpr u32 FeatureM05=1, FeatureM06=2, FeatureAntiTile=4, FeatureM07=8, FeatureM08=16;
+inline constexpr u32 FeatureM05=1, FeatureM06=2, FeatureAntiTile=4, FeatureM07=8, FeatureM08=16, FeatureGeo=32, FeatureGlobals=64;
 inline constexpr usize ResampleHeaderRows=2, ResampleRows=ResampleHeaderRows+NoiseRows;
 inline constexpr usize ClusterHeaderRows=2, ClusterRows=ClusterHeaderRows+NoiseRows;
 inline constexpr usize VariantRows=1+7*TerrainSurfaceMapRows;
+inline constexpr usize ModuleRows=3, ModuleLayerRows=2, GeoRows=4+2*TerrainSurfaceMapRows;
+inline constexpr usize GlobalRecordRows=4+5*TerrainSurfaceMapRows, GlobalRecords=4;
+inline constexpr usize GeoCurveSamples=256, GeoCurveRows=GeoCurveSamples/4;
 }
 
 // Atomic append to the std430 table. A missing descriptor is a publication
@@ -47,7 +50,12 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
     std::sort(entries.begin(),entries.end(),[](const auto *a,const auto *b){return a->identity<b->identity;});}
   const bool m07=std::any_of(binding.surface.layers.begin(),binding.surface.layers.end(),[](const auto &l){return l.resampleAlbedo||l.resampleNormal||l.resampleHeightBlend;});
   const bool m08=std::any_of(binding.surface.layers.begin(),binding.surface.layers.end(),[](const auto &l){return l.cluster.enabled||l.cluster.stochastic;});
-  const bool advanced=m08 || m07 || m06 || binding.surface.detailNoise.enabled || binding.surface.distanceNoise.enabled ||
+  const bool geo=binding.surface.geo.mode!=resources::TerrainGeoMode::Off;
+  const bool globals=std::any_of(binding.surface.globalMaps.begin(),binding.surface.globalMaps.end(),[](const auto &g){return g.enabled;});
+  const bool modules=geo||globals;
+  for(float value:binding.terrainDomain)if(!std::isfinite(value)||std::abs(value)>1e8f){error="Invalid terrain domain.";return false;}
+  if(binding.terrainDomain[2]<=0||binding.terrainDomain[3]<=0){error="Invalid terrain domain extent.";return false;}
+  const bool advanced=modules || m08 || m07 || m06 || binding.surface.detailNoise.enabled || binding.surface.distanceNoise.enabled ||
     std::any_of(binding.surface.layers.begin(),binding.surface.layers.end(),[](const auto &l){return l.detailNoise.enabled || l.distanceNoise.enabled;});
   const usize baseRows=TerrainSurfaceHeaderRows+binding.surface.layers.size()*TerrainSurfaceLayerRows;
   const usize extensionRow=baseRows+GlobalRows+binding.surface.layers.size()*LayerRows;
@@ -56,7 +64,12 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   const usize clusterStart=resampleRow+(m07?binding.surface.layers.size()*ResampleRows:0);
   std::vector<usize> clusterRows(binding.surface.layers.size());usize clusterEnd=clusterStart;
   if(m08)for(usize i=0;i<binding.surface.layers.size();++i){clusterRows[i]=clusterEnd;clusterEnd+=ClusterRows+binding.surface.layers[i].cluster.variants.size()*VariantRows;}
-  const usize rows=advanced?clusterEnd:baseRows;
+  const usize moduleRoot=clusterEnd,moduleLayers=moduleRoot+ModuleRows;
+  const usize geoRow=moduleLayers+binding.surface.layers.size()*ModuleLayerRows;
+  const usize globalRow=geoRow+(geo?GeoRows:0);
+  const usize curveRow=globalRow+(globals?GlobalRecords*GlobalRecordRows:0);
+  const bool curve=geo&&binding.surface.geo.curveEnabled;
+  const usize rows=advanced?(modules?curveRow+(curve?GeoCurveRows:0):clusterEnd):baseRows;
   if(table.size()%4 || table.size()/4+rows>TerrainSurfaceMaximumRows) {
     error="Tabela de materiais do terreno excede o orçamento.";return false;
   }
@@ -100,7 +113,7 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
     header[0]=1;header[1]=float(binding.surface.layers.size());
     header[2]=float(absoluteBase+baseRows+AdvancedHeaderRows);header[3]=float(absoluteBase+baseRows+GlobalRows);
     header[4]=antiTile?float(absoluteBase+antiDirectoryRow):0;
-    header[5]=float(entries.size());header[6]=float(absoluteBase+rows);header[7]=float(FeatureM05+(m06?FeatureM06:0)+(antiTile?FeatureAntiTile:0)+(m07?FeatureM07:0)+(m08?FeatureM08:0));
+    header[5]=float(entries.size());header[6]=float(absoluteBase+rows);header[7]=float(FeatureM05+(m06?FeatureM06:0)+(antiTile?FeatureAntiTile:0)+(m07?FeatureM07:0)+(m08?FeatureM08:0)+(geo?FeatureGeo:0)+(globals?FeatureGlobals:0));
     auto writeNoise=[&](const resources::TerrainSurfaceNoise &noise,usize row,bool normalRole=false)->bool {
       float *out=next.data()+row*4;
       out[0]=noise.enabled?1.f:0.f;out[1]=float(noise.projection);out[2]=noise.scale;out[3]=noise.strength;
@@ -167,6 +180,34 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
       }
     }
   }
+  if(modules){
+    const usize absoluteBase=table.size()/4;next[5]=float(absoluteBase+moduleRoot+1);
+    float *root=next.data()+moduleRoot*4;
+    root[0]=1;root[1]=geo?float(absoluteBase+geoRow):0;root[2]=globals?float(absoluteBase+globalRow):0;root[3]=float(absoluteBase+moduleLayers);
+    root[4]=float(absoluteBase+rows);root[5]=curve?float(absoluteBase+curveRow):0;root[6]=curve?float(GeoCurveSamples):0;
+    std::copy(binding.terrainDomain.begin(),binding.terrainDomain.end(),root+8);
+    for(usize i=0;i<binding.surface.layers.size();++i){const auto &layer=binding.surface.layers[i];float *out=next.data()+(moduleLayers+i*ModuleLayerRows)*4;
+      out[0]=layer.geoParticipation;out[1]=layer.geoHeightFilterEnabled?1.f:0.f;out[2]=layer.geoHeightThreshold;out[3]=layer.geoHeightStrength;
+      std::copy(layer.globalMapParticipation.begin(),layer.globalMapParticipation.end(),out+4);
+    }
+    if(geo){const auto &g=binding.surface.geo;float *out=next.data()+geoRow*4;
+      out[0]=float(g.mode);out[1]=float(g.blend);out[2]=g.blendStrength;out[3]=g.normalStrength;
+      out[4]=g.scaleMeters;out[5]=g.offsetMeters;out[6]=g.rangeEnabled?1.f:0.f;out[7]=g.curveEnabled?1.f:0.f;
+      std::copy(g.range.begin(),g.range.end(),out+8);
+      out[12]=g.curveScaleMeters;out[13]=g.curveOffsetMeters;out[14]=g.curveRotationDegrees;out[15]=g.heightContrast;
+      if(!writeMap(g.albedo,false,out+16)||!writeMap(g.normal,true,out+36))return false;
+    }
+    if(globals)for(usize role=0;role<GlobalRecords;++role){const auto &g=binding.surface.globalMaps[role];float *out=next.data()+(globalRow+role*GlobalRecordRows)*4;
+      out[0]=g.enabled?1.f:0.f;out[1]=float(role);out[2]=g.intensity;out[3]=float(g.normalBlend);
+      out[4]=g.fadeStart;out[5]=g.fadeEnd;out[6]=g.nearStrength;out[7]=g.farStrength;
+      out[8]=g.scaleX;out[9]=g.scaleY;out[10]=g.offsetX;out[11]=g.offsetY;out[12]=float(g.blend);
+      if(!writeMap(g.map,role==1,out+16)||!writeMap(g.smoothness,false,out+36)||!writeMap(g.ao,false,out+56)||!writeMap(g.metallic,false,out+76)||!writeMap(g.mask,false,out+96))return false;
+    }
+    if(curve)for(usize i=0;i<GeoCurveSamples;++i){resources::AnimationCurveSample sample;
+      if((!binding.surface.geo.curve.keys.empty()&&!resources::sampleValidatedAnimationCurve(binding.surface.geo.curve,double(i)/double(GeoCurveSamples-1),sample))||!std::isfinite(sample.value)||std::abs(sample.value)>1e8){error="Geo curve bake exceeds finite GPU value range.";return false;}
+      next[curveRow*4+i]=float(sample.value);
+    }
+  }
   offsetPlusOne=u32(table.size()/4)+1;
   table.insert(table.end(),next.begin(),next.end());error.clear();return true;
 }
@@ -182,15 +223,16 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
   if(!integer(part[0])||part[0]>32||!integer(part[2])||part[2]>float(rows))return fail();
   if(part[1]!=1 || !std::isfinite(part[4]) || part[4]<=0 || rows<TerrainSurfaceHeaderRows+usize(part[0])*TerrainSurfaceLayerRows)return fail();
   if(part[2]==0){
-    if(rows!=TerrainSurfaceHeaderRows+usize(part[0])*TerrainSurfaceLayerRows)return fail();
+    if(rows!=TerrainSurfaceHeaderRows+usize(part[0])*TerrainSurfaceLayerRows||part[5]!=0)return fail();
     error.clear();return true;
   }
   const usize advanced=usize(part[2])-1;
   const usize count=usize(part[0]);
   if(advanced!=TerrainSurfaceHeaderRows+count*TerrainSurfaceLayerRows || advanced+AdvancedHeaderRows>rows)return fail();
   float *header=part.data()+advanced*4;
-  if(!integer(header[7])||header[7]<1||header[7]>FeatureM05+FeatureM06+FeatureAntiTile+FeatureM07+FeatureM08)return fail();
-  const u32 features=u32(header[7]);const bool m06=(features&FeatureM06)!=0,antiTile=(features&FeatureAntiTile)!=0,m07=(features&FeatureM07)!=0,m08=(features&FeatureM08)!=0;
+  if(!integer(header[7])||header[7]<1||header[7]>FeatureM05+FeatureM06+FeatureAntiTile+FeatureM07+FeatureM08+FeatureGeo+FeatureGlobals)return fail();
+  const u32 features=u32(header[7]);const bool m06=(features&FeatureM06)!=0,antiTile=(features&FeatureAntiTile)!=0,m07=(features&FeatureM07)!=0,m08=(features&FeatureM08)!=0,geo=(features&FeatureGeo)!=0,globals=(features&FeatureGlobals)!=0;
+  const bool modules=geo||globals;
   if(!(features&FeatureM05)||(antiTile&&!m06))return fail();
   const usize extension=advanced+GlobalRows+count*LayerRows;
   const usize antiDirectory=extension+(m06?count*LayerExtraRows:0);
@@ -200,7 +242,7 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
   const usize clusterStart=resample+(m07?count*ResampleRows:0);
   if(header[0]!=TerrainSurfaceAdvancedVersion || header[1]!=part[0] || header[2]!=float(advanced+AdvancedHeaderRows) ||
      header[3]!=float(advanced+GlobalRows) || header[4]!=(antiTile?float(antiDirectory):0.f) ||
-     (!antiTile&&entries!=0) || header[6]!=float(rows) || (m08?rows<clusterStart:rows!=clusterStart))return fail();
+     (!antiTile&&entries!=0) || header[6]!=float(rows) || ((m08||modules)?rows<clusterStart:rows!=clusterStart))return fail();
   std::vector<usize> pointers{2,advanced*4+2,advanced*4+3,advanced*4+6};
   if(antiTile){
     if(entries==0)return fail();
@@ -240,7 +282,19 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
       }else if(binding[0]!=0)return fail();
     }else if(entry[2]!=0||entry[3]!=0)return fail();
   }
-  if(clusterCursor!=rows)return fail();
+  if(modules){
+    const usize moduleRoot=clusterCursor,moduleLayers=moduleRoot+ModuleRows,geoRow=moduleLayers+count*ModuleLayerRows,globalRow=geoRow+(geo?GeoRows:0),curveRow=globalRow+(globals?GlobalRecords*GlobalRecordRows:0);
+    if(moduleRoot+ModuleRows>rows||part[5]!=float(moduleRoot+1)||curveRow>rows)return fail();
+    const float *root=part.data()+moduleRoot*4;
+    const bool curve=root[6]!=0;
+    if(root[0]!=1||root[1]!=(geo?float(geoRow):0.f)||root[2]!=(globals?float(globalRow):0.f)||root[3]!=float(moduleLayers)||root[4]!=float(rows)||
+      root[5]!=(curve?float(curveRow):0.f)||root[6]!=(curve?float(GeoCurveSamples):0.f)||rows!=curveRow+(curve?GeoCurveRows:0)||(!geo&&curve))return fail();
+    if(geo&&((part[geoRow*4+7]>.5)!=curve))return fail();
+    for(usize i=0;i<4;++i)if(!std::isfinite(root[8+i])||std::abs(root[8+i])>1e8f)return fail();
+    if(root[10]<=0||root[11]<=0)return fail();
+    pointers.push_back(5);pointers.push_back(moduleRoot*4+3);pointers.push_back(moduleRoot*4+4);
+    if(geo)pointers.push_back(moduleRoot*4+1);if(globals)pointers.push_back(moduleRoot*4+2);if(curve)pointers.push_back(moduleRoot*4+5);
+  }else if(clusterCursor!=rows||part[5]!=0)return fail();
   // No mutation until every version, extent and pointer has been checked.
   for(usize pointer:pointers)part[pointer]+=float(destinationRow);
   error.clear();return true;

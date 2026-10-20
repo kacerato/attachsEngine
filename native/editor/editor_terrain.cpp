@@ -17,6 +17,7 @@
 #include <cmath>
 #include <limits>
 #include <map>
+#include <numeric>
 #include <thread>
 #include <type_traits>
 #include <unordered_set>
@@ -37,6 +38,10 @@ double number(const EditorScreenState &s, u32 i) {
     return *terrainNoiseNumber(r.surface,b.layer,s.terrainMaterialView,i);
   if(terrainClusterNumberAvailable(r.surface,b.layer,s.terrainMaterialView,i))
     return *terrainClusterNumber(r.surface,b.layer,s.terrainMaterialView,i,s.terrainMapRole);
+  if(terrainModuleNumberAvailable(s,i)) {
+    if(i==255) return s.terrainProfilePoint+1;
+    return *terrainModuleNumber(r.surface,b.layer,s.terrainMaterialView,s.terrainMapRole,s.terrainProfilePoint,i);
+  }
   if (i == 60)
     return r.controlCells;
   if (!r.surface.layers.empty() && b.layer < r.surface.layers.size()) {
@@ -295,6 +300,7 @@ std::shared_ptr<const TerrainMaterialCache> prepareTerrainMaterial(
     if(same) {
       result->images=previous->images;result->textures=previous->textures;result->binding=previous->binding;
       result->binding.surface=recipe.surface;result->binding.localMetersPerUv=recipe.textureScale;
+      result->binding.terrainDomain={-recipe.size*.5f,-recipe.size*.5f,recipe.size,recipe.size};
       error.clear();return result;
     }
   }
@@ -357,7 +363,8 @@ std::shared_ptr<const TerrainMaterialCache> prepareTerrainMaterial(
   }
   if (!resources::importTerrainSurface(
           recipe.surface, result->images, recipe.textureScale, 128u << 20,
-          result->textures, result->binding, error))
+          result->textures, result->binding, error,
+          {-recipe.size*.5f,-recipe.size*.5f,recipe.size,recipe.size}))
     return {};
   return result;
 }
@@ -896,7 +903,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
 bool EditorSession::setTerrainNumber(u32 field, double value) {
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
       (field >= 52 && field != 60 && !(field >= 64 && field <= 76) &&
-       !(field >= 96 && field <= 110) && !(field >= 128 && field <= 154) && !terrainClusterField(field)))
+       !(field >= 96 && field <= 110) && !(field >= 128 && field <= 154) && !terrainClusterField(field) && !terrainModuleField(field)))
     return false;
   if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28 ||
        field == 60) &&
@@ -904,6 +911,22 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
     return false;
   auto r = state_.terrainDraft;
   auto b = state_.terrainBrush;
+  if(terrainModuleField(field)) {
+    if(!terrainModuleNumberAvailable(state_,field)) return false;
+    if(field==255) {
+      const auto count=r.surface.geo.curve.keys.size();
+      if(value<1 || value>count || std::floor(value)!=value) return false;
+      state_.terrainProfilePoint=u32(value)-1;return true;
+    }
+    *terrainModuleNumber(r.surface,b.layer,state_.terrainMaterialView,state_.terrainMapRole,state_.terrainProfilePoint,field)=float(value);
+    if(field==208 || field==209) {
+      auto &key=r.surface.geo.curve.keys[std::min<usize>(state_.terrainProfilePoint,r.surface.geo.curve.keys.size()-1)];
+      if(!key.broken) {if(field==208) key.outSlope=key.inSlope;else key.inSlope=key.outSlope;}
+    }
+    std::string error;
+    if(!resources::validTerrainRecipe(r,error)) {state_.terrainMessage=error;return false;}
+    state_.terrainDraft=std::move(r);state_.terrainMessage="Estratos e mapas ajustados · prévia antes de aplicar";return true;
+  }
   if(terrainClusterField(field)) {
     if(!terrainClusterNumberAvailable(r.surface,b.layer,state_.terrainMaterialView,field)) return false;
     *terrainClusterNumber(r.surface,b.layer,state_.terrainMaterialView,field,state_.terrainMapRole)=float(value);
@@ -2116,6 +2139,157 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (state_.terrainBusy)
     return true;
+  if(id>=terrainModuleActionBase && id<terrainModuleActionBase+0x100) {
+    const auto action=id-terrainModuleActionBase;
+    const auto open=[&](u32 view) {state_.terrainMaterialView=view;state_.terrainScroll=0;};
+    if(action==0 || action==13) {
+      if(!loadTerrainCatalog()) return true;
+      initializeTerrainSurface(state_.terrainDraft);
+      state_.terrainDraft.blendedSurface=true;
+      open(action==0?120:(terrainPanelRect(state_).height<400?160:159));return true;
+    }
+    if(action==61) {state_.terrainTab=2;open(0);return true;}
+    if(state_.terrainBrush.layer>=state_.terrainDraft.surface.layers.size()) return true;
+    if(action==60) {open(121);return true;}
+    if(action==62 || action==63) {
+      const auto count=std::min<u32>(4,u32(state_.terrainDraft.surface.layers.size()));
+      state_.terrainBrush.layer=(state_.terrainBrush.layer+(action==62?count-1:1))%count;
+      state_.terrainScroll=0;return true;
+    }
+    if(action==5 || action==7 || action==10 || action==11 || action==12 || action==49) {
+      open(action==5?124:action==7?130:action==10?140:action==11?141:action==12?123:120);
+      if(action==7) state_.terrainProfilePoint=0;
+      return true;
+    }
+    if(action==57 || action==58 || action==59) {open(action==57?131:action==58?132:130);return true;}
+    if(action>=14 && action<=17) {open(160+action-14);return true;}
+    auto recipe=state_.terrainDraft;
+    auto &geo=recipe.surface.geo;
+    auto &layer=recipe.surface.layers[state_.terrainBrush.layer];
+    const auto view=state_.terrainMaterialView;
+    if(action==21) {state_.terrainMapRole=0;open(170+terrainModuleGlobal(view));return true;}
+    if(action==22) {open(view<159?121:160+terrainModuleGlobal(view));return true;}
+    if(action==23 || action==24) {open(action==23?view+10:view-10);state_.terrainCatalogPage=0;return true;}
+    if(action==28 || action==29) {state_.terrainMapRole=(state_.terrainMapRole+(action==29?1:3))%4;state_.terrainScroll=0;return true;}
+    if(action==30 || action==31) {
+      if(action==30 && state_.terrainCatalogPage) --state_.terrainCatalogPage;
+      if(action==31 && state_.terrainCatalog && (state_.terrainCatalogPage+1)*6<state_.terrainCatalog->textures.size()) ++state_.terrainCatalogPage;
+      state_.terrainScroll=0;return true;
+    }
+    if((action>=40 && action<=48) || action==54) {
+      auto &curve=geo.curve;
+      auto index=curve.keys.empty()?usize(0):std::min<usize>(state_.terrainProfilePoint,curve.keys.size()-1);
+      if(action==40 || action==41) {
+        if(!curve.keys.empty()) state_.terrainProfilePoint=u32(action==40?(index?index-1:0):std::min(index+1,curve.keys.size()-1));
+        return true;
+      }
+      if(action==54) {
+        if(curve.keys.empty()) return true;
+        const auto area=terrainContentRect(state_,terrainPanelRect(state_));
+        const auto domain=terrainGeoCurveDomain(curve);
+        const float fraction=std::clamp((event.position.x-area.x-10)/std::max(1.f,area.width-20),0.f,1.f);
+        const float time=std::lerp(domain[0],domain[1],fraction);
+        const auto found=std::lower_bound(curve.keys.begin(),curve.keys.end(),time,[](const auto &key,float t){return key.time<t;});
+        auto selected=usize(found-curve.keys.begin());
+        if(selected && (selected==curve.keys.size() || time-curve.keys[selected-1].time<curve.keys[selected].time-time)) --selected;
+        state_.terrainProfilePoint=u32(selected);return true;
+      }
+      if(action==42) {
+        u64 next=1,result=0;
+        for(const auto &old:curve.keys) {
+          if(old.id==std::numeric_limits<u64>::max()) {state_.terrainMessage="Limite de identidade de chave alcançado";return true;}
+          next=std::max(next,old.id+1);
+        }
+        bool inserted=false;
+        if(curve.keys.size()>=2) {
+          const auto left=index+1<curve.keys.size()?index:index-1;
+          const auto time=std::midpoint(curve.keys[left].time,curve.keys[left+1].time);
+          if(time>curve.keys[left].time && time<curve.keys[left+1].time)
+            inserted=resources::splitAnimationCurveDomain(curve,time,next,result,resources::AnimationCurveDomain::Signed);
+        }
+        if(!inserted) {
+          resources::AnimationCurveKey added;
+          if(!curve.keys.empty()) {
+            added.value=curve.keys.back().value;added.time=curve.keys.back().time+1;
+            if(!std::isfinite(added.time) || added.time<=curve.keys.back().time)
+              added.time=std::nextafter(curve.keys.back().time,std::numeric_limits<float>::infinity());
+            if(!std::isfinite(added.time)) {
+              added.value=curve.keys.front().value;
+              added.time=std::nextafter(curve.keys.front().time,-std::numeric_limits<float>::infinity());
+            }
+          }
+          inserted=resources::putAnimationCurveKeyDomain(curve,added,next,result,resources::AnimationCurveDomain::Signed);
+        }
+        if(!inserted) {state_.terrainMessage="Não foi possível inserir uma chave neste domínio";return true;}
+        for(usize i=0;i<curve.keys.size();++i) if(curve.keys[i].id==result) {index=i;break;}
+      } else if(action==43) {
+        if(curve.keys.empty()) return true;
+        const u64 removed=curve.keys[index].id;
+        if(!resources::eraseAnimationCurveKeysDomain(curve,std::span<const u64>(&removed,1),resources::AnimationCurveDomain::Signed)) {
+          state_.terrainMessage="Não foi possível remover a chave selecionada";return true;
+        }
+        index=curve.keys.empty()?0:std::min(index,curve.keys.size()-1);
+      } else if(curve.keys.empty()) return true;
+      else if(action==44) {
+        auto &key=curve.keys[index];
+        key.broken=!key.broken;
+        if(!key.broken) {key.outgoing=key.incoming;key.outSlope=key.inSlope;}
+      } else if(action==45 || action==46) {
+        auto &key=curve.keys[index];
+        auto &mode=action==45?key.incoming:key.outgoing;
+        for(u32 attempt=0;attempt<7;++attempt) {
+          mode=resources::AnimationTangentMode((unsigned(mode)+1)%7);
+          if(!key.broken) {key.incoming=key.outgoing=mode;key.outSlope=key.inSlope;}
+          if(resources::validAnimationCurveDomain(curve,resources::AnimationCurveDomain::Signed)) break;
+        }
+      } else if(action==47) curve.keys[index].weightedIn=!curve.keys[index].weightedIn;
+      else if(action==48) curve.keys[index].weightedOut=!curve.keys[index].weightedOut;
+      state_.terrainProfilePoint=u32(index);
+    } else if(action>=1 && action<=3) geo.mode=resources::TerrainGeoMode(action-1);
+    else if(action==4) geo.blend=geo.blend==resources::TerrainColorBlend::Multiply2x?resources::TerrainColorBlend::LighterColor:resources::TerrainColorBlend::Multiply2x;
+    else if(action==6) geo.rangeEnabled=!geo.rangeEnabled;
+    else if(action==8) geo.curveEnabled=!geo.curveEnabled;
+    else if(action==9) {
+      resources::AssetGuid albedo,normal;
+      resources::AssetGuid::parse("863f19b183b2443859f959a96f7dce32",albedo);
+      resources::AssetGuid::parse("192aaea3237044f608d663c9884e0c70",normal);
+      bool a=false,n=false;
+      if(state_.terrainCatalog) for(const auto &source:state_.terrainCatalog->textures) {a=a||source.identity==albedo;n=n||source.identity==normal;}
+      if(!a || !n) {state_.terrainMessage="Par Geo original indisponível no catálogo";return true;}
+      geo.albedo=resources::neutralTerrainSurfaceMaps()[0];geo.normal=resources::neutralTerrainSurfaceMaps()[1];
+      geo.albedo.texture=albedo;geo.normal.texture=normal;geo.mode=resources::TerrainGeoMode::AlbedoNormal;
+    } else if(action==18 || action==19 || action==20) {
+      auto &global=recipe.surface.globalMaps[terrainModuleGlobal(view)];
+      if(action==18) global.enabled=!global.enabled;
+      if(action==19) global.blend=resources::TerrainColorBlend((u32(global.blend)+1)%4);
+      if(action==20) global.normalBlend=resources::TerrainNormalBlend((u32(global.normalBlend)+1)%2);
+    } else if(action==25 || action==26 || action==27 || (action>=32 && action<=37)) {
+      auto &map=terrainModuleMap(recipe.surface,view,state_.terrainMapRole);
+      if(action==25) map.channel=terrainModuleNormal(view)?
+        (map.channel==resources::TerrainSurfaceChannel::NormalRG?resources::TerrainSurfaceChannel::NormalRGB:resources::TerrainSurfaceChannel::NormalRG):
+        resources::TerrainSurfaceChannel((u32(map.channel)+1)%((view==172 || view==182)?4:5));
+      if(action==26) map.invert=!map.invert;
+      if(action==27 && !terrainModuleNormal(view)) map.linear=!map.linear;
+      if(action>=32 && action<=37) {
+        const auto source=state_.terrainCatalogPage*6+action-32;
+        if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()) return true;
+        map.texture=state_.terrainCatalog->textures[source].identity;
+        if(terrainModuleNormal(view)) {map.linear=true;if(u32(map.channel)<5) map.channel=resources::TerrainSurfaceChannel::NormalRGB;}
+      }
+    } else if(action==55) layer.geoHeightFilterEnabled=!layer.geoHeightFilterEnabled;
+    else if(action==56) {
+      auto &g=recipe.surface.globalMaps[2];
+      if(!g.smoothness.texture.valid()) {state_.terrainMessage="Selecione primeiro a fonte de smoothness";return true;}
+      g.ao.texture=g.metallic.texture=g.mask.texture=g.smoothness.texture;
+    } else return true;
+    std::string error;
+    if(resources::validTerrainRecipe(recipe,error)) {
+      state_.terrainDraft=std::move(recipe);
+      if(action>=32 && action<=37) open(view-10);
+      state_.terrainMessage="Estratos e mapas ajustados · prévia antes de aplicar";
+    } else state_.terrainMessage=error;
+    return true;
+  }
   if(id>=terrainClusterActionBase && id<terrainClusterActionBase+0x80) {
     const auto action=id-terrainClusterActionBase;
     if(state_.terrainBrush.layer>=state_.terrainDraft.surface.layers.size()) return true;
@@ -2327,13 +2501,11 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     if (id == widgetId(EditorWidget::TerrainMaterialLibrary) &&
         !loadTerrainCatalog())
       return true;
-    if(id==widgetId(EditorWidget::TerrainMaterialProperties) ||
-       id==widgetId(EditorWidget::TerrainMaterialMaps)) {
-      initializeTerrainSurface(state_.terrainDraft);
-      state_.terrainDraft.blendedSurface=true;
-    }
-    if(id==widgetId(EditorWidget::TerrainMaterialLibrary) && state_.terrainMaterialView>=4)
+    if(id==widgetId(EditorWidget::TerrainMaterialLibrary) && state_.terrainMaterialView!=1)
       state_.terrainCatalogPage=0;
+    if(id!=widgetId(EditorWidget::TerrainMaterialPaint)) {
+      initializeTerrainSurface(state_.terrainDraft);state_.terrainDraft.blendedSurface=true;
+    }
     state_.terrainMaterialView =
         id == widgetId(EditorWidget::TerrainMaterialLibrary)      ? 1
         : id == widgetId(EditorWidget::TerrainMaterialProperties) ? 2
@@ -2421,7 +2593,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
        (id >= widgetId(EditorWidget::TerrainNumberBase) + 96 &&
         id <= widgetId(EditorWidget::TerrainNumberBase) + 110) ||
        (id >= widgetId(EditorWidget::TerrainNumberBase) + 128 && id <= widgetId(EditorWidget::TerrainNumberBase) + 154) ||
-       terrainClusterField(id-widgetId(EditorWidget::TerrainNumberBase)))) {
+       terrainClusterField(id-widgetId(EditorWidget::TerrainNumberBase)) || terrainModuleField(id-widgetId(EditorWidget::TerrainNumberBase)))) {
     state_.numericField = id;
     state_.numericEntity = state_.terrainTarget;
     state_.numericInstance = 0;

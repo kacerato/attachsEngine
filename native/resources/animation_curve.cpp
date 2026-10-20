@@ -1,4 +1,4 @@
-#include "resources/animation_curve.h"
+#include "resources/animation_curve_domain.h"
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -51,12 +51,16 @@ bool freezeTangents(AnimationCurve &curve) {
   curve=std::move(next);return true;
 }
 }
-bool validAnimationCurve(const AnimationCurve &curve) {
+namespace {
+bool validCurve(const AnimationCurve &curve,bool signedTime) {
   if(curve.keys.empty()||curve.keys.size()>AnimationCurve::MaximumKeys)return false;
-  // IDs are checked at resource boundaries, not during sampling.
+  // Signed Geo boundaries validate stable IDs; legacy animation policy
+  // retains its existing resource-boundary ID checks.
+  std::unordered_set<u64> signedIds;
   for(usize i=0;i<curve.keys.size();++i) {
     const auto &k=curve.keys[i];
-    if(!k.id||!std::isfinite(k.time)||k.time<0||!std::isfinite(k.value)||!std::isfinite(k.inSlope)||
+    if(signedTime&&!signedIds.insert(k.id).second)return false;
+    if(!k.id||!std::isfinite(k.time)||(!signedTime&&k.time<0)||!std::isfinite(k.value)||!std::isfinite(k.inSlope)||
        !std::isfinite(k.outSlope)||!std::isfinite(k.inWeight)||!std::isfinite(k.outWeight)||
        k.inWeight<0||k.inWeight>1||k.outWeight<0||k.outWeight>1||!validMode(k.incoming)||!validMode(k.outgoing)||
        (i&&k.time<=curve.keys[i-1].time))return false;
@@ -66,6 +70,11 @@ bool validAnimationCurve(const AnimationCurve &curve) {
         (curve.keys[i-1].outgoing==Mode::Constant||k.incoming==Mode::Constant))return false;}
   }
   return true;
+}
+} // namespace
+bool validAnimationCurve(const AnimationCurve &curve){return validCurve(curve,false);}
+bool validAnimationCurveDomain(const AnimationCurve &curve,AnimationCurveDomain domain){
+  return u8(domain)<=u8(AnimationCurveDomain::Signed)&&validCurve(curve,domain==AnimationCurveDomain::Signed);
 }
 double animationCurveSlope(const AnimationCurve &curve,usize i,bool incoming) {
   const auto &k=curve.keys[i];const auto mode=incoming?k.incoming:k.outgoing;
@@ -134,8 +143,9 @@ bool animationCurveExtremaTimes(const AnimationCurve &curve,std::vector<float> &
   std::sort(result.begin(),result.end());result.erase(std::unique(result.begin(),result.end()),result.end());
   times=std::move(result);return true;
 }
-bool putAnimationCurveKey(AnimationCurve &curve,AnimationCurveKey key,u64 &nextId,u64 &resultId) {
-  if(!std::isfinite(key.time)||key.time<0||!nextId||nextId==std::numeric_limits<u64>::max())return false;
+namespace {
+bool putCurveKey(AnimationCurve &curve,AnimationCurveKey key,u64 &nextId,u64 &resultId,bool signedTime) {
+  if(!std::isfinite(key.time)||(!signedTime&&key.time<0)||!nextId||nextId==std::numeric_limits<u64>::max())return false;
   auto candidate=curve;u64 frontier=nextId;
   if(key.id) {
     const auto found=std::find_if(candidate.keys.begin(),candidate.keys.end(),[&](const auto &k){return k.id==key.id;});
@@ -147,21 +157,32 @@ bool putAnimationCurveKey(AnimationCurve &curve,AnimationCurveKey key,u64 &nextI
     else {key.id=frontier++;candidate.keys.push_back(key);}
   }
   std::sort(candidate.keys.begin(),candidate.keys.end(),[](const auto &a,const auto &b){return a.time<b.time;});
-  if(!validAnimationCurve(candidate))return false;
+  if(!validCurve(candidate,signedTime))return false;
   std::unordered_set<u64> ids;
   for(const auto &k:candidate.keys)if(k.id>=frontier||!ids.insert(k.id).second)return false;
   curve=std::move(candidate);nextId=frontier;resultId=key.id;return true;
 }
-bool eraseAnimationCurveKeys(AnimationCurve &curve,std::span<const u64> ids) {
-  if(ids.empty()||!validAnimationCurve(curve))return false;
+} // namespace
+bool putAnimationCurveKey(AnimationCurve &curve,AnimationCurveKey key,u64 &nextId,u64 &resultId){return putCurveKey(curve,key,nextId,resultId,false);}
+bool putAnimationCurveKeyDomain(AnimationCurve &curve,AnimationCurveKey key,u64 &nextId,u64 &resultId,AnimationCurveDomain domain){
+  return u8(domain)<=u8(AnimationCurveDomain::Signed)&&putCurveKey(curve,key,nextId,resultId,domain==AnimationCurveDomain::Signed);
+}
+namespace {
+bool eraseCurveKeys(AnimationCurve &curve,std::span<const u64> ids,bool signedTime) {
+  if(ids.empty()||!validCurve(curve,signedTime))return false;
   auto candidate=curve;
   for(const auto id:ids) {
     const auto found=std::find_if(candidate.keys.begin(),candidate.keys.end(),[&](const auto &k){return k.id==id;});
     if(found==candidate.keys.end())return false;
     candidate.keys.erase(found);
   }
-  if(!candidate.keys.empty()&&!validAnimationCurve(candidate))return false;
+  if(!candidate.keys.empty()&&!validCurve(candidate,signedTime))return false;
   curve=std::move(candidate);return true;
+}
+} // namespace
+bool eraseAnimationCurveKeys(AnimationCurve &curve,std::span<const u64> ids){return eraseCurveKeys(curve,ids,false);}
+bool eraseAnimationCurveKeysDomain(AnimationCurve &curve,std::span<const u64> ids,AnimationCurveDomain domain){
+  return u8(domain)<=u8(AnimationCurveDomain::Signed)&&eraseCurveKeys(curve,ids,domain==AnimationCurveDomain::Signed);
 }
 bool retimeAnimationCurve(AnimationCurve &curve,double scale,double offset) {
   if(!validAnimationCurve(curve)||!std::isfinite(scale)||scale<=0||!std::isfinite(offset))return false;
@@ -188,8 +209,9 @@ bool reverseAnimationCurve(AnimationCurve &curve,double start,double end) {
   if(!validAnimationCurve(candidate))return false;
   curve=std::move(candidate);return true;
 }
-bool splitAnimationCurve(AnimationCurve &curve,float time,u64 &nextId,u64 &resultId) {
-  if(!validAnimationCurve(curve)||!std::isfinite(time)||time<curve.keys.front().time||time>curve.keys.back().time||
+namespace {
+bool splitCurve(AnimationCurve &curve,float time,u64 &nextId,u64 &resultId,bool signedTime) {
+  if(!validCurve(curve,signedTime)||!std::isfinite(time)||time<curve.keys.front().time||time>curve.keys.back().time||
      !nextId||nextId==std::numeric_limits<u64>::max())return false;
   const auto upper=std::lower_bound(curve.keys.begin(),curve.keys.end(),time,[](const auto &k,float t){return k.time<t;});
   if(upper!=curve.keys.end()&&upper->time==time) {resultId=upper->id;return true;}
@@ -222,9 +244,14 @@ bool splitAnimationCurve(AnimationCurve &curve,float time,u64 &nextId,u64 &resul
     key.value=static_cast<float>(p.y);
   }
   candidate.keys.insert(candidate.keys.begin()+i+1,key);
-  if(!validAnimationCurve(candidate))return false;
+  if(!validCurve(candidate,signedTime))return false;
   for(const auto &k:curve.keys)if(k.id>=nextId)return false;
   curve=std::move(candidate);resultId=nextId++;return true;
+}
+} // namespace
+bool splitAnimationCurve(AnimationCurve &curve,float time,u64 &nextId,u64 &resultId){return splitCurve(curve,time,nextId,resultId,false);}
+bool splitAnimationCurveDomain(AnimationCurve &curve,float time,u64 &nextId,u64 &resultId,AnimationCurveDomain domain){
+  return u8(domain)<=u8(AnimationCurveDomain::Signed)&&splitCurve(curve,time,nextId,resultId,domain==AnimationCurveDomain::Signed);
 }
 bool cropAnimationCurve(AnimationCurve &curve,float start,float end,u64 &nextId) {
   if(!validAnimationCurve(curve)||!std::isfinite(start)||!std::isfinite(end)||start<0||end<start||!nextId)return false;

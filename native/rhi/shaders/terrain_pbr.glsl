@@ -8,7 +8,8 @@ const uint terrainAdvancedHeaderRows=2u,terrainLayerDirectoryRows=2u;
 const uint terrainAdvancedGlobalRows=terrainAdvancedHeaderRows+terrainNoiseCount*terrainNoiseRows;
 const uint terrainAdvancedLayerRows=terrainLayerDirectoryRows+terrainNoiseCount*terrainNoiseRows;
 const uint terrainLayerExtraRows=3u,terrainAntiEntryRows=3u*terrainNoiseRows;
-const uint terrainFeatureM05=1u,terrainFeatureM06=2u,terrainFeatureAntiTile=4u,terrainFeatureM07=8u,terrainFeatureM08=16u;
+const uint terrainFeatureM05=1u,terrainFeatureM06=2u,terrainFeatureAntiTile=4u,terrainFeatureM07=8u,terrainFeatureM08=16u,terrainFeatureGeo=32u,terrainFeatureGlobals=64u;
+const uint terrainModuleRows=3u,terrainModuleLayerRows=2u,terrainGeoRows=14u,terrainGlobalRecordRows=29u;
 const uint terrainClusterHeaderRows=2u,terrainClusterRows=terrainClusterHeaderRows+terrainNoiseRows,terrainVariantRows=36u;
 const uint terrainResampleHeaderRows=2u,terrainResampleRows=terrainResampleHeaderRows+terrainNoiseRows;
 float terrainNoise(vec2 p);
@@ -401,6 +402,109 @@ TerrainPBRResult terrainPbrCluster(uint layerRow,uint clusterRow,uint resampleRo
   float luminance=dot(result.color.rgb,vec3(.2126,.7152,.0722));result.color.rgb=mix(vec3(luminance),result.color.rgb,blend.y);result.color*=terrainSurfaceRows[layerRow+4u];
   return result;
 }
+// M09/M10 sample shared global inputs once, then apply layer participation.
+// Unity SG17 Sample Texture 2D / Blend / Position; source units and channels
+// are recorded in M09-M10-SOURCE-CONTRACT.md. Global fades/ranges are linear.
+struct TerrainModuleSamples {
+  vec4 geoColor;vec4 geoNormal;vec2 geoUv;float geoStrength;
+  vec4 raw[4];vec4 saom[4];vec2 uv[4];vec2 dx[4];vec2 dy[4];vec4 strength;
+  vec3 px;vec3 py;
+};
+float terrainPbrRamp(float start,float end,float value){return end>start?clamp((value-start)/(end-start),0.0,1.0):(value>=end?1.0:0.0);}
+float terrainPbrCurve(uint root,float time){
+  vec4 curve=terrainSurfaceRows[root+1u];uint count=uint(curve.z+.5);if(count<2u)return 0.0;
+  float point=clamp(time,0.0,1.0)*float(count-1u);uint a=min(uint(point),count-1u),b=min(a+1u,count-1u),offset=uint(curve.y+.5);
+  return mix(terrainSurfaceRows[offset+a/4u][a%4u],terrainSurfaceRows[offset+b/4u][b%4u],fract(point));
+}
+TerrainModuleSamples terrainPbrSampleModules(uint root,vec3 localPosition,vec3 worldPosition){
+  TerrainModuleSamples samples;samples.geoColor=vec4(1);samples.geoNormal=vec4(.5,.5,1,1);samples.geoUv=vec2(0);samples.geoStrength=0;samples.strength=vec4(0);
+  samples.px=dFdx(worldPosition);samples.py=dFdy(worldPosition);
+  for(uint role=0u;role<4u;++role){samples.raw[role]=vec4(1);samples.saom[role]=vec4(1);samples.uv[role]=vec2(0);samples.dx[role]=vec2(0);samples.dy[role]=vec2(0);}
+  vec4 directory=terrainSurfaceRows[root];
+  if(directory.y>.5){
+    uint row=uint(directory.y+.5);vec4 g=terrainSurfaceRows[row],position=terrainSurfaceRows[row+1u],curve=terrainSurfaceRows[row+3u];
+    float vertical=(worldPosition.y+position.y)/position.x;
+    if(position.w>.5){float a=radians(curve.z);float coordinate=dot((worldPosition.xz+vec2(curve.y))/curve.x,vec2(cos(a),sin(a)));vertical+=terrainPbrCurve(root,coordinate);}
+    samples.geoUv=vec2(0,vertical);
+    if(g.z>0.0){
+      uint map=row+4u;samples.geoColor=terrainPbrColor(map,terrainPbrFetch(map,samples.geoUv,1.0));
+      samples.geoStrength=g.z*samples.geoColor.a;
+      if(position.z>.5){vec4 bounds=terrainSurfaceRows[row+2u];samples.geoStrength*=terrainPbrRamp(bounds.x,bounds.y,worldPosition.y)*(1.0-terrainPbrRamp(bounds.z,bounds.w,worldPosition.y));}
+      if(g.x>1.5&&g.w>0.0&&terrainSurfaceRows[row+9u].w>0.0)samples.geoNormal=terrainPbrFetch(row+9u,samples.geoUv,1.0);
+    }
+  }
+  if(directory.z>.5){
+    uint first=uint(directory.z+.5);vec4 domain=terrainSurfaceRows[root+2u];vec2 globalUv=(localPosition.xz-domain.xy)/domain.zw;
+    float cameraDistance=length(worldPosition-TERRAIN_SURFACE_CAMERA_POSITION);
+    for(uint role=0u;role<4u;++role){
+      uint row=first+role*terrainGlobalRecordRows;vec4 g=terrainSurfaceRows[row],fade=terrainSurfaceRows[row+1u],transform=terrainSurfaceRows[row+2u];
+      samples.uv[role]=(globalUv+transform.zw)*transform.xy;
+      samples.dx[role]=dFdx(samples.uv[role]);samples.dy[role]=dFdy(samples.uv[role]);
+      float strength=g.z*mix(fade.z,fade.w,terrainPbrRamp(fade.x,fade.y,cameraDistance));
+      if(g.x<.5||strength==0.0)continue;samples.strength[role]=strength;
+      uint map=row+4u;
+      if(role==2u){
+        for(uint channel=0u;channel<4u;++channel){
+          uint channelMap=map+5u+channel*5u;float slot=terrainSurfaceRows[channelMap].x;bool reused=false;
+          for(uint prior=0u;prior<channel;++prior)if(terrainSurfaceRows[map+5u+prior*5u].x==slot){samples.saom[channel]=samples.saom[prior];reused=true;break;}
+          if(!reused)samples.saom[channel]=terrainPbrFetchGrad(channelMap,samples.uv[role],samples.dx[role],samples.dy[role],1.0);
+        }
+      }else samples.raw[role]=terrainPbrFetchGrad(map,samples.uv[role],samples.dx[role],samples.dy[role],1.0);
+    }
+  }
+  return samples;
+}
+vec3 terrainPbrColorBlend(vec3 base,vec3 value,uint mode){
+  if(mode==0u)return base*value*2.0;
+  if(mode==1u)return mix(2.0*base*value,vec3(1)-2.0*(vec3(1)-base)*(vec3(1)-value),step(vec3(.5),base));
+  if(mode==2u)return dot(base,vec3(1))>dot(value,vec3(1))?base:value;
+  return value;
+}
+vec3 terrainPbrDecodedNormal(uint map,vec4 sampleValue,float strength){
+  vec3 decoded=mix(terrainSurfaceRows[map+3u].xyz,terrainSurfaceRows[map+4u].xyz,sampleValue.xyz)*terrainSurfaceRows[map+2u].xyz;
+  if(terrainSurfaceRows[map].z>.5)decoded=vec3(1)-decoded;
+  decoded=decoded*2.0-1.0;if(terrainSurfaceRows[map].y>5.5)decoded.z=sqrt(max(1.0-dot(decoded.xy,decoded.xy),0.0));
+  strength*=terrainSurfaceRows[map].w;
+  return terrainPbrSafeNormal(vec3(decoded.xy*strength,mix(1.0,decoded.z,clamp(strength,0.0,1.0))),vec3(0,0,1));
+}
+vec3 terrainPbrStableDetail(vec3 tangentNormal,vec3 n){
+  vec3 helper=abs(n.x)<.999?vec3(1,0,0):vec3(0,0,1);vec3 t=normalize(helper-n*dot(helper,n)),b=cross(n,t);
+  return terrainPbrSafeNormal(t*tangentNormal.x+b*tangentNormal.y+n*tangentNormal.z,n);
+}
+vec3 terrainPbrCombineNormal(vec3 base,vec3 detail,vec3 n){
+  vec3 helper=abs(n.z)<.999?vec3(0,0,1):vec3(0,1,0);vec3 t=normalize(cross(helper,n)),b=cross(n,t);
+  vec3 a=vec3(dot(base,t),dot(base,b),dot(base,n)),d=vec3(dot(detail,t),dot(detail,b),dot(detail,n));vec3 result=terrainPbrRnm(a,d);
+  return terrainPbrSafeNormal(t*result.x+b*result.y+n*result.z,n);
+}
+void terrainPbrApplyModules(inout TerrainPBRResult layer,uint root,uint index,TerrainModuleSamples samples,vec3 n){
+  vec4 directory=terrainSurfaceRows[root];uint controls=uint(directory.w+.5)+index*terrainModuleLayerRows;
+  if(directory.y>.5){
+    uint row=uint(directory.y+.5);vec4 g=terrainSurfaceRows[row],participation=terrainSurfaceRows[controls];
+    float amount=samples.geoStrength*participation.x;
+    if(participation.y>.5){float geoFilter=clamp((abs(participation.z)-layer.height)*terrainSurfaceRows[row+3u].w+.5,0.0,1.0);if(participation.z<0.0)geoFilter=1.0-geoFilter;amount*=max(1.0-participation.w,geoFilter);}
+    layer.color.rgb=mix(layer.color.rgb,terrainPbrColorBlend(layer.color.rgb,samples.geoColor.rgb,uint(g.y+.5)),clamp(amount,0.0,1.0));
+    if(g.x>1.5&&g.w>0.0&&amount>0.0){vec3 detail=terrainPbrStableDetail(terrainPbrDecodedNormal(row+9u,samples.geoNormal,g.w*amount),n);layer.normalWorld=terrainPbrCombineNormal(layer.normalWorld,detail,n);}
+  }
+  if(directory.z>.5){
+    uint first=uint(directory.z+.5);vec4 participation=terrainSurfaceRows[controls+1u];
+    for(uint role=0u;role<4u;++role){
+      float amount=samples.strength[role]*participation[role];if(amount==0.0)continue;
+      uint row=first+role*terrainGlobalRecordRows,map=row+4u;vec4 g=terrainSurfaceRows[row];
+      if(role==0u){vec4 color=terrainPbrColor(map,samples.raw[role]);layer.color.rgb=mix(layer.color.rgb,terrainPbrColorBlend(layer.color.rgb,color.rgb,uint(terrainSurfaceRows[row+3u].x+.5)),clamp(amount*color.a,0.0,1.0));}
+      else if(role==1u){
+        bool reoriented=g.w<.5;vec3 decoded=terrainPbrDecodedNormal(map,samples.raw[role],reoriented?amount:1.0);
+        float determinant=samples.dx[role].x*samples.dy[role].y-samples.dx[role].y*samples.dy[role].x;
+        vec3 detail=abs(determinant)<1e-12?terrainPbrStableDetail(decoded,n):terrainPbrNormalGrad(decoded,samples.dx[role],samples.dy[role],samples.px,samples.py,n);
+        layer.normalWorld=reoriented?terrainPbrCombineNormal(layer.normalWorld,detail,n):terrainPbrSafeNormal(mix(layer.normalWorld,detail,amount),n);
+      }else if(role==2u){
+        uint smoothness=map+5u,ao=map+10u,metallic=map+15u,mask=map+20u;
+        float blend=amount*terrainPbrScalar(mask,samples.saom[3]);
+        layer.roughness=clamp(mix(layer.roughness,1.0-terrainPbrScalar(smoothness,samples.saom[0]),blend),0.0,1.0);
+        layer.occlusion=clamp(mix(layer.occlusion,terrainPbrScalar(ao,samples.saom[1]),blend),0.0,1.0);layer.metallic=clamp(mix(layer.metallic,terrainPbrScalar(metallic,samples.saom[2]),blend),0.0,1.0);
+      }else layer.emission=max(vec3(0),mix(layer.emission,terrainPbrColor(map,samples.raw[role]).rgb,amount));
+    }
+  }
+}
 TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
   TerrainPBRResult result;result.color=vec4(0);result.normalWorld=worldNormal;result.roughness=1;result.metallic=0;result.occlusion=1;result.emission=vec3(0);result.height=0;result.valid=false;
   if(!aetherHasMaterialExtension()||aetherMaterialRow(14u).z<.5)return result;
@@ -412,6 +516,8 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
   if(vUv1.y>=0.0&&aetherMaterialRow(13u).x>.5){vec4 control=aetherMaterialRow(13u);weights=max(textureLod(TERRAIN_CONTROL_MAP(uint(control.y+.5)),vUv0*control.zw+aetherMaterialRow(14u).xy,0.0),vec4(0));}
 #endif
   vec3 localPosition=vec3(vUv0.x,vUv1.x,vUv0.y)*terrainSurfaceRows[offset+1u].x;
+  uint moduleRoot=terrainSurfaceRows[offset+1u].y>.5?uint(terrainSurfaceRows[offset+1u].y+.5)-1u:0u;
+  TerrainModuleSamples moduleSamples;if(moduleRoot!=0u)moduleSamples=terrainPbrSampleModules(moduleRoot,localPosition,worldPosition);
   TerrainPBRResult layers[4];float amounts[4];float peak=-1e20;
   // Current control storage is RGBA. Higher catalog layers require additional
   // control pages before they can receive weights; they are not invented here.
@@ -427,6 +533,7 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
     if(useCluster)layers[i]=terrainPbrCluster(row,clusterRow,resampleRow,localPosition,worldPosition,worldNormal);
     else{layers[i]=terrainPbrLayer(row,localPosition,worldPosition,worldNormal);if(resampleRow!=0u)terrainPbrResample(layers[i],row,resampleRow,localPosition,worldPosition,worldNormal);}
     if(header.z>.5)terrainPbrApplyNoises(layers[i],advanced,i,localPosition,worldPosition,terrainPbrGeometricNormal(terrainSurfaceRows[row],worldPosition,worldNormal),terrainSurfaceRows[row].z);
+    if(moduleRoot!=0u)terrainPbrApplyModules(layers[i],moduleRoot,i,moduleSamples,terrainPbrGeometricNormal(terrainSurfaceRows[row],worldPosition,worldNormal));
     vec4 blend=terrainSurfaceRows[row+2u],height=terrainSurfaceRows[row+3u];amounts[i]=weights[i];if(amounts[i]>0.0)peak=max(peak,amounts[i]+layers[i].height*height.y);
   }
 

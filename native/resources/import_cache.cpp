@@ -28,6 +28,8 @@ bool validTerrainSurfaces(const GltfImport &model) {
     const auto &binding=model.terrainSurfaces[m];std::string error;
     if((!binding.surface.layers.empty() && !validTerrainSurface(binding.surface,error)) || !std::isfinite(binding.localMetersPerUv) ||
        binding.localMetersPerUv<=0 || binding.localMetersPerUv>256)return false;
+    for(float value:binding.terrainDomain)if(!std::isfinite(value) || std::abs(value)>1e8f)return false;
+    if(binding.terrainDomain[2]<=0 || binding.terrainDomain[3]<=0)return false;
     const auto refs=terrainSurfaceTextureRefs(binding.surface);
     if(refs.size()!=binding.textures.size())return false;
     if(!binding.surface.layers.empty() && !(model.materials[m].flags&renderer::MapMaterialTerrain))return false;
@@ -366,10 +368,10 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   if(!model.terrainSurfaces.empty()) {
-    writer.raw(kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic);writer.u32v(1);writer.u32v(u32(model.terrainSurfaces.size()));
+    writer.raw(kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic);writer.u32v(2);writer.u32v(u32(model.terrainSurfaces.size()));
     for(const auto &binding:model.terrainSurfaces) {
       std::string text,error;if(!binding.surface.layers.empty() && !serializeTerrainSurface(binding.surface,text,error))return false;
-      writer.text(text);writer.raw(&binding.localMetersPerUv,sizeof(float));writer.u32v(u32(binding.textures.size()));
+      writer.text(text);writer.raw(&binding.localMetersPerUv,sizeof(float));writer.raw(binding.terrainDomain.data(),sizeof(float)*4);writer.u32v(u32(binding.textures.size()));
       for(const auto &entry:binding.textures) {
         writer.raw(&entry.identity,sizeof entry.identity);writer.u32v(entry.linear);writer.u32v(entry.normal);writer.u32v(entry.textureIndex);
       }
@@ -594,13 +596,15 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   if(reader.ok && bytes.size()-reader.at>=sizeof kTerrainSurfaceMagic &&
       std::memcmp(bytes.data()+reader.at,kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic)==0) {
     reader.at+=sizeof kTerrainSurfaceMagic;
-    if(reader.u32v()!=1)return refuse();const u32 count=reader.u32v();
+    const u32 surfaceVersion=reader.u32v();if(surfaceVersion!=1 && surfaceVersion!=2)return refuse();const u32 count=reader.u32v();
     if(!reader.ok || count!=model.materials.size() || count>(bytes.size()-reader.at)/12)return refuse();
     model.terrainSurfaces.resize(count);
     for(auto &binding:model.terrainSurfaces) {
       const auto text=reader.text(1024*1024);std::string error;
       if(!reader.ok || (!text.empty() && !deserializeTerrainSurface(text,binding.surface,error)))return refuse();
-      reader.raw(&binding.localMetersPerUv,sizeof(float));const u32 refs=reader.u32v();
+      reader.raw(&binding.localMetersPerUv,sizeof(float));
+      if(surfaceVersion>=2)reader.raw(binding.terrainDomain.data(),sizeof(float)*4);
+      const u32 refs=reader.u32v();
       if(!reader.ok || refs>(bytes.size()-reader.at)/28 || refs>4096)return refuse();
       binding.textures.resize(refs);
       for(auto &entry:binding.textures) {

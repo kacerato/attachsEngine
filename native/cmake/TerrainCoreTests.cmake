@@ -13,12 +13,14 @@ function(aether_add_terrain_core_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_neighbors.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_recovery.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_modules.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_catalog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_history_store.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_neighbors.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_catalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/animation_curve.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/platform/atomic_asset_file.cpp
@@ -41,6 +43,7 @@ function(aether_add_terrain_import_tests)
   add_executable(aether_terrain_import_tests EXCLUDE_FROM_ALL
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/family_base_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_domain.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_import.cpp
@@ -77,6 +80,7 @@ function(aether_add_terrain_surface_preview)
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_catalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/animation_curve.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_draw_list.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_text.cpp

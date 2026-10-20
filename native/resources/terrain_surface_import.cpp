@@ -8,14 +8,17 @@
 #include <map>
 namespace ae::resources {
 bool importTerrainSurface(const TerrainSurfaceAsset &surface,std::span<const TerrainSurfaceImage> images,float meters,
-    u64 budget,std::vector<renderer::SharedAuthoringTexture> &out,renderer::TerrainSurfaceBinding &binding,std::string &error) {
+    u64 budget,std::vector<renderer::SharedAuthoringTexture> &out,renderer::TerrainSurfaceBinding &binding,std::string &error,
+    std::array<float,4> domain) {
   if(!validTerrainSurface(surface,error))return false;
   if(!std::isfinite(meters) || meters<=0 || meters>256){error="Invalid terrain surface meter scale.";return false;}
+  for(float value:domain)if(!std::isfinite(value)||std::abs(value)>1e8f){error="Invalid terrain domain.";return false;}
+  if(domain[2]<=0||domain[3]<=0){error="Terrain domain extent must be positive.";return false;}
   std::map<AssetGuid,const TerrainSurfaceImage *> sources;
   for(const auto &image:images)if(!image.identity.valid() || !sources.emplace(image.identity,&image).second) {
     error="Invalid/duplicate terrain surface image identity.";return false;
   }
-  std::vector<renderer::SharedAuthoringTexture> textures;renderer::TerrainSurfaceBinding next;next.surface=surface;next.localMetersPerUv=meters;
+  std::vector<renderer::SharedAuthoringTexture> textures;renderer::TerrainSurfaceBinding next;next.surface=surface;next.localMetersPerUv=meters;next.terrainDomain=domain;
   u64 used=0;
   for(const auto &ref:terrainSurfaceTextureRefs(surface)) {
     for(const auto &prior:next.textures)if(prior.identity==ref.identity && prior.linear==ref.linear && prior.normal==ref.normal) {

@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -295,11 +296,13 @@ VkShaderModule shader(VkDevice device, const std::string &path) {
   return result;
 }
 int main(int argc, char **argv) {
-  require(argc == 2,
-          "usage: astra_terrain_control_gpu <compiled shader directory>");
+  require(argc == 2||argc==3,
+          "usage: astra_terrain_control_gpu <compiled shader directory> [original 1x256 Geo RGBA]");
   Fixture f;
   constexpr uint32_t width = 32, height = 32, controlWidth = 65;
-  std::array<Image, 10> textures;
+  std::vector<uint8_t> originalGeo(1024,255);
+  if(argc==3){std::ifstream image(argv[2],std::ios::binary);image.read(reinterpret_cast<char*>(originalGeo.data()),1024);require(image.gcount()==1024&&image.peek()==EOF,"actual original Geo decode is 1x256 RGBA without downscale");}
+  std::array<Image, 11> textures;
   std::array<std::array<uint8_t, 4>, 10> colors{{{255, 0, 0, 255},
                                                  {0, 255, 0, 255},
                                                  {0, 0, 255, 255},
@@ -337,16 +340,17 @@ int main(int argc, char **argv) {
       gradient[p + 1] = uint8_t(y * 255 / 64);
       gradient[p + 2] = 0;
     }
-  for (uint32_t i = 0; i < 10; ++i) {
+  for (uint32_t i = 0; i < 11; ++i) {
     uint32_t n = i == 4 || i == 8 ? controlWidth : 1;
-    uint32_t imageHeight = n;
+    uint32_t imageHeight = i==10?256:n;
     textures[i] =
         f.image(n, imageHeight,
                 VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     auto staging =
         f.buffer(n * imageHeight * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
     std::memcpy(staging.mapped,
-                i == 4   ? pixels.data()
+                i == 10 ? originalGeo.data()
+                : i == 4   ? pixels.data()
                 : i == 8 ? gradient.data()
                          : colors[i].data(),
                 n * imageHeight * 4);
@@ -369,7 +373,7 @@ int main(int argc, char **argv) {
   constexpr size_t materialBytes =
       ae::renderer::MaterialExtensionFloats * sizeof(float);
   auto rows = f.buffer(materialBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
-  auto surfaceRows = f.buffer(4096, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  auto surfaceRows = f.buffer(16384, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
   auto *row = static_cast<float *>(rows.mapped);
   ae::renderer::TerrainControlBinding control;
   control.uvScale[0] = float(controlWidth - 1) / controlWidth;
@@ -389,7 +393,7 @@ int main(int argc, char **argv) {
   check(vkCreateSampler(f.device, &sci, nullptr, &sampler),
         "create production-repeat sampler");
   VkDescriptorSetLayoutBinding textureBinding{
-      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10,
+      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 11,
       VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
   VkDescriptorSetLayoutBinding rowBindings[]{
       {16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -407,7 +411,7 @@ int main(int argc, char **argv) {
   li.pBindings = rowBindings;
   check(vkCreateDescriptorSetLayout(f.device, &li, nullptr, &layouts[1]),
         "material row layout");
-  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10},
+  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 11},
                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
   VkDescriptorPoolCreateInfo dpi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   dpi.maxSets = 2;
@@ -424,18 +428,18 @@ int main(int argc, char **argv) {
   std::array<VkDescriptorSet, 2> sets;
   check(vkAllocateDescriptorSets(f.device, &dai, sets.data()),
         "descriptor sets");
-  std::array<VkDescriptorImageInfo, 10> infos;
-  for (size_t i = 0; i < 10; ++i)
+  std::array<VkDescriptorImageInfo, 11> infos;
+  for (size_t i = 0; i < 11; ++i)
     infos[i] = {sampler, textures[i].view,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo rinfo{rows.handle, 0, materialBytes};
-  VkDescriptorBufferInfo sinfo{surfaceRows.handle, 0, 4096};
+  VkDescriptorBufferInfo sinfo{surfaceRows.handle, 0, 16384};
   std::array<VkWriteDescriptorSet, 3> writes{};
   for (auto &w : writes)
     w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = sets[0];
   writes[0].dstBinding = 0;
-  writes[0].descriptorCount = 10;
+  writes[0].descriptorCount = 11;
   writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[0].pImageInfo = infos.data();
   writes[1].dstSet = sets[1];
@@ -565,8 +569,9 @@ int main(int argc, char **argv) {
     qi.queryType=VK_QUERY_TYPE_TIMESTAMP;qi.queryCount=2;
     check(vkCreateQueryPool(f.device,&qi,nullptr,&timestamps),"create GPU timestamp queries");
   }
-  std::array<std::vector<uint8_t>,116> modePixels;
-  for (uint32_t mode = 0; mode < 116; ++mode) {
+  std::array<std::vector<uint8_t>,199> modePixels;
+  for (uint32_t mode = 0; mode < 199; ++mode) {
+    if(mode==189&&argc!=3)continue;
     if (mode == 29 || mode==50) {
       auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
       const uint8_t negativeZ[4]{uint8_t(mode==29?128:191), 128, uint8_t(mode==29?0:238), 255};
@@ -761,7 +766,7 @@ int main(int argc, char **argv) {
         }
         if(mode==86)layer.resampleBlend=TerrainDistanceBlend::Noise;
       }
-      if(mode>=88){
+      if(mode>=88&&mode<116){
         auto &c=layer.cluster;
         const bool baseStochastic=mode>=101&&mode<=104;
         c.enabled=!baseStochastic;c.stochastic=mode>=101&&mode<=114;
@@ -791,6 +796,67 @@ int main(int argc, char **argv) {
         if(mode==107||mode==108||mode==109){layer.resampleAlbedo=true;layer.resampleNormal=mode==108;layer.resampleHeightBlend=mode==108;layer.resampleScale=2;layer.resampleBlend=TerrainDistanceBlend::Constant;}
         if(mode==109)mapSlot(c.variants[1].maps[0],8,TerrainSurfaceChannel::RGB);
       }
+      if(mode>=116){
+        mapSlot(layer.maps[0],9,TerrainSurfaceChannel::RGB);
+        auto &geo=binding.surface.geo;
+        auto setupGeo=[&](){geo.mode=TerrainGeoMode::Albedo;mapSlot(geo.albedo,7,TerrainSurfaceChannel::RGB);};
+        if(mode<=145||mode>=182){setupGeo();}
+        if(mode==116)geo.mode=TerrainGeoMode::Off;
+        if(mode==118)geo.blendStrength=0;
+        if(mode==119)layer.geoParticipation=0;
+        if(mode==120)layer.geoParticipation=.5f;
+        if(mode==121)geo.blend=TerrainColorBlend::LighterColor;
+        if(mode>=122&&mode<=124){geo.rangeEnabled=true;geo.range=mode==122?std::array<float,4>{-10,10,20,30}:mode==123?std::array<float,4>{-30,-20,-10,10}:std::array<float,4>{10,20,30,40};}
+        if(mode>=125&&mode<=127){layer.geoHeightFilterEnabled=true;layer.geoHeightThreshold=mode==126?-.5f:.5f;if(mode==127)layer.geoHeightStrength=.5f;}
+        if(mode>=128&&mode<=132){geo.mode=TerrainGeoMode::AlbedoNormal;mapSlot(geo.normal,6,mode==129?TerrainSurfaceChannel::NormalRG:TerrainSurfaceChannel::NormalRGB);if(mode==130)geo.normalStrength=0;if(mode==131)geo.normal.factor=0;if(mode==132)geo.normal.invert=true;}
+        if(mode>=133&&mode<=139||mode==144||mode==145||mode>=182&&mode<=187){
+          mapSlot(layer.maps[0],3,TerrainSurfaceChannel::RGB);mapSlot(geo.albedo,8,TerrainSurfaceChannel::RGB);geo.blendStrength=.5f;geo.scaleMeters=2;geo.offsetMeters=.5f;
+          if(mode==134)geo.offsetMeters=1;
+          if(mode==135||mode==136){geo.offsetMeters=0;if(mode==136)geo.scaleMeters=4;}
+          if(mode==137){geo.curveEnabled=true;geo.offsetMeters=0;for(auto &key:geo.curve.keys)key.value=.25f;}
+          if(mode==139)geo.albedo.colorFactor[3]=.25f;
+          if(mode==144)geo.offsetMeters=1.5f;
+          if(mode==145){layer.maps[0].texture={};layer.maps[0].colorFactor={0,0,0,1};geo.blend=TerrainColorBlend::LighterColor;geo.blendStrength=1;geo.offsetMeters=0;}
+          if(mode>=182){geo.curveEnabled=true;geo.offsetMeters=0;geo.curveScaleMeters=2;geo.curve.keys.back().value=.25f;geo.curve.keys.front().incoming=geo.curve.keys.front().outgoing=geo.curve.keys.back().incoming=geo.curve.keys.back().outgoing=AnimationTangentMode::Linear;
+            if(mode==183)geo.curveScaleMeters=4;if(mode==184)geo.curveOffsetMeters=.5f;if(mode==185)geo.curveRotationDegrees=90;
+            if(mode==186)for(auto &key:geo.curve.keys){key.incoming=key.outgoing=AnimationTangentMode::Free;key.inSlope=key.outSlope=0;}
+            if(mode==187)geo.curveEnabled=false;
+          }
+        }
+        if(mode>=140&&mode<=143){layer.geoHeightFilterEnabled=true;layer.geoHeightThreshold=mode==140?.8f:.7f;geo.heightContrast=mode==141?1:10;if(mode==143)layer.geoHeightStrength=0;}
+        if(mode>=146&&mode<=161){auto &g=binding.surface.globalMaps[0];g.enabled=mode!=161;mapSlot(g.map,7,TerrainSurfaceChannel::RGB);
+          if(mode==147)g.blend=TerrainColorBlend::Multiply2x;if(mode==148||mode==149)g.blend=TerrainColorBlend::Overlay;if(mode==160)g.blend=TerrainColorBlend::LighterColor;
+          if(mode==149){layer.maps[0].texture={};layer.maps[0].colorFactor={.6f,.2f,.8f,1};}
+          if(mode==150)layer.globalMapParticipation[0]=0;if(mode==151)g.intensity=0;
+          if(mode>=152&&mode<=154){g.fadeStart=10;g.fadeEnd=20;g.nearStrength=.25f;g.farStrength=.75f;}
+          if(mode==155){g.map.colorRemapMin=g.map.colorRemapMax={.1f,.2f,.3f,.6f};g.map.colorFactor={.5f,1,2,1};g.map.factor=.5f;g.map.invert=true;}
+          if(mode>=156&&mode<=159){mapSlot(g.map,8,TerrainSurfaceChannel::RGB);binding.terrainDomain={-2,-4,8,16};if(mode==157){g.scaleX=2;g.scaleY=.5f;g.offsetX=.125f;g.offsetY=.25f;}if(mode==158)binding.localMetersPerUv=2;if(mode==159)binding.terrainDomain={-2,-4,16,8};}
+        }
+        if(mode>=162&&mode<=169){auto &g=binding.surface.globalMaps[1];g.enabled=true;mapSlot(g.map,6,mode==163?TerrainSurfaceChannel::NormalRG:TerrainSurfaceChannel::NormalRGB);
+          if(mode==164)layer.globalMapParticipation[1]=0;if(mode==165)g.intensity=0;if(mode==166||mode==167)layer.globalMapParticipation[1]=2;if(mode==167)g.normalBlend=TerrainNormalBlend::Crossfade;
+          if(mode==168){g.fadeStart=10;g.fadeEnd=20;g.nearStrength=.25f;g.farStrength=.75f;}if(mode==169)g.map.invert=true;
+        }
+        if(mode>=170&&mode<=175||mode==181){auto &g=binding.surface.globalMaps[2];g.enabled=true;mapSlot(g.smoothness,7,TerrainSurfaceChannel::R);mapSlot(g.ao,7,TerrainSurfaceChannel::G);mapSlot(g.metallic,7,TerrainSurfaceChannel::B);mapSlot(g.mask,7,TerrainSurfaceChannel::A);
+          if(mode==171)layer.globalMapParticipation[2]=0;if(mode==172)layer.globalMapParticipation[2]=2;if(mode==173){g.mask.remapMin=.2f;g.mask.remapMax=.8f;g.mask.invert=true;g.mask.factor=.5f;}
+          if(mode==174){g.smoothness.channel=TerrainSurfaceChannel::B;g.smoothness.invert=true;g.ao.channel=TerrainSurfaceChannel::R;g.metallic.channel=TerrainSurfaceChannel::G;}if(mode==175)g.intensity=0;
+        }
+        if(mode>=176&&mode<=180){auto &g=binding.surface.globalMaps[3];g.enabled=true;mapSlot(g.map,7,TerrainSurfaceChannel::RGB);if(mode==177)layer.globalMapParticipation[3]=2;if(mode==178)layer.globalMapParticipation[3]=0;
+          if(mode==179){g.fadeStart=10;g.fadeEnd=20;g.nearStrength=.25f;g.farStrength=.75f;}if(mode==180){g.map.factor=.5f;g.map.invert=true;}
+        }
+        if(mode==181){setupGeo();geo.curveEnabled=true;binding.surface.globalMaps[0].enabled=true;mapSlot(binding.surface.globalMaps[0].map,7,TerrainSurfaceChannel::RGB);binding.surface.globalMaps[1].enabled=true;mapSlot(binding.surface.globalMaps[1].map,6,TerrainSurfaceChannel::NormalRGB);binding.surface.globalMaps[3].enabled=true;mapSlot(binding.surface.globalMaps[3].map,7,TerrainSurfaceChannel::RGB);}
+        if(mode==189){mapSlot(geo.albedo,10,TerrainSurfaceChannel::RGB);geo.scaleMeters=1;geo.blend=TerrainColorBlend::LighterColor;layer.maps[0].texture={};layer.maps[0].colorFactor={0,0,0,1};}
+        if(mode==190||mode==191){geo.mode=TerrainGeoMode::Off;auto &g=binding.surface.globalMaps[0];g.enabled=true;mapSlot(g.map,8,TerrainSurfaceChannel::RGB);binding.terrainDomain={-2,-4,8,16};g.scaleX=mode==190?-1.f:0.f;g.scaleY=mode==190?1.f:0.f;}
+        if(mode==192){geo.mode=TerrainGeoMode::Off;auto &g=binding.surface.globalMaps[1];g.enabled=true;mapSlot(g.map,6,TerrainSurfaceChannel::NormalRGB);g.scaleX=g.scaleY=0;}
+        if(mode>=193&&mode<=198){
+          mapSlot(layer.maps[0],3,TerrainSurfaceChannel::RGB);mapSlot(geo.albedo,8,TerrainSurfaceChannel::RGB);geo.blendStrength=.5f;geo.scaleMeters=2;geo.offsetMeters=0;geo.curveEnabled=true;geo.curveScaleMeters=2;
+          if(mode==193)geo.curve.keys.clear();
+          if(mode==194||mode==197){geo.curve.keys.resize(1);geo.curve.keys[0].time=mode==194?-2.f:2.f;geo.curve.keys[0].value=mode==194?.25f:.125f;}
+          if(mode==195){geo.curve.keys[0].time=-2;geo.curve.keys[0].value=-.5f;geo.curve.keys[1].time=3;geo.curve.keys[1].value=.75f;for(auto &key:geo.curve.keys)key.incoming=key.outgoing=AnimationTangentMode::Linear;}
+          if(mode==196){geo.curve.keys[0].time=-1;geo.curve.keys[0].value=-.25f;geo.curve.keys[1].time=2;geo.curve.keys[1].value=.5f;for(auto &key:geo.curve.keys){key.incoming=key.outgoing=AnimationTangentMode::Free;key.inSlope=key.outSlope=0;}geo.curve.keys[0].weightedOut=true;geo.curve.keys[0].outWeight=.21f;geo.curve.keys[1].weightedIn=true;geo.curve.keys[1].inWeight=.43f;}
+          if(mode==198){geo.curve.keys.clear();for(uint32_t i=0;i<4;++i){AnimationCurveKey key;key.id=i+1;key.time=float(i)-1;key.value=i==0?-.25f:i==1?0:i==2?.25f:1;key.incoming=key.outgoing=AnimationTangentMode::Auto;geo.curve.keys.push_back(key);}}
+        }
+        if(mode==188){geo.rangeEnabled=true;geo.range={0,0,1,1};}
+      }
       binding.surface.layers.push_back(layer);
       if (mode == 13 || mode == 15) {
         auto second = layer;
@@ -819,7 +885,7 @@ int main(int argc, char **argv) {
         for(const auto &ref:terrainSurfaceTextureRefs(binding.surface))
           binding.textures.push_back({ref.identity,ref.linear,ref.normal,uint32_t(ref.identity.low-1)});
       }
-      std::array<ae::u32, 10> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+      std::array<ae::u32, 11> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10};
       std::vector<float> published;
       ae::u32 offset = 0;
       std::string error;
@@ -832,11 +898,11 @@ int main(int argc, char **argv) {
       require(
           appendTerrainSurfaceTable(binding, slots, published, offset, error),
           error.c_str());
-      if(mode==48||mode==110){
+      if(mode==48||mode==110||mode==181){
         require(relocateTerrainSurfaceTable(published,3,error),error.c_str());
         published.insert(published.begin(),12,0.f);offset+=3;
       }
-      require(published.size() * sizeof(float) <= 4096,
+      require(published.size() * sizeof(float) <= 16384,
               "surface table fixture fits storage");
       std::memcpy(surfaceRows.mapped, published.data(),
                   published.size() * sizeof(float));
@@ -901,6 +967,55 @@ int main(int argc, char **argv) {
       evidence.write(reinterpret_cast<const char *>(rgba + p * 4), 3);
     require(bool(evidence), "write real GPU evidence PPM");
     modePixels[mode].assign(rgba,rgba+width*height*4);
+    if(mode>=116){
+      const auto byte=[](double value){return uint8_t(std::lround(std::clamp(value,0.0,1.0)*255));};
+      const auto gradientChannel=[](double coordinate){double pixel=coordinate*65-.5;int first=int(std::floor(pixel));double t=pixel-first;auto texel=[](int i){i=(i%65+65)%65;return double(i*255/64)/255.0;};return texel(first)*(1-t)+texel(first+1)*t;};
+      const auto geoColor=[&](double amount){return std::array<uint8_t,4>{byte(26.0/255*(1-amount+amount*.4)),byte(51.0/255*(1-amount+amount*.8)),byte(77.0/255*(1-amount+amount*1.2)),255};};
+      const auto tintColor=[&](double amount){return std::array<uint8_t,4>{byte(26.0/255*(1-amount)+.2*amount),byte(51.0/255*(1-amount)+.4*amount),byte(77.0/255*(1-amount)+.6*amount),255};};
+      if(mode==116||mode==118||mode==119||mode==124||mode==125||mode==142||mode==150||mode==151||mode==161)expectPixel(16,{26,51,77,255},"disabled module, range, filter or zero participation is exactly base");
+      else if(mode==117||mode==126||mode==143||mode==188)expectPixel(16,geoColor(.8),"Geo Multiply2x, signed filter, zero filter strength and coincident range");
+      else if(mode==120||mode==122||mode==123||mode==127||mode==140)expectPixel(16,geoColor(.4),"Geo linear range midpoint, participation and source max filter floor");
+      else if(mode==121||mode==146||mode==160)expectPixel(16,tintColor(.8),"Geo LighterColor and global Tint full source contribution");
+      else if(mode==141)expectPixel(16,geoColor(.32),"Geo height contrast changes real sampled height filter");
+      else if(mode>=128&&mode<=132){
+        if(mode==130||mode==131)expectPixel(16,{128,255,128,255},"zero Geo normal strength or map factor preserves flat surface");
+        else{double x=191.0/127.5-1,y=128.0/127.5-1,z=mode==129?std::sqrt(1-x*x-y*y):238.0/127.5-1;if(mode==132){x=-x;y=-y;z=-z;}x*=.8;y*=.8;z=.2+.8*z;double length=std::sqrt(x*x+y*y+z*z);expectPixel(16,{byte(x/length*.5+.5),byte(z/length*.5+.5),byte(-y/length*.5+.5),255},"Geo RGB/RG strip normal affects stable geometric frame");}
+      }
+      else if(mode>=133&&mode<=139||mode==144||mode==145||mode>=182&&mode<=187){
+        double v=.25,amount=.5;if(mode==134)v=.5;if(mode==136)v=.125;if(mode==139)amount=.125;if(mode==144)v=.75;if(mode==145)v=-.25;
+        if(mode>=182&&mode<=186){double input=(1.03125+(mode==184?.5:0))/(mode==183?4:2);if(mode==185)input=1.546875/2;v=.25*(mode==186?input*input*(3-2*input):input);}
+        if(mode==187)v=0;
+        auto expected=mode==145?std::array<uint8_t,4>{byte(gradientChannel(0)),byte(gradientChannel(v)),0,255}:std::array<uint8_t,4>{byte(1-amount+amount*2*gradientChannel(0)),byte(1-amount+amount*2*gradientChannel(v)),byte(1-amount),255};
+        expectPixel(16,expected,"Geo metres/offset/world height/curve LUT rotation or opacity follows original texture coordinates");
+      }
+      else if(mode==147||mode==148)expectPixel(16,geoColor(.8),"global Multiply2x and dark-base Overlay source arithmetic");
+      else if(mode==149)expectPixel(16,{104,43,212,255},"Overlay chooses high-base branch independently by channel");
+      else if(mode>=152&&mode<=154)expectPixel(16,tintColor(mode==152?.4:mode==153?.6:.2),"global distance midpoint and near/far strengths are independent linear fades");
+      else if(mode==155)expectPixel(16,{32,61,97,255},"global color remap inversion factor and alpha each affect output");
+      else if(mode>=156&&mode<=159){double u=(.515625*(mode==158?2:1)+2)/(mode==159?16:8),v=(.515625*(mode==158?2:1)+4)/(mode==159?8:16);if(mode==157){u=(u+.125)*2;v=(v+.25)*.5;}expectPixel(16,{byte(gradientChannel(u)),byte(gradientChannel(v)),0,255},"global UV derives actual nondefault terrain domain then offset-before-scale");}
+      else if(mode>=162&&mode<=169){
+        if(mode==164||mode==165)expectPixel(16,{128,255,128,255},"normal zero intensity/participation is base");
+        else{double x=191.0/127.5-1,y=128.0/127.5-1,z=mode==163?std::sqrt(1-x*x-y*y):238.0/127.5-1;if(mode==169){x=-x;y=-y;z=-z;}if(mode==167){double len=std::sqrt(x*x+y*y+z*z);x=2*x/len;y=2*y/len;z=2*z/len-1;}else{double strength=mode==166?2:mode==168?.5:1;x*=strength;y*=strength;z=1+(z-1)*std::min(strength,1.0);}double len=std::sqrt(x*x+y*y+z*z);expectPixel(16,{byte(x/len*.5+.5),byte(z/len*.5+.5),byte(y/len*.5+.5),255},"global RGB/RG, over-one RNM/Crossfade, linear fade and inversion");}
+      }
+      else if(mode>=170&&mode<=175||mode==181){double amount=mode==171||mode==175?0:mode==172?1.6:mode==173?.16:.8;double rough=mode==174?.6:.8,metal=mode==174?.4:.6,ao=mode==174?.2:.4;expectPixel(16,{byte(.37*(1-amount)+rough*amount),byte(.2*(1-amount)+metal*amount),byte(.6*(1-amount)+ao*amount),255},"SAOM channel layout, smoothness inversion, mask remap and over-one participation");}
+      else if(mode>=176&&mode<=180){double amount=mode==177?2:mode==178?0:mode==179?.5:1;double r=mode==180?.4:.2,g=mode==180?.3:.4,b=mode==180?.2:.6;expectPixel(16,{byte(13.0/255*(1-amount)+r*amount),byte(25.5/255*(1-amount)+g*amount),byte(38.5/255*(1-amount)+b*amount),204},"global emission fade, factor, inversion and over-one participation preserve radiance");}
+      else if(mode==190||mode==191){double u=mode==190?-(.515625+2)/8:0,v=mode==190?(.515625+4)/16:0;expectPixel(16,{byte(gradientChannel(u)),byte(gradientChannel(v)),0,255},"signed mirrored and zero UV scale are authored global transforms");}
+      else if(mode==192)expectPixel(16,{191,238,127,255},"zero global normal UV uses a finite stable geometric frame");
+      else if(mode>=193&&mode<=198){
+        double input=1.03125/2,v=0;
+        if(mode==194)v=.25;if(mode==195)v=.25*input;if(mode==197)v=.125;
+        if(mode==196){double low=0,high=1;for(int step=0;step<60;++step){double t=(low+high)/2,q=1-t,x=-q*q*q+3*(-.37)*q*q*t+3*.71*q*t*t+2*t*t*t;if(x<input)low=t;else high=t;}double t=(low+high)/2,q=1-t;v=-.25*q*q*q-3*.25*q*q*t+3*.5*q*t*t+.5*t*t*t;}
+        if(mode==198){double t=input;v=.25*(-2*t*t*t+3*t*t)+.25*(t*t*t-2*t*t+t)+.5*(t*t*t-t*t);}
+        expectPixel(16,{byte(.5+gradientChannel(0)),byte(.5+gradientChannel(v)),128,255},"signed/outside weighted keys, Auto tangents and empty/single Geo curves sample original authoring domain");
+      }
+      else if(mode==189){
+        auto rgba=modePixels[mode].data();
+        for(uint32_t y=0;y<height;++y){double point=(double(y)+.5)/height*256-.5;int a=int(std::floor(point)),b=a+1;double blend=point-a;a=(a%256+256)%256;b=(b%256+256)%256;
+          for(int channel=0;channel<3;++channel){int expected=int(std::lround(originalGeo[a*4+channel]*(1-blend)+originalGeo[b*4+channel]*blend));require(std::abs(int(rgba[(y*width+16)*4+channel])-expected)<=3,"original Geo PNG full-resolution rows survive actual GPU sampling/readback");}
+        }
+      }
+      continue;
+    }
     if (mode == 0) {
       expectPixel(16, colors[1], "sub-vertex painted stripe");
       expectPixel(4, colors[0], "left exterior");

@@ -13,6 +13,8 @@ struct TerrainSurfaceTextureBinding {
 struct TerrainSurfaceBinding {
   resources::TerrainSurfaceAsset surface;
   float localMetersPerUv=1;
+  // Local X/Z origin and full terrain extent in metres; independent of layer tiling.
+  std::array<float,4> terrainDomain{-32,-32,64,64};
   std::vector<TerrainSurfaceTextureBinding> textures;
 };
 // std430 vec4 rows. The first header contains layer count/version; the second

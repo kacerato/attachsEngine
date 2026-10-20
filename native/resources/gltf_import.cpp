@@ -10,6 +10,7 @@
 #include "resources/terrain_lod.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <cstring>
 #include <unordered_map>
@@ -1056,6 +1057,18 @@ struct Importer {
           binding.localMetersPerUv=float(json->number(*extras,"localMetersPerUv",0));
           if(!std::isfinite(binding.localMetersPerUv) || binding.localMetersPerUv<=0 || binding.localMetersPerUv>256)
             return fail("Invalid terrain surface meter scale.");
+          if(const auto *domain=array(*extras,"terrainDomain")) {
+            if(domain->childCount!=4)return fail("Invalid terrain surface domain.");
+            for(u32 d=0;d<4;++d) {
+              const auto *value=json->child(*domain,d);
+              if(!value || value->kind!=JsonDocument::Kind::Number)return fail("Invalid terrain surface domain.");
+              binding.terrainDomain[d]=float(value->number);
+              if(!std::isfinite(binding.terrainDomain[d]))return fail("Invalid terrain surface domain.");
+            }
+            if(binding.terrainDomain[2]<=0 || binding.terrainDomain[3]<=0)return fail("Invalid terrain surface extent.");
+          } else if(serialized.starts_with("AETERRAINSURFACE2")) {
+            return fail("Terrain surface v2 requires its full domain.");
+          }
           const auto *images=array(*extras,"surfaceImages");
           if(!images || images->childCount>4096)return fail("Invalid terrain surface image table.");
           std::map<AssetGuid,i64> imageIndices;
@@ -1064,7 +1077,8 @@ struct Importer {
             if(!AssetGuid::parse(json->string(entry,"identity"),guid) || !guid.valid() ||
                !imageIndices.emplace(guid,json->index(entry,"index")).second)return fail("Invalid/duplicate surface image identity.");
           }
-          std::string key=serialized+":"+std::to_string(binding.localMetersPerUv);
+          std::string key=serialized+":"+std::to_string(std::bit_cast<u32>(binding.localMetersPerUv));
+          for(float domainValue:binding.terrainDomain)key+=":"+std::to_string(std::bit_cast<u32>(domainValue));
           for(const auto &[identity,index]:imageIndices)key+=identity.text()+":"+std::to_string(index);
           if(const auto found=surfaceBindings.find(key);found!=surfaceBindings.end())binding=found->second;
           else {
@@ -1083,7 +1097,7 @@ struct Importer {
             if(out->textureBytes>limits->maximumTextureBytes)return fail("Texture memory budget exceeded.");
             std::vector<renderer::SharedAuthoringTexture> decoded;
             if(!importTerrainSurface(binding.surface,sourceImages,binding.localMetersPerUv,
-                limits->maximumTextureBytes-out->textureBytes,decoded,binding,out->diagnostic))return false;
+                limits->maximumTextureBytes-out->textureBytes,decoded,binding,out->diagnostic,binding.terrainDomain))return false;
             const u32 base=u32(out->textures.size());
             for(auto &entry:binding.textures)entry.textureIndex+=base;
             for(auto &texture:decoded){out->textureBytes+=texture->mipChain.size();out->textures.push_back(std::move(texture));out->textureImages.push_back("Terrain surface");}

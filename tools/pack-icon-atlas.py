@@ -223,6 +223,17 @@ def main() -> None:
             cursor_x += image.width + PADDING
         names = names + [name for name, _, _ in BRAND]
 
+    # Additive concepts can follow the existing brand IDs. Physical grid cells
+    # remain independent of logical enum order; the binary rects are reordered
+    # with names so no old icon ID changes when a module appends a new concept.
+    appended = {name for name, metadata in catalogue["icons"].items()
+                if metadata.get("append_after_brand", False)}
+    if appended:
+        pairs = list(zip(names, rects))
+        pairs = [pair for pair in pairs if pair[0] not in appended] + [pair for pair in pairs if pair[0] in appended]
+        names = [pair[0] for pair in pairs]
+        rects = [pair[1] for pair in pairs]
+
     arguments.output.mkdir(parents=True, exist_ok=True)
     # O PNG é só a cópia legível do atlas (nenhum código o lê). No Windows, um
     # processo que o mantém mapeado (miniatura do Explorer, visualizador) faz a

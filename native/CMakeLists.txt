@@ -1003,7 +1003,7 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_history_store.cpp ../tests/native/test_terrain_neighbors.cpp
     ../tests/native/test_terrain_recovery.cpp ../tests/native/test_terrain_surface_asset.cpp
     ../tests/native/test_terrain_surface_catalog.cpp ../tests/native/test_terrain_control_cache.cpp
-    ../tests/native/test_terrain_material.cpp)
+    ../tests/native/test_terrain_material.cpp ../tests/native/test_terrain_surface_domain.cpp ../tests/native/test_terrain_surface_modules.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_texture_publication_tests EXCLUDE_FROM_ALL

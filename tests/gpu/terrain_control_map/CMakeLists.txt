@@ -26,6 +26,7 @@ add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/pbr.frag.spv"
     "${ASTRA_ROOT}/native/rhi/shaders/material_uv_transform.glsl")
 add_executable(astra_terrain_control_gpu main.cpp
   "${ASTRA_ROOT}/native/resources/terrain_surface_asset.cpp"
+  "${ASTRA_ROOT}/native/resources/animation_curve.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/control.vert.spv" "${CMAKE_CURRENT_BINARY_DIR}/control.frag.spv"
   "${CMAKE_CURRENT_BINARY_DIR}/fallback.frag.spv" "${CMAKE_CURRENT_BINARY_DIR}/pbr.frag.spv")
 # Isolate Vulkan headers: an NDK sysroot's C headers must not shadow host CRT.

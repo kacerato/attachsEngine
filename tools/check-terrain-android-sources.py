@@ -33,6 +33,7 @@ targets = {
     'terrain_surface_asset.cpp', 'terrain_surface_catalog.cpp',
     'terrain_surface_import.cpp', 'editor_model_publication.cpp',
     'gltf_import.cpp', 'import_cache.cpp', 'editor_session.cpp', 'android_main.cpp',
+    'animation_curve.cpp',
 }
 commands = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
 root = Path(__file__).resolve().parents[1]

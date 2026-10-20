@@ -3,6 +3,7 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_noise_controls.h"
+#include "editor/editor_terrain_modules_controls.h"
 #include "ui_software_raster.h"
 #include <cstdio>
 #include <cstdlib>
@@ -41,7 +42,7 @@ int main(int argc, char **argv) {
   const std::string_view scenario = argc > 5 ? argv[5] : "lod";
   if (scenario != "lod") {
     if (scenario != "library" && scenario != "layer" && scenario != "maps" &&
-        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker")
+        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off")
       return 2;
     state.terrainTab = 2;
     state.terrainMaterialView = scenario == "library" ? 1u
@@ -91,6 +92,35 @@ int main(int argc, char **argv) {
       auto &cluster=state.terrainDraft.surface.layers[0].cluster;
       cluster.stochastic=true;cluster.selection.enabled=true;cluster.selection.map=cluster.variants[0].maps[0];
     }
+    if(scenario.starts_with("geo") || scenario.starts_with("global")) {
+      auto &geo=state.terrainDraft.surface.geo;
+      resources::AssetGuid::parse("863f19b183b2443859f959a96f7dce32",geo.albedo.texture);
+      resources::AssetGuid::parse("192aaea3237044f608d663c9884e0c70",geo.normal.texture);
+      geo.mode=resources::TerrainGeoMode::AlbedoNormal;geo.rangeEnabled=geo.curveEnabled=true;
+      geo.range={-10,5,55,80};
+      resources::AnimationCurveKey key;key.id=3;key.time=.5f;key.value=.8f;
+      key.broken=key.weightedIn=key.weightedOut=true;key.incoming=key.outgoing=resources::AnimationTangentMode::Free;
+      key.inSlope=2;key.outSlope=-2;key.inWeight=.7f;key.outWeight=.6f;
+      geo.curve.keys.insert(geo.curve.keys.begin()+1,key);state.terrainProfilePoint=1;
+      if(scenario=="geo-curve-signed" || scenario=="geo-tangents-signed") {geo.curve.keys.front().time=-2;geo.curve.keys.back().time=3;geo.curve.keys.front().value=-.5f;geo.curve.keys.back().value=1.2f;}
+      if(scenario=="geo-curve-empty") {geo.curve.keys.clear();state.terrainProfilePoint=0;}
+      if(scenario=="geo-curve-single") {geo.curve.keys={key};geo.curve.keys[0].time=-.25f;geo.curve.keys[0].value=1.5f;state.terrainProfilePoint=0;}
+      if(scenario=="geo-curve-off") geo.curveEnabled=false;
+      if(scenario=="geo-off") geo.mode=resources::TerrainGeoMode::Off;
+      state.terrainDraft.surface.layers[0].geoHeightFilterEnabled=true;
+      state.terrainDraft.surface.layers[0].geoHeightThreshold=-.25f;
+      for(u32 role=0;role<4;++role) {
+        auto &global=state.terrainDraft.surface.globalMaps[role];global.enabled=true;
+        global.map=state.terrainDraft.surface.layers[0].maps[0];
+        if(role==1) {global.map=geo.normal;global.map.linear=true;}
+        if(role==2) {global.smoothness.texture=global.ao.texture=global.metallic.texture=global.mask.texture=geo.albedo.texture;}
+      }
+      if(scenario=="global-empty") state.terrainDraft.surface.globalMaps[0]=resources::neutralTerrainGlobalMaps()[0];
+      state.terrainMaterialView=scenario=="global-empty"?160:scenario=="geo-fontes"?121:(scenario=="geo" || scenario=="geo-off")?120:scenario=="geo-range"?124:scenario=="geo-layer"?123:(scenario=="geo-curve" || scenario=="geo-curve-signed" || scenario=="geo-curve-empty" || scenario=="geo-curve-single" || scenario=="geo-curve-off")?130:
+        (scenario=="geo-tangents" || scenario=="geo-tangents-signed")?131:scenario=="geo-axis"?132:scenario=="geo-albedo-map"?140:scenario=="geo-normal-map"?141:scenario=="geo-source"?150:
+        scenario=="global"?159:scenario=="global-tint"?160:scenario=="global-normal"?161:scenario=="global-saom"?162:scenario=="global-emission"?163:
+        scenario=="global-saom-maps"?172:scenario=="global-normal-map"?171:180;
+    }
     state.terrainMessage = "Materiais originais · confira a prévia e aplique";
   }
 
@@ -119,7 +149,10 @@ int main(int argc, char **argv) {
         !reachable.contains(base + 60))
       return 4;
   } else {
-    if (!reachable.contains(
+    const bool compactModule=panel.height<400 && state.terrainMaterialView!=0;
+    if(compactModule) {
+      for(u32 action:{61u,62u,63u}) if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action)))) return 4;
+    } else if (!reachable.contains(
             editor::widgetId(editor::EditorWidget::TerrainMaterialLibrary)) ||
         !reachable.contains(
             editor::widgetId(editor::EditorWidget::TerrainMaterialMaps)))
@@ -131,9 +164,19 @@ int main(int argc, char **argv) {
              editor::widgetId(editor::EditorWidget::TerrainCatalogItemBase) +
              5)))
       return 4;
-    if (scenario == "layer" &&
-        (!reachable.contains(base + 64) || !reachable.contains(base + 76)))
-      return 4;
+    if (scenario == "layer") {
+      const auto &layer=state.terrainDraft.surface.layers[state.terrainBrush.layer];
+      // Catalog layers may use absolute cluster transforms or disable height
+      // blending. Disabled controls intentionally do not receive routed hits.
+      const bool scaleReachable=reachable.contains(base+64);
+      const bool heightReachable=reachable.contains(base+76);
+      if(scaleReachable==layer.cluster.enabled || heightReachable!=layer.heightBlend ||
+         !reachable.contains(base+66)) {
+        std::fprintf(stderr,"layer control gate mismatch: cluster=%d heightBlend=%d scale=%d height=%d\n",
+          int(layer.cluster.enabled),int(layer.heightBlend),int(scaleReachable),int(heightReachable));
+        return 4;
+      }
+    }
     if (scenario == "maps" && !reachable.contains(base + 96))
       return 4;
   }
@@ -148,6 +191,17 @@ int main(int argc, char **argv) {
   if(scenario=="cluster")for(u32 field:{164u,165u})if(!requireField(field))return 4;
   if(scenario=="variant")for(u32 field:{160u,161u,162u,163u})if(!requireField(field))return 4;
   if(scenario=="variant-maps" && !requireField(176))return 4;
+  if(scenario=="geo")for(u32 field:{191u,192u,193u,194u,202u})if(!requireField(field))return 4;
+  if(scenario=="geo-range")for(u32 field:{195u,196u,197u,198u})if(!requireField(field))return 4;
+  if(scenario=="geo-layer")for(u32 field:{203u,204u,205u})if(!requireField(field))return 4;
+  if(scenario=="geo-curve" || scenario=="geo-curve-signed" || scenario=="geo-curve-single")for(u32 field:{206u,207u,255u})if(!requireField(field))return 4;
+  if(scenario=="geo-tangents" || scenario=="geo-tangents-signed")for(u32 field:{208u,209u,210u,211u,255u})if(!requireField(field))return 4;
+  if(scenario=="geo-axis")for(u32 field:{199u,200u,201u})if(!requireField(field))return 4;
+  if(scenario=="global-tint" || scenario=="global-normal" || scenario=="global-saom" || scenario=="global-emission")for(u32 field:{212u,213u,214u,215u,216u,217u,218u,219u,220u,221u})if(!requireField(field))return 4;
+  if(scenario=="geo-albedo-map" || scenario=="geo-normal-map" || scenario=="global-normal-map")for(u32 field:{222u,225u,226u,229u,230u,233u,234u})if(!requireField(field))return 4;
+  if(scenario=="global-saom-maps")for(u32 field:{222u,223u,224u})if(!requireField(field))return 4;
+  if(scenario=="geo-curve-empty" && !reachable.contains(editor::widgetId(editor::terrainModuleAction(42)))) return 4;
+  if(scenario=="geo-fontes")for(u32 action:{1u,2u,3u,4u,9u,10u,11u})if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action))))return 4;
   state.terrainScroll = argc > 4 ? std::strtof(argv[4], nullptr) : 0;
   render();
   std::vector<ui::UiInstance> instances;

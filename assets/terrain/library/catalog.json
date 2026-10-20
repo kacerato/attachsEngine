@@ -2777,6 +2777,44 @@
       "runtime_mode": "RGB",
       "thumbnail": "thumbnails/7c4d7b5d24fc553ceacbde944bcddaf1b87a0bf4c6d6e8e0af473b8647cf7593.png",
       "profiles": {}
+    },
+    {
+      "id": "a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a",
+      "guid": "863f19b183b2443859f959a96f7dce32",
+      "source": "sources/a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a.png",
+      "source_path": "Packages/com.jbooth.microsplat.global-texture/Textures/microsplat_def_geomap_01.png",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a",
+      "runtime": "sources/a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a.png",
+      "runtime_sha256": "a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a",
+      "dimensions": [
+        1,
+        256
+      ],
+      "source_mode": "RGB",
+      "runtime_mode": "RGB",
+      "thumbnail": "thumbnails/a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a.png",
+      "profiles": {}
+    },
+    {
+      "id": "ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62",
+      "guid": "192aaea3237044f608d663c9884e0c70",
+      "source": "sources/ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62.png",
+      "source_path": "Packages/com.jbooth.microsplat.global-texture/Textures/microsplat_def_geomap_norm_01.png",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62",
+      "runtime": "sources/ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62.png",
+      "runtime_sha256": "ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62",
+      "dimensions": [
+        1,
+        256
+      ],
+      "source_mode": "RGB",
+      "runtime_mode": "RGB",
+      "thumbnail": "thumbnails/ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62.png",
+      "profiles": {}
     }
   ],
   "materials": [

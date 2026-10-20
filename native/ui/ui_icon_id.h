@@ -493,9 +493,11 @@ enum class UiIcon : u32 {
   ZzTerrainMaterialMaterial081 = 477,  // zz-terrain-material/material-081
   BrandWordmark = 478,  // brand/wordmark
   BrandMark = 479,  // brand/mark
+  ZzTerrainModuleGlobalMaps = 480,  // zz-terrain-module/global-maps
+  ZzTerrainModuleStrata = 481,  // zz-terrain-module/strata
 };
 
-inline constexpr u32 kUiIconCount = 479;
+inline constexpr u32 kUiIconCount = 481;
 
 // Nome de catálogo do ícone, para log e diagnóstico. Nunca para busca: procurar
 // um ícone por string em tempo de execução desfaria a garantia do enum.

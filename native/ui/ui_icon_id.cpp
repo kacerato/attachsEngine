@@ -484,6 +484,8 @@ constexpr const char *kNames[] = {
     "zz-terrain-material/material-081",
     "brand/wordmark",
     "brand/mark",
+    "zz-terrain-module/global-maps",
+    "zz-terrain-module/strata",
 };
 } // namespace
 

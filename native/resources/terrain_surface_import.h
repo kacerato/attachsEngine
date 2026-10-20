@@ -12,5 +12,6 @@ struct TerrainSurfaceImage {
 };
 bool importTerrainSurface(const TerrainSurfaceAsset &,std::span<const TerrainSurfaceImage>,float localMetersPerUv,
                           u64 maximumTextureBytes,std::vector<renderer::SharedAuthoringTexture> &,
-                          renderer::TerrainSurfaceBinding &,std::string &);
+                          renderer::TerrainSurfaceBinding &,std::string &,
+                          std::array<float,4> terrainDomain={-32,-32,64,64});
 }

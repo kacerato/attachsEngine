@@ -1,5 +1,6 @@
 #pragma once
 #include "resources/asset_registry.h"
+#include "resources/animation_curve.h"
 #include <array>
 #include <functional>
 
@@ -74,6 +75,41 @@ struct TerrainSurfaceCluster {
   float contrast = 1, noiseBoost = 0;
   TerrainSurfaceQuality quality = TerrainSurfaceQuality::Medium;
 };
+// Capacity references: Unity Shader Graph 17.0 Sample Texture 2D / Blend /
+// Position / Normal Blend, and Unity 6000.0 Keyframe weighted tangents.
+// https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Blend-Node.html
+// https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Keyframe.html
+enum class TerrainGeoMode : u32 { Off, Albedo, AlbedoNormal };
+enum class TerrainColorBlend : u32 { Multiply2x, Overlay, LighterColor, Crossfade };
+enum class TerrainNormalBlend : u32 { Reoriented, Crossfade };
+struct TerrainGeoSettings {
+  TerrainGeoMode mode=TerrainGeoMode::Off;
+  TerrainSurfaceMap albedo=neutralTerrainSurfaceMaps()[0],normal=neutralTerrainSurfaceMaps()[1];
+  TerrainColorBlend blend=TerrainColorBlend::Multiply2x;
+  float blendStrength=1,normalStrength=1,scaleMeters=100,offsetMeters=0;
+  bool rangeEnabled=false;
+  std::array<float,4> range{0,0,100,100};
+  bool curveEnabled=false;
+  AnimationCurve curve=[](){AnimationCurve c;AnimationCurveKey a,b;a.id=1;b.id=2;b.time=1;c.keys={a,b};return c;}();
+  float curveScaleMeters=512,curveOffsetMeters=0,curveRotationDegrees=0,heightContrast=10;
+};
+struct TerrainGlobalMap {
+  bool enabled=false;
+  TerrainSurfaceMap map;
+  float intensity=1,fadeStart=50,fadeEnd=200,nearStrength=1,farStrength=1;
+  float scaleX=1,scaleY=1,offsetX=0,offsetY=0;
+  TerrainColorBlend blend=TerrainColorBlend::Crossfade;
+  TerrainNormalBlend normalBlend=TerrainNormalBlend::Reoriented;
+  // SAOM role only: independent references/remaps; compatible references share
+  // one sampled texel. R is smoothness, converted to roughness after mapping.
+  TerrainSurfaceMap smoothness,ao=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::G;return m;}(),
+    metallic=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::B;return m;}(),
+    mask=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::A;return m;}();
+};
+inline std::array<TerrainGlobalMap,4> neutralTerrainGlobalMaps(){
+  std::array<TerrainGlobalMap,4> maps;
+  maps[0].map=maps[3].map=neutralTerrainSurfaceMaps()[0];maps[1].map=neutralTerrainSurfaceMaps()[1];return maps;
+}
 struct TerrainSurfaceLayer {
   AssetGuid identity;
   std::string name;
@@ -107,6 +143,10 @@ struct TerrainSurfaceLayer {
   TerrainDistanceBlend resampleBlend = TerrainDistanceBlend::Crossfade;
   TerrainSurfaceNoise resampleNoise;
   TerrainSurfaceCluster cluster;
+  float geoParticipation=1;
+  bool geoHeightFilterEnabled=false;
+  float geoHeightThreshold=1,geoHeightStrength=1;
+  std::array<float,4> globalMapParticipation{1,1,1,1};
 };
 struct TerrainSurfaceAsset {
   // Vector order is authoring/control-map order, including inactive layers.
@@ -114,6 +154,8 @@ struct TerrainSurfaceAsset {
   TerrainSurfaceNoise detailNoise, distanceNoise;
   std::array<TerrainSurfaceNoise, 3> normalNoise;
   TerrainAntiTileArray antiTileArray;
+  TerrainGeoSettings geo;
+  std::array<TerrainGlobalMap,4> globalMaps=neutralTerrainGlobalMaps();
 };
 struct TerrainSurfaceDiagnostic {
   AssetGuid layer, texture;

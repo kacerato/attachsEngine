@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 precision highp float;
 precision highp int;
-layout(set=0,binding=0) uniform sampler2D textures[10];
+layout(set=0,binding=0) uniform sampler2D textures[11];
 layout(push_constant) uniform Test { uint mode; } test;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
@@ -15,7 +15,7 @@ vec4 vColor;
 #define MR_MAP textures[2]
 #define EMISSIVE_MAP textures[3]
 #ifdef TEST_PBR
-#define TERRAIN_SURFACE_CAMERA_POSITION ((test.mode==45u||test.mode==46u||test.mode==77u||test.mode==81u||test.mode==82u||test.mode==83u||test.mode==86u)?vec3(worldPosition.x,15.0,worldPosition.z):vec3(0,(test.mode==33u||test.mode==35u||test.mode==62u||test.mode==69u||test.mode==76u||test.mode==84u||test.mode==106u)?100.0:0.0,0))
+#define TERRAIN_SURFACE_CAMERA_POSITION ((test.mode==45u||test.mode==46u||test.mode==77u||test.mode==81u||test.mode==82u||test.mode==83u||test.mode==86u||test.mode==152u||test.mode==168u||test.mode==179u)?vec3(worldPosition.x,15.0,worldPosition.z):vec3(0,(test.mode==33u||test.mode==35u||test.mode==62u||test.mode==69u||test.mode==76u||test.mode==84u||test.mode==106u||test.mode==153u)?100.0:0.0,0))
 #define TERRAIN_SURFACE_PBR
 #define TERRAIN_SURFACE_MAP(index) textures[index]
 #endif
@@ -38,10 +38,13 @@ void main() {
   vec3 position=vec3(uv.x*2.0,0,uv.y*3.0),normal=vec3(0,1,0);
   if(test.mode==14u||test.mode==72u||test.mode==73u){position=vec3(uv.x*1.41421356,uv.x*1.41421356,uv.y*3.0);normal=normalize(vec3(-1,1,0));}
   if(test.mode==73u)normal=vec3(0,1,0);
+  if(test.mode==135u||test.mode==136u)position.y=.5;
+  if(test.mode==145u)position.y=-.5;
+  if(test.mode==189u)position.y=uv.y;
   TerrainPBRResult pbr=terrainPBRSurface(position,normal);
-  if(test.mode==9u||test.mode==14u||test.mode==16u||test.mode==17u||test.mode==22u||test.mode==29u||((test.mode>=50u&&test.mode<74u&&test.mode!=68u&&test.mode!=69u)||test.mode==79u||test.mode==94u||test.mode==115u))outColor=vec4(pbr.normalWorld*.5+.5,1);
-  else if(test.mode==10u||test.mode==23u||test.mode==26u||test.mode==95u)outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);
-  else if(test.mode==11u||test.mode==25u||test.mode==27u||test.mode==80u||test.mode==86u||test.mode==96u)outColor=vec4(pbr.emission,pbr.height);
+  if(test.mode==9u||test.mode==14u||test.mode==16u||test.mode==17u||test.mode==22u||test.mode==29u||((test.mode>=50u&&test.mode<74u&&test.mode!=68u&&test.mode!=69u)||test.mode==79u||test.mode==94u||test.mode==115u||test.mode>=128u&&test.mode<=132u||test.mode>=162u&&test.mode<=169u||test.mode==192u))outColor=vec4(pbr.normalWorld*.5+.5,1);
+  else if(test.mode==10u||test.mode==23u||test.mode==26u||test.mode==95u||test.mode>=170u&&test.mode<=175u||test.mode==181u)outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);
+  else if(test.mode==11u||test.mode==25u||test.mode==27u||test.mode==80u||test.mode==86u||test.mode==96u||test.mode>=176u&&test.mode<=180u)outColor=vec4(pbr.emission,pbr.height);
   else outColor=pbr.color;
   if(!pbr.valid)outColor=vec4(1,0,1,1);
 #else

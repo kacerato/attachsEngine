@@ -1,4 +1,6 @@
 #include "resources/terrain_surface_asset.h"
+#include "resources/animation_curve_domain.h"
+#include <algorithm>
 #include <cmath>
 #include <iomanip>
 #include <locale>
@@ -43,6 +45,21 @@ template <class A> void fields(A &a, TerrainSurfaceLayer &v) {
 }
 template <class A> void fields(A &a, TerrainSurfaceAsset &v) {
   a(v.layers, v.detailNoise, v.distanceNoise, v.normalNoise, v.antiTileArray);
+}
+template <class A> void fields(A &a, AnimationCurveKey &v){
+  a(v.id,v.time,v.value,v.inSlope,v.outSlope,v.inWeight,v.outWeight,v.incoming,v.outgoing,v.broken,v.weightedIn,v.weightedOut);
+}
+template <class A> void fields(A &a, AnimationCurve &v){a(v.keys);}
+template <class A> void fields(A &a, TerrainGeoSettings &v){
+  a(v.mode,v.albedo,v.normal,v.blend,v.blendStrength,v.normalStrength,v.scaleMeters,v.offsetMeters,
+    v.rangeEnabled,v.range,v.curveEnabled,v.curve,v.curveScaleMeters,v.curveOffsetMeters,v.curveRotationDegrees,v.heightContrast);
+}
+template <class A> void fields(A &a, TerrainGlobalMap &v){
+  a(v.enabled,v.map,v.intensity,v.fadeStart,v.fadeEnd,v.nearStrength,v.farStrength,v.scaleX,v.scaleY,v.offsetX,v.offsetY,
+    v.blend,v.normalBlend,v.smoothness,v.ao,v.metallic,v.mask);
+}
+template <class A> void extensionLayer(A &a,TerrainSurfaceLayer &v){
+  a(v.geoParticipation,v.geoHeightFilterEnabled,v.geoHeightThreshold,v.geoHeightStrength,v.globalMapParticipation);
 }
 struct Writer {
   std::ostringstream s;
@@ -93,6 +110,11 @@ struct Reader {
     }
     if (!(s >> std::quoted(v)) || v.size() > 64 * 1024)
       ok = false;
+  }
+  void one(AnimationCurve &v){
+    u32 count=0;one(count);
+    if(!ok||count>AnimationCurve::MaximumKeys){ok=false;return;}
+    v.keys.resize(count);for(auto &key:v.keys)one(key);
   }
   template <class T, size_t N> void one(std::array<T, N> &v) {
     for (auto &x : v)
@@ -162,6 +184,12 @@ template <class F> void refs(const TerrainSurfaceAsset &a, F f) {
   };
   visitNoise({}, a.detailNoise, "global.detail");
   visitNoise({}, a.distanceNoise, "global.distance");
+  const auto visitMap=[&](const TerrainSurfaceMap &m,const std::string &location){if(m.texture.valid())f({},m.texture,location);};
+  visitMap(a.geo.albedo,"geo.albedo");visitMap(a.geo.normal,"geo.normal");
+  for(usize i=0;i<a.globalMaps.size();++i){
+    const auto &g=a.globalMaps[i];const auto location="globalMap."+std::to_string(i);
+    visitMap(g.map,location);visitMap(g.smoothness,location+".smoothness");visitMap(g.ao,location+".ao");visitMap(g.metallic,location+".metallic");visitMap(g.mask,location+".mask");
+  }
   for (size_t i = 0; i < 3; ++i)
     visitNoise({}, a.normalNoise[i], "global.normal." + std::to_string(i));
   for (auto &e : a.antiTileArray.entries) {
@@ -196,6 +224,28 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
   };
   if (a.layers.empty() || a.layers.size() > 32)
     return fail("Surface requires 1..32 layers");
+  const auto &geo=a.geo;
+  if(u32(geo.mode)>2||!map(geo.albedo)||!map(geo.normal)||
+    (geo.blend!=TerrainColorBlend::Multiply2x&&geo.blend!=TerrainColorBlend::LighterColor)||
+    !range(geo.blendStrength,0,1)||!range(geo.normalStrength,0,64)||!range(geo.scaleMeters,.0001f,1e8f)||!range(geo.offsetMeters,-1e8f,1e8f)||
+    !range(geo.curveScaleMeters,.0001f,1e8f)||!range(geo.curveOffsetMeters,-1e8f,1e8f)||!range(geo.curveRotationDegrees,-36000,36000)||!range(geo.heightContrast,0,65536))return fail("Invalid Geo parameters");
+  if(geo.mode!=TerrainGeoMode::Off&&!geo.albedo.texture.valid())return fail("Geo requires albedo source");
+  if(geo.mode==TerrainGeoMode::AlbedoNormal&&(!geo.normal.texture.valid()||
+    (geo.normal.channel!=TerrainSurfaceChannel::NormalRGB&&geo.normal.channel!=TerrainSurfaceChannel::NormalRG)))return fail("Geo requires RGB/RG normal source");
+  for(usize i=0;i<geo.range.size();++i)if(!range(geo.range[i],-1e8f,1e8f)||(i&&geo.range[i]<geo.range[i-1]))return fail("Invalid Geo height range");
+  if(!geo.curve.keys.empty()&&!validAnimationCurveDomain(geo.curve,AnimationCurveDomain::Signed))return fail("Invalid signed Geo curve");
+  std::set<u64> curveIds;
+  for(const auto &key:geo.curve.keys)if(!curveIds.insert(key.id).second||!range(key.value,-1e8f,1e8f)||!range(key.inSlope,-1e8f,1e8f)||!range(key.outSlope,-1e8f,1e8f))return fail("Invalid Geo curve key identity/value");
+  for(usize role=0;role<a.globalMaps.size();++role){
+    const auto &g=a.globalMaps[role];
+    if(!map(g.map)||!map(g.smoothness)||!map(g.ao)||!map(g.metallic)||!map(g.mask)||u32(g.blend)>3||u32(g.normalBlend)>1||
+      !range(g.intensity,0,64)||!range(g.fadeStart,0,1e8f)||!range(g.fadeEnd,0,1e8f)||g.fadeEnd<=g.fadeStart||
+      !range(g.nearStrength,0,64)||!range(g.farStrength,0,64)||!range(g.scaleX,-65536,65536)||!range(g.scaleY,-65536,65536)||
+      !range(g.offsetX,-1e8f,1e8f)||!range(g.offsetY,-1e8f,1e8f))return fail("Invalid global map parameters");
+    if(g.enabled&&role!=2&&!g.map.texture.valid())return fail("Enabled global map requires source");
+    if(g.enabled&&role==2&&!g.smoothness.texture.valid()&&!g.ao.texture.valid()&&!g.metallic.texture.valid())return fail("Enabled global SAOM requires source");
+    if(g.enabled&&role==1&&g.map.channel!=TerrainSurfaceChannel::NormalRGB&&g.map.channel!=TerrainSurfaceChannel::NormalRG)return fail("Global normal requires RGB/RG packing");
+  }
   if (!noise(a.detailNoise) || !noise(a.distanceNoise))
     return fail("Invalid global noise texture or transition");
   for (auto &n : a.normalNoise)
@@ -218,6 +268,8 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
     if (!l.identity.valid() || !ids.insert(l.identity).second ||
         l.name.size() > 128 || l.name.find('\0') != std::string::npos)
       return fail("Invalid or duplicate surface layer identity/name");
+    if(!range(l.geoParticipation,0,1)||!range(l.geoHeightThreshold,-1,1)||!range(l.geoHeightStrength,0,1))return fail("Invalid layer Geo participation/filter");
+    for(usize i=0;i<l.globalMapParticipation.size();++i)if(!range(l.globalMapParticipation[i],0,i==0?1.f:2.f))return fail("Invalid layer global map participation");
     if (l.sourceCatalogId.size() > 256 ||
         l.sourceCatalogId.find('\0') != std::string::npos)
       return fail("Invalid surface source catalog identity");
@@ -293,8 +345,10 @@ bool serializeTerrainSurface(const TerrainSurfaceAsset &a, std::string &out,
     return false;
   auto copy = a;
   Writer w;
-  w.s << "AETERRAINSURFACE1 ";
+  w.s << "AETERRAINSURFACE2 ";
   w.one(copy);
+  u32 extensionVersion=1,count=u32(copy.layers.size());w.one(extensionVersion);w.one(copy.geo);w.one(copy.globalMaps);w.one(count);
+  for(auto &layer:copy.layers){w.one(layer.identity);extensionLayer(w,layer);}
   auto serialized = w.s.str();
   if (serialized.size() > 1024 * 1024) {
     error = "Surface metadata exceeds 1 MiB byte budget";
@@ -312,12 +366,24 @@ bool deserializeTerrainSurface(std::string_view text, TerrainSurfaceAsset &out,
   Reader r(text);
   std::string version;
   r.s >> version;
-  if (version != "AETERRAINSURFACE1") {
+  if (version != "AETERRAINSURFACE1"&&version!="AETERRAINSURFACE2") {
     error = "Unsupported terrain surface version";
     return false;
   }
   TerrainSurfaceAsset a;
   r.one(a);
+  if(version=="AETERRAINSURFACE2"){
+    u32 extensionVersion=0,count=0;r.one(extensionVersion);
+    if(!r.ok||extensionVersion!=1){error="Unsupported terrain surface extension version";return false;}
+    r.one(a.geo);r.one(a.globalMaps);r.one(count);
+    if(!r.ok||count!=a.layers.size()){error="Invalid terrain extension layer coverage";return false;}
+    std::set<AssetGuid> visited;
+    for(u32 i=0;i<count;++i){
+      AssetGuid id;r.one(id);auto found=std::find_if(a.layers.begin(),a.layers.end(),[&](const auto &layer){return layer.identity==id;});
+      if(!r.ok||!visited.insert(id).second||found==a.layers.end()){error="Invalid terrain extension layer identity";return false;}
+      extensionLayer(r,*found);
+    }
+  }
   r.s >> std::ws;
   if (!r.ok || !r.s.eof()) {
     error = "Invalid/truncated terrain surface or trailing tokens";

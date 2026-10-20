@@ -17,3 +17,6 @@ docs/planos/ROADMAP-UI-UNIVERSAL-attachsEngine-2026-10-04.md -text
 build/material-preview/source/* filter=lfs diff=lfs merge=lfs -text
 build/dirt-road/cook/* filter=lfs diff=lfs merge=lfs -text
 games/realism-collection/projects/*/Assets/world.glb filter=lfs diff=lfs merge=lfs -text
+
+# Byte-exact legacy writer output deliberately ends with a separator space.
+tests/native/fixtures/terrain-surface-v1.txt -text whitespace=-blank-at-eol

@@ -3119,6 +3119,18 @@
       "dark_ui_ready": true,
       "force_opaque": true,
       "source_catalog_id": "fdc173a0089b17741a2a83f811b18b1d"
+    },
+    "zz-terrain-module/strata": {
+      "source": "vector/zz-terrain-module/strata.svg",
+      "generator": "tools/generate-terrain-module-icons.py",
+      "append_after_brand": true,
+      "concept": "terrain-geological-strata"
+    },
+    "zz-terrain-module/global-maps": {
+      "source": "vector/zz-terrain-module/global-maps.svg",
+      "generator": "tools/generate-terrain-module-icons.py",
+      "append_after_brand": true,
+      "concept": "terrain-global-map-domain"
     }
   },
   "unmapped": []

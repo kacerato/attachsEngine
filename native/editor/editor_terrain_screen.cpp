@@ -38,6 +38,23 @@ std::string terrainNoiseSourceName(const resources::TerrainCatalogTexture &sourc
 std::string terrainMaterialContext(const EditorScreenState &s) {
   if(s.terrainTab!=2) return {};
   const auto view=s.terrainMaterialView;
+  if(view==120) return s.terrainDraft.surface.geo.mode==resources::TerrainGeoMode::Off?"Geo · desligado":"Estratos · Geo";
+  if(view==121) return "Geo · Fontes e mistura";
+  if(view==123) return "Geo · Influência da camada";
+  if(view==124) return "Geo · Faixa de alturas";
+  if(view==130) return s.terrainDraft.surface.geo.curveEnabled?"Geo · Chaves da curva":"Curva · desligada";
+  if(view==131) return s.terrainDraft.surface.geo.curveEnabled?"Geo · Tangentes e pesos":"Tangentes · curva off";
+  if(view==132) return "Geo · Eixo da curva";
+  if(view==140 || view==150) return "Geo · Fonte de cor";
+  if(view==141 || view==151) return "Geo · Fonte normal";
+  if(view==159) return "Mapas globais · Terreno";
+  if(view>=160 && view<=183 && terrainModuleView(view)) {
+    const char *names[]{"Tint","Normal","SAOM","Emissão"};
+    return std::string("Global · ")+names[terrainModuleGlobal(view)];
+  }
+  if(view==1) return "Pintura · Acervo";
+  if(view==2) return "Pintura · Camada";
+  if(view==3) return "Pintura · Mapas PBR";
   if(view==60) return "Variantes · Estocástico";
   if(view==62 || view==69) return "Variantes · Seleção";
   if(terrainClusterVariantView(view)) {
@@ -54,6 +71,9 @@ std::string terrainMaterialContext(const EditorScreenState &s) {
   return "Ruído · "+role+(terrainNoiseLocal(view)?" local":" global");
 }
 bool compact(const UiRect &a) { return a.height < 400; }
+bool compactTerrainModule(const EditorScreenState &s,const UiRect &area) {
+  return compact(area) && s.terrainTab==2 && s.terrainMaterialView!=0 && !s.terrainBusy && s.terrainBrush.layer<s.terrainDraft.surface.layers.size();
+}
 float contentHeight(const EditorScreenState &s) {
   constexpr float padding = 12;
   const bool hf = s.terrainDraft.mode == resources::TerrainMode::Heightfield;
@@ -101,29 +121,58 @@ float contentHeight(const EditorScreenState &s) {
     return extent + padding;
   }
   if (s.terrainTab == 2) {
+    const bool deep=compactTerrainModule(s,terrainPanelRect(s));
     if(s.terrainMaterialView==1) {
       const auto count=s.terrainCatalog ? std::min<usize>(6,s.terrainCatalog->materials.size()-
         std::min<usize>(s.terrainCatalog->materials.size(),usize(s.terrainCatalogPage)*6)):0;
-      return 146.f+(s.terrainCatalog?122.f+112.f*float((count+1)/2):58.f)+padding-24;
+      return 146.f+(s.terrainCatalog?122.f+112.f*float((count+1)/2):58.f)+padding+16-(deep?210.f:0.f);
     }
-    if(s.terrainMaterialView==60) return 914.f+padding-24;
+    if(terrainModuleView(s.terrainMaterialView)) {
+      const bool small=compactTerrainModule(s,terrainPanelRect(s));
+      const float prefix=small?162.f:0.f,geoNav=small?44.f:0.f;
+      if(s.terrainMaterialView==130) return (s.terrainDraft.surface.geo.curve.keys.empty()?662.f:758.f)-prefix-geoNav-(small?80.f:0.f)+padding;
+      if(s.terrainMaterialView==131) return (s.terrainDraft.surface.geo.curve.keys.empty()?578.f:974.f)-prefix-geoNav-(small?80.f:0.f)+padding;
+      if(s.terrainMaterialView==132) return 490.f-prefix-geoNav+padding;
+      if(terrainModulePicker(s.terrainMaterialView)) return 564.f-prefix+padding;
+      if(terrainModuleMapView(s.terrainMaterialView)) return (s.terrainMaterialView==172?598.f:908.f)-prefix+padding;
+      if(s.terrainMaterialView>=160 && s.terrainMaterialView<=163) return (s.terrainMaterialView<162?834.f:822.f)-prefix-(small?56.f:44.f)+padding;
+      if(s.terrainMaterialView==120) return 574.f-prefix-geoNav+padding;
+      if(s.terrainMaterialView==121) return 478.f-prefix-geoNav+padding;
+      if(s.terrainMaterialView==124) return 554.f-prefix-geoNav+padding;
+      if(s.terrainMaterialView==123) return 516.f-prefix-geoNav+padding;
+      return 492.f-prefix+padding;
+    }
+    if(s.terrainMaterialView==60) return deep?470.f+44.f*float(s.terrainDraft.surface.layers[s.terrainBrush.layer].cluster.variants.size())+padding:914.f+padding+16;
     if(terrainClusterVariantView(s.terrainMaterialView)) {
-      if(s.terrainMaterialView>=100) return (s.terrainMapRole>=2 && s.terrainMapRole<=5?702.f:1100.f)+padding-24;
-      if(s.terrainMaterialView>=80) return 700.f+padding-24;
-      return 650.f+padding-24;
+      if(deep) return (s.terrainMaterialView>=100?(s.terrainMapRole>=2 && s.terrainMapRole<=5?316.f:714.f):s.terrainMaterialView>=80?346.f:372.f)+padding;
+      if(s.terrainMaterialView>=100) return (s.terrainMapRole>=2 && s.terrainMapRole<=5?702.f:1100.f)+padding+16;
+      if(s.terrainMaterialView>=80) return 700.f+padding+16;
+      return 650.f+padding+16;
     }
-    if(s.terrainMaterialView==30) return 800.f+padding-24;
-    if(s.terrainMaterialView==50) return 712.f+padding-24;
+    if(s.terrainMaterialView==30) return deep?382.f+padding:800.f+padding+16;
+    if(s.terrainMaterialView==50) return deep?352.f+padding:712.f+padding+16;
     if(terrainNoiseAvailable(s.terrainDraft.surface,s.terrainBrush.layer,s.terrainMaterialView)) {
-      if(terrainNoisePicker(s.terrainMaterialView)) return 838.f+padding-24;
+      if(deep) {
+        if(terrainNoisePicker(s.terrainMaterialView)) return 346.f+padding;
+        const auto selection=terrainNoiseSelection(s.terrainMaterialView);
+        const auto &noise=terrainSelectedNoise(s.terrainDraft.surface,s.terrainBrush.layer,s.terrainMaterialView);
+        const auto *entry=selection>=10 && selection<=12?terrainBoundAntiTile(s.terrainDraft.surface,s.terrainBrush.layer):nullptr;
+        const bool last=entry && noise.enabled && unsigned(entry->normal.enabled)+unsigned(entry->detail.enabled)+unsigned(entry->distance.enabled)==1;
+        const bool required=selection==13 && s.terrainDraft.surface.layers[s.terrainBrush.layer].resampleBlend==resources::TerrainDistanceBlend::Noise;
+        return (selection<10?64.f:0.f)+192.f+(selection<=12?64.f:0.f)+304.f+
+          (terrainNoiseNormal(s.terrainMaterialView) || noise.map.channel==resources::TerrainSurfaceChannel::RGB?462.f:64.f)+
+          (last || required?32.f:0.f)+(u32(noise.map.channel)>4 && !terrainNoiseNormal(s.terrainMaterialView)?32.f:0.f)+padding;
+      }
+      if(terrainNoisePicker(s.terrainMaterialView)) return 838.f+padding+16;
       const auto &n=terrainSelectedNoise(s.terrainDraft.surface,s.terrainBrush.layer,s.terrainMaterialView);
       return (n.map.channel==resources::TerrainSurfaceChannel::RGB || terrainNoiseNormal(s.terrainMaterialView)?1414.f:1016.f)+
-        (terrainNoiseSelection(s.terrainMaterialView)>=10 && terrainNoiseSelection(s.terrainMaterialView)<=12?32.f:0.f)+(u32(n.map.channel)>4 && !terrainNoiseNormal(s.terrainMaterialView)?32.f:0.f)+padding-24;
+        (terrainNoiseSelection(s.terrainMaterialView)>=10 && terrainNoiseSelection(s.terrainMaterialView)<=12?32.f:0.f)+(u32(n.map.channel)>4 && !terrainNoiseNormal(s.terrainMaterialView)?32.f:0.f)+padding+16;
     }
-    if(s.terrainMaterialView==2 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())return 1164.f+(s.terrainDraft.surface.layers[s.terrainBrush.layer].cluster.enabled?32.f:0.f)+padding-24;
+    if(terrainNoiseView(s.terrainMaterialView)) return 76.f+padding;
+    if(s.terrainMaterialView==2 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())return 1164.f+(s.terrainDraft.surface.layers[s.terrainBrush.layer].cluster.enabled?32.f:0.f)+padding+16-(deep?162.f:0.f);
     if(s.terrainMaterialView==3 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())
-      return (s.terrainMapRole>=2 && s.terrainMapRole<=5?514.f:912.f)+padding-24;
-    return 662.f+padding-24;
+      return (s.terrainMapRole>=2 && s.terrainMapRole<=5?514.f:912.f)+padding+16-(deep?210.f:0.f);
+    return 662.f+padding+16;
   }
   return 450.f + padding;
 }
@@ -140,7 +189,7 @@ UiRect terrainPanelRect(const EditorScreenState &s) {
 UiRect terrainContentRect(const EditorScreenState &s, const UiRect &area) {
   auto body = deflate(area, UiInsets::all(8));
   take(body, compact(area) ? 32 : 56);
-  take(body, compact(area) ? 36 : 48);
+  take(body, compactTerrainModule(s,area)?64.f:(compact(area) ? 36.f : 48.f));
   if (s.terrainTab < 2 || s.terrainTab == 4)
     take(body, compact(area) ? 28 : 40);
   body.height = std::max(0.f, body.height - (compact(area) ? 64 : 88));
@@ -303,6 +352,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
                          UiDrawList &list, UiInputRouter &router,
                          const UiRect &area) {
   list.addRect(area, theme.color.surface);
+  const bool moduleCompact=compactTerrainModule(s,area);
   list.addBorder(area, theme.color.lineSoft, 1);
   router.addBlocker(area);
   const auto text = [&](UiRect box, std::string_view value, UiColor color,
@@ -347,7 +397,10 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     }
     const bool noiseRole=(widgetId(id)>=terrainNoiseActionBase+1 && widgetId(id)<=terrainNoiseActionBase+4) ||
       (widgetId(id)>=terrainNoiseActionBase+23 && widgetId(id)<=terrainNoiseActionBase+25);
-    text(label, value, ink, compactNoiseIcon || noiseRole, UiAlign::Center);
+    const bool moduleTab=moduleCompact && ((widgetId(id)>=terrainModuleActionBase+1 && widgetId(id)<=terrainModuleActionBase+3) ||
+      (widgetId(id)>=terrainModuleActionBase+14 && widgetId(id)<=terrainModuleActionBase+17) ||
+      id==terrainModuleAction(49) || id==terrainModuleAction(60) || id==terrainModuleAction(5) || id==terrainModuleAction(7) || id==terrainModuleAction(12));
+    text(label, value, ink, compactNoiseIcon || noiseRole || moduleTab || (moduleCompact && rect.height<=32), UiAlign::Center);
     if (enabled)
       router.addRegion(rect, widgetId(id));
   };
@@ -360,9 +413,13 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
   auto name = title;
   name.width -= 100;
   const auto materialContext=terrainMaterialContext(s);
+  if(moduleCompact) {
+    button({name.x,name.y,32,name.height},"<",terrainModuleAction(61),false,!s.terrainBusy);
+    name.x+=36;name.width-=36;
+  }
   if (compact(area))
     text(name, materialContext.empty()?(s.terrainTarget ? "Editar terreno" : "Novo terreno"):materialContext,
-         theme.color.text);
+         theme.color.text,moduleCompact);
   else {
     text(take(name, 28), "Terreno e voxel", theme.color.text);
     const auto *e = s.document ? s.document->find(s.terrainTarget) : nullptr;
@@ -374,6 +431,87 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
   const UiIcon icons[]{UiIcon::TerrainTerrain, UiIcon::TerrainSculpt,
                        UiIcon::TerrainLayers, UiIcon::TerrainManage,
                        UiIcon::TerrainPath};
+  if(moduleCompact) {
+    auto selected=take(outer,32);
+    button({selected.x,selected.y,32,32},"<",terrainModuleAction(62));
+    button({selected.right()-32,selected.y,32,32},">",terrainModuleAction(63));
+    const auto current=std::min(s.terrainBrush.layer,3u);
+    const auto &layer=s.terrainDraft.surface.layers[current];
+    const UiIcon fallback[]{UiIcon::TerrainSampleGrass,UiIcon::TerrainSampleRock,UiIcon::TerrainSampleSoil,UiIcon::TerrainSamplePath};
+    const auto icon=layer.sourceCatalogId.empty()?fallback[current]:terrainMaterialIcon(layer.sourceCatalogId);
+    list.addImage({selected.x+38,selected.y+4,24,24},static_cast<UiImageId>(icon));
+    text({selected.x+66,selected.y,selected.width-98,32},std::to_string(current+1)+" · "+materialDisplayName(layer.name),theme.color.text,true);
+    auto contexts=take(outer,32);
+    const auto view=s.terrainMaterialView;
+    const char *pbrRoles[]{"Cor base","Normal","Altura","AO","Rugosidade","Metálico","Emissão"};
+    if(terrainModuleView(view)) {
+      if(view<159) {
+        const char *names[]{"Geo","Fontes","Faixa","Curva","Camada"};
+        const u32 actions[]{49,60,5,7,12};
+        const u32 active=view==120?0:(view==121 || view==140 || view==141 || view==150 || view==151)?1:view==124?2:(view>=130 && view<=132)?3:4;
+        for(u32 i=0;i<5;++i) button({contexts.x+contexts.width*i/5,contexts.y,contexts.width/5,32},names[i],terrainModuleAction(actions[i]),active==i);
+      } else {
+        const char *names[]{"Tint","Normal","SAOM","Emissão"};
+        for(u32 i=0;i<4;++i) button({contexts.x+contexts.width*i/4,contexts.y,contexts.width/4,32},names[i],terrainModuleAction(14+i),view!=159 && terrainModuleGlobal(view)==i);
+      }
+    } else if(view==1) {
+      button({contexts.x,contexts.y,32,32},"<",EditorWidget::TerrainCatalogPrevious,false,s.terrainCatalogPage>0);
+      button({contexts.right()-32,contexts.y,32,32},">",EditorWidget::TerrainCatalogNext,false,s.terrainCatalog && (s.terrainCatalogPage+1)*6<s.terrainCatalog->materials.size());
+      text({contexts.x+32,contexts.y,contexts.width-64,32},"Acervo · página "+std::to_string(s.terrainCatalogPage+1),theme.color.text,true,UiAlign::Center);
+    } else if(view==3 || (view>=100 && view<=102)) {
+      button({contexts.x,contexts.y,32,32},"<",view==3?EditorWidget::TerrainMapPrevious:terrainClusterAction(11));
+      button({contexts.right()-32,contexts.y,32,32},">",view==3?EditorWidget::TerrainMapNext:terrainClusterAction(12));
+      text({contexts.x+32,contexts.y,contexts.width-64,32},pbrRoles[std::min(s.terrainMapRole,6u)],theme.color.text,true,UiAlign::Center);
+    } else if(terrainNoisePicker(view)) {
+      button({contexts.x,contexts.y,32,32},"<",terrainNoiseAction(12),false,s.terrainCatalogPage>0);
+      button({contexts.right()-32,contexts.y,32,32},">",terrainNoiseAction(13),false,s.terrainCatalog && (s.terrainCatalogPage+1)*6<s.terrainCatalog->textures.size());
+      button({contexts.x+32,contexts.y,contexts.width-64,32},"Voltar · página "+std::to_string(s.terrainCatalogPage+1),terrainNoiseAction(11));
+    } else if(terrainNoiseView(view)) {
+      if(terrainNoiseAvailable(s.terrainDraft.surface,s.terrainBrush.layer,view)) {
+        const auto selection=terrainNoiseSelection(view);
+        const auto &noise=terrainSelectedNoise(s.terrainDraft.surface,s.terrainBrush.layer,view);
+        const auto *entry=selection>=10 && selection<=12?terrainBoundAntiTile(s.terrainDraft.surface,s.terrainBrush.layer):nullptr;
+        const bool last=entry && noise.enabled && unsigned(entry->normal.enabled)+unsigned(entry->detail.enabled)+unsigned(entry->distance.enabled)==1;
+        const bool required=selection==13 && layer.resampleBlend==resources::TerrainDistanceBlend::Noise;
+        float used=0;
+        if(selection<10) {
+          button({contexts.x,contexts.y,60,32},"Global",terrainNoiseAction(44),!terrainNoiseLocal(view));
+          button({contexts.x+60,contexts.y,60,32},"Local",terrainNoiseAction(45),terrainNoiseLocal(view));used=120;
+        } else {
+          const auto back=selection<=12?terrainNoiseAction(26):selection==13?terrainNoiseAction(35):terrainClusterAction(0);
+          button({contexts.x,contexts.y,100,32},selection<=12?"Anti-tile":selection==13?"Distante":"Variantes",back);used=100;
+        }
+        button({contexts.x+used,contexts.y,80,32},"Fonte",terrainNoiseAction(10));used+=80;
+        button({contexts.x+used,contexts.y,contexts.width-used,32},!noise.map.texture.valid()?"Sem fonte":noise.enabled?"Ligado":"Desligado",terrainNoiseAction(5),noise.enabled,noise.map.texture.valid() && !last && !required);
+      } else button(contexts,"Selecionar entrada anti-tile",terrainNoiseAction(26));
+    } else if(view==30) {
+      const auto &array=s.terrainDraft.surface.antiTileArray;
+      button({contexts.x,contexts.y,contexts.width/3,32},"Ruído",terrainNoiseAction(1));
+      button({contexts.x+contexts.width/3,contexts.y,contexts.width/3,32},"Criar",terrainNoiseAction(28),false,array.entries.size()<32);
+      button({contexts.x+contexts.width*2/3,contexts.y,contexts.width/3,32},array.enabled?"Ligado":"Desligado",terrainNoiseAction(27),array.enabled,!array.entries.empty());
+    } else if(view==50) {
+      const char *names[]{"Ruído","Constant","Noise","Fade"};
+      const u32 actions[]{1,39,40,41};
+      for(u32 i=0;i<4;++i)button({contexts.x+contexts.width*i/4,contexts.y,contexts.width/4,32},names[i],terrainNoiseAction(actions[i]),i && u32(layer.resampleBlend)==i-1);
+    } else if(terrainClusterVariantView(view) && view>=80 && view<=92) {
+      const bool material=view<=82;
+      const auto count=s.terrainCatalog?(material?s.terrainCatalog->materials.size():s.terrainCatalog->textures.size()):0;
+      button({contexts.x,contexts.y,32,32},"<",terrainClusterAction(16),false,s.terrainCatalogPage>0);
+      button({contexts.right()-32,contexts.y,32,32},">",terrainClusterAction(17),false,(s.terrainCatalogPage+1)*6<count);
+      button({contexts.x+32,contexts.y,contexts.width-64,32},"Voltar · página "+std::to_string(s.terrainCatalogPage+1),material?terrainClusterAction(0):terrainClusterAction(7));
+    } else if(terrainClusterVariantView(view)) {
+      const char *names[]{"Variantes","Mapas","Material"};const u32 actions[]{0,7,8};
+      for(u32 i=0;i<3;++i)button({contexts.x+contexts.width*i/3,contexts.y,contexts.width/3,32},names[i],terrainClusterAction(actions[i]));
+    } else if(view==60) {
+      button({contexts.x,contexts.y,contexts.width/3,32},"Ruído",terrainNoiseAction(0));
+      button({contexts.x+contexts.width/3,contexts.y,contexts.width/3,32},"Geo",terrainModuleAction(0));
+      button({contexts.x+contexts.width*2/3,contexts.y,contexts.width/3,32},"Globais",terrainModuleAction(13));
+    } else {
+      const char *names[]{"Acervo","Camada","Mapas","Ruído"};
+      const EditorWidget actions[]{EditorWidget::TerrainMaterialLibrary,EditorWidget::TerrainMaterialProperties,EditorWidget::TerrainMaterialMaps,terrainNoiseAction(0)};
+      for(u32 i=0;i<4;++i)button({contexts.x+contexts.width*i/4,contexts.y,contexts.width/4,32},names[i],actions[i],view==i+1);
+    }
+  } else {
   auto tabrow = take(outer, compact(area) ? 36 : 48);
   for (u32 col = 0; col < 5; ++col) {
     const u32 i = tabOrder[col];
@@ -381,6 +519,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
             tabrow.height},
            tabs[i], EditorWidget(widgetId(EditorWidget::TerrainTabBase) + i),
            s.terrainTab == i, !s.terrainBusy, icons[i]);
+  }
   }
   if (s.terrainTab < 2 || s.terrainTab == 4) {
     auto sections = take(outer, compact(area) ? 28 : 40);
@@ -461,7 +600,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
            EditorWidget(widgetId(EditorWidget::TerrainPlusBase) + index), false,
            enabled && !s.terrainBusy);
   };
-  const auto field = [&](const char *n, double v, u32 id, bool en = true) {
+  const auto field = [&](std::string_view n, double v, u32 id, bool en = true) {
     fieldAt(row(64), n, v, id, en);
   };
   const auto fields = [&](const char *a, double av, u32 ai, const char *b,
@@ -717,6 +856,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       const UiIcon samples[]{UiIcon::TerrainSampleGrass,UiIcon::TerrainSampleRock,
                             UiIcon::TerrainSampleSoil,UiIcon::TerrainSamplePath};
       const auto current=std::min(b.layer,3u);
+      if(!moduleCompact) {
       label("CAMADA "+std::to_string(current+1)+" · "+materialDisplayName(
         current<r.surface.layers.size()?r.surface.layers[current].name:layers[current]));
       auto slots=row(48);
@@ -733,12 +873,228 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       const EditorWidget actions[]{EditorWidget::TerrainMaterialLibrary,EditorWidget::TerrainMaterialProperties,
                                   EditorWidget::TerrainMaterialMaps,EditorWidget::TerrainMaterialPaint,terrainNoiseAction(0)};
       for(u32 i=0;i<5;++i)button({navigation.x+navigation.width*i/5,navigation.y,navigation.width/5,48},
-        sections[i],actions[i],i==4 && s.terrainMaterialView>=4,true,i==4?UiIcon::TerrainNoise:UiIcon::None);
-    if((s.terrainMaterialView==60 || terrainClusterVariantView(s.terrainMaterialView)) && b.layer<r.surface.layers.size()) {
+        sections[i],actions[i],i==4 && (terrainNoiseView(s.terrainMaterialView) || s.terrainMaterialView==30 || s.terrainMaterialView==50 || s.terrainMaterialView==60 || terrainClusterVariantView(s.terrainMaterialView)),true,i==4?UiIcon::TerrainNoise:UiIcon::None);
+    auto modules=row(40);
+    button({modules.x,modules.y,modules.width/2,40},"Estratos",terrainModuleAction(0),s.terrainMaterialView>=120 && s.terrainMaterialView<=151,true,UiIcon::ZzTerrainModuleStrata);
+    button({modules.x+modules.width/2,modules.y,modules.width/2,40},"Mapas globais",terrainModuleAction(13),s.terrainMaterialView>=159 && terrainModuleView(s.terrainMaterialView),true,UiIcon::ZzTerrainModuleGlobalMaps);
+    }
+    if(terrainModuleView(s.terrainMaterialView) && b.layer<r.surface.layers.size()) {
+      const auto view=s.terrainMaterialView;
+      const auto &geo=r.surface.geo;
+      const auto &layer=r.surface.layers[b.layer];
+      const auto sourceName=[&](const resources::TerrainSurfaceMap &map) {
+        if(s.terrainCatalog) for(const auto &source:s.terrainCatalog->textures)
+          if(source.identity==map.texture) return terrainNoiseSourceName(source);
+        return map.texture.valid()?std::string("Textura externa vinculada"):std::string("Selecionar textura original");
+      };
+      const auto geoNavigation=[&]() {
+        if(moduleCompact) return;
+        auto nav=row(44);
+        const char *names[]{"Geo","Fontes","Faixa","Curva","Camada"};
+        const u32 actions[]{49,60,5,7,12};
+        const u32 views[]{120,121,124,130,123};
+        for(u32 i=0;i<5;++i) button({nav.x+nav.width*i/5,nav.y,nav.width/5,44},names[i],terrainModuleAction(actions[i]),view==views[i] || (i==3 && (view==131 || view==132)));
+      };
+      if(view==120) {
+        geoNavigation();
+        field("Participação da mistura",geo.blendStrength,191,geo.mode!=resources::TerrainGeoMode::Off);
+        field("Força do normal",geo.normalStrength,192,geo.mode==resources::TerrainGeoMode::AlbedoNormal);
+        field("Tamanho vertical (m/repetição)",geo.scaleMeters,193,geo.mode!=resources::TerrainGeoMode::Off);
+        field("Deslocamento vertical (m)",geo.offsetMeters,194,geo.mode!=resources::TerrainGeoMode::Off);
+        field("Contraste do filtro por altura",geo.heightContrast,202,geo.mode!=resources::TerrainGeoMode::Off);
+        hint("Cor e normal originais 1 × 256, quando selecionados.","O alfa da cor Geo mascara a mistura.");
+      } else if(view==121) {
+        geoNavigation();
+        button(row(48),"Usar estratos originais do plugin",terrainModuleAction(9),false,true,UiIcon::ZzTerrainModuleStrata);
+        auto modes=row(44);
+        const char *names[]{"Desligado","Cor","Cor + normal"};
+        for(u32 i=0;i<3;++i)button({modes.x+modes.width*i/3,modes.y,modes.width/3,44},names[i],terrainModuleAction(1+i),u32(geo.mode)==i,
+          i==0 || (geo.albedo.texture.valid() && (i!=2 || geo.normal.texture.valid())));
+        button(row(44),"Cor · "+sourceName(geo.albedo),terrainModuleAction(10));
+        button(row(44),"Normal · "+sourceName(geo.normal),terrainModuleAction(11));
+        button(row(44),geo.blend==resources::TerrainColorBlend::Multiply2x?"Mistura: Multiply2x":"Mistura: LighterColor",terrainModuleAction(4),false,geo.mode!=resources::TerrainGeoMode::Off);
+        hint("Fontes e interpretação originais preservadas.","Escolha o modo depois de vincular as fontes reais.");
+      } else if(view==124) {
+        geoNavigation();
+        button(row(44),geo.rangeEnabled?"Faixa de alturas ligada":"Faixa de alturas desligada",terrainModuleAction(6),geo.rangeEnabled);
+        field("Entrada · início (altura mundial m)",geo.range[0],195,geo.rangeEnabled);
+        field("Entrada · fim (altura mundial m)",geo.range[1],196,geo.rangeEnabled);
+        field("Saída · início (altura mundial m)",geo.range[2],197,geo.rangeEnabled);
+        field("Saída · fim (altura mundial m)",geo.range[3],198,geo.rangeEnabled);
+        hint("Alturas permanecem em ordem; coincidência é válida.","Alturas coincidentes criam um limite imediato.");
+      } else if(view==123) {
+        geoNavigation();label("CAMADA · "+layer.name);
+        field("Participação Geo da camada",layer.geoParticipation,203);
+        button(row(44),layer.geoHeightFilterEnabled?"Filtro de altura ligado":"Filtro de altura desligado",terrainModuleAction(55),layer.geoHeightFilterEnabled);
+        field("Limiar assinado (-1 a 1)",layer.geoHeightThreshold,204,layer.geoHeightFilterEnabled);
+        field("Força do filtro",layer.geoHeightStrength,205,layer.geoHeightFilterEnabled);
+        hint("O sinal inverte o filtro da altura material.","Força zero preserva a influência sem redução.");
+      } else if(view==132) {
+        geoNavigation();
+        button(row(44),"Voltar às chaves da curva",terrainModuleAction(59));
+        field("Período horizontal (m)",geo.curveScaleMeters,199);
+        field("Deslocamento horizontal (m)",geo.curveOffsetMeters,200);
+        field("Rotação do eixo (°)",geo.curveRotationDegrees,201);
+        hint("O eixo rotacionado percorre um período horizontal.","A saída da curva desloca diretamente o UV Geo.");
+      } else if(view==130 || view==131) {
+        geoNavigation();
+        const auto &curve=geo.curve;
+        const auto selected=curve.keys.empty()?usize(0):std::min<usize>(s.terrainProfilePoint,curve.keys.size()-1);
+        const auto *key=curve.keys.empty()?nullptr:&curve.keys[selected];
+        const auto domain=terrainGeoCurveDomain(curve);
+        const auto curveInk=geo.curveEnabled?theme.color.accent:theme.color.textMuted;
+        auto graph=deflate(row(moduleCompact?80.f:144.f),UiInsets{10,8,10,8});
+        list.addRect(graph,theme.color.raised,6);list.addBorder(graph,theme.color.lineSoft,1,6);
+        float low=-.05f,high=.05f;
+        for(const auto &point:curve.keys) {low=std::min(low,point.value);high=std::max(high,point.value);}
+        for(u32 i=0;i<=96;++i) {resources::AnimationCurveSample sample;const auto time=std::lerp(domain[0],domain[1],float(i)/96);if(resources::sampleValidatedAnimationCurve(curve,time,sample)) {low=std::min(low,float(sample.value));high=std::max(high,float(sample.value));}}
+        const float margin=std::max(.05f,(high-low)*.1f);low-=margin;high+=margin;
+        const auto pointAt=[&](double time,double value) {return UiPoint{
+          graph.x+float((time-domain[0])/(double(domain[1])-domain[0]))*graph.width,
+          graph.bottom()-float(std::clamp((value-low)/(double(high)-low),-2.0,3.0))*graph.height};};
+        list.pushClip(graph);
+        const auto zero=pointAt(0,0),one=pointAt(1,0);
+        list.addRect({zero.x,graph.y,one.x-zero.x,graph.height},geo.curveEnabled?theme.color.accentWash:theme.color.lineSoft);
+        list.addLine({zero.x,graph.y},{zero.x,graph.bottom()},theme.color.lineSoft,1);
+        list.addLine({one.x,graph.y},{one.x,graph.bottom()},theme.color.lineSoft,1);
+        UiPoint previous{};
+        for(u32 i=0;i<=96;++i) {
+          resources::AnimationCurveSample sample;
+          const auto time=std::lerp(domain[0],domain[1],float(i)/96);
+          const auto valid=resources::sampleValidatedAnimationCurve(curve,time,sample);
+          const auto point=pointAt(time,valid?sample.value:0);
+          if(i)list.addLine(previous,point,curveInk,2);previous=point;
+        }
+        if(key) {
+          const auto center=pointAt(key->time,key->value);
+          if(selected) {const double span=(key->weightedIn?key->inWeight:1.f/3)*(double(key->time)-curve.keys[selected-1].time);const auto handle=pointAt(key->time-span,key->value-resources::animationCurveSlope(curve,selected,true)*span);list.addLine(center,handle,theme.color.textMuted,1);list.addRect({handle.x-3,handle.y-3,6,6},theme.color.textMuted,3);}
+          if(selected+1<curve.keys.size()) {const double span=(key->weightedOut?key->outWeight:1.f/3)*(double(curve.keys[selected+1].time)-key->time);const auto handle=pointAt(key->time+span,key->value+resources::animationCurveSlope(curve,selected,false)*span);list.addLine(center,handle,theme.color.textMuted,1);list.addRect({handle.x-3,handle.y-3,6,6},theme.color.textMuted,3);}
+          // Every key contributes to a visible 2 px occupancy cell; dense imports
+          // do not exhaust UiDrawList capacity or truncate the authored curve.
+          const auto columns=std::max(1u,u32(std::ceil(graph.width/2))),rows=std::max(1u,u32(std::ceil(graph.height/2)));
+          std::vector<u8> occupied(usize(columns)*rows);
+          for(const auto &authored:curve.keys) {
+            const auto point=pointAt(authored.time,authored.value);
+            const auto x=std::min(columns-1,u32(std::max(0.f,point.x-graph.x)/2));
+            const auto y=std::min(rows-1,u32(std::max(0.f,point.y-graph.y)/2));
+            auto &cell=occupied[usize(y)*columns+x];
+            if(!cell) {cell=1;list.addRect({point.x-1.5f,point.y-1.5f,3,3},theme.color.textMuted,1.5f);}
+          }
+          list.addRect({center.x-5,center.y-5,10,10},theme.color.text,5);
+        }
+        list.popClip();if(key)router.addRegion(graph,widgetId(terrainModuleAction(54)));
+        const float keyHeight=moduleCompact?28.f:44.f;
+        auto keys=row(keyHeight);
+        button({keys.x,keys.y,48,keyHeight},"<",terrainModuleAction(40),false,key && selected>0);
+        button({keys.right()-48,keys.y,48,keyHeight},">",terrainModuleAction(41),false,key && selected+1<curve.keys.size());
+        if(key) button({keys.x+48,keys.y,keys.width-96,keyHeight},"Chave "+std::to_string(selected+1)+" / "+std::to_string(curve.keys.size()),EditorWidget(widgetId(EditorWidget::TerrainNumberBase)+255));
+        else button({keys.x+48,keys.y,keys.width-96,keyHeight},"Adicionar primeira chave",terrainModuleAction(42));
+        button(row(44),geo.curveEnabled?"Curva de deslocamento ligada":"Curva de deslocamento desligada",terrainModuleAction(8),geo.curveEnabled,true,UiIcon::AnimationCurve);
+        if(view==130) {
+          auto edits=row();
+          button({edits.x,edits.y,edits.width/2,edits.height},"Inserir chave",terrainModuleAction(42),false,curve.keys.size()<resources::AnimationCurve::MaximumKeys);
+          button({edits.x+edits.width/2,edits.y,edits.width/2,edits.height},"Remover chave",terrainModuleAction(43),false,key!=nullptr);
+          if(key) {
+            field("Posição da chave (assinada)",key->time,206);
+            field("Saída da chave (UV estrato)",key->value,207);
+          } else hint("Insira uma chave para iniciar a autoria.");
+          button(row(44),"Tangentes e pesos desta chave",terrainModuleAction(57),false,key!=nullptr);
+          button(row(44),"Eixo e transformação da curva",terrainModuleAction(58));
+        } else {
+          button(row(44),"Voltar às chaves da curva",terrainModuleAction(59));
+          if(key) {
+            button(row(44),key->broken?"Tangentes independentes":"Tangentes vinculadas",terrainModuleAction(44),key->broken);
+            const char *modes[]{"Livre","Linear","Constante","Auto","Auto limitado","Plana","Constante seguinte"};
+            button(row(44),std::string("Entrada: ")+modes[unsigned(key->incoming)],terrainModuleAction(45));
+            button(row(44),std::string("Saída: ")+modes[unsigned(key->outgoing)],terrainModuleAction(46));
+            field("Inclinação de entrada (UV/posição)",key->inSlope,208,key->incoming==resources::AnimationTangentMode::Free);
+            field("Inclinação de saída (UV/posição)",key->outSlope,209,key->outgoing==resources::AnimationTangentMode::Free);
+            pair(key->weightedIn?"Entrada ponderada":"Ponderar entrada",terrainModuleAction(47),key->weightedOut?"Saída ponderada":"Ponderar saída",terrainModuleAction(48));
+            field("Peso do handle de entrada",key->inWeight,210,key->weightedIn);
+            field("Peso do handle de saída",key->outWeight,211,key->weightedOut);
+          } else hint("Curva vazia: saída constante zero.","Volte às chaves para inserir a primeira.");
+        }
+        hint("Área sombreada: janela LUT 0–1.","Chaves externas são preservadas; toque seleciona.");
+      } else if(view==159) {
+        label("MAPAS DO DOMÍNIO COMPLETO DO TERRENO");
+        const char *names[]{"Tint · cor global","Normal · relevo global","SAOM · smoothness / AO / metálico","Emissão · luz do material"};
+        for(u32 i=0;i<4;++i) button(row(64),names[i],terrainModuleAction(14+i),r.surface.globalMaps[i].enabled,true,UiIcon::ZzTerrainModuleGlobalMaps);
+        hint("Domínio real: "+num(r.size)+" m × "+num(r.size)+" m", "Origem X/Z: "+num(-r.size*.5f)+" m; independente dos tiles.");
+      } else if(view>=160 && view<=163) {
+        const auto role=terrainModuleGlobal(view);
+        const auto &global=r.surface.globalMaps[role];
+        const bool source=role==2?(global.smoothness.texture.valid() || global.ao.texture.valid() || global.metallic.texture.valid()):global.map.texture.valid();
+        auto stateRow=row(moduleCompact?32.f:44.f);
+        button({stateRow.x,stateRow.y,stateRow.width/2,stateRow.height},!source?"Sem fonte":global.enabled?"Ligado":"Desligado",terrainModuleAction(18),global.enabled,source);
+        button({stateRow.x+stateRow.width/2,stateRow.y,stateRow.width/2,stateRow.height},source?(role==2?"Fontes SAOM":"Fonte e canais"):"Escolher fonte",terrainModuleAction(21));
+        field("Intensidade do mapa global",global.intensity,212);
+        field("Participação · "+layer.name,layer.globalMapParticipation[role],221);
+        fields("Fade início (m)",global.fadeStart,213,"Fade fim (m)",global.fadeEnd,214);
+        field("Força perto",global.nearStrength,215);
+        field("Força longe",global.farStrength,216);
+        fields("Escala UV X",global.scaleX,217,"Escala UV Y",global.scaleY,218);
+        fields("Offset UV X",global.offsetX,219,"Offset UV Y",global.offsetY,220);
+
+        button(row(44),"Voltar aos quatro mapas",terrainModuleAction(13));
+
+        if(role==0) {const char *blends[]{"Multiply2x","Overlay","LighterColor","Crossfade"};button(row(44),std::string("Mistura: ")+blends[u32(global.blend)],terrainModuleAction(19));}
+        if(role==1) button(row(44),global.normalBlend==resources::TerrainNormalBlend::Reoriented?"Normal: RNM":"Normal: Crossfade",terrainModuleAction(20));
+        if(role>=2) hint("Mistura real: Crossfade");
+        hint("UV do domínio: "+num(r.size)+" m × "+num(r.size)+" m", "Primeiro offset UV, depois escala; origem real do terreno.");
+      } else if(terrainModulePicker(view)) {
+        button(row(44),"Voltar aos parâmetros do mapa",terrainModuleAction(24));
+        label("FONTE · TEXTURAS ORIGINAIS TRANSPORTADAS");
+        const auto catalog=s.terrainCatalog;
+        if(catalog && !catalog->textures.empty()) {
+          auto pager=row(44);
+          button({pager.x,pager.y,48,44},"<",terrainModuleAction(30),false,s.terrainCatalogPage>0);
+          button({pager.right()-48,pager.y,48,44},">",terrainModuleAction(31),false,(s.terrainCatalogPage+1)*6<catalog->textures.size());
+          text({pager.x+48,pager.y,pager.width-96,44},std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string((catalog->textures.size()+5)/6),theme.color.text,true,UiAlign::Center);
+          for(u32 i=0;i<6 && s.terrainCatalogPage*6+i<catalog->textures.size();++i) {const auto &source=catalog->textures[s.terrainCatalogPage*6+i];button(row(48),terrainNoiseSourceName(source),terrainModuleAction(32+i),terrainModuleMap(r.surface,view,s.terrainMapRole).texture==source.identity);}
+        } else hint("Nenhuma textura disponível no catálogo.");
+      } else if(terrainModuleMapView(view)) {
+        const auto &map=terrainModuleMap(r.surface,view,s.terrainMapRole);
+        const bool normal=terrainModuleNormal(view);
+        const bool saom=view==172;
+        button(row(44),"Voltar ao módulo",terrainModuleAction(22));
+        if(saom) {
+          const char *roles[]{"Smoothness → rugosidade = 1 − S","Oclusão ambiente (AO)","Metálico","Máscara de mistura"};
+          auto selector=row(44);
+          button({selector.x,selector.y,44,44},"<",terrainModuleAction(28));
+          button({selector.right()-44,selector.y,44,44},">",terrainModuleAction(29));
+          text({selector.x+44,selector.y,selector.width-88,44},roles[s.terrainMapRole%4],theme.color.text,true,UiAlign::Center);
+          button(row(44),"Usar fonte de S para AO / metálico / máscara",terrainModuleAction(56),false,r.surface.globalMaps[2].smoothness.texture.valid());
+        }
+        button(row(44),sourceName(map),terrainModuleAction(23));
+        const char *channels[]{"R","G","B","A","RGB","Normal RGB","Normal RG"};
+        button(row(44),std::string("Canal: ")+channels[u32(map.channel)],terrainModuleAction(25),false,map.texture.valid());
+        auto options=row();
+        button({options.x,options.y,options.width/2,options.height},normal?"Normal · linear":map.linear?"Espaço: linear":"Espaço: sRGB",terrainModuleAction(27),false,!normal && map.texture.valid());
+        button({options.x+options.width/2,options.y,options.width/2,options.height},map.invert?"Inversão ligada":"Inversão desligada",terrainModuleAction(26));
+        field(normal?"Fator do normal":"Fator do mapa",map.factor,222);
+        if(saom) fields("Remap mínimo",map.remapMin,223,"Remap máximo",map.remapMax,224);
+        else {
+          label(normal?"NORMAL · FATORES XYZ":view==173?"FATORES RGB":"FATORES RGBA");
+          fields("Vermelho",map.colorFactor[0],225,"Verde",map.colorFactor[1],226);
+          if(normal) field("Azul",map.colorFactor[2],227,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+          else if(view==173) field("Azul",map.colorFactor[2],227);
+          else fields("Azul",map.colorFactor[2],227,"Alfa",map.colorFactor[3],228);
+          label("REMAP MÍNIMO");fields("Vermelho",map.colorRemapMin[0],229,"Verde",map.colorRemapMin[1],230);
+          if(normal) field("Azul",map.colorRemapMin[2],231,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+          else if(view==173) field("Azul",map.colorRemapMin[2],231);
+          else fields("Azul",map.colorRemapMin[2],231,"Alfa",map.colorRemapMin[3],232);
+          label("REMAP MÁXIMO");fields("Vermelho",map.colorRemapMax[0],233,"Verde",map.colorRemapMax[1],234);
+          if(normal) field("Azul",map.colorRemapMax[2],235,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+          else if(view==173) field("Azul",map.colorRemapMax[2],235);
+          else fields("Azul",map.colorRemapMax[2],235,"Alfa",map.colorRemapMax[3],236);
+        }
+        hint(saom?"Padrão SAOM: R smoothness · G AO · B metálico · A máscara":"Fonte, interpretação e ajustes preservados ao salvar.");
+      }
+    } else if((s.terrainMaterialView==60 || terrainClusterVariantView(s.terrainMaterialView)) && b.layer<r.surface.layers.size()) {
       const auto &layer=r.surface.layers[b.layer];
       const auto &cluster=layer.cluster;
       const auto index=terrainClusterVariant(s.terrainMaterialView);
-      label("VARIANTES E ESTOCÁSTICO · "+layer.name);
+      if(!moduleCompact) label("VARIANTES E ESTOCÁSTICO · "+layer.name);
       if(s.terrainMaterialView==60) {
         button(row(44),cluster.enabled?"Clusters ligados":"Clusters desligados",terrainClusterAction(1),cluster.enabled,cluster.variants.size()>=2);
         button(row(44),cluster.stochastic?"Estocástico ligado":"Estocástico desligado",terrainClusterAction(2),cluster.stochastic);
@@ -763,15 +1119,17 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         hint("Baixa reduz diversidade; seleção pode marcar bordas.","Média e Alta misturam mais amostras.");
       } else if(s.terrainMaterialView>=80 && s.terrainMaterialView<=92) {
         const bool material=s.terrainMaterialView<=82;
-        button(row(44),material?"Voltar às variantes":"Voltar aos mapas",material?terrainClusterAction(0):terrainClusterAction(7));
+        if(!moduleCompact) button(row(44),material?"Voltar às variantes":"Voltar aos mapas",material?terrainClusterAction(0):terrainClusterAction(7));
         label(material?"MATERIAL ORIGINAL · SETE MAPAS":"TEXTURA ORIGINAL · MAPA SELECIONADO");
         const auto catalog=s.terrainCatalog;
         const auto count=catalog?(material?catalog->materials.size():catalog->textures.size()):0;
         if(count) {
+          if(!moduleCompact) {
           auto pager=row(44);
           button({pager.x,pager.y,48,44},"<",terrainClusterAction(16),false,s.terrainCatalogPage>0);
           button({pager.right()-48,pager.y,48,44},">",terrainClusterAction(17),false,(s.terrainCatalogPage+1)*6<count);
           text({pager.x+48,pager.y,pager.width-96,44},std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string((count+5)/6),theme.color.text,true,UiAlign::Center);
+          }
           for(u32 i=0;i<6 && s.terrainCatalogPage*6+i<count;++i) {
             const auto source=s.terrainCatalogPage*6+i;
             if(material) button(row(48),materialDisplayName(catalog->materials[source].layer.name),terrainClusterAction(20+i),false,true,terrainMaterialIcon(catalog->materials[source].id));
@@ -781,11 +1139,11 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         hint(material?"Identidades e sete mapas do material preservados.":"Canal, remaps e fatores permanecem independentes.");
       } else if(index<cluster.variants.size()) {
         const auto &variant=cluster.variants[index];
-        button(row(44),"Voltar às variantes",terrainClusterAction(0));
+        if(!moduleCompact) button(row(44),"Voltar às variantes",terrainClusterAction(0));
         std::string variantName="VARIANTE "+std::to_string(index+1);
         if(s.terrainCatalog) for(const auto &material:s.terrainCatalog->materials)
           if(material.layer.identity==variant.identity) {variantName=materialDisplayName(material.layer.name);break;}
-        label(variantName);
+        if(!moduleCompact) label(variantName);
         if(s.terrainMaterialView<80) {
           field("Tamanho do tile (m)",variant.scale,160);
           fields("Deslocamento X (m)",variant.offsetX,161,"Deslocamento Y (m)",variant.offsetY,162);
@@ -798,10 +1156,12 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
           const auto role=std::min(s.terrainMapRole,6u);
           const auto &map=variant.maps[role];
           const char *roles[]{"Cor base","Normal","Altura","Oclusão ambiente","Rugosidade","Metálico","Emissão"};
+          if(!moduleCompact) {
           auto selector=row(44);
           button({selector.x,selector.y,48,44},"<",terrainClusterAction(11));
           button({selector.right()-48,selector.y,48,44},">",terrainClusterAction(12));
           text({selector.x+48,selector.y,selector.width-96,44},roles[role],theme.color.text,false,UiAlign::Center);
+          }
           std::string sourceName="Selecionar textura original";
           if(s.terrainCatalog) for(const auto &source:s.terrainCatalog->textures)
             if(source.identity==map.texture) {sourceName=terrainNoiseSourceName(source);break;}
@@ -832,14 +1192,16 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       } else hint("Selecione uma variante existente nesta camada.");
     } else if(s.terrainMaterialView==50 && b.layer<r.surface.layers.size()) {
       const auto &layer=r.surface.layers[b.layer];
-      label("REAMOSTRAGEM · "+layer.name);
-      button(row(44),"Voltar aos ruídos",terrainNoiseAction(1));
+      if(!moduleCompact) {label("REAMOSTRAGEM · "+layer.name);
+      button(row(44),"Voltar aos ruídos",terrainNoiseAction(1));}
       button(row(44),layer.resampleAlbedo?"Cor distante: ligada":"Cor distante: desligada",terrainNoiseAction(36),layer.resampleAlbedo);
       button(row(44),layer.resampleNormal?"Normal distante: ligado":"Normal distante: desligado",terrainNoiseAction(37),layer.resampleNormal);
       button(row(44),layer.resampleHeightBlend?"Mistura de altura: ligada":"Mistura de altura: desligada",terrainNoiseAction(38),layer.resampleHeightBlend);
+      if(!moduleCompact) {
       auto modes=row(44);
       const char *names[]{"Constant","Noise","Crossfade"};
       for(u32 i=0;i<3;++i)button({modes.x+modes.width*i/3,modes.y,modes.width/3,44},names[i],terrainNoiseAction(39+i),u32(layer.resampleBlend)==i);
+      }
       field("Escala distante (×)",layer.resampleScale,152);
       const bool distance=layer.resampleBlend!=resources::TerrainDistanceBlend::Constant;
       fields("Início (m)",layer.resampleStart,153,"Fim (m)",layer.resampleEnd,154,distance);
@@ -848,10 +1210,12 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     } else if(s.terrainMaterialView==30 && b.layer<r.surface.layers.size()) {
       const auto &layer=r.surface.layers[b.layer];
       const auto &array=r.surface.antiTileArray;
+      if(!moduleCompact) {
       label("ANTI-TILE · CONJUNTO COMPARTILHADO");
       button(row(44),"Voltar aos ruídos",terrainNoiseAction(1));
       button(row(44),array.enabled?"Conjunto ligado":"Conjunto desligado",terrainNoiseAction(27),array.enabled,!array.entries.empty());
       button(row(44),"Criar entrada com normal do material",terrainNoiseAction(28),false,array.entries.size()<32);
+      }
       hint(std::to_string(array.entries.size())+" entradas · até 32", "A criação vincula uma fonte normal real do catálogo.");
       const auto *entry=terrainBoundAntiTile(r.surface,b.layer);
       label("VÍNCULO · "+layer.name);
@@ -869,6 +1233,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       const auto &noise=terrainSelectedNoise(r.surface,b.layer,s.terrainMaterialView);
       const bool normal=terrainNoiseNormal(s.terrainMaterialView);
       const bool local=terrainNoiseLocal(s.terrainMaterialView);
+      if(!moduleCompact) {
       auto scope=row(44);
       button({scope.x,scope.y,scope.width/2,44},"Global",terrainNoiseAction(44),!local);
       button({scope.x+scope.width/2,scope.y,scope.width/2,44},"Local",terrainNoiseAction(45),local);
@@ -883,15 +1248,18 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       button({links.x+links.width*2/3,links.y,links.width/3,44},"Variantes",terrainClusterAction(0));
       if(selection==14) button(row(44),"Voltar às variantes",terrainClusterAction(0));
       label(selection==14?"VARIANTES · MÁSCARA DE SELEÇÃO":selection==13?"REAMOSTRAGEM · FONTE DO NOISE":selection>=10?"ANTI-TILE · ENTRADA COMPARTILHADA":terrainNoiseLocal(s.terrainMaterialView)?"LOCAL · "+layer.name:"GLOBAL · TODAS AS CAMADAS");
+      }
       if(terrainNoisePicker(s.terrainMaterialView)) {
-        button(row(44),"Voltar aos parâmetros",terrainNoiseAction(11));
+        if(!moduleCompact) button(row(44),"Voltar aos parâmetros",terrainNoiseAction(11));
         label("FONTE · TEXTURAS ORIGINAIS DO CATÁLOGO");
         const auto catalog=s.terrainCatalog;
         if(catalog && !catalog->textures.empty()) {
+          if(!moduleCompact) {
           auto pager=row(44);
           button({pager.x,pager.y,48,44},"<",terrainNoiseAction(12),false,s.terrainCatalogPage>0);
           button({pager.right()-48,pager.y,48,44},">",terrainNoiseAction(13),false,(s.terrainCatalogPage+1)*6<catalog->textures.size());
           text({pager.x+48,pager.y,pager.width-96,44},std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string((catalog->textures.size()+5)/6),theme.color.text,true,UiAlign::Center);
+          }
           for(u32 i=0;i<6;++i) {
             const auto index=s.terrainCatalogPage*6+i;
             if(index>=catalog->textures.size()) break;
@@ -905,16 +1273,27 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         const bool lastSource=bound && noise.enabled &&
           unsigned(bound->normal.enabled)+unsigned(bound->detail.enabled)+unsigned(bound->distance.enabled)==1;
         const bool requiredNoise=selection==13 && layer.resampleBlend==resources::TerrainDistanceBlend::Noise;
-        button(row(44),noise.enabled?"Ruído ligado":"Ruído desligado",terrainNoiseAction(5),noise.enabled,noise.map.texture.valid() && !lastSource && !requiredNoise);
+        if(!moduleCompact) button(row(44),noise.enabled?"Ruído ligado":"Ruído desligado",terrainNoiseAction(5),noise.enabled,noise.map.texture.valid() && !lastSource && !requiredNoise);
         if(requiredNoise) hint("Modo Noise exige esta fonte ativa.");
         if(lastSource) hint("Mantenha uma fonte ativa por entrada anti-tile.");
         std::string sourceName="Selecionar textura original";
         if(s.terrainCatalog) for(const auto &source:s.terrainCatalog->textures)
           if(source.identity==noise.map.texture) { sourceName=terrainNoiseSourceName(source); break; }
-        button(row(44),sourceName,terrainNoiseAction(10));
+        if(!moduleCompact) button(row(44),sourceName,terrainNoiseAction(10));
         const char *projection[]{"UV","Triplanar local","Triplanar mundial"};
-        button(row(44),std::string("Projeção: ")+projection[u32(noise.projection)],terrainNoiseAction(6));
+        if(!moduleCompact) button(row(44),std::string("Projeção: ")+projection[u32(noise.projection)],terrainNoiseAction(6));
+        if(moduleCompact && selection<10) {
+          auto roles=row(32);const char *names[]{"Detalhe","Distância","N1","N2","N3"};
+          const u32 actions[]{local?3u:1u,local?4u:2u,23u,24u,25u};
+          const auto active=selection<4?selection%2:2+(selection-4)%3;
+          for(u32 i=0;i<5;++i)button({roles.x+roles.width*i/5,roles.y,roles.width/5,32},names[i],terrainNoiseAction(actions[i]),active==i);
+        }
         field("Frequência (rep/m)",noise.scale,128);
+        if(moduleCompact && selection<10) {
+          auto links=row(32);button({links.x,links.y,links.width/3,32},"Anti-tile",terrainNoiseAction(26));
+          button({links.x+links.width/3,links.y,links.width/3,32},"Distante",terrainNoiseAction(35));
+          button({links.x+links.width*2/3,links.y,links.width/3,32},"Variantes",terrainClusterAction(0));
+        }
         field("Força",noise.strength,129);
         fields("Fade início (m)",noise.fadeStart,130,"Fade fim (m)",noise.fadeEnd,131);
         if(selection<4) field(selection%2==0?"Participação global · detalhe":"Participação global · distância",
@@ -923,6 +1302,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         else if(selection<=12) field("Participação desta camada",layer.antiTileParticipation[selection==10?0:selection==11?1:2],selection==10?149:selection==11?150:151);
         hint((selection==1 || selection==3 || selection==12)?"Distância aparece ao afastar a câmera.":"Detalhe e normal desaparecem ao afastar a câmera.",
           "Participação pertence à camada selecionada.");
+        if(moduleCompact) button(row(44),std::string("Projeção: ")+projection[u32(noise.projection)],terrainNoiseAction(6));
         const char *channels[]{"R","G","B","A","RGB","Normal RGB","Normal RG"};
         if(u32(noise.map.channel)>4 && !normal)
           hint("Canal normal importado · selecione R, G, B, A ou RGB.");
@@ -946,10 +1326,14 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         } else fields("Remap mínimo",noise.map.remapMin,134,"Remap máximo",noise.map.remapMax,135);
         hint(normal?"Força zero preserva o normal base sem amostragem.":"0,5 é neutro · força zero evita amostragem.","Toque no valor para digitar com precisão.");
       }
+    } else if(terrainNoiseView(s.terrainMaterialView)) {
+      hint("Esta camada não possui entrada anti-tile vinculada.");
+      button(row(44),"Selecionar ou criar entrada real",terrainNoiseAction(26));
     } else if (s.terrainMaterialView == 1) {
       const auto catalog = s.terrainCatalog;
       label("BIBLIOTECA · MATERIAIS ORIGINAIS");
       if (catalog) {
+        if(!moduleCompact) {
         auto pager = row(48);
         button({pager.x, pager.y, 48, 48}, "<",
                EditorWidget::TerrainCatalogPrevious, false,
@@ -961,6 +1345,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
              std::to_string(s.terrainCatalogPage + 1) + " / " +
                  std::to_string((catalog->materials.size() + 5) / 6),
              theme.color.text, true, UiAlign::Center);
+        }
         const auto count=std::min<usize>(6,catalog->materials.size()-
           std::min<usize>(catalog->materials.size(),usize(s.terrainCatalogPage)*6));
         for(u32 i=0;i<count;i+=2) {
@@ -1031,6 +1416,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       const char *roles[] = {"Cor base",         "Normal",     "Altura",
                              "Oclusão ambiente", "Rugosidade", "Metálico",
                              "Emissão"};
+      if(!moduleCompact) {
       auto selector = row(48);
       button({selector.x, selector.y, 48, 48}, "<",
              EditorWidget::TerrainMapPrevious);
@@ -1039,6 +1425,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       text({selector.x + 48, selector.y, selector.width - 96, 48},
            roles[std::min(s.terrainMapRole, 6u)], theme.color.text, false,
            UiAlign::Center);
+      }
       hint(map.texture.valid() ? "Textura original vinculada"
                                : "Valor constante · sem textura",
            layer.name);
