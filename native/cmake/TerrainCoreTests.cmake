@@ -9,7 +9,19 @@ function(aether_add_terrain_core_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/family_base_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_core.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_lod.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_history_store.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_neighbors.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_recovery.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_catalog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_history_store.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_neighbors.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_catalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/platform/atomic_asset_file.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/mesh_lod_build.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/lod_selection.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/renderer/static_collision_mesh.cpp)

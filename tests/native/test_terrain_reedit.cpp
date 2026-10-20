@@ -2,6 +2,7 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
 #include "editor/editor_theme.h"
+#include "editor/editor_terrain_recovery.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
 #include "scene/import_link.h"
@@ -161,6 +162,41 @@ struct ReeditFixture {
   }
 };
 } // namespace
+
+AE_TEST(terrain_checkpoint_delta_recovers_corrupt_source_and_rebuilds_immutable_revision) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  resources::TerrainRecipe recipe;recipe.cells=8;recipe.height=0;recipe.controlCells=16;
+  for(u32 i=0;i<20;++i)recipe.strokes.push_back({resources::TerrainTool::Raise,float(i%5)-2,0,float(i/5)-2,4,.1f,0});
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  recipe.strokes.push_back({resources::TerrainTool::Paint,0,0,0,8,.4f,3});
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto source=scene::importLink(f.session.document().find(root)->components)->source;
+  const auto record=*f.session.assets().find(source);
+  std::filesystem::path objects,reference;
+  AE_EXPECT_TRUE(editor::terrainRecoveryPaths(f.path.string(),record.contentHash,objects,reference),"safe recovery paths");
+  std::vector<u8> pointer;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(reference,pointer,64),"published revision points to recipe history");
+  std::vector<u8> envelope;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(objects/(std::string(pointer.begin(),pointer.end())+".aethist"),envelope),"read committed history object");
+  AE_EXPECT_TRUE(envelope.size()>5 && envelope[4]=='D',"similar recipe stored as an exact delta");
+  const auto sourcePath=f.path/record.path;
+  const std::vector<u8> truncated{0,1,2};
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::write(sourcePath,truncated),"simulate truncated GLB");
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"corrupt source can reopen through validated recipe chain");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),resources::serializeTerrainRecipe(recipe),"recovery preserves every authored value");
+  AE_EXPECT_TRUE(f.session.screen().terrainAppliedRecipe.empty(),"recovered terrain offers reconstruction");
+  f.session.startTerrainJob();
+  AE_EXPECT_TRUE(f.finishGeneration(),"reconstruction completes through production job");
+  AE_EXPECT_TRUE(!f.session.screen().terrainAppliedRecipe.empty(),f.session.screen().terrainMessage.c_str());
+  std::vector<u8> repaired;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(sourcePath,repaired) && Sha256::hex(repaired)==record.contentHash,"known immutable source file is rebuilt exactly");
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"repaired GLB reopens normally");
+  AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("recuperada")==std::string::npos,"normal open no longer reports fallback");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,16u,"material map resolution recovered with recipe");
+}
 
 AE_TEST(terrain_new_canvas_flat_and_soft_sculpt_preserves_saved_relief) {
   const editor::EditorScreenState freshEditor;
@@ -330,6 +366,9 @@ AE_TEST(terrain_failed_history_reload_is_cached_and_explicit_reopen_recovers) {
   AE_EXPECT_TRUE(editor::EditorImportTransaction::read(originalPath, sourceBytes), "save valid source bytes");
   const std::vector<u8> corrupt{0, 1, 2, 3};
   AE_EXPECT_TRUE(editor::EditorImportTransaction::write(originalPath, corrupt), "simulate corrupt old revision");
+  const auto reference=f.path/".astra/terrain-history/revisions"/
+      (f.session.assets().find(originalSource)->contentHash+".ref");
+  AE_EXPECT_TRUE(std::filesystem::remove(reference),"also remove recovery reference to test total data loss");
   f.action(editor::EditorWidget::TerrainSculpt);
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()), "Undo selects the corrupt revision");
   f.session.refreshTerrainJob();
@@ -393,7 +432,12 @@ AE_TEST(terrain_reedit_renamed_source_scene_reload_and_failed_open_are_safe) {
   AE_EXPECT_EQ(f.session.screen().terrainDraft.seed, recipe.seed, "reopened persisted recipe");
   const auto before = resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
   std::filesystem::rename(f.path / newPath, f.path / "temporary.glb");
-  AE_EXPECT_TRUE(!f.session.openTerrain(root), "missing source refuses edit");
+  AE_EXPECT_TRUE(f.session.openTerrain(root), "missing source recovers authoring from checkpoint");
+  AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("recuperada")!=std::string::npos,"recovery is explained in the editor");
+  AE_EXPECT_TRUE(f.session.screen().terrainAppliedRecipe.empty(),"recovered recipe requires reconstruction before save");
+  const auto reference=f.path/".astra/terrain-history/revisions"/(registry.find(source)->contentHash+".ref");
+  AE_EXPECT_TRUE(std::filesystem::remove(reference),"remove backup reference to test unavailable authoring");
+  AE_EXPECT_TRUE(!f.session.openTerrain(root), "missing source and unavailable checkpoint refuse edit");
   AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft), before, "failure preserves draft");
   AE_EXPECT_EQ(f.session.screen().terrainTarget, root, "failure preserves target");
   std::filesystem::rename(f.path / "temporary.glb", f.path / newPath);

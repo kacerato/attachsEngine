@@ -19,7 +19,8 @@ int main(int argc,char **argv) {
   if(!font.load(fontBytes) || !icons.load(iconBytes))return 3;
   editor::EditorScreenState state;state.surface={0,0,float(width),float(height)};
   state.terrainOpen=true;state.terrainTab=0;state.terrainSection=2;state.terrainDraft.lodLevels=4;
-  state.terrainMessage="LOD autoral · aplique para gerar";
+  state.terrainDraft.controlCells=128;
+  state.terrainMessage="Pintura e LOD · confira e aplique";
   const auto panel=editor::terrainPanelRect(state);const auto &theme=editor::editorTheme();
   const auto metrics=font.metrics(ui::UiFontWeight::Regular);
   ui::UiDrawList list;ui::UiInputRouter router;
@@ -32,7 +33,7 @@ int main(int argc,char **argv) {
       reachable.insert(router.hitTest({x,y}).widgetId);
   }
   const u32 base=editor::widgetId(editor::EditorWidget::TerrainNumberBase);
-  if(!reachable.contains(base+28) || !reachable.contains(base+29))return 4;
+  if(!reachable.contains(base+28) || !reachable.contains(base+29) || !reachable.contains(base+60))return 4;
   state.terrainScroll=argc>4?std::strtof(argv[4],nullptr):0;render();
   std::vector<ui::UiInstance> instances;
   const auto built=ui::buildUiInstances(list,font,icons,65536,instances);
@@ -45,6 +46,6 @@ int main(int argc,char **argv) {
   for(usize p=0;p<usize(width)*height;++p)for(u32 c=0;c<3;++c)
     rgb[p*3+c]=u8(std::clamp(image.pixels[p*4+c],0.f,1.f)*255+.5f);
   const bool ok=std::fwrite(rgb.data(),1,rgb.size(),file)==rgb.size();std::fclose(file);
-  std::printf("%ux%u production surface; LOD controls reachable; %u instances; scroll %.0f/%.0f\n",width,height,built.emitted,state.terrainScroll,limit);
+  std::printf("%ux%u production surface; map and LOD controls reachable; %u instances; scroll %.0f/%.0f\n",width,height,built.emitted,state.terrainScroll,limit);
   return ok?0:7;
 }

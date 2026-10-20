@@ -28,7 +28,7 @@ float contentHeight(const EditorScreenState &s) {
   if(s.terrainTab==0) {
     if(s.terrainSection==0)return (hf?348.f:298.f)+padding;
     if(s.terrainSection==1)return 410+padding;
-    return (hf?364.f:428.f)+padding;
+    return (hf?476.f:428.f)+padding;
   }
   if(s.terrainTab==4) {
     if(s.terrainDraft.paths.empty())return 104+padding;
@@ -380,6 +380,11 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
   } else if (s.terrainTab == 0) {
     label("MATERIAIS E FÍSICA");
     field("Repetição da textura (m)", r.textureScale, 8);
+    if(hf) {
+      field("Células do mapa de pintura", r.controlCells, 60);
+      hint(r.controlCells ? "Mapa autoral independente da malha." : "0: pintura legada · arraste para criar mapa.",
+           "Detalhe visível depende da malha.");
+    }
     if (!hf)
       field("Resolução vertical (8–64)", r.verticalCells, 7);
     button(row(),
@@ -395,9 +400,11 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
          "Distância segue o erro em pixels de Qualidade.");
     const u64 samples =
         u64(r.cells + 1) * (r.cells + 1) * (hf ? 1 : r.verticalCells + 1);
-    hint(std::to_string(samples) + " / 600.000 amostras",
+    hint("Geometria: " + std::to_string(samples) + " / 600.000",
          "Limite: 200.000 triângulos por terreno.");
-    hint("Aplique para atualizar geometria e colisão.");
+    if(hf && r.controlCells && r.blendedSurface)
+      hint("Mapa de pintura: "+std::to_string(u64(r.controlCells+1)*(r.controlCells+1))+" amostras");
+    else hint("Aplique para atualizar geometria e colisão.");
   } else if (s.terrainTab == 1 && s.terrainSection == 0) {
     slider("Raio (m)",b.radius,9,.1f,std::max(8.f,r.size*.25f));
     slider(b.tool==resources::TerrainTool::Terrace?"Altura do degrau (m)":

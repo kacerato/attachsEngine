@@ -44,6 +44,7 @@ template<class State> TerrainControlRange terrainControlRange(const State &s, un
   case 18:range={.05f,1,0,true};break;
   case 26:case 28:range={1,4,1,true};break;
   case 29:range={.01f,10,0,r.lodLevels>1,true};break;
+  case 60:range={8,512,8,unsigned(r.mode)==0};break;
   case 34:range={-512,512,0,true};break;
   case 37:range={-2048,2048,0,true};break;
   case 35:range={0,89.9f,0,true};break;

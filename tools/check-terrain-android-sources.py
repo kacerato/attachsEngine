@@ -29,8 +29,23 @@ def command_arguments(command):
 targets = {
     'terrain_asset.cpp', 'editor_terrain.cpp', 'editor_terrain_screen.cpp',
     'upload_context.cpp', 'dirt_road_resources.cpp', 'instanced_renderer.cpp',
+    'terrain_history_store.cpp', 'terrain_neighbors.cpp',
+    'terrain_surface_asset.cpp', 'terrain_surface_catalog.cpp',
 }
 commands = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+root = Path(__file__).resolve().parents[1]
+terrain = next(entry for entry in commands if Path(entry['file']).name == 'terrain_asset.cpp')
+if Path(terrain['file']).resolve() != root / 'native/resources/terrain_asset.cpp':
+    raise ValueError('Compilation database belongs to another checkout')
+# New sources use the same aether_assets options. A syntax check can use the
+# existing target command before Gradle regenerates its compilation database;
+# this does not stand in for linking/package validation.
+for name in sorted(targets):
+    if name.startswith('terrain_') and not any(Path(entry['file']).name == name for entry in commands):
+        args = terrain.get('arguments') or command_arguments(terrain['command'])
+        source = str(root / 'native/resources' / name)
+        args = [source if arg == terrain['file'] else arg for arg in args]
+        commands.append(dict(terrain, file=source, arguments=args))
 seen = set()
 for entry in commands:
     name = Path(entry['file']).name

@@ -585,9 +585,9 @@ AE_TEST(terrain_path_point_heights_ramps_and_crest_have_independent_effects) {
   resources::TerrainRecipe loaded;auto encoded=resources::serializeTerrainRecipe(r);
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
   AE_EXPECT_TRUE(!loaded.paths[0].followTerrain,"point-height mode persists");
-  // Remove v6 LOD fields, then v5 followTerrain, to exercise an actual v4 record.
+  // Remove v7 map resolution, v6 LOD fields, then v5 followTerrain.
   encoded.replace(0,10,"AETERRAIN4");
-  for(u32 i=0;i<3;++i)encoded.resize(encoded.rfind(' '));
+  for(u32 i=0;i<4;++i)encoded.resize(encoded.rfind(' '));
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
   AE_EXPECT_TRUE(loaded.paths[0].followTerrain,"version 4 migration preserves the previous follow behavior");
 }
@@ -644,4 +644,113 @@ AE_TEST(terrain_path_caps_clip_geometry_and_paint_at_terminal_planes) {
     AE_EXPECT_TRUE(sampled,"paint probe exists in exported surface");
   }
   }
+}
+
+AE_TEST(terrain_control_map_replays_recipe_independently_of_mesh_cells) {
+  using namespace resources;
+  TerrainRecipe a;a.cells=8;a.controlCells=32;a.height=0;
+  TerrainStroke stroke;stroke.tool=TerrainTool::Paint;stroke.layer=3;stroke.radius=7;stroke.opacity=.4f;
+  a.strokes.push_back(stroke);
+  TerrainPath path;path.points={{-20,0,-12},{20,0,12}};path.surfaceLayer=2;a.paths.push_back(path);
+  TerrainField fa,fb;std::string error;
+  AE_EXPECT_TRUE(generateTerrainField(a,fa,error),"material field");
+  auto b=a;b.cells=64;
+  AE_EXPECT_TRUE(generateTerrainField(b,fb,error),"different mesh field");
+  AE_EXPECT_EQ(fa.controlWidth,33u,"independent map dimensions");
+  AE_EXPECT_TRUE(fa.controlWeights==fb.controlWeights,"mesh cells cannot change authoritative material map");
+  TerrainMesh mesh;AE_EXPECT_TRUE(meshTerrainField(a,fa,mesh,error),"map is consumed by mesh");
+  for(const auto &part:mesh.parts)for(const auto &v:part.vertices) {
+    const auto weights=terrainFieldWeights(fa,v.position[0],v.position[2]);
+    for(u32 l=0;l<4;++l)AE_EXPECT_TRUE(std::abs(weights[l]-v.weights[l])<.00001f,"vertex consumes map exactly once");
+  }
+  const auto original=serializeTerrainRecipe(a);a.controlCells=8;
+  TerrainField coarse;AE_EXPECT_TRUE(generateTerrainField(a,coarse,error),"coarse map");
+  a.controlCells=32;TerrainField restored;
+  AE_EXPECT_TRUE(generateTerrainField(a,restored,error),"replay fine map");
+  AE_EXPECT_TRUE(restored.controlWeights==fa.controlWeights,"resolution change never destructively resamples paint");
+  TerrainRecipe reopened;AE_EXPECT_TRUE(deserializeTerrainRecipe(original,reopened,error),"version seven reopen");
+  AE_EXPECT_EQ(reopened.controlCells,32u,"map resolution persists");
+  AE_EXPECT_TRUE(serializeTerrainRecipe(reopened)==original,"strokes and paths preserved");
+}
+AE_TEST(terrain_control_map_legacy_volume_cancellation_and_limits) {
+  using namespace resources;std::string error;
+  TerrainRecipe r;r.cells=8;r.height=0;
+  auto legacy=serializeTerrainRecipe(r);legacy.replace(0,10,"AETERRAIN6");legacy.erase(legacy.find_last_of(' '));
+  TerrainRecipe old;AE_EXPECT_TRUE(deserializeTerrainRecipe(legacy,old,error),"version six remains readable");
+  AE_EXPECT_EQ(old.controlCells,0u,"legacy map disabled");
+  TerrainMesh before,after;AE_EXPECT_TRUE(generateTerrain(r,before,error),"legacy baseline");
+  AE_EXPECT_TRUE(generateTerrain(old,after,error),"legacy reopened");
+  AE_EXPECT_EQ(terrainDigest(before),terrainDigest(after),"legacy vertex semantics unchanged");
+  r.controlCells=512;TerrainField map;
+  AE_EXPECT_TRUE(generateTerrainField(r,map,error),"maximum map fits budget");
+  AE_EXPECT_EQ(map.controlWeights.size(),usize(513)*513,"map memory has bounded texels");
+  TerrainField unchanged;unchanged.width=777;
+  AE_EXPECT_TRUE(!generateTerrainField(r,unchanged,error,[](float){return false;}),"cancel map generation");
+  AE_EXPECT_EQ(unchanged.width,777u,"cancel leaves output atomic");
+  r.controlCells=9;AE_EXPECT_TRUE(!validTerrainRecipe(r,error),"reject invalid map resolution");
+  r.controlCells=0;r.mode=TerrainMode::SmoothVoxel;r.verticalCells=8;
+  TerrainMesh volumeA,volumeB;AE_EXPECT_TRUE(generateTerrain(r,volumeA,error),"volume baseline");
+  r.controlCells=32;AE_EXPECT_TRUE(generateTerrain(r,volumeB,error),"volume ignores two dimensional map");
+  AE_EXPECT_EQ(terrainDigest(volumeA),terrainDigest(volumeB),"volume wall and ceiling semantics unchanged");
+}
+AE_TEST(terrain_control_map_texel_halo_reuses_unaffected_chunks) {
+  using namespace resources;std::string error;
+  TerrainRecipe r;r.cells=64;r.controlCells=8;r.height=0;
+  TerrainBuild before,after;
+  AE_EXPECT_TRUE(updateTerrain(r,nullptr,before,error),"baseline map build");
+  TerrainStroke paint;paint.tool=TerrainTool::Paint;paint.x=-24;paint.z=-24;
+  paint.radius=1;paint.layer=3;r.strokes.push_back(paint);
+  AE_EXPECT_TRUE(updateTerrain(r,&before,after,error),"regional material edit");
+  AE_EXPECT_TRUE(after.mesh.reusedChunks>0,"distant chunks reused");
+  TerrainMesh full;AE_EXPECT_TRUE(generateTerrain(r,full,error),"reference full rebuild");
+  AE_EXPECT_EQ(terrainDigest(after.mesh),terrainDigest(full),"coarse texel influence includes neighboring mesh chunks");
+  const auto fallback=std::array<float,4>{1,0,0,0};
+  AE_EXPECT_TRUE(terrainFieldWeights(after.field,std::numeric_limits<float>::quiet_NaN(),0)==fallback,"NaN coordinate rejected");
+  AE_EXPECT_TRUE(terrainFieldWeights(after.field,0,std::numeric_limits<float>::infinity())==fallback,"infinite coordinate rejected");
+  after.field.controlStep=std::numeric_limits<float>::quiet_NaN();
+  AE_EXPECT_TRUE(terrainFieldWeights(after.field,0,0)==fallback,"NaN step rejected");
+}
+AE_TEST(terrain_control_map_brush_bins_preserve_order_and_rotated_footprints) {
+  using namespace resources;std::string error;
+  TerrainRecipe r;r.cells=32;r.controlCells=32;r.height=0;
+  for(u32 i=0;i<12;++i) {
+    TerrainStroke s;s.tool=i%3==2?TerrainTool::Restore:TerrainTool::Paint;
+    s.application=i%2?TerrainBrushApplication::Target:TerrainBrushApplication::Accumulate;
+    s.shape=i%2?TerrainBrushShape::Box:TerrainBrushShape::RoundedBox;
+    s.x=float(i%4)*12-18;s.z=float(i/4)*12-12;s.radius=5;
+    s.aspect=2;s.depthAspect=.5f;s.rotation=37;s.pitch=70;s.roll=43;
+    s.layer=i%4;s.opacity=.4f;r.strokes.push_back(s);
+  }
+  TerrainField map;AE_EXPECT_TRUE(generateTerrainField(r,map,error),"binned map");
+  auto reference=r;reference.controlCells=0;TerrainMesh mesh;
+  AE_EXPECT_TRUE(generateTerrain(reference,mesh,error),"legacy vertex evaluator reference");
+  for(const auto &part:mesh.parts)for(const auto &v:part.vertices) {
+    const auto weights=terrainFieldWeights(map,v.position[0],v.position[2]);
+    for(u32 l=0;l<4;++l)AE_EXPECT_TRUE(std::abs(weights[l]-v.weights[l])<.00001f,"culling preserves exact ordered evaluator");
+  }
+  for(u32 i=0;i<128;++i) {
+    TerrainStroke outside;outside.tool=TerrainTool::Paint;outside.x=4096;outside.z=-4096;
+    outside.radius=.1f;outside.layer=3;r.strokes.push_back(outside);
+  }
+  TerrainField padded;AE_EXPECT_TRUE(generateTerrainField(r,padded,error),"outside-grid strokes");
+  AE_EXPECT_TRUE(map.controlWeights==padded.controlWeights,"outside-grid bins cannot affect weights");
+  r.strokes.back().x=std::numeric_limits<float>::infinity();
+  TerrainField unchanged;unchanged.width=444;
+  AE_EXPECT_TRUE(!generateTerrainField(r,unchanged,error),"infinite brush rejected before bins");
+  AE_EXPECT_EQ(unchanged.width,444u,"invalid brush leaves output atomic");
+}
+
+AE_TEST(terrain_control_map_rejects_malformed_field_before_meshing) {
+  resources::TerrainRecipe recipe;recipe.cells=8;recipe.controlCells=8;
+  resources::TerrainField field;
+  resources::TerrainMesh unchanged;unchanged.triangles=777;
+  std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrainField(recipe,field,error),error.c_str());
+  field.controlWeights.front()[0]=std::numeric_limits<float>::quiet_NaN();
+  AE_EXPECT_TRUE(!resources::meshTerrainField(recipe,field,unchanged,error),"nonfinite weight rejected");
+  AE_EXPECT_EQ(unchanged.triangles,777u,"invalid map never mutates output mesh");
+  field.controlWeights.front()={.5f,.5f,.5f,.5f};
+  AE_EXPECT_TRUE(!resources::meshTerrainField(recipe,field,unchanged,error),"unnormalized weights rejected");
+  field.controlWeights.front()={1,0,0,0};field.controlStep*=2;
+  AE_EXPECT_TRUE(!resources::meshTerrainField(recipe,field,unchanged,error),"map spacing must match authoritative recipe");
 }

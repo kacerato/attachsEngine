@@ -82,6 +82,8 @@ struct TerrainRecipe {
   float baseDepth = 8;
   bool blendedSurface = true;
   float macroVariation = .3f;
+  // 0 preserves AETERRAIN1..6 vertex painting. Explicit maps apply to heightfields.
+  u32 controlCells = 0;
   // Level 0 remains the collision surface. Additional render levels lock
   // chunk borders and use the renderer's existing screen-space error budget.
   u32 lodLevels = 1;
@@ -116,10 +118,14 @@ struct TerrainField {
   std::vector<float> heights, density;
   std::vector<u8> legacyLayers, holes;
   std::vector<TerrainStroke> paintSamples;
+  u32 controlWidth = 0;
+  float controlStep = 0;
+  std::vector<std::array<float,4>> controlWeights;
 };
 // Exactly the same curve tessellation used by path deformation and painting.
 std::vector<std::array<float,3>> terrainPathPolyline(const TerrainPath &, float step);
 float terrainFieldHeight(const TerrainField &, float x, float z);
+std::array<float,4> terrainFieldWeights(const TerrainField &, float x, float z);
 struct TerrainChunkKey {
   u32 x = 0, y = 0, z = 0;
   bool operator==(const TerrainChunkKey &) const = default;

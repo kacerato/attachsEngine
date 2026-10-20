@@ -2,6 +2,7 @@
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_screen.h"
 #include "editor/terrain_controls.h"
+#include "editor/editor_terrain_recovery.h"
 #include "editor/editor_session.h"
 #include "resources/terrain_textures.generated.h"
 #include "resources/terrain_vertex_index.h"
@@ -29,6 +30,7 @@ std::array<std::vector<u8>, 4> textures() {
 double number(const EditorScreenState &s, u32 i) {
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
+  if(i==60)return r.controlCells;
   if(i>=32 && i<=51 && s.terrainPath<r.paths.size()) {
     const auto &p=r.paths[s.terrainPath];
     const auto &curve=s.terrainSection==2?p.textureProfile:p.profile;
@@ -310,14 +312,10 @@ EditorEntityId EditorSession::terrainRoot(EditorEntityId target) {
         found->path = record->path;
         found->hash = record->contentHash;
         resources::TerrainRecipe recipe;
-        std::filesystem::path absolute;
-        std::vector<u8> bytes;
         std::string error;
-        found->editable = EditorImportTransaction::safePath(
-                              EditorImportTransaction::fromUtf8(files_.rootPath()),
-                              record->path, absolute) &&
-                          EditorImportTransaction::read(absolute, bytes, 64u << 20) &&
-                          resources::terrainRecipeFromGlb(bytes, recipe, error);
+        bool recovered=false;
+        found->editable = readTerrainAuthoring(files_.rootPath(),record->path,
+            record->contentHash,recipe,error,recovered);
       }
       if (found->editable)
         return entity->id;
@@ -331,6 +329,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     return false;
   clearTerrainPreview();
   refreshTerrainBudget();
+  bool restoredFromHistory=false;
   if (target) {
     // Explicit reopening retries a restored file even if its registry hash did
     // not change. Automatic refresh checks this per-session negative cache first.
@@ -349,16 +348,10 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     const auto *entity = document_.find(id);
     const auto *link = entity ? scene::importLink(entity->components) : nullptr;
     const auto *record = link ? assets_.find(link->source) : nullptr;
-    std::vector<u8> bytes;
     std::string error;
-    std::filesystem::path absolute;
     resources::TerrainRecipe recipe;
-    if (!record ||
-        !EditorImportTransaction::safePath(
-            EditorImportTransaction::fromUtf8(files_.rootPath()), record->path,
-            absolute) ||
-        !EditorImportTransaction::read(absolute, bytes, 64u << 20) ||
-        !resources::terrainRecipeFromGlb(bytes, recipe, error)) {
+    if (!record || !readTerrainAuthoring(files_.rootPath(),record->path,
+            record->contentHash,recipe,error,restoredFromHistory)) {
       if (record)
         for (auto &entry : terrainAccess_)
           if (entry.source == record->guid) entry.editable = false;
@@ -371,7 +364,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     state_.terrainDraft = std::move(recipe);
     state_.terrainTarget = id;
     terrainSource_ = record->guid;
-    state_.terrainMessage = "Receita carregada · " +
+    state_.terrainMessage = std::string(restoredFromHistory?"Receita recuperada do histórico · aplique para reconstruir · ":"Receita carregada · ") +
                             std::to_string(state_.terrainDraft.strokes.size()) +
                             " operações";
   } else {
@@ -403,7 +396,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
   state_.terrainPage = 0;
   state_.terrainScroll = 0;
   state_.terrainSection = 0;
-  state_.terrainAppliedRecipe = target ? resources::serializeTerrainRecipe(state_.terrainDraft) : std::string{};
+  state_.terrainAppliedRecipe = target && !restoredFromHistory ? resources::serializeTerrainRecipe(state_.terrainDraft) : std::string{};
   if(terrainPreviewCache_ && resources::serializeTerrainRecipe(terrainPreviewCache_->recipe)!=state_.terrainAppliedRecipe) {
     terrainPreviewCache_.reset();state_.terrainPreviewBuild.reset();
   }
@@ -411,9 +404,9 @@ bool EditorSession::openTerrain(EditorEntityId target) {
 }
 bool EditorSession::setTerrainNumber(u32 field, double value) {
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
-      field >= 52)
+      (field >= 52 && field != 60))
     return false;
-  if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28) &&
+  if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28 || field == 60) &&
       (value < 0 || value > 4294967295.0 || std::floor(value) != value))
     return false;
   auto r = state_.terrainDraft;
@@ -506,6 +499,9 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   case 27: b.surfaceDepth=f;break;
   case 28: r.lodLevels=u32(value);break;
   case 29: r.lodRelativeError=f*.01f;break;
+  case 60:
+    if(r.mode!=resources::TerrainMode::Heightfield)return false;
+    r.controlCells=u32(value);break;
   default:
     return false;
   }
@@ -539,7 +535,20 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
   // previous geometry and recipe. A failed publisher cannot alter the old
   // source.
   const auto hash = Sha256::hex(bytes);
-  auto path = "Terrenos/terrain-" + hash.substr(0, 24) + ".glb";
+  // The GLB remains the scene/Undo resource. A separate recipe chain can
+  // reconstruct authoring when its source file is lost or truncated.
+  std::string previousHash;
+  if(const auto *old=assets_.find(terrainSource_)) {
+    resources::TerrainRecipe previousRecipe;
+    bool recovered=false;
+    if(readTerrainAuthoring(files_.rootPath(),old->path,old->contentHash,
+          previousRecipe,error,recovered)) {
+      previousHash=old->contentHash;
+      if(!writeTerrainRecovery(files_.rootPath(),previousHash,previousRecipe,{},error))return false;
+    } else {error="Receita anterior indisponível; revisão preservada.";return false;}
+  }
+  if(!writeTerrainRecovery(files_.rootPath(),hash,r,previousHash,error))return false;
+  auto path = "Terrenos/terrain-" + hash + ".glb";
   ModelImportReport report;
   const auto *known = assets_.findByPath(path);
   if (!known) for (const auto &entry : importedSources_) {
@@ -549,6 +558,9 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
       path = record->path;
       break;
     }
+  }
+  if(known && known->contentHash!=hash) {
+    error="O caminho da revisão pertence a outra fonte; terreno preservado.";return false;
   }
   refreshTerrainBudget();
   if (!known) {
@@ -579,6 +591,22 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
   if (!record) {
     error = "Fonte não registrada.";
     return false;
+  }
+  if(known) {
+    std::filesystem::path absolute;
+    std::vector<u8> current;
+    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),path,absolute)) {
+      error="Caminho da revisão inválido.";return false;
+    }
+    if(!EditorImportTransaction::read(absolute,current,64u<<20) || Sha256::hex(current)!=hash) {
+      std::filesystem::path temporary;
+      if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),path+".aether-tmp",temporary)) {
+        error="Temporário da revisão inválido.";return false;
+      }
+      std::error_code ec;
+      std::filesystem::create_directories(absolute.parent_path(),ec);
+      if(ec || !EditorImportTransaction::write(absolute,bytes,&error))return false;
+    }
   }
   usize before = 0, total = 0;
   const ImportedSource *source = nullptr;
@@ -1200,7 +1228,8 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   if (state_.terrainBusy)
     return true;
   if (id >= widgetId(EditorWidget::TerrainNumberBase) &&
-      id < widgetId(EditorWidget::TerrainNumberBase) + 52) {
+      (id < widgetId(EditorWidget::TerrainNumberBase) + 52 ||
+       id == widgetId(EditorWidget::TerrainNumberBase) + 60)) {
     state_.numericField = id;
     state_.numericEntity = state_.terrainTarget;
     state_.numericInstance = 0;

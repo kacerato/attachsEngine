@@ -23,6 +23,7 @@ struct TerrainUiFixture {
   ui::UiFont font;
   ui::UiIconAtlas icons;
   ui::UiDrawList list;
+  ui::UiFontMetrics metrics;
   ui::UiInputRouter router;
   std::vector<u8> vertices;
   std::vector<u32> indices;
@@ -84,8 +85,8 @@ struct TerrainUiFixture {
   }
   void render() {
     session.update();
-    list.begin(session.screen().surface,
-               font.metrics(ui::UiFontWeight::Regular));
+    metrics=font.metrics(ui::UiFontWeight::Regular);
+    list.begin(session.screen().surface,metrics);
     router.beginFrame();
     editor::buildEditorScreen(session.screen(), editor::editorTheme(), list,
                               router);
@@ -201,6 +202,7 @@ std::set<u32> contentControls(u32 mode, u32 tab, u32 section) {
     result.insert(id(Widget::TerrainIsland));
   } else if (tab == 0) {
     fields(result, {8});
+    if(mode==0)fields(result,{60});
     if (mode != 0)
       fields(result, {7});
     result.insert(id(Widget::TerrainCollision));
@@ -719,4 +721,26 @@ AE_TEST(terrain_path_curve_sliders_preserve_node_order_and_profile_domains) {
   AE_EXPECT_EQ(draft.paths.front().textureProfile[f.session.screen().terrainProfilePoint].y,1.f,"paint opacity remains normalized");
   std::string error;
   AE_EXPECT_TRUE(resources::validTerrainRecipe(draft,error),error.c_str());
+}
+
+AE_TEST(terrain_material_map_resolution_slider_and_precise_entry_survive_reopen) {
+  TerrainUiFixture f(655,300);
+  AE_EXPECT_TRUE(f.ready && f.visit(0,2),"open detail settings on compact layout");
+  const auto cells=f.session.screen().terrainDraft.cells;
+  AE_EXPECT_TRUE(f.slide(60,120.f/504),"independent material map slider is reachable");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,128u,"material resolution follows valid eight-cell steps");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.cells,cells,"material adjustment never changes mesh cells");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,60)),"precise map value remains accessible");
+  AE_EXPECT_EQ(f.session.screen().numericCurrent,128.,"numeric editor opens the actual map value");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"",false),"cancel precise input");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(60,0),"zero preserves legacy evaluation explicitly");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(60,15) && !f.session.setTerrainNumber(60,513),"invalid map steps rejected");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(60,64),"precise entry selects a map resolution");
+  auto recipe=f.session.screen().terrainDraft;recipe.cells=8;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen committed material map");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,64u,"independent map setting persists through GLB");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.cells,8u,"low mesh resolution remains independent");
 }
