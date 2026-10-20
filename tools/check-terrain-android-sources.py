@@ -31,6 +31,7 @@ targets = {
     'upload_context.cpp', 'dirt_road_resources.cpp', 'instanced_renderer.cpp',
     'terrain_history_store.cpp', 'terrain_neighbors.cpp',
     'terrain_surface_asset.cpp', 'terrain_surface_catalog.cpp',
+    'terrain_surface_import.cpp', 'editor_model_publication.cpp',
     'gltf_import.cpp', 'import_cache.cpp', 'editor_session.cpp', 'android_main.cpp',
 }
 commands = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))

@@ -16,4 +16,6 @@ layout(set=0,binding=0) uniform sampler2D textures[];
 // R4: textura de oclusão própria, índice da extensão de material do desenho.
 #define OCCLUSION_MAP(index) textures[index]
 #define TERRAIN_CONTROL_MAP(index) textures[index]
+#define TERRAIN_SURFACE_PBR
+#define TERRAIN_SURFACE_MAP(index) textures[index]
 #include "dirt_road_shading.glsl"

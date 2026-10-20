@@ -43,10 +43,18 @@ struct TerrainSurfaceNoise {
   float scale = 1, strength = 1, fadeStart = 0, fadeEnd = 100;
   TerrainProjection projection = TerrainProjection::LocalTriplanar;
 };
+inline std::array<TerrainSurfaceMap,7> neutralTerrainSurfaceMaps() {
+  std::array<TerrainSurfaceMap,7> maps{};
+  maps[0].channel=maps[6].channel=TerrainSurfaceChannel::RGB;
+  maps[0].linear=maps[6].linear=false;
+  maps[1].channel=TerrainSurfaceChannel::NormalRGB;
+  maps[2].factor=maps[5].factor=maps[6].factor=0;
+  return maps;
+}
 struct TerrainSurfaceVariant {
   AssetGuid identity;
   // albedo, normal, height, AO, roughness, metallic, emission.
-  std::array<TerrainSurfaceMap, 7> maps;
+  std::array<TerrainSurfaceMap, 7> maps=neutralTerrainSurfaceMaps();
   float scale = 1, offsetX = 0, offsetY = 0, rotation = 0;
 };
 // An authoring array entry is referenced by identity, never GPU slice number.
@@ -75,7 +83,7 @@ struct TerrainSurfaceLayer {
   std::string sourcePropertiesJson, sourcePackingJson, sourceResolvedMapsJson;
   bool active = true;
   AssetGuid thumbnail;
-  std::array<TerrainSurfaceMap, 7> maps;
+  std::array<TerrainSurfaceMap, 7> maps=neutralTerrainSurfaceMaps();
   float scaleX = 1, scaleY = 1, offsetX = 0, offsetY = 0, rotation = 0;
   std::array<float, 4> tint{1, 1, 1, 1};
   float saturation = 1;

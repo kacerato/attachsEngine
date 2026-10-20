@@ -3,6 +3,8 @@
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
 #include "renderer/spatial_render_chunks.h"
+#include "renderer/terrain_surface_table.h"
+#include <map>
 
 #include "rhi/shaders/editor_grid_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
@@ -1036,6 +1038,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   }
   // Capacidade fixa no teto do contrato da grade: realocar no meio do laço de
   // quadro obrigaria a reescrever o descritor, e o tamanho aqui é modesto.
+  {
+    rhi::BufferDesc surfaces{};surfaces.sizeBytes=u64(renderer::TerrainSurfaceMaximumRows)*16;
+    surfaces.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;surfaces.cpuAccess=rhi::CpuAccess::SequentialWrite;
+    surfaces.preferDeviceMemory=false;
+    if(!memoryAllocator_->createBuffer(surfaces,&terrainSurfaceTableBuffer_))return false;
+    std::memset(terrainSurfaceTableBuffer_.mappedData(),0,16);
+    if(!memoryAllocator_->flushBuffer(terrainSurfaceTableBuffer_))return false;
+  }
   if(waterSubpassActive_) {
     rhi::BufferDesc ripple{};
     ripple.sizeBytes = static_cast<u64>(renderer::MaximumWaterGridSegments) *
@@ -1070,7 +1080,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[18]{};
+  VkDescriptorSetLayoutBinding bindings[19]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1109,6 +1119,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G6-B: atlas de sombra das luzes locais, com o mesmo sampler de compare.
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
@@ -1117,7 +1128,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
                                     (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 1u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
+                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -1158,7 +1169,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[18]{};
+  VkWriteDescriptorSet writes[19]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1252,6 +1263,9 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[writeCount].pImageInfo = &localShadow;
   ++writeCount;
+  VkDescriptorBufferInfo terrainTable{terrainSurfaceTableBuffer_.handle(),0,terrainSurfaceTableBuffer_.sizeBytes()};
+  writes[writeCount]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,nullptr,environmentSet_,18,0,1,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,nullptr,&terrainTable,nullptr};
+  ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
 }
@@ -1268,18 +1282,20 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
     // O padrão da fonte (oclusão empacotada ou não) vem das flags efetivas do desenho.
     u32 flags = 0;
     const renderer::TerrainControlBinding *control=nullptr;
+    u32 surfaceOffset=0;
     if (draw < dirtRoadResources_.draws().size()) {
       const u32 materialIndex = dirtRoadResources_.draws()[draw].materialIndex;
       if (materialIndex < dirtRoadResources_.materials().size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex], material, textureBase).flags;
       if((flags&renderer::MapMaterialTerrain) && materialIndex<authoredTerrainControls_.size())
         control=&authoredTerrainControls_[materialIndex];
+      if((flags&renderer::MapMaterialTerrain) && materialIndex<authoredTerrainSurfaceOffsets_.size())surfaceOffset=authoredTerrainSurfaceOffsets_[materialIndex];
     }
     u32 controlSlot=renderer::MaterialExtensionNoTexture;
     if(useBindless_ && control && control->textureIndex!=renderer::InvalidMapTexture &&
        control->textureIndex<dirtTextureSlots_.size() && dirtTextureSlots_[control->textureIndex]!=baseTextureIndex_)
       controlSlot=dirtTextureSlots_[control->textureIndex];
-    if (!renderer::needsMaterialExtension(material) && controlSlot==renderer::MaterialExtensionNoTexture) continue;
+    if (!renderer::needsMaterialExtension(material) && controlSlot==renderer::MaterialExtensionNoTexture && !surfaceOffset) continue;
     if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
     // Textura de oclusão própria só existe com descritores bindless: o caminho de
     // fallback tem exatamente quatro samplers por material.
@@ -1301,6 +1317,7 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
     }
     renderer::materialExtensionEntry(material, flags, occlusionSlot,
                                      entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot,control,controlSlot);
+    entries[usize(used)*renderer::MaterialExtensionFloats+58]=float(surfaceOffset);
     authoredUvTransformEntries_[draw] = ++used;
   }
   // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.
@@ -4791,6 +4808,7 @@ void InstancedRenderer::shutdown() {
   environmentSet_ = VK_NULL_HANDLE;
   waterRippleBuffer_.reset();
   materialUvTransformBuffer_.reset();
+  terrainSurfaceTableBuffer_.reset();authoredTerrainSurfaceOffsets_.clear();
   environmentUniform_.reset();
   editorSceneCachedUniform_.clear();editorSceneCacheValid_=false;editorSceneReusedLastFrame_=false;
   indirectBuffer_.reset();
@@ -5083,12 +5101,42 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
                                                 std::span<const renderer::MapMaterialRecord> materials,
                                                 std::span<const renderer::SharedAuthoringTexture> textures,
                                                 const DeformationLibrary &deformation,
-                                                std::span<const renderer::TerrainControlBinding> terrainControls) {
+                                                std::span<const renderer::TerrainControlBinding> terrainControls,
+                                                std::span<const renderer::TerrainSurfaceBinding> terrainSurfaces) {
   if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
     return false;
   }
   if(!terrainControls.empty() && terrainControls.size()!=materials.size())return false;
+  if(!terrainSurfaces.empty() && terrainSurfaces.size()!=materials.size())return false;
+  const bool pbr=std::any_of(terrainSurfaces.begin(),terrainSurfaces.end(),[](const auto &s){return !s.surface.layers.empty();});
+  if(pbr && (!useBindless_ || textures.size()>u64(bindlessRegistry_.capacity()-bindlessRegistry_.allocatedCount())+authoringTextureSlots_.size())) {
+    __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] descritores insuficientes para as texturas PBR originais; publicação recusada.");return false;
+  }
+  const auto prepareRows=[&](std::span<const u32> slots,u32 textureOffset,std::vector<float> &rows,std::vector<u32> &offsets) {
+    std::map<std::vector<float>,u32> shared;offsets.assign(materials.size(),0);
+    for(usize m=0;m<terrainSurfaces.size();++m) {
+      auto surface=terrainSurfaces[m];
+      if(surface.surface.layers.empty())continue;
+      if(!(materials[m].flags&renderer::MapMaterialTerrain))return false;
+      for(auto &t:surface.textures) {
+        if(t.textureIndex>=textures.size() || !textures[t.textureIndex] || textures[t.textureIndex]->srgb==t.linear)return false;
+        t.textureIndex+=textureOffset;
+      }
+      std::vector<float> part;u32 unused=0;std::string reason;
+      if(!renderer::appendTerrainSurfaceTable(surface,slots,part,unused,reason)) {
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] %s",reason.c_str());return false;
+      }
+      if(const auto found=shared.find(part);found!=shared.end()){offsets[m]=found->second;continue;}
+      if(rows.size()+part.size()>usize(renderer::TerrainSurfaceMaximumRows)*4)return false;
+      offsets[m]=u32(rows.size()/4)+1;shared.emplace(part,offsets[m]);rows.insert(rows.end(),part.begin(),part.end());
+    }
+    return true;
+  };
+  std::vector<u32> validationSlots(textures.size());
+  for(u32 i=0;i<validationSlots.size();++i)validationSlots[i]=i;
+  std::vector<float> validationRows;std::vector<u32> validationOffsets;
+  if(!prepareRows(validationSlots,0,validationRows,validationOffsets))return false;
   for(usize m=0;m<terrainControls.size();++m) {
     const auto &control=terrainControls[m];
     if(control.textureIndex==renderer::InvalidMapTexture)continue;
@@ -5131,10 +5179,10 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   if(useBindless_) for(const auto slot:authoringTextureSlots_) bindlessRegistry_.unregisterTexture(slot);
   authoringTextureSlots_.clear();
   dirtRoadResources_.setSamplerAnisotropy(renderingPolicy_.textures.samplerAnisotropy);
-  dirtRoadResources_.setTextureResidencyMipBias(resourceRenderingPolicy_.textures.residencyMipBias);
+  dirtRoadResources_.setTextureResidencyMipBias(pbr?0u:resourceRenderingPolicy_.textures.residencyMipBias);
   // Leituras pedidas para a biblioteca anterior não valem para a nova.
   textureLevelReader_.clear();
-  dirtRoadResources_.setTextureStreamingInitialMip(renderingPolicy_.textures.streaming
+  dirtRoadResources_.setTextureStreamingInitialMip(!pbr && renderingPolicy_.textures.streaming
       ? renderingPolicy_.textures.residencyMipBias+renderingPolicy_.textures.streamingMaxLevelReduction : 0u);
   if(!dirtRoadResources_.rebuildAuthoringLibrary(*rhiDevice_,uploadContext_,vertices,indices,draws,materials,textures,
                                                  deformation.meshLods)) {
@@ -5149,6 +5197,12 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // topologia velha.
   registerAuthoringTextures();
   const auto materialBase=dirtRoadResources_.materials().size()-materials.size();
+  std::vector<float> surfaceRows;std::vector<u32> surfaceOffsets;
+  if(!prepareRows(dirtTextureSlots_,u32(packageTextures),surfaceRows,surfaceOffsets))return false;
+  if(!surfaceRows.empty())std::memcpy(terrainSurfaceTableBuffer_.mappedData(),surfaceRows.data(),surfaceRows.size()*sizeof(float));
+  if(!memoryAllocator_->flushBuffer(terrainSurfaceTableBuffer_))return false;
+  authoredTerrainSurfaceOffsets_.assign(dirtRoadResources_.materials().size(),0);
+  for(usize m=0;m<surfaceOffsets.size();++m)authoredTerrainSurfaceOffsets_[materialBase+m]=surfaceOffsets[m];
   authoredTerrainControls_.assign(dirtRoadResources_.materials().size(),{});
   for(usize m=0;m<terrainControls.size();++m) {
     auto control=terrainControls[m];

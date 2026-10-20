@@ -9,6 +9,7 @@
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
 #include "renderer/terrain_control.h"
+#include "renderer/terrain_surface_binding.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -265,7 +266,8 @@ public:
                                 std::span<const renderer::MapMaterialRecord> materials,
                                 std::span<const renderer::SharedAuthoringTexture> textures = {},
                                 const DeformationLibrary &deformation = {},
-                                std::span<const renderer::TerrainControlBinding> terrainControls = {});
+                                std::span<const renderer::TerrainControlBinding> terrainControls = {},
+                                std::span<const renderer::TerrainSurfaceBinding> terrainSurfaces = {});
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
@@ -597,6 +599,8 @@ private:
   std::vector<renderer::MaterialOverride> authoredMaterials_;
   // Aligned to the complete GPU package's materials, including built-ins.
   std::vector<renderer::TerrainControlBinding> authoredTerrainControls_;
+  std::vector<u32> authoredTerrainSurfaceOffsets_;
+  rhi::VulkanBuffer terrainSurfaceTableBuffer_{};
   struct AuthoredDrawIdentity {
     u64 objectId;
     u32 sourceDrawIndex;
@@ -605,7 +609,7 @@ private:
   std::vector<AuthoredDrawIdentity> authoredDrawIdentities_;
   // R4: tabela de transformações de UV por binding (set=1, binding=16). Só os
   // desenhos que transformam ocupam entrada; o índice+1 vai em materialFlags.z.
-  static constexpr u32 MaterialUvTransformCapacity = 1024;
+  static constexpr u32 MaterialUvTransformCapacity = 16384;
   rhi::VulkanBuffer materialUvTransformBuffer_{};
   std::vector<u32> authoredUvTransformEntries_;
   bool uvTransformOverflowReported_ = false;

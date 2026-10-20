@@ -1,6 +1,14 @@
 # Retomada — 16/10/2026
 
-Continuação atual: [pintura independente na GPU](PINTURA-GPU-2026-10-20.md). Consumidor por fragmento, GLB/cache/publicação e prévia do mapa integrados ao relevo; 128 células como padrão de criação e barra 8–512. 96/96 cenários integrados, 18/18 de texturas e oito modos gráficos na GPU do PC passaram; painel host conferido. 14/14 unidades Android passaram na compilação sintática; sem APK novo e sem ADB. Catálogo/PBR extensível é a próxima dependência real; P11, bloco 1 e os 71 itens continuam abertos.
+Continuação atual: [catálogo e materiais PBR](MATERIAIS-PBR-2026-10-20.md). Catálogo original de 82 materiais selecionável por canal, miniaturas reais no atlas, sete mapas PBR, mistura por altura e UV/triplanar local/mundial com controles por barras. Escala/offset em metros; normais e constantes neutras corrigidas. Reaplicar fonte existente republica a biblioteca canônica antes dos slots dos chunks. PNGs/fontes/propriedades persistem no histórico e em sessão nova; nenhum original foi reduzido.
+
+**102/102 cenários host**, **30 modos GPU reais**, **16/16 unidades Android ARM64 sintáticas**; seis capturas executáveis em 1280×720 e 655×300. 146 PNGs runtime (302.147.871 bytes) conferidos por hash/CRC/dimensões. Atlas/enum sincronizados com 479 entradas em 2048×2452, com alfa opaco somente na prévia UI derivada. Duas asserções condicionais de symlink indisponíveis no Windows. APK 110 permanece anterior; sem novo APK ou ADB.
+
+M01 conserva 32 camadas, mas o controle/render atuais usam quatro; M02–M04 avançaram com consumidores, sujeitos ao aceite completo. M05–M08 continuam sem consumidores completos de ruído/anti-tile/resampling/clusters. Próxima implementação: [especificação M05–M08](PROXIMO-M05-M08-2026-10-20.md). O plano integral de 71 itens e todas as propriedades comprometidas foram preservados; bloco 1 e meta global permanecem abertos.
+
+Publicação desta revisão no site e na branch: registrar a confirmação remota no documento de materiais após o deploy. As revisões abaixo são históricas.
+
+Checkpoint anterior: [pintura independente na GPU](PINTURA-GPU-2026-10-20.md). Consumidor por fragmento, GLB/cache/publicação e prévia do mapa integrados ao relevo; 128 células como padrão de criação e barra 8–512. 96/96 cenários integrados, 18/18 de texturas e oito modos gráficos na GPU do PC passaram; painel host conferido. 14/14 unidades Android passaram na compilação sintática; sem APK novo e sem ADB. Catálogo/PBR extensível é a próxima dependência real; P11, bloco 1 e os 71 itens continuam abertos.
 
 Código funcional `47b4cd6b` publicado; AstraDocs `2f3efbb` publicado, Vercel READY e conteúdo servido pelo domínio conferido. A conferência adicional dos pixels da revisão visível após cold reload passou. Próximo avanço: catálogo original/PBR integrado ao editor e renderer, preservando todos os controles do plano.
 

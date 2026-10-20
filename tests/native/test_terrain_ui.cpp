@@ -25,7 +25,7 @@ struct TerrainUiFixture {
   ui::UiDrawList list;
   ui::UiFontMetrics metrics;
   ui::UiInputRouter router;
-  std::vector<u8> vertices;
+  std::vector<u8> vertices, fontBytes, iconBytes;
   std::vector<u32> indices;
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
@@ -68,7 +68,6 @@ struct TerrainUiFixture {
           out = {draws, materials, vertices, indices};
           return true;
         });
-    std::vector<u8> fontBytes, iconBytes;
     ready = editor::EditorImportTransaction::read(
                 "assets/astra-visual/ui/astra-ui-font.aeuf", fontBytes) &&
             editor::EditorImportTransaction::read(
@@ -743,4 +742,31 @@ AE_TEST(terrain_material_map_resolution_slider_and_precise_entry_survive_reopen)
   AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen committed material map");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,64u,"independent map setting persists through GLB");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.cells,8u,"low mesh resolution remains independent");
+}
+
+AE_TEST(terrain_catalog_touch_selection_sliders_and_vertical_scroll_are_distinct) {
+  TerrainUiFixture f(655,300);
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),
+                 "open actual material library by touch");
+  AE_EXPECT_TRUE(f.session.screen().terrainCatalog && f.session.screen().terrainCatalog->materials.size()==82,
+                 "touch opens real supplied catalog");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogItemBase)),"tap first real material thumbnail");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,2u,"selection opens effectful layer properties");
+  AE_EXPECT_TRUE(f.slide(64,.1f,1),"actual compact scale slider touch");
+  const auto scale=f.session.screen().terrainDraft.surface.layers[0].scaleX;
+  AE_EXPECT_TRUE(scale>20 && scale<21,"scale slider changes authored metre value");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainSliderBase,64+0x100),point),"slider remains touch reachable");
+  const auto before=f.session.screen().terrainScroll;f.time+=1;
+  const ui::UiPoint to{point.x,point.y-70};
+  f.session.handlePointer({94,ui::UiPointerPhase::Down,point,f.time});
+  f.session.handlePointer({94,ui::UiPointerPhase::Move,to,f.time+.1});
+  f.session.handlePointer({94,ui::UiPointerPhase::Up,to,f.time+.2});
+  AE_EXPECT_TRUE(f.session.screen().terrainScroll>before,"vertical drag over bar scrolls properties");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].scaleX,scale,
+               "vertical scroll never edits the slider value");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMaterialMaps)) && f.slide(96,.25f),
+                 "map factor is reachable through actual navigation and touch");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].maps[0].factor-2.f)<.001f,
+                 "map slider updates actual PBR factor");
 }

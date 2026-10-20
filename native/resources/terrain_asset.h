@@ -2,6 +2,8 @@
 #include "core/base.h"
 #include "renderer/terrain_control.h"
 #include "renderer/authoring_texture.h"
+#include "resources/terrain_surface_asset.h"
+#include "resources/terrain_surface_import.h"
 #include <array>
 #include <functional>
 #include <span>
@@ -73,6 +75,7 @@ struct TerrainPath {
   bool operator==(const TerrainPath &) const = default;
 };
 struct TerrainRecipe {
+  TerrainSurfaceAsset surface;
   TerrainMode mode = TerrainMode::Heightfield;
   u32 seed = 1337, cells = 32, verticalCells = 24, octaves = 4;
   float size = 64, height = 16, base = 4, frequency = 3, textureScale = 4;
@@ -159,5 +162,7 @@ bool writeTerrainGlb(const TerrainRecipe &, const TerrainMesh &,
                      std::vector<u8> &, std::string &);
 bool writeTerrainGlb(const TerrainBuild &, const std::array<std::vector<u8>, 4> &textures,
                      std::vector<u8> &, std::string &);
+bool writeTerrainGlb(const TerrainBuild &,const std::array<std::vector<u8>,4> &legacyTextures,
+                     std::span<const TerrainSurfaceImage>,std::vector<u8> &,std::string &);
 bool terrainRecipeFromGlb(std::span<const u8>, TerrainRecipe &, std::string &);
 } // namespace ae::resources

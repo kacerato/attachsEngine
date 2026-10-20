@@ -1254,6 +1254,27 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
     // Antes das fontes reabrirem, a sessão sabe se o aparelho amostra ASTC 4x4.
     shell.editorSession.setImportAstc4x4(shell.instancedRenderer.supportsAstc4x4());
     shell.editorSession.setMaterialCullingAvailable(shell.instancedRenderer.materialCulling());
+    shell.editorSession.setTerrainLibraryReader(
+        [manager=shell.app->activity->assetManager](std::string_view relative,std::vector<ae::u8> &out) {
+          if(relative.empty() || relative.front()=='/' || relative.find('\\')!=std::string_view::npos ||
+              relative.find(':')!=std::string_view::npos)return false;
+          const std::filesystem::path part{std::string(relative)};
+          for(const auto &component:part)if(component==".." || component==".")return false;
+          const auto path="terrain/library/"+std::string(relative);
+          AAsset *asset=AAssetManager_open(manager,path.c_str(),AASSET_MODE_STREAMING);
+          if(!asset)return false;
+          const auto length=AAsset_getLength64(asset);
+          bool ok=length>0 && length<=64*1024*1024;
+          std::vector<ae::u8> bytes;
+          if(ok) {
+            bytes.resize(static_cast<ae::usize>(length));ae::usize at=0;
+            while(at<bytes.size()) {
+              const int count=AAsset_read(asset,bytes.data()+at,std::min<ae::usize>(1u<<20,bytes.size()-at));
+              if(count<=0){ok=false;break;}at+=static_cast<ae::usize>(count);
+            }
+          }
+          AAsset_close(asset);if(ok)out=std::move(bytes);return ok;
+        });
     __android_log_print(ANDROID_LOG_INFO,LogTag,"[Material] culling por material (dupla face): %s.",
                         shell.instancedRenderer.materialCulling()?"sim":"não (aparelho sem estado dinâmico de culling)");
     __android_log_print(ANDROID_LOG_INFO,LogTag,"[Import] KTX2 com mips vira %s.",
@@ -1268,7 +1289,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           const auto &skin=shell.editorSession.skinningPublication();
           if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures,
                   {skin.influences,skin.drawJoints,skin.morphDeltas,skin.drawMorphOffsets,skin.drawMorphTargets,
-                   skin.meshLods},shell.editorSession.terrainControlPublication())) return false;
+                   skin.meshLods},shell.editorSession.terrainControlPublication(),shell.editorSession.terrainSurfacePublication())) return false;
           shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};

@@ -258,7 +258,17 @@ void main() {
         float(textureQueryLevels(BASE_MAP)-1));
   }
   bool terrain=(flags&524288u)!=0u;
-  mediump vec4 baseSample=terrain?terrainSurface():impostor?
+#if defined(TERRAIN_SURFACE_PBR) && defined(TERRAIN_SURFACE_MAP)
+  TerrainPBRResult terrainPbr;
+  terrainPbr.valid=false;
+  if(terrain)terrainPbr=terrainPBRSurface(vPosition,normalize(vNormal));
+#endif
+  mediump vec4 baseSample;
+#if defined(TERRAIN_SURFACE_PBR) && defined(TERRAIN_SURFACE_MAP)
+  if(terrainPbr.valid)baseSample=terrainPbr.color;
+  else
+#endif
+  baseSample=terrain?terrainSurface():impostor?
       textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
   // R4: origem do alfa do material, antes do corte (igual à cobertura e à sombra).
   if(!impostor) baseSample.a=aetherAlphaFromSource(baseSample);
@@ -297,7 +307,7 @@ void main() {
   // defaults. White ORM turned textured conductors into rough bare metal and
   // erased occlusion as the camera crossed the quality band. Preserve the
   // filtered material statistics using the texture's mip chain instead.
-  if(hasMaterialFeature(flags,4u)) {
+  if(!terrain && hasMaterialFeature(flags,4u)) {
     highp vec2 uv=selectedUv(2);
     // Evaluate implicit derivatives before the new per-pixel branch. A full
     // detail sample has weight one; its coarsest mip contributes exactly zero.
@@ -319,7 +329,7 @@ void main() {
   // ambiente e o reflexo do ambiente, nunca a luz direta. `mr` já volta a 1
   // longe da câmera, então a oclusão some junto com o detalhe do mapa.
   mediump float occlusion=((flags&16384u)!=0u && hasMaterialFeature(flags,4u))?mr.r:1.0;
-  if(materialExtension) {
+  if(materialExtension && !terrain) {
     // R4: origem, canal e força da oclusão escolhidos no material (T21).
     highp vec4 occlusionRow=aetherMaterialRow(8u);
     uint occlusionSource=uint(occlusionRow.y+0.5);
@@ -333,6 +343,9 @@ void main() {
     occlusion=occlusionSource==0u?1.0:mix(1.0,sampledOcclusion,clamp(occlusionRow.x,0.0,1.0));
   }
   mediump vec3 n=normalize(vNormal);
+#if defined(TERRAIN_SURFACE_PBR) && defined(TERRAIN_SURFACE_MAP)
+  if(terrainPbr.valid){rough=terrainPbr.roughness;metal=terrainPbr.metallic;occlusion=terrainPbr.occlusion;n=terrainPbr.normalWorld;}
+#endif
   // For regular materials this is optional high-frequency detail. For an
   // impostor the atlas stores the geometry's replacement normal field, so it
   // remains at full weight at distance and prevents a whole crown from sharing
@@ -343,7 +356,7 @@ void main() {
   // inteira ficar preta; sem base válida o detalhe do mapa normal é omitido.
   mediump vec3 tangentAxis=vTangent.xyz-n*dot(n,vTangent.xyz);
   bool worldNormal=((frame.materialFlags.y>>2u)&3u)==2u;
-  if(hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0 &&
+  if(!terrain && hasMaterialFeature(flags,2u) && isolation!=1u && normalDetailWeight>0.0 &&
      (impostor || worldNormal || dot(tangentAxis,tangentAxis)>1.0e-6)) {
     mediump vec3 t=worldNormal?vec3(1,0,0):normalize(tangentAxis);
     mediump vec3 b=worldNormal?vec3(0,1,0):cross(n,t)*(impostor?1.0:vTangent.w);
@@ -412,9 +425,12 @@ void main() {
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);
-  if(hasMaterialFeature(flags,8u) && emissiveDetailWeight>0.0)
+  if(!terrain && hasMaterialFeature(flags,8u) && emissiveDetailWeight>0.0)
     color+=texture(EMISSIVE_MAP,selectedUv(3)).rgb*frame.emissiveFactorStrength.rgb*
         frame.emissiveFactorStrength.a*emissiveDetailWeight;
+#if defined(TERRAIN_SURFACE_PBR) && defined(TERRAIN_SURFACE_MAP)
+  if(terrainPbr.valid)color+=terrainPbr.emission;
+#endif
   // R4: isolar um dado do material na prévia do editor (a sessão só marca fora de Play).
   if(materialExtension) {
     uint isolate=uint(aetherMaterialRow(10u).x+0.5);

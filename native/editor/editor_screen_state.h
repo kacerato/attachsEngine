@@ -1,6 +1,7 @@
 // Estado autoral/transitorio da tela. Nao inclui os IDs nem a API de desenho.
 #pragma once
 #include "resources/terrain_asset.h"
+#include "resources/terrain_surface_catalog.h"
 namespace ae::ui { class UiDrawList; }
 #include <functional>
 
@@ -1154,6 +1155,8 @@ struct EditorScreenState final {
   std::shared_ptr<const resources::TerrainBuild> terrainPreviewBuild;
   EditorEntityId terrainTarget=0;
   resources::TerrainRecipe terrainDraft;
+  std::shared_ptr<const resources::TerrainSurfaceCatalog> terrainCatalog;
+  u32 terrainMaterialView=0,terrainCatalogPage=0,terrainMapRole=0;
   resources::TerrainStroke terrainBrush=[] {
     resources::TerrainStroke brush;
     brush.radius=8;

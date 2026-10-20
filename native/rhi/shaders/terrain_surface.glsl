@@ -1,6 +1,7 @@
 // Terrain surfaces v1/v2. The four bindings are sRGB albedos; COLOR_0 is the
 // normalized fallback splat vector, never vertex tint/opacity. UVs carry local XYZ so
 // moving the terrain does not make the material swim through world space.
+#include "terrain_pbr.glsl"
 float terrainHash(vec2 p) {return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float terrainNoise(vec2 p) {
   vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);

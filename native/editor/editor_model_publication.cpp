@@ -62,6 +62,19 @@ bool persistedRegistry(const std::filesystem::path &root,const resources::AssetR
   return true;
 }
 template<class T>u64 storage(const std::vector<T> &values) {return static_cast<u64>(values.capacity())*sizeof(T);}
+// Surface maps/noise records are inline. Only these authoring containers and
+// provenance strings own allocations beyond their parent records.
+u64 terrainSurfaceStorage(const renderer::TerrainSurfaceBinding &binding) {
+  const auto &surface=binding.surface;
+  u64 bytes=storage(binding.textures)+storage(surface.layers)+storage(surface.antiTileArray.entries);
+  for(const auto &layer:surface.layers) {
+    bytes+=layer.name.capacity()+layer.sourceCatalogId.capacity()+
+        layer.sourcePropertiesJson.capacity()+layer.sourcePackingJson.capacity()+
+        layer.sourceResolvedMapsJson.capacity()+storage(layer.cluster.variants);
+  }
+  return bytes;
+}
+
 }
 
 u64 EditorSession::retainedModelBytes(const ImportedSource &source) {
@@ -79,6 +92,12 @@ u64 EditorSession::retainedModelBytes(const ImportedSource &source) {
       storage(source.terrainControls)+storage(source.identities)+storage(source.names)+storage(source.nodes)+storage(source.drawNodes)+storage(source.map.nodes)+
       storage(source.materialNames)+storage(source.textures)+storage(source.skins)+storage(source.drawSkins)+storage(source.skinInfluences)+
       storage(source.animations)+storage(source.morphs)+storage(source.drawMorphs)+storage(source.textureImages)+storage(source.meshLods)+source.map.sourceHash.capacity();
+  bytes+=storage(source.terrainSurfaces)+storage(source.terrainSurfaceImages);
+  for(const auto &binding:source.terrainSurfaces)bytes+=terrainSurfaceStorage(binding);
+  // Snapshots conservatively count each occurrence. Terrain's aggregate
+  // budget subtracts repeated immutable payload identities across sources.
+  for(const auto &image:source.terrainSurfaceImages)if(image.encoded)
+    bytes+=sizeof(*image.encoded)+image.encoded->capacity();
   for(const auto &name:source.names)bytes+=name.capacity();
   for(const auto &name:source.materialNames)bytes+=name.capacity();
   for(const auto &name:source.textureImages)bytes+=name.capacity();

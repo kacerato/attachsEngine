@@ -1928,7 +1928,8 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
     const auto terrainBase=widgetId(EditorWidget::TerrainNumberBase);
-    if(edit.field>=terrainBase&&(edit.field<terrainBase+52 || edit.field==terrainBase+60)) {
+    if(edit.field>=terrainBase&&(edit.field<terrainBase+52 || edit.field==terrainBase+60 ||
+       (edit.field>=terrainBase+64 && edit.field<=terrainBase+110))) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
       if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(edit.field-terrainBase,number)) {
         state_.numericError=true;state_.status=reason.empty()?"Valor de terreno fora do limite":reason;return false;
@@ -3971,6 +3972,9 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
       auto control=m<source.terrainControls.size()?source.terrainControls[m]:renderer::TerrainControlBinding{};
       if(control.textureIndex!=renderer::InvalidMapTexture)control.textureIndex+=textureBase;
       library.terrainControls.push_back(control);
+      auto surface=m<source.terrainSurfaces.size()?source.terrainSurfaces[m]:renderer::TerrainSurfaceBinding{};
+      for(auto &texture:surface.textures)if(texture.textureIndex!=renderer::InvalidMapTexture)texture.textureIndex+=textureBase;
+      library.terrainSurfaces.push_back(std::move(surface));
     }
     library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
     library.textureSources.insert(library.textureSources.end(),source.textures.size(),source.guid);
@@ -4096,6 +4100,13 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
         streaming[binding.index].streamable=profile.streamingMipmaps;streaming[binding.index].priority=profile.streamingPriority;
       }
   }
+  // Authored terrain maps stay pinned until projected PBR UV demand is
+  // represented by the streaming planner. Preserve original quality.
+  for(const auto &surface:library.terrainSurfaces)for(const auto &map:surface.textures)
+    if(map.textureIndex<streaming.size()) {
+      streaming[map.textureIndex].streamable=false;
+      streaming[map.textureIndex].requestedMip=0;
+    }
   // A source revision is a separate asset, but identical immutable pixels with
   // identical streaming policy need only one GPU image and bindless descriptor.
   // Keep source-local indices intact; remap only the publication transaction.
@@ -4121,6 +4132,12 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   auto materials=library.materials;
   auto terrainControls=library.terrainControls;
+  auto terrainSurfaces=library.terrainSurfaces;
+  if(terrainSurfaces.size()!=materials.size()){diagnostic="Superfícies PBR desalinhadas dos materiais.";return false;}
+  for(auto &surface:terrainSurfaces)for(auto &texture:surface.textures) {
+    if(texture.textureIndex>=textureSlots.size()){diagnostic="Textura PBR fora da biblioteca.";return false;}
+    texture.textureIndex=textureSlots[texture.textureIndex];
+  }
   if(terrainControls.size()!=materials.size()) {
     diagnostic="Mapas de controle desalinhados dos materiais.";return false;
   }
@@ -4134,7 +4151,16 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   for(auto &binding:bindings)binding.index=textureSlots[binding.index];
   textures=std::move(uniqueTextures);streaming=std::move(uniqueStreaming);
+  std::vector<std::pair<u32,renderer::SharedAuthoringTexture>> originalTerrainMaps;
+  for(const auto &surface:terrainSurfaces)for(const auto &map:surface.textures)
+    originalTerrainMaps.emplace_back(map.textureIndex,textures[map.textureIndex]);
   const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
+  for(const auto &[index,original]:originalTerrainMaps)if(original &&
+      (!textures[index] || textures[index]->width!=original->width || textures[index]->height!=original->height ||
+       textures[index]->levels!=original->levels)) {
+    diagnostic="Material do terreno excede o orçamento atual de texturas. Resolução original preservada; publicação cancelada.";
+    return false;
+  }
   // R4 (T16): o que cada textura do projeto ocupa de fato na GPU, depois do perfil e do orçamento.
   std::vector<std::pair<EditorMapScene::TextureBinding,TextureResidency>> publishedResidency;
   for(const auto &binding:bindings)
@@ -4146,6 +4172,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
                         library.drawMorphTargets,library.meshLods};
   terrainControlPublication_=terrainControls;
+  terrainSurfacePublication_=terrainSurfaces;
   const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,materials,textures,published);
   if(accepted) {
     publishedSourceTextureSlots_.assign(textureSlots.begin(),textureSlots.begin()+library.textures.size());
@@ -4154,6 +4181,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   skinningPublication_={};
   terrainControlPublication_={};
+  terrainSurfacePublication_={};
   if(!accepted) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
   }
@@ -4234,7 +4262,10 @@ void EditorSession::collectSourceTextures() {
         if(material>=source.materials.size()) continue;
         const auto &indices=source.materials[material].textureIndices;
         const bool control=material<source.terrainControls.size() && source.terrainControls[material].textureIndex==t;
-        if(control || std::find(std::begin(indices),std::end(indices),t)!=std::end(indices)) entry.meshes.push_back(source.identities[d]);
+        const bool surface=material<source.terrainSurfaces.size() && std::any_of(
+          source.terrainSurfaces[material].textures.begin(),source.terrainSurfaces[material].textures.end(),
+          [t](const auto &map){return map.textureIndex==t;});
+        if(control || surface || std::find(std::begin(indices),std::end(indices),t)!=std::end(indices)) entry.meshes.push_back(source.identities[d]);
       }
       sourceTextures_.push_back(std::move(entry));
     }
@@ -4918,6 +4949,16 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.indices.assign(model.indices.begin(),model.indices.end());
   block.materials.assign(model.materials.begin(),model.materials.end());
   block.terrainControls=model.terrainControls;
+  block.terrainSurfaces=model.terrainSurfaces;
+  block.terrainSurfaceImages=model.terrainSurfaceImages;
+  // Retained source revisions share immutable original PNGs, as well as mips.
+  for(auto &image:block.terrainSurfaceImages)for(const auto &prior:importedSources_) {
+    const auto old=std::find_if(prior.terrainSurfaceImages.begin(),prior.terrainSurfaceImages.end(),[&](const auto &candidate){
+      return image.identity==candidate.identity && image.bytes().size()==candidate.bytes().size() &&
+        std::equal(image.bytes().begin(),image.bytes().end(),candidate.bytes().begin());
+    });
+    if(old!=prior.terrainSurfaceImages.end()){image.encoded=old->encoded;break;}
+  }
   block.draws.assign(model.draws.begin(),model.draws.end());
   block.nodes=model.nodes;
   block.drawNodes=model.drawNodes;

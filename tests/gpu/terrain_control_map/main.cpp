@@ -2,6 +2,7 @@
 // depend on editor state, Android, renderer mocks, image codecs or a window.
 #define VK_NO_PROTOTYPES
 #include "renderer/material_override.h"
+#include "renderer/terrain_surface_table.h"
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -16,42 +17,41 @@
 #else
 #include <dlfcn.h>
 #endif
-#define VK_FUNCTIONS(X)                                                           \
-  X(CreateInstance)                                                               \
-  X(DestroyInstance)                                                              \
-  X(EnumeratePhysicalDevices)                                                     \
-  X(GetPhysicalDeviceProperties)                                                  \
-  X(GetPhysicalDeviceQueueFamilyProperties) X(                                    \
-      GetPhysicalDeviceMemoryProperties) X(CreateDevice) X(DestroyDevice)         \
-      X(GetDeviceQueue) X(CreateBuffer) X(DestroyBuffer) X(                       \
-          GetBufferMemoryRequirements) X(AllocateMemory) X(FreeMemory)            \
-          X(BindBufferMemory) X(MapMemory) X(UnmapMemory) X(CreateImage) X(       \
-              DestroyImage) X(GetImageMemoryRequirements) X(BindImageMemory)      \
-              X(CreateImageView) X(DestroyImageView) X(CreateSampler) X(          \
-                  DestroySampler) X(CreateDescriptorSetLayout)                    \
-                  X(DestroyDescriptorSetLayout) X(CreateDescriptorPool) X(        \
-                      DestroyDescriptorPool) X(AllocateDescriptorSets)            \
-                      X(UpdateDescriptorSets) X(CreateRenderPass) X(              \
-                          DestroyRenderPass) X(CreateFramebuffer)                 \
-                          X(DestroyFramebuffer) X(CreateShaderModule) X(          \
-                              DestroyShaderModule) X(CreatePipelineLayout)        \
-                              X(DestroyPipelineLayout) X(                         \
-                                  CreateGraphicsPipelines) X(DestroyPipeline)     \
-                                  X(CreateCommandPool) X(DestroyCommandPool) X(   \
-                                      AllocateCommandBuffers)                     \
-                                      X(BeginCommandBuffer) X(                    \
-                                          EndCommandBuffer) X(CmdPipelineBarrier) \
-                                          X(CmdCopyBufferToImage) X(              \
-                                              CmdCopyImageToBuffer)               \
-                                              X(CmdBeginRenderPass) X(            \
-                                                  CmdEndRenderPass)               \
-                                                  X(CmdBindPipeline) X(           \
-                                                      CmdBindDescriptorSets)      \
-                                                      X(CmdPushConstants) X(      \
-                                                          CmdDraw)                \
-                                                          X(QueueSubmit) X(       \
-                                                              QueueWaitIdle)      \
-                                                              X(DeviceWaitIdle)
+#define VK_FUNCTIONS(X)                                                        \
+  X(CreateInstance)                                                            \
+  X(DestroyInstance)                                                           \
+  X(EnumeratePhysicalDevices)                                                  \
+  X(GetPhysicalDeviceProperties)                                               \
+  X(GetPhysicalDeviceQueueFamilyProperties)                                    \
+  X(GetPhysicalDeviceMemoryProperties)                                         \
+  X(CreateDevice)                                                              \
+  X(DestroyDevice)                                                             \
+  X(GetDeviceQueue)                                                            \
+  X(CreateBuffer)                                                              \
+  X(DestroyBuffer) X(GetBufferMemoryRequirements) X(AllocateMemory) X(         \
+      FreeMemory) X(BindBufferMemory) X(MapMemory) X(UnmapMemory)              \
+      X(CreateImage) X(DestroyImage) X(GetImageMemoryRequirements) X(          \
+          BindImageMemory) X(CreateImageView) X(DestroyImageView)              \
+          X(CreateSampler) X(DestroySampler) X(CreateDescriptorSetLayout) X(   \
+              DestroyDescriptorSetLayout) X(CreateDescriptorPool)              \
+              X(DestroyDescriptorPool) X(AllocateDescriptorSets) X(            \
+                  UpdateDescriptorSets) X(CreateRenderPass)                    \
+                  X(DestroyRenderPass) X(CreateFramebuffer) X(                 \
+                      DestroyFramebuffer) X(CreateShaderModule)                \
+                      X(DestroyShaderModule) X(CreatePipelineLayout) X(        \
+                          DestroyPipelineLayout) X(CreateGraphicsPipelines)    \
+                          X(DestroyPipeline) X(CreateCommandPool) X(           \
+                              DestroyCommandPool) X(AllocateCommandBuffers)    \
+                              X(BeginCommandBuffer) X(EndCommandBuffer) X(     \
+                                  CmdPipelineBarrier) X(CmdCopyBufferToImage)  \
+                                  X(CmdCopyImageToBuffer) X(                   \
+                                      CmdBeginRenderPass) X(CmdEndRenderPass)  \
+                                      X(CmdBindPipeline)                       \
+                                          X(CmdBindDescriptorSets)             \
+                                              X(CmdPushConstants) X(CmdDraw)   \
+                                                  X(QueueSubmit)               \
+                                                      X(QueueWaitIdle)         \
+                                                          X(DeviceWaitIdle)
 #define DECLARE(name) PFN_vk##name vk##name{};
 VK_FUNCTIONS(DECLARE)
 #undef DECLARE
@@ -294,11 +294,17 @@ int main(int argc, char **argv) {
           "usage: astra_terrain_control_gpu <compiled shader directory>");
   Fixture f;
   constexpr uint32_t width = 32, height = 32, controlWidth = 65;
-  std::array<Image, 5> textures;
-  std::array<std::array<uint8_t, 4>, 4> colors{{{255, 0, 0, 255},
-                                                {0, 255, 0, 255},
-                                                {0, 0, 255, 255},
-                                                {255, 255, 255, 255}}};
+  std::array<Image, 10> textures;
+  std::array<std::array<uint8_t, 4>, 10> colors{{{255, 0, 0, 255},
+                                                 {0, 255, 0, 255},
+                                                 {0, 0, 255, 255},
+                                                 {255, 255, 255, 255},
+                                                 {0, 0, 0, 0},
+                                                 {128, 128, 255, 255},
+                                                 {191, 128, 238, 255},
+                                                 {51, 102, 153, 204},
+                                                 {0, 0, 0, 0},
+                                                 {26, 51, 77, 255}}};
   std::vector<uint8_t> pixels(controlWidth * controlWidth * 4, 0);
   for (uint32_t y = 0; y < controlWidth; ++y)
     for (uint32_t x = 0; x < controlWidth; ++x) {
@@ -318,15 +324,26 @@ int main(int argc, char **argv) {
       }
     }
   auto upload = f.command();
-  for (uint32_t i = 0; i < 5; ++i) {
-    uint32_t n = i == 4 ? controlWidth : 1;
-    uint32_t imageHeight = i == 4 ? controlWidth : 1;
+  std::vector<uint8_t> gradient(controlWidth * controlWidth * 4, 255);
+  for (uint32_t y = 0; y < controlWidth; ++y)
+    for (uint32_t x = 0; x < controlWidth; ++x) {
+      auto p = (y * controlWidth + x) * 4;
+      gradient[p] = uint8_t(x * 255 / 64);
+      gradient[p + 1] = uint8_t(y * 255 / 64);
+      gradient[p + 2] = 0;
+    }
+  for (uint32_t i = 0; i < 10; ++i) {
+    uint32_t n = i == 4 || i == 8 ? controlWidth : 1;
+    uint32_t imageHeight = n;
     textures[i] =
         f.image(n, imageHeight,
                 VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
     auto staging =
         f.buffer(n * imageHeight * 4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
-    std::memcpy(staging.mapped, i == 4 ? pixels.data() : colors[i].data(),
+    std::memcpy(staging.mapped,
+                i == 4   ? pixels.data()
+                : i == 8 ? gradient.data()
+                         : colors[i].data(),
                 n * imageHeight * 4);
     f.transition(
         upload, textures[i], VK_IMAGE_LAYOUT_UNDEFINED,
@@ -347,6 +364,7 @@ int main(int argc, char **argv) {
   constexpr size_t materialBytes =
       ae::renderer::MaterialExtensionFloats * sizeof(float);
   auto rows = f.buffer(materialBytes, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
+  auto surfaceRows = f.buffer(4096, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT);
   auto *row = static_cast<float *>(rows.mapped);
   ae::renderer::TerrainControlBinding control;
   control.uvScale[0] = float(controlWidth - 1) / controlWidth;
@@ -366,11 +384,13 @@ int main(int argc, char **argv) {
   check(vkCreateSampler(f.device, &sci, nullptr, &sampler),
         "create production-repeat sampler");
   VkDescriptorSetLayoutBinding textureBinding{
-      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5,
+      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10,
       VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
-  VkDescriptorSetLayoutBinding rowBinding{16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                          1, VK_SHADER_STAGE_FRAGMENT_BIT,
-                                          nullptr};
+  VkDescriptorSetLayoutBinding rowBindings[]{
+      {16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
+       nullptr},
+      {18, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
+       nullptr}};
   std::array<VkDescriptorSetLayout, 2> layouts;
   VkDescriptorSetLayoutCreateInfo li{
       VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
@@ -378,11 +398,12 @@ int main(int argc, char **argv) {
   li.pBindings = &textureBinding;
   check(vkCreateDescriptorSetLayout(f.device, &li, nullptr, &layouts[0]),
         "texture layout");
-  li.pBindings = &rowBinding;
+  li.bindingCount = 2;
+  li.pBindings = rowBindings;
   check(vkCreateDescriptorSetLayout(f.device, &li, nullptr, &layouts[1]),
         "material row layout");
-  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 5},
-                               {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1}};
+  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 10},
+                               {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
   VkDescriptorPoolCreateInfo dpi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   dpi.maxSets = 2;
   dpi.poolSizeCount = 2;
@@ -398,17 +419,18 @@ int main(int argc, char **argv) {
   std::array<VkDescriptorSet, 2> sets;
   check(vkAllocateDescriptorSets(f.device, &dai, sets.data()),
         "descriptor sets");
-  std::array<VkDescriptorImageInfo, 5> infos;
-  for (size_t i = 0; i < 5; ++i)
+  std::array<VkDescriptorImageInfo, 10> infos;
+  for (size_t i = 0; i < 10; ++i)
     infos[i] = {sampler, textures[i].view,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo rinfo{rows.handle, 0, materialBytes};
-  std::array<VkWriteDescriptorSet, 2> writes{};
+  VkDescriptorBufferInfo sinfo{surfaceRows.handle, 0, 4096};
+  std::array<VkWriteDescriptorSet, 3> writes{};
   for (auto &w : writes)
     w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = sets[0];
   writes[0].dstBinding = 0;
-  writes[0].descriptorCount = 5;
+  writes[0].descriptorCount = 10;
   writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[0].pImageInfo = infos.data();
   writes[1].dstSet = sets[1];
@@ -416,7 +438,10 @@ int main(int argc, char **argv) {
   writes[1].descriptorCount = 1;
   writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
   writes[1].pBufferInfo = &rinfo;
-  vkUpdateDescriptorSets(f.device, 2, writes.data(), 0, nullptr);
+  writes[2] = writes[1];
+  writes[2].dstBinding = 18;
+  writes[2].pBufferInfo = &sinfo;
+  vkUpdateDescriptorSets(f.device, 3, writes.data(), 0, nullptr);
   VkAttachmentDescription attachment{};
   attachment.format = VK_FORMAT_R8G8B8A8_UNORM;
   attachment.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -463,10 +488,11 @@ int main(int argc, char **argv) {
         "pipeline layout");
   std::string directory = argv[1];
   VkShaderModule vert = shader(f.device, directory + "/control.vert.spv");
-  std::array<VkPipeline, 2> pipelines;
-  for (size_t i = 0; i < 2; ++i) {
-    auto frag = shader(
-        f.device, directory + (i ? "/fallback.frag.spv" : "/control.frag.spv"));
+  std::array<VkPipeline, 3> pipelines;
+  for (size_t i = 0; i < 3; ++i) {
+    auto frag = shader(f.device, directory + (i == 2 ? "/pbr.frag.spv"
+                                              : i    ? "/fallback.frag.spv"
+                                                     : "/control.frag.spv"));
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
     for (auto &s : stages)
       s.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
@@ -528,7 +554,29 @@ int main(int argc, char **argv) {
         require(false, label);
       }
   };
-  for (uint32_t mode = 0; mode < 8; ++mode) {
+  for (uint32_t mode = 0; mode < 30; ++mode) {
+    if (mode == 29) {
+      auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+      const uint8_t negativeZ[4]{128, 128, 0, 255};
+      std::memcpy(staging.mapped, negativeZ, 4);
+      auto update = f.command();
+      f.transition(
+          update, textures[6], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+          VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+          VK_PIPELINE_STAGE_TRANSFER_BIT);
+      VkBufferImageCopy copy{};
+      copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+      copy.imageExtent = {1, 1, 1};
+      vkCmdCopyBufferToImage(update, staging.handle, textures[6].handle,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+      f.transition(update, textures[6], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT,
+                   VK_PIPELINE_STAGE_TRANSFER_BIT,
+                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+      f.submit(update);
+    }
     if (mode >= 6) {
       const float span = float(controlWidth - 1) / controlWidth;
       control.uvScale[0] = .5f * span;
@@ -540,6 +588,142 @@ int main(int argc, char **argv) {
           ae::renderer::MaterialExtensionNoTexture, row,
           ae::renderer::MaterialExtensionNoTexture, &control, 4);
     }
+    if (mode >= 8) {
+      using namespace ae::resources;
+      using namespace ae::renderer;
+      TerrainSurfaceBinding binding;
+      binding.localMetersPerUv = 1;
+      TerrainSurfaceLayer layer;
+      layer.identity = {11, 1};
+      layer.projection = TerrainProjection::UV;
+      auto mapSlot = [&](TerrainSurfaceMap &map, uint32_t slot,
+                         TerrainSurfaceChannel channel) {
+        map.texture = {22, slot + 1};
+        map.channel = channel;
+        map.linear = true;
+        map.factor = 1;
+      };
+      mapSlot(layer.maps[0], 0, TerrainSurfaceChannel::RGB);
+      mapSlot(layer.maps[1], 5, TerrainSurfaceChannel::NormalRGB);
+      mapSlot(layer.maps[2], 7, TerrainSurfaceChannel::A);
+      mapSlot(layer.maps[3], 7, TerrainSurfaceChannel::B);
+      mapSlot(layer.maps[4], 7, TerrainSurfaceChannel::R);
+      layer.maps[4].remapMin = .1f;
+      layer.maps[4].remapMax = .9f;
+      layer.maps[4].invert = true;
+      layer.maps[4].factor = .5f;
+      mapSlot(layer.maps[5], 7, TerrainSurfaceChannel::G);
+      layer.maps[5].factor = .5f;
+      mapSlot(layer.maps[6], 9, TerrainSurfaceChannel::RGB);
+      layer.maps[6].factor = .5f;
+      if (mode == 8) {
+        layer.saturation = 0;
+        layer.tint = {.5f, 1, 1, 1};
+      }
+      if (mode == 12) {
+        mapSlot(layer.maps[0], 8, TerrainSurfaceChannel::RGB);
+        layer.scaleX = 2;
+        layer.scaleY = .5f;
+        layer.rotation = 90;
+        layer.offsetX = 1.25f;
+        layer.offsetY = .25f;
+      }
+      if (mode == 28) {
+        mapSlot(layer.maps[0], 8, TerrainSurfaceChannel::RGB);
+        layer.scaleX = 2;
+        layer.scaleY = .5f;
+        layer.offsetX = .5f;
+        layer.offsetY = .25f;
+      }
+      if (mode == 18 || mode == 19) {
+        mapSlot(layer.maps[0], 8, TerrainSurfaceChannel::RGB);
+        layer.projection = mode == 18 ? TerrainProjection::LocalTriplanar
+                                      : TerrainProjection::WorldTriplanar;
+      }
+      if (mode == 21) {
+        mapSlot(layer.maps[0], 3, TerrainSurfaceChannel::RGB);
+        auto &m = layer.maps[0];
+        m.colorRemapMin = {.1f, .2f, .3f, .4f};
+        m.colorRemapMax = {.8f, .7f, .6f, .9f};
+        m.colorFactor = {.5f, .5f, .5f, 1};
+        m.factor = .5f;
+        m.invert = true;
+      }
+      if (mode == 16 || mode == 17) {
+        mapSlot(layer.maps[1], 6, TerrainSurfaceChannel::NormalRGB);
+        if (mode == 17)
+          layer.maps[1].factor = 0;
+      }
+      if (mode == 29) {
+        mapSlot(layer.maps[1], 6, TerrainSurfaceChannel::NormalRGB);
+        layer.maps[1].factor = 0;
+      }
+      if (mode == 22)
+        mapSlot(layer.maps[1], 6, TerrainSurfaceChannel::NormalRG);
+      if (mode == 25) {
+        auto &heightMap = layer.maps[2];
+        heightMap.texture = {};
+        heightMap.factor = .35f;
+        heightMap.remapMin = .2f;
+        heightMap.remapMax = .8f;
+        heightMap.invert = true;
+      }
+      if (mode == 26) {
+        auto &rough = layer.maps[4];
+        rough.texture = {};
+        rough.remapMin = .2f;
+        rough.remapMax = .8f;
+      }
+      if (mode == 27) {
+        layer.maps[2].texture = {};
+        layer.maps[2].factor = 0;
+        layer.maps[6].texture = {};
+        layer.maps[6].factor = 0;
+      }
+      binding.surface.layers.push_back(layer);
+      if (mode == 13 || mode == 15) {
+        auto second = layer;
+        second.identity = {11, 2};
+        mapSlot(second.maps[0], 1, TerrainSurfaceChannel::RGB);
+        if (mode == 13) {
+          binding.surface.layers[0].heightBlend = true;
+          binding.surface.layers[0].heightWidth = .2f;
+          binding.surface.layers[0].maps[2].channel = TerrainSurfaceChannel::R;
+          second.heightBlend = true;
+          second.heightWidth = .2f;
+        }
+        if (mode == 15)
+          binding.surface.layers[0].active = false;
+        binding.surface.layers.push_back(second);
+      }
+      for (auto &authored : binding.surface.layers)
+        for (size_t role = 0; role < 7; ++role) {
+          auto &map = authored.maps[role];
+          if (map.texture.valid())
+            binding.textures.push_back({map.texture, role == 1 || map.linear,
+                                        role == 1,
+                                        uint32_t(map.texture.low - 1)});
+        }
+      std::array<ae::u32, 10> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+      std::vector<float> published;
+      ae::u32 offset = 0;
+      std::string error;
+      std::string cold;
+      require(serializeTerrainSurface(binding.surface, cold, error),
+              error.c_str());
+      TerrainSurfaceAsset restored;
+      require(deserializeTerrainSurface(cold, restored, error), error.c_str());
+      binding.surface = std::move(restored);
+      require(
+          appendTerrainSurfaceTable(binding, slots, published, offset, error),
+          error.c_str());
+      require(published.size() * sizeof(float) <= 4096,
+              "surface table fixture fits storage");
+      std::memcpy(surfaceRows.mapped, published.data(),
+                  published.size() * sizeof(float));
+      row[13 * 4] = 0;
+      row[14 * 4 + 2] = float(offset);
+    }
     auto cmd = f.command();
     VkClearValue clear{};
     VkRenderPassBeginInfo bi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
@@ -550,7 +734,7 @@ int main(int argc, char **argv) {
     bi.pClearValues = &clear;
     vkCmdBeginRenderPass(cmd, &bi, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      pipelines[mode == 5]);
+                      pipelines[mode >= 8 ? 2 : mode == 5]);
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout, 0, 2, sets.data(), 0, nullptr);
     vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4,
@@ -600,6 +784,63 @@ int main(int argc, char **argv) {
       expectPixel(16, colors[1], "asymmetric scale and XY offsets hit stripe");
     else if (mode == 7)
       expectPixel(16, colors[0], "asymmetric Y scale and offset leave stripe");
+    else if (mode == 8)
+      expectPixel(16, {27, 54, 54, 255}, "PBR albedo tint and saturation");
+    else if (mode == 9 || mode == 17)
+      expectPixel(16, {128, 255, 128, 255},
+                  "neutral normal and zero normal strength");
+    else if (mode == 10 || mode == 23)
+      expectPixel(16, {94, 51, 153, 255},
+                  "packed roughness remap/invert metal and AO");
+    else if (mode == 11)
+      expectPixel(16, {13, 26, 39, 204},
+                  "emission RGB factor and height alpha mapping");
+    else if (mode == 12)
+      expectPixel(16, {119, 227, 0, 255},
+                  "meter tiling rotation offset real gradient texture");
+    else if (mode == 13 || mode == 15)
+      expectPixel(16, colors[1], "height blend or active-layer normalization");
+    else if (mode == 14)
+      expectPixel(16, {37, 218, 128, 255},
+                  "neutral normal on rotated nonuniform geometry");
+    else if (mode == 16)
+      expectPixel(16, {191, 238, 128, 255},
+                  "normal texture changes world-space lighting normal");
+    else if (mode == 18)
+      expectPixel(16, {132, 132, 0, 255},
+                  "local triplanar uses stored local meters");
+    else if (mode == 19)
+      expectPixel(16, {6, 140, 0, 255},
+                  "world triplanar uses transformed world meters");
+    else if (mode == 20)
+      expectPixel(16, colors[0],
+                  "ordinary PBR layer without advanced features");
+    else if (mode == 21)
+      expectPixel(16, {13, 19, 26, 13},
+                  "RGBA remap inversion and color factors");
+    else if (mode == 22)
+      expectPixel(16, {191, 238, 128, 255},
+                  "two-channel normal reconstructs positive Z");
+    else if (mode == 24) {
+      auto *p = static_cast<uint8_t *>(readback.mapped) + (16 * width + 16) * 4;
+      require(p[0] > 178 && p[0] < 255 && p[1] == 0 && p[2] == 0,
+              "macro color variation changes albedo only");
+    } else if (mode == 25)
+      expectPixel(
+          16, {13, 26, 39, 18},
+          "authored constant height applies remap inversion and factor");
+    else if (mode == 26)
+      expectPixel(16, {26, 51, 153, 255},
+                  "constant roughness applies remap inversion and factor");
+    else if (mode == 27)
+      expectPixel(16, {0, 0, 0, 0},
+                  "neutral missing height and emission remain zero");
+    else if (mode == 28)
+      expectPixel(16, {129, 135, 0, 255},
+                  "meter offsets divide by asymmetric tile sizes");
+    else if (mode == 29)
+      expectPixel(16, {128, 255, 128, 255},
+                  "zero strength neutralizes even negative-Z normal texture");
     else
       expectPixel(16, colors[0],
                   mode == 3   ? "closed side keeps vertex weights"

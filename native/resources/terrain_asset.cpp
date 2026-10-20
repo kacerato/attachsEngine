@@ -1,4 +1,6 @@
 #include "resources/terrain_asset.h"
+#include "resources/terrain_surface_texture_refs.h"
+#include "resources/terrain_png_integrity.h"
 #include "resources/terrain_vertex_index.h"
 #include "resources/shared_decoded_texture.h"
 #include <algorithm>
@@ -264,13 +266,14 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
       return false;
     }
   }
+  if(!r.surface.layers.empty() && !validTerrainSurface(r.surface,error))return false;
   error.clear();
   return true;
 }
 std::string serializeTerrainRecipe(const TerrainRecipe &r) {
   std::ostringstream s;
   s.imbue(std::locale::classic());
-  s << std::setprecision(9) << "AETERRAIN7 " << u32(r.mode) << ' ' << r.seed
+  s << std::setprecision(9) << "AETERRAIN8 " << u32(r.mode) << ' ' << r.seed
     << ' ' << r.cells << ' ' << r.verticalCells << ' ' << r.octaves << ' '
     << r.size << ' ' << r.height << ' ' << r.base << ' ' << r.frequency << ' '
     << r.textureScale << ' ' << r.island << ' ' << r.collision << ' '
@@ -297,6 +300,9 @@ std::string serializeTerrainRecipe(const TerrainRecipe &r) {
     s << ' ' << p.followTerrain;
   }
   s << ' ' << r.lodLevels << ' ' << r.lodRelativeError << ' ' << r.controlCells;
+  std::string surface,error;
+  if(!r.surface.layers.empty() && !serializeTerrainSurface(r.surface,surface,error))return {};
+  s << ' ' << (surface.empty()?"-":terrainSurfaceHex(surface));
   return s.str();
 }
 bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
@@ -314,7 +320,7 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
   if (!(s >> magic >> mode >> r.seed >> r.cells >> r.verticalCells >>
         r.octaves >> r.size >> r.height >> r.base >> r.frequency >>
         r.textureScale >> r.island >> r.collision) ||
-      (magic.size()!=10 || magic.substr(0,9)!="AETERRAIN" || magic[9]<'1' || magic[9]>'7')) {
+      (magic.size()!=10 || magic.substr(0,9)!="AETERRAIN" || magic[9]<'1' || magic[9]>'8')) {
     error = "Receita de terreno inválida.";
     return false;
   }
@@ -368,6 +374,11 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
   }
   if(version>=6 && !(s>>r.lodLevels>>r.lodRelativeError)){error="Configuração de LOD truncada.";return false;}
   if(version>=7 && !(s>>r.controlCells)){error="Resolução do mapa truncada.";return false;}
+  if(version>=8) {
+    std::string token,surface;
+    if(!(s>>token))return false;
+    if(token!="-" && (!terrainSurfaceUnhex(token,surface) || !deserializeTerrainSurface(surface,r.surface,error)))return false;
+  }
   s >> std::ws;
   if (!s.eof()) {
     error = "Dados extras na receita.";
@@ -1269,7 +1280,7 @@ static std::vector<u8> terrainControlPng(const renderer::AuthoringTexture &textu
 }
 static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
                      const std::array<std::vector<u8>, 4> &textures,
-                     std::vector<u8> &out, std::string &error,const TerrainField *prepared) {
+                     std::vector<u8> &out, std::string &error,const TerrainField *prepared,std::span<const TerrainSurfaceImage> surfaceImages={}) {
   if (!validTerrainRecipe(r, error) || mesh.parts.empty() ||
       mesh.triangles > 200000)
     return false;
@@ -1301,6 +1312,30 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
                        "0.42,0.27,0.15,1", "0.52,0.43,0.3,1"};
   const bool blended=r.blendedSurface && std::all_of(textures.begin(),textures.end(),[](const auto &t){return !t.empty();});
   const bool control=blended && r.mode==TerrainMode::Heightfield && r.controlCells;
+  const bool surface=!r.surface.layers.empty();
+  if(surface && !blended){error="Terrain surface export requires four legacy fallback textures.";return false;}
+  std::vector<const TerrainSurfaceImage *> selectedImages;
+  std::ostringstream surfaceMetadata;
+  surfaceMetadata.imbue(std::locale::classic());surfaceMetadata<<std::setprecision(9);
+  if(surface) {
+    std::string encoded;
+    if(!serializeTerrainSurface(r.surface,encoded,error))return false;
+    surfaceMetadata << ",\"surfaceRecipe\":\"" << terrainSurfaceHex(encoded) << "\",\"localMetersPerUv\":" << r.textureScale << ",\"surfaceImages\":[";
+    for(const auto &ref:terrainSurfaceTextureRefs(r.surface)) {
+      if(std::any_of(selectedImages.begin(),selectedImages.end(),[&](const auto *image){return image->identity==ref.identity;}))continue;
+      const TerrainSurfaceImage *found=nullptr;
+      for(const auto &image:surfaceImages)if(image.identity==ref.identity) {
+        if(found){error="Duplicate terrain surface image identity.";return false;}found=&image;
+      }
+      if(!found || !validTerrainPng(found->bytes())) {
+        error="Terrain surface requires original lossless PNG images for every reference.";return false;
+      }
+      if(!selectedImages.empty())surfaceMetadata << ',';
+      surfaceMetadata << "{\"identity\":\"" << ref.identity.text() << "\",\"index\":" << 4+u32(control)+selectedImages.size() << '}';
+      selectedImages.push_back(found);
+    }
+    surfaceMetadata << ']';
+  }
   TerrainField generatedField;
   const TerrainField *controlField=prepared;
   if(control && prepared) {
@@ -1333,7 +1368,8 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
       materials << ",\"baseColorFactor\":[" << colors[i] << ']';
     materials << "}";
     if(blended) {
-      materials << ",\"extras\":{\"astraTerrainSurface\":" << (control?2:1) << ",\"grassTexture\":{\"index\":0},\"rockTexture\":{\"index\":1},\"soilTexture\":{\"index\":2},\"pathTexture\":{\"index\":3}";
+      materials << ",\"extras\":{\"astraTerrainSurface\":" << (surface?3:control?2:1) << ",\"grassTexture\":{\"index\":0},\"rockTexture\":{\"index\":1},\"soilTexture\":{\"index\":2},\"pathTexture\":{\"index\":3}";
+      if(surface)materials << surfaceMetadata.str();
       if(control) {
         const float scale=r.textureScale*float(r.controlCells)/(float(r.controlCells+1)*r.size);
         materials << ",\"controlTexture\":{\"index\":4},\"controlUvScale\":[" << scale << ',' << scale
@@ -1349,6 +1385,11 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
     const auto png=terrainControlPng(*texture);const u32 v=view(png.data(),png.size(),0);
     images << ",{\"bufferView\":" << v << ",\"mimeType\":\"image/png\"}";
     tex << ",{\"source\":" << imageCount++ << ",\"sampler\":1}";
+  }
+  for(const auto *image:selectedImages) {
+    const u32 v=view(image->bytes().data(),image->bytes().size(),0);
+    images << ",{\"bufferView\":" << v << ",\"mimeType\":\"image/png\"}";
+    tex << ",{\"source\":" << imageCount++ << ",\"sampler\":0}";
   }
   for (usize i = 0; i < mesh.parts.size(); ++i) {
     const auto &p = mesh.parts[i];
@@ -1444,6 +1485,10 @@ bool writeTerrainGlb(const TerrainRecipe &r,const TerrainMesh &mesh,
 bool writeTerrainGlb(const TerrainBuild &build,const std::array<std::vector<u8>,4> &textures,
                      std::vector<u8> &out,std::string &error) {
   return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field);
+}
+bool writeTerrainGlb(const TerrainBuild &build,const std::array<std::vector<u8>,4> &textures,
+                     std::span<const TerrainSurfaceImage> images,std::vector<u8> &out,std::string &error) {
+  return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field,images);
 }
 bool terrainRecipeFromGlb(std::span<const u8> b, TerrainRecipe &out,
                           std::string &error) {

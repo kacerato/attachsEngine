@@ -1,6 +1,8 @@
 #include "resources/shared_decoded_texture.h"
 #include "resources/import_cache.h"
 #include "core/sha256.h"
+#include "resources/terrain_surface_texture_refs.h"
+#include "resources/terrain_png_integrity.h"
 
 #include <algorithm>
 #include <cmath>
@@ -18,6 +20,36 @@ constexpr char kImageMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'M', 'G'};
 constexpr u32 kCounterCount = 22;
 constexpr char kTerrainControlMagic[8]{'A', 'S', 'T', 'R', 'A', 'T', 'C', '1'};
 constexpr u32 kTerrainControlVersion = 1;
+constexpr char kTerrainSurfaceMagic[8]{'A','S','T','R','A','T','S','1'};
+bool validTerrainSurfaces(const GltfImport &model) {
+  if(model.terrainSurfaces.empty())return true;
+  if(model.terrainSurfaces.size()!=model.materials.size())return false;
+  for(usize m=0;m<model.terrainSurfaces.size();++m) {
+    const auto &binding=model.terrainSurfaces[m];std::string error;
+    if((!binding.surface.layers.empty() && !validTerrainSurface(binding.surface,error)) || !std::isfinite(binding.localMetersPerUv) ||
+       binding.localMetersPerUv<=0 || binding.localMetersPerUv>256)return false;
+    const auto refs=terrainSurfaceTextureRefs(binding.surface);
+    if(refs.size()!=binding.textures.size())return false;
+    if(!binding.surface.layers.empty() && !(model.materials[m].flags&renderer::MapMaterialTerrain))return false;
+    for(usize i=0;i<refs.size();++i) {
+      const auto &ref=refs[i];const auto &entry=binding.textures[i];
+      if(entry.identity!=ref.identity || entry.linear!=ref.linear || entry.normal!=ref.normal || entry.textureIndex>=model.textures.size())return false;
+      const auto &texture=model.textures[entry.textureIndex];
+      if(!texture || !texture->valid() || texture->format!=renderer::AuthoringTextureRgba8 || texture->srgb==entry.linear)return false;
+      u32 levels=1;for(u32 w=texture->width,h=texture->height;w>1||h>1;w=std::max(1u,w/2),h=std::max(1u,h/2))++levels;
+      if(texture->levels!=levels)return false;
+      if(std::none_of(model.terrainSurfaceImages.begin(),model.terrainSurfaceImages.end(),[&](const auto &image){return image.identity==entry.identity;}))return false;
+    }
+  }
+  u64 encodedBytes=0;
+  for(usize i=0;i<model.terrainSurfaceImages.size();++i) {
+    const auto &image=model.terrainSurfaceImages[i];
+    if(!image.identity.valid() || !validTerrainPng(image.bytes()))return false;
+    encodedBytes+=image.bytes().size();if(encodedBytes>256*1048576)return false;
+    for(usize j=0;j<i;++j)if(model.terrainSurfaceImages[j].identity==image.identity)return false;
+  }
+  return true;
+}
 
 bool validTerrainControls(const GltfImport &model) {
   if (model.terrainControls.empty())
@@ -113,9 +145,9 @@ struct Reader {
     raw(&value, sizeof value);
     return value;
   }
-  std::string text() {
+  std::string text(usize maximum=0xffffffffu) {
     const u32 size = u32v();
-    if (!ok || size > in.size() - at) {
+    if (!ok || size > maximum || size > in.size() - at) {
       ok = false;
       return {};
     }
@@ -197,7 +229,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
                       std::vector<u64> *textureOffsets) {
   if (textureOffsets) textureOffsets->clear();
   out.clear();
-  if (!validTerrainControls(model)) return false;
+  if (!validTerrainControls(model) || !validTerrainSurfaces(model)) return false;
   if (key.empty() || model.nodes.empty() || (model.draws.empty()&&model.animations.empty())) return false;
   // This is a derived glTF cache, not the editable clip resource format.
   // Refuse authoring curves rather than discarding keys, IDs and handles.
@@ -333,6 +365,18 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     }
   }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
+  if(!model.terrainSurfaces.empty()) {
+    writer.raw(kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic);writer.u32v(1);writer.u32v(u32(model.terrainSurfaces.size()));
+    for(const auto &binding:model.terrainSurfaces) {
+      std::string text,error;if(!binding.surface.layers.empty() && !serializeTerrainSurface(binding.surface,text,error))return false;
+      writer.text(text);writer.raw(&binding.localMetersPerUv,sizeof(float));writer.u32v(u32(binding.textures.size()));
+      for(const auto &entry:binding.textures) {
+        writer.raw(&entry.identity,sizeof entry.identity);writer.u32v(entry.linear);writer.u32v(entry.normal);writer.u32v(entry.textureIndex);
+      }
+    }
+    writer.u32v(u32(model.terrainSurfaceImages.size()));
+    for(const auto &image:model.terrainSurfaceImages){writer.raw(&image.identity,sizeof image.identity);writer.u64v(image.bytes().size());writer.raw(image.bytes().data(),image.bytes().size());}
+  }
   writer.raw(kMagic, sizeof kMagic);
   return true;
 }
@@ -546,6 +590,36 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     }
     if (!reader.ok || !validTerrainControls(model))
       return refuse();
+  }
+  if(reader.ok && bytes.size()-reader.at>=sizeof kTerrainSurfaceMagic &&
+      std::memcmp(bytes.data()+reader.at,kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic)==0) {
+    reader.at+=sizeof kTerrainSurfaceMagic;
+    if(reader.u32v()!=1)return refuse();const u32 count=reader.u32v();
+    if(!reader.ok || count!=model.materials.size() || count>(bytes.size()-reader.at)/12)return refuse();
+    model.terrainSurfaces.resize(count);
+    for(auto &binding:model.terrainSurfaces) {
+      const auto text=reader.text(1024*1024);std::string error;
+      if(!reader.ok || (!text.empty() && !deserializeTerrainSurface(text,binding.surface,error)))return refuse();
+      reader.raw(&binding.localMetersPerUv,sizeof(float));const u32 refs=reader.u32v();
+      if(!reader.ok || refs>(bytes.size()-reader.at)/28 || refs>4096)return refuse();
+      binding.textures.resize(refs);
+      for(auto &entry:binding.textures) {
+        reader.raw(&entry.identity,sizeof entry.identity);const u32 linear=reader.u32v(),normal=reader.u32v();
+        if(linear>1 || normal>1)return refuse();entry.linear=linear!=0;entry.normal=normal!=0;entry.textureIndex=reader.u32v();
+      }
+    }
+    const u32 images=reader.u32v();
+    if(!reader.ok || images>4096 || images>(bytes.size()-reader.at)/24)return refuse();
+    model.terrainSurfaceImages.resize(images);
+    u64 encodedBytes=0;
+    for(auto &image:model.terrainSurfaceImages) {
+      reader.raw(&image.identity,sizeof image.identity);const u64 size=reader.u64v();
+      if(!reader.ok || size>64*1048576 || size>bytes.size()-reader.at || encodedBytes+size>256*1048576)return refuse();
+      encodedBytes+=size;std::vector<u8> data;data.resize(usize(size));
+      if(!reader.raw(data.data(),data.size()))return refuse();
+      image.encoded=std::make_shared<const std::vector<u8>>(std::move(data));
+    }
+    if(!reader.ok || !validTerrainSurfaces(model))return refuse();
   }
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||

@@ -2375,6 +2375,744 @@
     "terrain/brush-axes": {
       "source": "vector/terrain/brush-axes.svg",
       "generator": "tools/generate-terrain-authoring-icons.py"
+    },
+    "zz-terrain-material/material-000": {
+      "category": "zz-terrain-material",
+      "name": "material-000",
+      "label": "layer_Sand and Rocks",
+      "raster": "../../../terrain/library/thumbnails/987f24d7ec5be16caee4c822b7c12039cbbcf855d99fd9739df787de510460ca.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "2c15fa1c5f2e84d4cb5639da6acdeed9"
+    },
+    "zz-terrain-material/material-001": {
+      "category": "zz-terrain-material",
+      "name": "material-001",
+      "label": "layer_Cliff",
+      "raster": "../../../terrain/library/thumbnails/01fca7b4379083ad4782415bf9f060044f4a158a766e07f841f40371f6eec75f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "496367f095928f44994c336d5a4ac797"
+    },
+    "zz-terrain-material/material-002": {
+      "category": "zz-terrain-material",
+      "name": "material-002",
+      "label": "layer_Grass and Clover",
+      "raster": "../../../terrain/library/thumbnails/cc84378a13d90374869b32e5c45f796197ec0f814e8894d6c20259a9ca8697f6.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "5b8ae2f8c0c78a84ca0d97b05588e022"
+    },
+    "zz-terrain-material/material-003": {
+      "category": "zz-terrain-material",
+      "name": "material-003",
+      "label": "SandLayer",
+      "raster": "../../../terrain/library/thumbnails/0173d1dc39f4780eac478fadabad783a24ed9edebf8453c43e7d57b3c04405a1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "0834ef114040a42ffb0acb7095171e9a"
+    },
+    "zz-terrain-material/material-004": {
+      "category": "zz-terrain-material",
+      "name": "material-004",
+      "label": "RoughRockLayer",
+      "raster": "../../../terrain/library/thumbnails/aecc753b41f8090840cfd6655c5b069bd159a3f5d5a5b3d39c625bafb2cb8a42.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "1d06ead0f1f64485f9d6ada38156ddbe"
+    },
+    "zz-terrain-material/material-005": {
+      "category": "zz-terrain-material",
+      "name": "material-005",
+      "label": "DirtLayer",
+      "raster": "../../../terrain/library/thumbnails/ec626297c2ebfa587585d42b65ca67aaf02890441bdcccfb3eb934416e1d3a15.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "5254a2672ae194b228033c789d8c7483"
+    },
+    "zz-terrain-material/material-006": {
+      "category": "zz-terrain-material",
+      "name": "material-006",
+      "label": "PeblesLayer",
+      "raster": "../../../terrain/library/thumbnails/d07a64fd47509214f1c3358261e07bac5151507226c11cf5b6865a82f8dba05d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "5b08584f6c0e04eff9a30802c044ab42"
+    },
+    "zz-terrain-material/material-007": {
+      "category": "zz-terrain-material",
+      "name": "material-007",
+      "label": "GroundDirtLayer",
+      "raster": "../../../terrain/library/thumbnails/960e3b8a54c2b11bbcee63f4aa52e57de996ac3f9ca18cdd3419daaa5315c916.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "7c23f2696de0b467dbc1787987a466d7"
+    },
+    "zz-terrain-material/material-008": {
+      "category": "zz-terrain-material",
+      "name": "material-008",
+      "label": "StonesLayer",
+      "raster": "../../../terrain/library/thumbnails/2ef1830afe8e28927b0dc2d3ac7604888c46ec111e5baa92c9f03dcb7e8420bd.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "949e4052ee4224438995c649cc58b085"
+    },
+    "zz-terrain-material/material-009": {
+      "category": "zz-terrain-material",
+      "name": "material-009",
+      "label": "GrassLayer",
+      "raster": "../../../terrain/library/thumbnails/60e62d6bd654c16d5537ff2c0b77ef02484dfbc3f15f867e93a07edcdceed2b5.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "c737bd5e3ecf74be2b9e3b557f792e07"
+    },
+    "zz-terrain-material/material-010": {
+      "category": "zz-terrain-material",
+      "name": "material-010",
+      "label": "microsplat_layer_Cliff_bright_0",
+      "raster": "../../../terrain/library/thumbnails/6b929b7b52c2e9221471309e596af9e355a0ff9ad287dc59ef2c7a2d83b71bf2.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "0c7fc5590597d7d4bb4d9b79edb53847"
+    },
+    "zz-terrain-material/material-011": {
+      "category": "zz-terrain-material",
+      "name": "material-011",
+      "label": "CliffBright",
+      "raster": "../../../terrain/library/thumbnails/6b929b7b52c2e9221471309e596af9e355a0ff9ad287dc59ef2c7a2d83b71bf2.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "240ea90774073d84cb4ef9b3c461e28c"
+    },
+    "zz-terrain-material/material-012": {
+      "category": "zz-terrain-material",
+      "name": "material-012",
+      "label": "microsplat_layer_YellowGrass_3",
+      "raster": "../../../terrain/library/thumbnails/21d8d4debb2ad9c17403f5b9ea599eeaefd2ea0c54263a1667b877b7e6ba4911.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "2a94bb3c3f1c48544870d19ba52a0f5b"
+    },
+    "zz-terrain-material/material-013": {
+      "category": "zz-terrain-material",
+      "name": "material-013",
+      "label": "CliffRed",
+      "raster": "../../../terrain/library/thumbnails/1a438df092b36645f3e7070af5f245772fb5a49961cfb79d26722cefd016471b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "3185de1f46d009e48b933908c89757e5"
+    },
+    "zz-terrain-material/material-014": {
+      "category": "zz-terrain-material",
+      "name": "material-014",
+      "label": "Gravel",
+      "raster": "../../../terrain/library/thumbnails/0628881729681f3d7d7843d9cbb506758a96f7f3c1d3fbd0aa567bb9d041eed8.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "4afee262bdd7c9c4aa3935aa1f3f39e7"
+    },
+    "zz-terrain-material/material-015": {
+      "category": "zz-terrain-material",
+      "name": "material-015",
+      "label": "microsplat_layer_GreenGrass_2",
+      "raster": "../../../terrain/library/thumbnails/756735bf5c000f23dea49bb29a2e014bbcb3a446b88cef4aff70662be2a0fa92.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "4fc9b315dbcf6634ba32674e2e5e0f1c"
+    },
+    "zz-terrain-material/material-016": {
+      "category": "zz-terrain-material",
+      "name": "material-016",
+      "label": "Snow",
+      "raster": "../../../terrain/library/thumbnails/e1a57fc75335d3862fc599da4e21cfc1f1ce09bda0006b2d921cb6263048c57a.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "659a6b9d07c116a4599fe24a08162ff2"
+    },
+    "zz-terrain-material/material-017": {
+      "category": "zz-terrain-material",
+      "name": "material-017",
+      "label": "Dirt",
+      "raster": "../../../terrain/library/thumbnails/7c2d521837a0bd35484dba632aae90f030d487fd96bb1ffd13d9afeff1071c76.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "73bb5bb99ad813244ac63ea164bf8583"
+    },
+    "zz-terrain-material/material-018": {
+      "category": "zz-terrain-material",
+      "name": "material-018",
+      "label": "SandCracks",
+      "raster": "../../../terrain/library/thumbnails/4e8e221e8f009414706bea4b9944f776e280b802e85ea68f8d7b58134ddea29e.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "7732cc8dee1912c49a1360eadcaff136"
+    },
+    "zz-terrain-material/material-019": {
+      "category": "zz-terrain-material",
+      "name": "material-019",
+      "label": "CliffPink",
+      "raster": "../../../terrain/library/thumbnails/62b950687106c46ca187e801241291055520eff135e4a4b29f57bea3cacd2389.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "7c17b19db75f2d444a47cc02d70b12b5"
+    },
+    "zz-terrain-material/material-020": {
+      "category": "zz-terrain-material",
+      "name": "material-020",
+      "label": "microsplat_layer_Cliff_dark_1",
+      "raster": "../../../terrain/library/thumbnails/4b3a8d7da656b7e94813aab15237192c6a47d16682a41d3d5778edaa88ed8471.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a6c2bf31cb37aaa408d48374718d5a40"
+    },
+    "zz-terrain-material/material-021": {
+      "category": "zz-terrain-material",
+      "name": "material-021",
+      "label": "GrassGreen",
+      "raster": "../../../terrain/library/thumbnails/756735bf5c000f23dea49bb29a2e014bbcb3a446b88cef4aff70662be2a0fa92.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "af8a2f819cbf6644fbe743f8a2b4f952"
+    },
+    "zz-terrain-material/material-022": {
+      "category": "zz-terrain-material",
+      "name": "material-022",
+      "label": "CliffDark",
+      "raster": "../../../terrain/library/thumbnails/4b3a8d7da656b7e94813aab15237192c6a47d16682a41d3d5778edaa88ed8471.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "cf3df7d7519ee014ebecbfe99c6cab3a"
+    },
+    "zz-terrain-material/material-023": {
+      "category": "zz-terrain-material",
+      "name": "material-023",
+      "label": "GrassYellow",
+      "raster": "../../../terrain/library/thumbnails/21d8d4debb2ad9c17403f5b9ea599eeaefd2ea0c54263a1667b877b7e6ba4911.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "dbd5cac43e2888e42b956cba46f3d44f"
+    },
+    "zz-terrain-material/material-024": {
+      "category": "zz-terrain-material",
+      "name": "material-024",
+      "label": "Sand",
+      "raster": "../../../terrain/library/thumbnails/7c1869abcf7f345df7f1066073d983282d365ece5377a174f6da17d4ab33f359.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "e39b942f8ed869c40ad7372f683af5c0"
+    },
+    "zz-terrain-material/material-025": {
+      "category": "zz-terrain-material",
+      "name": "material-025",
+      "label": "microsplat_layer_cliff_albedo_3",
+      "raster": "../../../terrain/library/thumbnails/97c0195440043c157ea85f0444a820bb9dc363c8cb42ef6cce2c92dbe3148d1b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "1a7d200b262d144d39064958a60ee57d"
+    },
+    "zz-terrain-material/material-026": {
+      "category": "zz-terrain-material",
+      "name": "material-026",
+      "label": "microsplat_layer_sand_albedo_2",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "36976c097639e406d84c4126bb6488c0"
+    },
+    "zz-terrain-material/material-027": {
+      "category": "zz-terrain-material",
+      "name": "material-027",
+      "label": "wasteland_01_diff",
+      "raster": "../../../terrain/library/thumbnails/239d809cf75d6761d7041c9806f6e62ea25e2a60acecdb2d37f39b9207549d40.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "599a05ad31353478dbec09d8a30b19ab-sourceTextures-0"
+    },
+    "zz-terrain-material/material-028": {
+      "category": "zz-terrain-material",
+      "name": "material-028",
+      "label": "sand_albedo",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "599a05ad31353478dbec09d8a30b19ab-sourceTextures-1"
+    },
+    "zz-terrain-material/material-029": {
+      "category": "zz-terrain-material",
+      "name": "material-029",
+      "label": "shore_sand_03_diff",
+      "raster": "../../../terrain/library/thumbnails/7395b2f7c5b109f3df6e81572b1b99d0f6119210d3e30b55c3e9246c9575a3d9.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "599a05ad31353478dbec09d8a30b19ab-sourceTextures-2"
+    },
+    "zz-terrain-material/material-030": {
+      "category": "zz-terrain-material",
+      "name": "material-030",
+      "label": "wasteland_03_diff",
+      "raster": "../../../terrain/library/thumbnails/6894ac5ffece50e09209c66333ba1c77ae7451fd20f9e47d50b51f74f4bbc8a3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "599a05ad31353478dbec09d8a30b19ab-sourceTextures-3"
+    },
+    "zz-terrain-material/material-031": {
+      "category": "zz-terrain-material",
+      "name": "material-031",
+      "label": "packed_ground_albedo",
+      "raster": "../../../terrain/library/thumbnails/a21c11032504af6af04796ad4e631390767da9b84eb2f2a78fd978b0e94e70d1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "599a05ad31353478dbec09d8a30b19ab-sourceTextures-4"
+    },
+    "zz-terrain-material/material-032": {
+      "category": "zz-terrain-material",
+      "name": "material-032",
+      "label": "microsplat_layer_sand_albedo_0",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "5bf7e886830f642199a4c388645bcd54"
+    },
+    "zz-terrain-material/material-033": {
+      "category": "zz-terrain-material",
+      "name": "material-033",
+      "label": "microsplat_layer_shore_sand_albedo_0",
+      "raster": "../../../terrain/library/thumbnails/2fb7694bb6c0a0dc60bd3cf1c21ba598dbc0ec1b14d2c40a26df2fbc4726ffd5.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "70da6022e6c6b4272859c69d93deddf5"
+    },
+    "zz-terrain-material/material-034": {
+      "category": "zz-terrain-material",
+      "name": "material-034",
+      "label": "microsplat_layer_rock_cliff_albedo_2",
+      "raster": "../../../terrain/library/thumbnails/830326fd602187bcc49b199b34d62ca52fbea43b6f4ef1ef606364e8b5973eb3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "84a907e30c9a844bc99356a8500ba8b9"
+    },
+    "zz-terrain-material/material-035": {
+      "category": "zz-terrain-material",
+      "name": "material-035",
+      "label": "sand_albedo",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "8a4a63f5c487f4d78a641fedb4432025-sourceTextures-0"
+    },
+    "zz-terrain-material/material-036": {
+      "category": "zz-terrain-material",
+      "name": "material-036",
+      "label": "shore_sand_01_diff",
+      "raster": "../../../terrain/library/thumbnails/88487e71db91d40f5bede3e29239a4f1fc1d8ac1cee4d0c14a3ab8d14722a378.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-0"
+    },
+    "zz-terrain-material/material-037": {
+      "category": "zz-terrain-material",
+      "name": "material-037",
+      "label": "moss_01_diff",
+      "raster": "../../../terrain/library/thumbnails/a5a165aef8213cf8612959fa1b3a61ae6a0144187dab163135768381329f7f49.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-1"
+    },
+    "zz-terrain-material/material-038": {
+      "category": "zz-terrain-material",
+      "name": "material-038",
+      "label": "rock_cliff_02_diff",
+      "raster": "../../../terrain/library/thumbnails/a5843e56eff9296d3b8427c78bc8285c3b7c70ad5d0d3a5db9af705fb0d79d7e.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-2"
+    },
+    "zz-terrain-material/material-039": {
+      "category": "zz-terrain-material",
+      "name": "material-039",
+      "label": "wasteland_01_diff",
+      "raster": "../../../terrain/library/thumbnails/239d809cf75d6761d7041c9806f6e62ea25e2a60acecdb2d37f39b9207549d40.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-3"
+    },
+    "zz-terrain-material/material-040": {
+      "category": "zz-terrain-material",
+      "name": "material-040",
+      "label": "moss_01_diff",
+      "raster": "../../../terrain/library/thumbnails/a5a165aef8213cf8612959fa1b3a61ae6a0144187dab163135768381329f7f49.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-4"
+    },
+    "zz-terrain-material/material-041": {
+      "category": "zz-terrain-material",
+      "name": "material-041",
+      "label": "one",
+      "raster": "../../../terrain/library/thumbnails/a4b8d4a265408e590207b5da57e1114d48021c20edff53e7ea80628e8d0cbe1b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures-5"
+    },
+    "zz-terrain-material/material-042": {
+      "category": "zz-terrain-material",
+      "name": "material-042",
+      "label": "shore_sand_02_diff",
+      "raster": "../../../terrain/library/thumbnails/914cec6297dd0406c6e5d1873b9e9219050b89e7b498df184f8df9853317625d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-0"
+    },
+    "zz-terrain-material/material-043": {
+      "category": "zz-terrain-material",
+      "name": "material-043",
+      "label": "moss_02_diff",
+      "raster": "../../../terrain/library/thumbnails/4cb3e45595cffada79d934d91fa086d0cdc045ad60c72a06b349cfaad957e9fa.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-1"
+    },
+    "zz-terrain-material/material-044": {
+      "category": "zz-terrain-material",
+      "name": "material-044",
+      "label": "rock_cliff_03_diff",
+      "raster": "../../../terrain/library/thumbnails/4e3ac464adf5eb1a084e5ddd3843f6ca447ace414bff04a477edec0cd4a36e2c.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-2"
+    },
+    "zz-terrain-material/material-045": {
+      "category": "zz-terrain-material",
+      "name": "material-045",
+      "label": "wasteland_02_diff",
+      "raster": "../../../terrain/library/thumbnails/d7046a7dc92dabde0e563723d7ec05150742dbb0dccf609230e4f068cbc34fc3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-3"
+    },
+    "zz-terrain-material/material-046": {
+      "category": "zz-terrain-material",
+      "name": "material-046",
+      "label": "shore_sand_02_diff",
+      "raster": "../../../terrain/library/thumbnails/914cec6297dd0406c6e5d1873b9e9219050b89e7b498df184f8df9853317625d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-4"
+    },
+    "zz-terrain-material/material-047": {
+      "category": "zz-terrain-material",
+      "name": "material-047",
+      "label": "two",
+      "raster": "../../../terrain/library/thumbnails/f0a5f1c5db4b73bbdabbe1675049f2bf348208a2f0da5f3ce5122c36f07e1d86.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures2-5"
+    },
+    "zz-terrain-material/material-048": {
+      "category": "zz-terrain-material",
+      "name": "material-048",
+      "label": "shore_sand_03_diff",
+      "raster": "../../../terrain/library/thumbnails/7395b2f7c5b109f3df6e81572b1b99d0f6119210d3e30b55c3e9246c9575a3d9.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-0"
+    },
+    "zz-terrain-material/material-049": {
+      "category": "zz-terrain-material",
+      "name": "material-049",
+      "label": "moss_03_diff",
+      "raster": "../../../terrain/library/thumbnails/804b819288d13b622ea3ef535d3a1c95416d22e75e9d82af71a3715457473766.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-1"
+    },
+    "zz-terrain-material/material-050": {
+      "category": "zz-terrain-material",
+      "name": "material-050",
+      "label": "rock_cliff_04_diff",
+      "raster": "../../../terrain/library/thumbnails/a331c9b70a859cdf557a26f4a9717487a8fed67bb44ac1118c17d3e101bba621.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-2"
+    },
+    "zz-terrain-material/material-051": {
+      "category": "zz-terrain-material",
+      "name": "material-051",
+      "label": "wasteland_03_diff",
+      "raster": "../../../terrain/library/thumbnails/6894ac5ffece50e09209c66333ba1c77ae7451fd20f9e47d50b51f74f4bbc8a3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-3"
+    },
+    "zz-terrain-material/material-052": {
+      "category": "zz-terrain-material",
+      "name": "material-052",
+      "label": "wasteland_02_diff",
+      "raster": "../../../terrain/library/thumbnails/d7046a7dc92dabde0e563723d7ec05150742dbb0dccf609230e4f068cbc34fc3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-4"
+    },
+    "zz-terrain-material/material-053": {
+      "category": "zz-terrain-material",
+      "name": "material-053",
+      "label": "three",
+      "raster": "../../../terrain/library/thumbnails/4a1ac43792c3c8ba41f47d938efd5c763930c4a2ba61a142b640e5774c3518b3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "91af24ec082dd4325bc31efe6e195d9b-sourceTextures3-5"
+    },
+    "zz-terrain-material/material-054": {
+      "category": "zz-terrain-material",
+      "name": "material-054",
+      "label": "microsplat_layer_packed_ground_albedo_3",
+      "raster": "../../../terrain/library/thumbnails/a21c11032504af6af04796ad4e631390767da9b84eb2f2a78fd978b0e94e70d1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "9748d811b8da34febb57b3d2942cd6ef"
+    },
+    "zz-terrain-material/material-055": {
+      "category": "zz-terrain-material",
+      "name": "material-055",
+      "label": "shore_sand_albedo",
+      "raster": "../../../terrain/library/thumbnails/2fb7694bb6c0a0dc60bd3cf1c21ba598dbc0ec1b14d2c40a26df2fbc4726ffd5.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a708a7a73fb534bf0ac7cc83a706c5b8-sourceTextures-0"
+    },
+    "zz-terrain-material/material-056": {
+      "category": "zz-terrain-material",
+      "name": "material-056",
+      "label": "moss_albedo",
+      "raster": "../../../terrain/library/thumbnails/9a03ebc2100a529c3f7c72a74dae235b3a612a815c28a3b32ffff8584692708d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a708a7a73fb534bf0ac7cc83a706c5b8-sourceTextures-1"
+    },
+    "zz-terrain-material/material-057": {
+      "category": "zz-terrain-material",
+      "name": "material-057",
+      "label": "rock_cliff_albedo",
+      "raster": "../../../terrain/library/thumbnails/830326fd602187bcc49b199b34d62ca52fbea43b6f4ef1ef606364e8b5973eb3.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a708a7a73fb534bf0ac7cc83a706c5b8-sourceTextures-2"
+    },
+    "zz-terrain-material/material-058": {
+      "category": "zz-terrain-material",
+      "name": "material-058",
+      "label": "cliff_albedo",
+      "raster": "../../../terrain/library/thumbnails/97c0195440043c157ea85f0444a820bb9dc363c8cb42ef6cce2c92dbe3148d1b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a708a7a73fb534bf0ac7cc83a706c5b8-sourceTextures-3"
+    },
+    "zz-terrain-material/material-059": {
+      "category": "zz-terrain-material",
+      "name": "material-059",
+      "label": "sand_albedo",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "bf3a0b42d3937423c8ca9be46bdf118c-sourceTextures-0"
+    },
+    "zz-terrain-material/material-060": {
+      "category": "zz-terrain-material",
+      "name": "material-060",
+      "label": "packed_ground_albedo",
+      "raster": "../../../terrain/library/thumbnails/a21c11032504af6af04796ad4e631390767da9b84eb2f2a78fd978b0e94e70d1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "bf3a0b42d3937423c8ca9be46bdf118c-sourceTextures-1"
+    },
+    "zz-terrain-material/material-061": {
+      "category": "zz-terrain-material",
+      "name": "material-061",
+      "label": "sand_albedo",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "bf3a0b42d3937423c8ca9be46bdf118c-sourceTextures-2"
+    },
+    "zz-terrain-material/material-062": {
+      "category": "zz-terrain-material",
+      "name": "material-062",
+      "label": "packed_ground_albedo",
+      "raster": "../../../terrain/library/thumbnails/a21c11032504af6af04796ad4e631390767da9b84eb2f2a78fd978b0e94e70d1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "bf3a0b42d3937423c8ca9be46bdf118c-sourceTextures-3"
+    },
+    "zz-terrain-material/material-063": {
+      "category": "zz-terrain-material",
+      "name": "material-063",
+      "label": "microsplat_layer_moss_albedo_1",
+      "raster": "../../../terrain/library/thumbnails/9a03ebc2100a529c3f7c72a74dae235b3a612a815c28a3b32ffff8584692708d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "c3bac167ca01d4f22a16c823a8d521bf"
+    },
+    "zz-terrain-material/material-064": {
+      "category": "zz-terrain-material",
+      "name": "material-064",
+      "label": "microsplat_layer_sand_albedo_0",
+      "raster": "../../../terrain/library/thumbnails/7588d4b6621e26a767c410ef25a6ed0a250c691721ad0175cf081a83f074143f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "d0e4c8f75f00a4db7befe0f2c4af4e41"
+    },
+    "zz-terrain-material/material-065": {
+      "category": "zz-terrain-material",
+      "name": "material-065",
+      "label": "microsplat_layer_packed_ground_albedo_1",
+      "raster": "../../../terrain/library/thumbnails/a21c11032504af6af04796ad4e631390767da9b84eb2f2a78fd978b0e94e70d1.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "e6bf4f487ce274c61a86c73ba2fd9d30"
+    },
+    "zz-terrain-material/material-066": {
+      "category": "zz-terrain-material",
+      "name": "material-066",
+      "label": "3DH FTT Path_001 ForestGround_001 2K",
+      "raster": "../../../terrain/library/thumbnails/f1ce745d0b87a0bf110bef442c4ba98d9e3cf4dacaf31f0b5921d2028acba27b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "058c378e3d8ae5147b586cfd9ed90642"
+    },
+    "zz-terrain-material/material-067": {
+      "category": "zz-terrain-material",
+      "name": "material-067",
+      "label": "3DH FTT Path_001 Sand_001 2K",
+      "raster": "../../../terrain/library/thumbnails/f191b69f8d9be1033625f26f3d8072bde444b7d67dd3096a1c8cb750a8389660.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "096629a7a845a2a47a0ee4f132297e46"
+    },
+    "zz-terrain-material/material-068": {
+      "category": "zz-terrain-material",
+      "name": "material-068",
+      "label": "3DH FTT ForestGround_001 2K",
+      "raster": "../../../terrain/library/thumbnails/6ea90bb893b2deea3ef55b2c49c514c75604fd4bcc117def9480f0600ce71d97.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "18c7b58197507ef4e9775ed38cfdd237"
+    },
+    "zz-terrain-material/material-069": {
+      "category": "zz-terrain-material",
+      "name": "material-069",
+      "label": "3DH FTT Path_001 2K",
+      "raster": "../../../terrain/library/thumbnails/dc449f8f5639e5b7d8d3678aefc2a78e804b04ae7b8ebe87415ba88184e727b7.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "1ae6add2660c6474ea66e14ef55e1eb8"
+    },
+    "zz-terrain-material/material-070": {
+      "category": "zz-terrain-material",
+      "name": "material-070",
+      "label": "3DH FTT Dirt_002a 1K",
+      "raster": "../../../terrain/library/thumbnails/cb18d05bcb555250d0dca25604d681af701a41e6a8f8fe46770db21a25f9e548.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "1c548c274efc6a94aa3277bb888fdedf"
+    },
+    "zz-terrain-material/material-071": {
+      "category": "zz-terrain-material",
+      "name": "material-071",
+      "label": "3DH FTT Rocks_001 2K",
+      "raster": "../../../terrain/library/thumbnails/57081effd4b3f7967c72b5bc718afa45401372b7cd3893bd5aa44e3236118569.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "1dce6618155fb0e4a966f3bade6289e6"
+    },
+    "zz-terrain-material/material-072": {
+      "category": "zz-terrain-material",
+      "name": "material-072",
+      "label": "3DH FTT Rocks_001_Mossy 2K",
+      "raster": "../../../terrain/library/thumbnails/aaaa374aa0e60a2914e8a8ff94bbd8b3870b2ac4b311227caef14a515cdb486f.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "439c4439e1dac814eaa1e7063ba05690"
+    },
+    "zz-terrain-material/material-073": {
+      "category": "zz-terrain-material",
+      "name": "material-073",
+      "label": "stdSand",
+      "raster": "../../../terrain/library/thumbnails/0c757b55e178796a3f5b0068b14daff1d37417add4bc56269840a043401bef4b.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "44446ae64202373419ba40aea479fe46"
+    },
+    "zz-terrain-material/material-074": {
+      "category": "zz-terrain-material",
+      "name": "material-074",
+      "label": "3DH FTT Cliff_001 4K",
+      "raster": "../../../terrain/library/thumbnails/88096300aa45a9f914956f415c7c3ceec1f2546221d5fd0f415e7bf2c724ab4c.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "62f32ed3f3ed6b94d9e53022156fec6d"
+    },
+    "zz-terrain-material/material-075": {
+      "category": "zz-terrain-material",
+      "name": "material-075",
+      "label": "3DH FTT ForestGround_001 Grass_002 2K",
+      "raster": "../../../terrain/library/thumbnails/9c8b53020d24754d667695054b793af6a7608c86f6ece74085fc73c5c9755704.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "73383c9e0898a01498e63939cf62781c"
+    },
+    "zz-terrain-material/material-076": {
+      "category": "zz-terrain-material",
+      "name": "material-076",
+      "label": "stdGrassHill",
+      "raster": "../../../terrain/library/thumbnails/842d445bc4df19c423763a20d4640b08b087fd31380c1811613155c19d6e3c9d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a5f951ac6d48fed49a2ac7abf3463bb1"
+    },
+    "zz-terrain-material/material-077": {
+      "category": "zz-terrain-material",
+      "name": "material-077",
+      "label": "3DH FTT Path_001 Abandoned_004 2K",
+      "raster": "../../../terrain/library/thumbnails/4b9c765d516ad03acaf4201d74c572079811c88d8644ed04b3d25a003aa77ad9.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "a6c74887df014f84ca113b4e44b4898a"
+    },
+    "zz-terrain-material/material-078": {
+      "category": "zz-terrain-material",
+      "name": "material-078",
+      "label": "3DH FTT Grass_002 Grass_001a 2K",
+      "raster": "../../../terrain/library/thumbnails/8a9cb7dc73342d923df746586fb4f5f8833397c6189d86bb131978c454f990c4.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "d07ab0945c1b30a4f80f7dc8df0c7567"
+    },
+    "zz-terrain-material/material-079": {
+      "category": "zz-terrain-material",
+      "name": "material-079",
+      "label": "3DH FTT Sand_001 1K",
+      "raster": "../../../terrain/library/thumbnails/0a88be9588aa1deb69cb335971da605bc4e7b2f86377167208fe3a13dd423a5a.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "d69026617a177274fbedc2d457858b3e"
+    },
+    "zz-terrain-material/material-080": {
+      "category": "zz-terrain-material",
+      "name": "material-080",
+      "label": "stdCliff",
+      "raster": "../../../terrain/library/thumbnails/a4ccbbfaf3b87c7d6ccdfe50583e294c904301e4a3c4ddd17199432801183a6c.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "db64acfd79d82b342a96e45d0852bc4f"
+    },
+    "zz-terrain-material/material-081": {
+      "category": "zz-terrain-material",
+      "name": "material-081",
+      "label": "stdMudRocky",
+      "raster": "../../../terrain/library/thumbnails/bf4c24361a8aee2ece826d9042a528964ca6e7ff8e81362183e36604c36d61c4.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "source_catalog_id": "fdc173a0089b17741a2a83f811b18b1d"
     }
   },
   "unmapped": []

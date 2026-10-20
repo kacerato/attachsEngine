@@ -2,10 +2,104 @@
 #include "resources/gltf_import.h"
 #include "resources/terrain_asset.h"
 #include "resources/terrain_textures.generated.h"
+#include "resources/import_cache.h"
+#include "resources/terrain_surface_import.h"
+#include "resources/terrain_png_integrity.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 using namespace ae;
+AE_TEST(terrain_surface_v3_recipe_glb_cache_and_role_views_are_lossless) {
+  using namespace resources;std::string error;
+  TerrainRecipe r;r.cells=8;r.controlCells=32;r.height=0;r.textureScale=7;
+  const auto imageId=assetGuidFromSeed("terrain-surface-original");
+  TerrainSurfaceLayer layer;layer.identity=assetGuidFromSeed("terrain-surface-layer");layer.name="Layer with provenance";
+  layer.sourceCatalogId="catalog/source";layer.sourcePropertiesJson="{\"gain\":0.37}";
+  layer.sourcePackingJson="{\"normal\":\"RGB\"}";layer.sourceResolvedMapsJson="{\"original\":true}";
+  layer.maps[0].texture=imageId;layer.maps[0].channel=TerrainSurfaceChannel::RGB;layer.maps[0].linear=false;
+  layer.maps[1].texture=imageId;layer.maps[1].channel=TerrainSurfaceChannel::NormalRGB;layer.maps[1].linear=true;
+  layer.maps[4].texture=imageId;layer.maps[4].linear=true;
+  layer.detailNoise.enabled=true;layer.detailNoise.map.texture=imageId;layer.detailNoise.strength=.37f;
+  layer.resampleAlbedo=true;layer.resampleScale=.7f;layer.tint={.7f,.8f,.9f,1};
+  r.surface.layers={layer};r.surface.normalNoise[2].enabled=true;r.surface.normalNoise[2].map=layer.maps[1];
+  TerrainRecipe reopened;const auto recipe=serializeTerrainRecipe(r);
+  AE_EXPECT_TRUE(deserializeTerrainRecipe(recipe,reopened,error),error.c_str());
+  AE_EXPECT_EQ(serializeTerrainRecipe(reopened),recipe,"recipe eight preserves every nested surface property");
+  const std::array<std::vector<u8>,4> legacy{{
+    {std::begin(terrainTexture0),std::end(terrainTexture0)},
+    {std::begin(terrainTexture1),std::end(terrainTexture1)},
+    {std::begin(terrainTexture2),std::end(terrainTexture2)},
+    {std::begin(terrainTexture3),std::end(terrainTexture3)}}};
+  const std::vector<TerrainSurfaceImage> images{{imageId,legacy[0]}};
+  TerrainBuild build;AE_EXPECT_TRUE(updateTerrain(r,nullptr,build,error),error.c_str());
+  std::vector<u8> glb;AE_EXPECT_TRUE(writeTerrainGlb(build,legacy,images,glb,error),error.c_str());
+  GltfImport imported;GltfImportLimits limits;limits.maximumTextureDimension=32;limits.textureCompression=8;
+  AE_EXPECT_TRUE(importGlb(glb,limits,{},imported),imported.diagnostic.c_str());
+  AE_EXPECT_EQ(imported.terrainSurfaces.size(),imported.materials.size(),"surface binding includes neutral slot");
+  const auto &binding=imported.terrainSurfaces[0];
+  AE_EXPECT_EQ(binding.localMetersPerUv,7.f,"local meter conversion persists");
+  std::string originalSurface,actualSurface;
+  AE_EXPECT_TRUE(serializeTerrainSurface(r.surface,originalSurface,error),error.c_str());
+  AE_EXPECT_TRUE(serializeTerrainSurface(binding.surface,actualSurface,error),error.c_str());
+  AE_EXPECT_EQ(originalSurface,actualSurface,"GLB keeps unsupported properties and provenance");
+  AE_EXPECT_EQ(binding.textures.size(),usize(3),"one original supplies independent sRGB, linear and normal views");
+  for(const auto &entry:binding.textures) {
+    AE_EXPECT_TRUE(entry.textureIndex<imported.textures.size(),"resolved role index valid");
+    if(entry.textureIndex>=imported.textures.size())return;
+    const auto &texture=*imported.textures[entry.textureIndex];
+    AE_EXPECT_TRUE(texture.width>32 && texture.levels>1,"PBR keeps original dimensions and full mips");
+    AE_EXPECT_TRUE(texture.srgb!=entry.linear,"role selects correct color space");
+    AE_EXPECT_EQ(texture.format,renderer::AuthoringTextureRgba8,"quality profile cannot ASTC-compress source views");
+  }
+  AE_EXPECT_EQ(imported.terrainSurfaceImages.size(),usize(1),"original GUID PNG retained once");
+  AE_EXPECT_TRUE(*imported.terrainSurfaceImages[0].encoded==*images[0].encoded,"original PNG bytes survive import");
+  std::vector<u8> cache;const auto key=importCacheKey("terrain-surface-v3",limits);
+  AE_EXPECT_TRUE(writeImportCache(imported,key,cache),"surface cache write");
+  GltfImport cached;AE_EXPECT_TRUE(readImportCache(cache,key,cached),"surface cache read");
+  AE_EXPECT_TRUE(*cached.terrainSurfaceImages[0].encoded==*images[0].encoded,"cache preserves original PNG");
+  std::string cachedSurface;AE_EXPECT_TRUE(serializeTerrainSurface(cached.terrainSurfaces[0].surface,cachedSurface,error),error.c_str());
+  AE_EXPECT_EQ(cachedSurface,originalSurface,"cache preserves full typed schema");
+  AE_EXPECT_TRUE(validTerrainPng(images[0].bytes()),"original PNG structure and CRC valid");
+  auto corruptBytes=*images[0].encoded;corruptBytes[29]^=1; // IHDR CRC only; decoded pixels would be unchanged.
+  AE_EXPECT_TRUE(!validTerrainPng(corruptBytes),"CRC-only corruption rejected");
+  std::vector<TerrainSurfaceImage> corruptImages{{imageId,corruptBytes}};
+  std::vector<renderer::SharedAuthoringTexture> protectedTextures=imported.textures;
+  renderer::TerrainSurfaceBinding protectedBinding=binding;
+  AE_EXPECT_TRUE(!importTerrainSurface(r.surface,corruptImages,7,256ull<<20,protectedTextures,protectedBinding,error),"decoder refuses PNG with bad CRC");
+  std::vector<u8> protectedGlb{1,2,3};
+  AE_EXPECT_TRUE(!writeTerrainGlb(build,legacy,corruptImages,protectedGlb,error),"export refuses corrupt original PNG");
+  AE_EXPECT_TRUE(protectedGlb==std::vector<u8>({1,2,3}),"corrupt original leaves export atomic");
+  auto corruptedCache=cache;
+  const auto originalPng=std::search(corruptedCache.begin(),corruptedCache.end(),images[0].bytes().begin(),images[0].bytes().end());
+  AE_EXPECT_TRUE(originalPng!=corruptedCache.end(),"cache contains original PNG payload");
+  if(originalPng!=corruptedCache.end()) {
+    *(originalPng+29)^=1;
+    GltfImport rejected;AE_EXPECT_TRUE(!readImportCache(corruptedCache,key,rejected),"cache reader rejects corrupted original PNG CRC");
+  }
+  auto corruptModel=imported;corruptModel.terrainSurfaceImages=corruptImages;
+  std::vector<u8> rejectedCache;AE_EXPECT_TRUE(!writeImportCache(corruptModel,key,rejectedCache),"cache writer rejects PNG CRC corruption");
+  corruptImages[0]=TerrainSurfaceImage(imageId,std::vector<u8>(images[0].bytes().begin(),images[0].bytes().begin()+8));
+  AE_EXPECT_TRUE(!validTerrainPng(corruptImages[0].bytes()),"signature-only truncated PNG rejected");
+  AE_EXPECT_TRUE(!writeTerrainGlb(build,legacy,corruptImages,protectedGlb,error),"export refuses signature-only PNG");
+  auto noIend=*images[0].encoded;noIend.resize(noIend.size()-12);
+  AE_EXPECT_TRUE(!validTerrainPng(noIend),"missing terminal IEND rejected");
+  auto trailing=*images[0].encoded;trailing.push_back(0);
+  AE_EXPECT_TRUE(!validTerrainPng(trailing),"trailing bytes after IEND rejected");
+  auto invalid=imported;invalid.terrainSurfaces[0].textures[0].textureIndex=renderer::InvalidMapTexture;
+  AE_EXPECT_TRUE(!writeImportCache(invalid,key,cache),"cache rejects invalid surface texture reference");
+  std::vector<renderer::SharedAuthoringTexture> unchanged=imported.textures;
+  renderer::TerrainSurfaceBinding unchangedBinding=binding;
+  AE_EXPECT_TRUE(!importTerrainSurface(r.surface,images,7,1,unchanged,unchangedBinding,error),"full quality fails explicit insufficient budget");
+  AE_EXPECT_EQ(unchanged.size(),imported.textures.size(),"decoder failure preserves texture output");
+  TerrainSurfaceAsset rgSurface;TerrainSurfaceLayer rgLayer;
+  rgLayer.identity=assetGuidFromSeed("normal-rg-layer");rgLayer.maps[1].texture=imageId;
+  rgLayer.maps[1].channel=TerrainSurfaceChannel::NormalRG;rgSurface.layers={rgLayer};
+  std::vector<renderer::SharedAuthoringTexture> rgTextures;renderer::TerrainSurfaceBinding rgBinding;
+  AE_EXPECT_TRUE(importTerrainSurface(rgSurface,images,1,256ull<<20,rgTextures,rgBinding,error),error.c_str());
+  DecodedImage raw;AE_EXPECT_TRUE(decodeImageRgba8(images[0].bytes(),{},raw,error),error.c_str());
+  AE_EXPECT_TRUE(std::equal(raw.rgba.begin(),raw.rgba.end(),rgTextures[0]->mipChain.begin()),"RG-normal mip derivation preserves original level zero channels");
+  AE_EXPECT_TRUE(rgBinding.textures[0].normal && rgBinding.textures[0].linear,"RG normal view is explicitly linear");
+}
 
 AE_TEST(terrain_high_resolution_control_png_survives_real_glb_import) {
   resources::TerrainRecipe r;r.cells=8;r.controlCells=128;r.height=0;r.solidBase=true;

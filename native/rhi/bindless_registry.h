@@ -40,6 +40,7 @@ public:
   VkDescriptorSetLayout layout() const { return layout_; }
   VkDescriptorSet descriptorSet() const { return descriptorSet_; }
   u32 capacity() const { return allocator_.capacity(); }
+  u32 allocatedCount() const { return allocator_.allocatedCount(); }
 
   // Aloca um índice livre e escreve a textura nesse slot do array bindless. Devolve
   // kBindlessIndexInvalid se a capacidade foi esgotada.

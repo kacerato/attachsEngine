@@ -16,6 +16,7 @@
 #pragma once
 #include "resources/rig_asset.h"
 #include "resources/terrain_stroke_sampler.h"
+#include "editor/editor_terrain_material.h"
 #include "scene/animator.h"
 #include <optional>
 #include <functional>
@@ -54,6 +55,7 @@
 #include "editor/editor_grid.h"
 #include "editor/editor_map_scene.h"
 #include "resources/gltf_import.h"
+#include "renderer/terrain_surface_binding.h"
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
 #include "resources/environment_profile.h"
@@ -156,6 +158,11 @@ public:
   void refreshTerrainBudget();
   bool applyTerrain(const resources::TerrainRecipe &,std::string &error);
   bool setTerrainNumber(u32 field,double number);
+  void setTerrainLibraryReader(TerrainLibraryReader);
+  bool loadTerrainCatalog();
+  bool selectTerrainCatalogMaterial(u32 index);
+  TerrainLibraryReader terrainLibraryReader_;
+  std::shared_ptr<const TerrainMaterialCache> terrainMaterialCache_;
   bool handleTerrainInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
   void refreshTerrainJob();
   void startTerrainJob();
@@ -609,6 +616,7 @@ public:
   // Material-aligned control maps for the current publication transaction.
   // Indices refer to its deduplicated texture span, never source-local slots.
   std::span<const renderer::TerrainControlBinding> terrainControlPublication() const noexcept { return terrainControlPublication_; }
+  std::span<const renderer::TerrainSurfaceBinding> terrainSurfacePublication() const noexcept { return terrainSurfacePublication_; }
   // Republica a geometria importada para um consumidor gráfico NOVO.
   //
   // Recriar a superfície reconstrói o renderer do zero, e a biblioteca de
@@ -1283,6 +1291,8 @@ private:
     std::vector<renderer::MapDrawRecord> draws;
     std::vector<renderer::MapMaterialRecord> materials;
     std::vector<renderer::TerrainControlBinding> terrainControls;
+    std::vector<renderer::TerrainSurfaceBinding> terrainSurfaces;
+    std::vector<resources::TerrainSurfaceImage> terrainSurfaceImages;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
     // A árvore do arquivo, preservada para reinstanciar e para a reimportação
@@ -1332,6 +1342,7 @@ private:
     std::vector<renderer::MapDrawRecord> draws;
     std::vector<renderer::MapMaterialRecord> materials;
     std::vector<renderer::TerrainControlBinding> terrainControls;
+    std::vector<renderer::TerrainSurfaceBinding> terrainSurfaces;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
     // Texturas de todas as fontes, com os índices dos materiais já deslocados.
@@ -1562,6 +1573,7 @@ private:
   GeometryPublisher publishGeometry_;
   SkinningPublication skinningPublication_{};
   std::span<const renderer::TerrainControlBinding> terrainControlPublication_{};
+  std::span<const renderer::TerrainSurfaceBinding> terrainSurfacePublication_{};
   static u64 nextSceneEpoch() noexcept;
   struct InputCapture {
     EditorSceneVersion version;

@@ -10,7 +10,7 @@ inline bool applyTerrainLodRecipe(std::string_view text, MeshLodSettings &settin
   if(text.empty())return true;
   TerrainRecipe recipe;
   if(!deserializeTerrainRecipe(text,recipe,error))return false;
-  if(!text.starts_with("AETERRAIN6 ") && !text.starts_with("AETERRAIN7 "))return true;
+  if(!text.starts_with("AETERRAIN6 ") && !text.starts_with("AETERRAIN7 ") && !text.starts_with("AETERRAIN8 "))return true;
   settings.generate=recipe.lodLevels>1;
   settings.maximumLevels=recipe.lodLevels;
   settings.maximumRelativeError=recipe.lodRelativeError;

@@ -145,6 +145,11 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../native/third_party/fidelityfx_fsr1/LICENSE.txt") { into("licenses/fidelityfx_fsr1") }
     from("../../native/third_party/recastnavigation/License.txt") { into("licenses/recastnavigation") }
     from("../../assets/terrain") { include("LICENSE-supplied.txt", "manifest.json"); into("licenses/terrain") }
+    // Original-resolution runtime PNGs and previews. Source PSD archives remain in the repository.
+    from("../../assets/terrain/library") {
+        include("catalog.json", "textures/**", "thumbnails/**", "sources/**/*.png")
+        into("terrain/library")
+    }
     if (includeLegacyDemos) {
     inputs.file("../../samples/material-preview/manifest.json")
     inputs.file("../../samples/dirt-road/manifest.json")

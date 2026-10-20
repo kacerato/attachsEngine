@@ -1,22 +1,24 @@
+#include "resources/terrain_surface_texture_refs.h"
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_screen.h"
-#include "editor/terrain_controls.h"
-#include "editor/editor_terrain_recovery.h"
 #include "editor/editor_session.h"
+#include "editor/editor_terrain_recovery.h"
+#include "editor/terrain_controls.h"
+#include "renderer/authoring_texture.h"
 #include "resources/terrain_textures.generated.h"
 #include "resources/terrain_vertex_index.h"
 #include "scene/collider.h"
 #include "scene/import_link.h"
 #include "scene/physics_body.h"
-#include "renderer/authoring_texture.h"
 #include <atomic>
-#include <unordered_set>
+#include <bit>
 #include <cmath>
-#include <map>
 #include <limits>
-#include <type_traits>
+#include <map>
 #include <thread>
+#include <type_traits>
+#include <unordered_set>
 
 namespace ae::editor {
 namespace {
@@ -30,19 +32,67 @@ std::array<std::vector<u8>, 4> textures() {
 double number(const EditorScreenState &s, u32 i) {
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
-  if(i==60)return r.controlCells;
-  if(i>=32 && i<=51 && s.terrainPath<r.paths.size()) {
-    const auto &p=r.paths[s.terrainPath];
-    const auto &curve=s.terrainSection==2?p.textureProfile:p.profile;
-    const auto &node=curve[std::min(s.terrainProfilePoint,u32(curve.size()-1))];
-    if(i==50)return node.x;
-    if(i==51)return node.y;
-    const resources::TerrainPathPoint point=s.terrainPathPoint<p.points.size()?p.points[s.terrainPathPoint]:resources::TerrainPathPoint{};
-    const double pathValues[]{p.width,p.shoulderWidth,p.elevation,p.slopeLimit,p.uniformRamp,p.definedHeight,p.textureOpacity,p.shoulderOpacity,
-      p.textureTransition,p.vegetationTransition,double(p.surfaceLayer),double(p.shoulderLayer),point.x,point.y,point.z,
-      p.profile.size()>2?p.profile[1].y:.5f,p.textureProfile.size()>2?p.textureProfile[1].y:.5f,
-      p.vegetationProfile.size()>2?p.vegetationProfile[1].y:.5f,0};
-    return pathValues[i-32];
+  if (i == 60)
+    return r.controlCells;
+  if (!r.surface.layers.empty() && b.layer < r.surface.layers.size()) {
+    const auto &layer = r.surface.layers[b.layer];
+    if (i >= 64 && i <= 76) {
+      const double values[] = {
+          layer.scaleX,         layer.scaleY,         layer.offsetX,
+          layer.offsetY,        layer.rotation,       layer.tint[0],
+          layer.tint[1],        layer.tint[2],        layer.saturation,
+          layer.axisContrast,   layer.heightContrast, layer.heightWidth,
+          layer.heightInfluence};
+      return values[i - 64];
+    }
+    if (i >= 96 && i <= 110) {
+      const auto &map = layer.maps[std::min(s.terrainMapRole, 6u)];
+      if (i == 96)
+        return map.factor;
+      if (i == 97)
+        return map.remapMin;
+      if (i == 98)
+        return map.remapMax;
+      if (i <= 102)
+        return map.colorFactor[i - 99];
+      if (i <= 106)
+        return map.colorRemapMin[i - 103];
+      return map.colorRemapMax[i - 107];
+    }
+  }
+  if (i >= 32 && i <= 51 && s.terrainPath < r.paths.size()) {
+    const auto &p = r.paths[s.terrainPath];
+    const auto &curve = s.terrainSection == 2 ? p.textureProfile : p.profile;
+    const auto &node =
+        curve[std::min(s.terrainProfilePoint, u32(curve.size() - 1))];
+    if (i == 50)
+      return node.x;
+    if (i == 51)
+      return node.y;
+    const resources::TerrainPathPoint point =
+        s.terrainPathPoint < p.points.size() ? p.points[s.terrainPathPoint]
+                                             : resources::TerrainPathPoint{};
+    const double pathValues[]{
+        p.width,
+        p.shoulderWidth,
+        p.elevation,
+        p.slopeLimit,
+        p.uniformRamp,
+        p.definedHeight,
+        p.textureOpacity,
+        p.shoulderOpacity,
+        p.textureTransition,
+        p.vegetationTransition,
+        double(p.surfaceLayer),
+        double(p.shoulderLayer),
+        point.x,
+        point.y,
+        point.z,
+        p.profile.size() > 2 ? p.profile[1].y : .5f,
+        p.textureProfile.size() > 2 ? p.textureProfile[1].y : .5f,
+        p.vegetationProfile.size() > 2 ? p.vegetationProfile[1].y : .5f,
+        0};
+    return pathValues[i - 32];
   }
   const double values[]{double(r.seed),
                         r.size,
@@ -57,65 +107,326 @@ double number(const EditorScreenState &s, u32 i) {
                         b.strength,
                         b.x,
                         b.y,
-                        b.z, r.baseDepth, b.hardness, b.rotation, b.aspect, s.terrainSpacing, r.macroVariation, b.verticalAspect, b.depthAspect, b.pitch, b.roll, b.roundness, b.opacity, double(b.filterRadius), b.surfaceDepth,
-                        double(r.lodLevels),double(r.lodRelativeError)*100};
+                        b.z,
+                        r.baseDepth,
+                        b.hardness,
+                        b.rotation,
+                        b.aspect,
+                        s.terrainSpacing,
+                        r.macroVariation,
+                        b.verticalAspect,
+                        b.depthAspect,
+                        b.pitch,
+                        b.roll,
+                        b.roundness,
+                        b.opacity,
+                        double(b.filterRadius),
+                        b.surfaceDepth,
+                        double(r.lodLevels),
+                        double(r.lodRelativeError) * 100};
   return i < 30 ? values[i] : 0;
 }
 u64 textureRetainedBytes(const renderer::AuthoringTexture &texture) {
-  return sizeof(texture)+texture.mipChain.capacity()+(texture.file?sizeof(*texture.file)+texture.file->path.capacity():0);
+  return sizeof(texture) + texture.mipChain.capacity() +
+         (texture.file ? sizeof(*texture.file) + texture.file->path.capacity()
+                       : 0);
 }
-u64 terrainCandidateBytes(const resources::GltfImport &model,
-    std::unordered_set<const renderer::AuthoringTexture *> resident) {
+u64 terrainCandidateBytes(
+    const resources::GltfImport &model,
+    std::unordered_set<const renderer::AuthoringTexture *> resident,
+    std::span<const resources::TerrainSurfaceImage> originals) {
   // Terrain GLBs are static. Count the retained geometry, decoded textures and
   // conservative metadata capacity before stageSource copies the whole library.
   // This bounds growth; it is not a process/GPU peak-memory guarantee.
-  if (!model.skins.empty() || !model.animations.empty() || !model.morphs.empty())
+  if (!model.skins.empty() || !model.animations.empty() ||
+      !model.morphs.empty())
     return std::numeric_limits<u64>::max();
   const auto storage = [](const auto &values) {
-    return u64(values.capacity()) * sizeof(typename std::decay_t<decltype(values)>::value_type);
+    return u64(values.capacity()) *
+           sizeof(typename std::decay_t<decltype(values)>::value_type);
   };
-  u64 bytes = 1024 + storage(model.vertices) + storage(model.indices) + storage(model.draws) +
-              storage(model.materials) + storage(model.terrainControls) + storage(model.names) + storage(model.nodes) +
-              storage(model.drawNodes) + storage(model.materialNames) + storage(model.textures) +
-              storage(model.textureImages) + storage(model.meshLods) + storage(model.drawSkins) +
-              storage(model.drawMorphs) + storage(model.skinInfluences);
+  u64 bytes = 1024 + storage(model.vertices) + storage(model.indices) +
+              storage(model.draws) + storage(model.materials) +
+              storage(model.terrainControls) + storage(model.names) +
+              storage(model.nodes) + storage(model.drawNodes) +
+              storage(model.materialNames) + storage(model.textures) +
+              storage(model.textureImages) + storage(model.meshLods) +
+              storage(model.drawSkins) + storage(model.drawMorphs) +
+              storage(model.skinInfluences);
+  bytes+=storage(model.terrainSurfaces)+storage(model.terrainSurfaceImages);
+  for(const auto &binding:model.terrainSurfaces) {
+    bytes+=storage(binding.textures)+storage(binding.surface.layers)+storage(binding.surface.antiTileArray.entries);
+    for(const auto &layer:binding.surface.layers)bytes+=layer.name.capacity()+layer.sourceCatalogId.capacity()+
+      layer.sourcePropertiesJson.capacity()+layer.sourcePackingJson.capacity()+layer.sourceResolvedMapsJson.capacity()+
+      storage(layer.cluster.variants);
+  }
+  for(const auto &image:model.terrainSurfaceImages)if(image.encoded) {
+    const bool shared=std::any_of(originals.begin(),originals.end(),[&](const auto &prior){
+      return prior.identity==image.identity && prior.bytes().size()==image.bytes().size() &&
+        std::equal(image.bytes().begin(),image.bytes().end(),prior.bytes().begin());
+    });
+    if(!shared)bytes+=sizeof(*image.encoded)+image.encoded->capacity();
+  }
   bytes += u64(model.nodes.size()) * 2 * sizeof(resources::ImportNodeRecord);
   bytes += u64(model.draws.size()) * 4 * sizeof(resources::AssetGuid);
   for (const auto &node : model.nodes)
-    bytes += 2 * (node.name.capacity()+node.authoredId.capacity()) + storage(node.morphWeights);
-  for (const auto *names : {&model.names, &model.materialNames, &model.textureImages})
-    for (const auto &name : *names) bytes += name.capacity();
+    bytes += 2 * (node.name.capacity() + node.authoredId.capacity()) +
+             storage(node.morphWeights);
+  for (const auto *names :
+       {&model.names, &model.materialNames, &model.textureImages})
+    for (const auto &name : *names)
+      bytes += name.capacity();
   for (const auto &texture : model.textures)
-    if (texture && resident.insert(texture.get()).second)bytes+=textureRetainedBytes(*texture);
+    if (texture && resident.insert(texture.get()).second)
+      bytes += textureRetainedBytes(*texture);
   return bytes;
 }
 bool terrainSourceCurrent(const EditorDocument &document, EditorEntityId target,
                           resources::AssetGuid source) {
-  if (!target) return true;
+  if (!target)
+    return true;
   const auto *entity = document.find(target);
   const auto *link = entity ? scene::importLink(entity->components) : nullptr;
   return link && link->source == source;
 }
 void normalizeTerrainBrush(EditorScreenState &state) {
-  const auto tool=state.terrainBrush.tool;
-  const bool volume=state.terrainDraft.mode!=resources::TerrainMode::Heightfield &&
-      (tool==resources::TerrainTool::Dig || tool==resources::TerrainTool::Add ||
-       tool==resources::TerrainTool::Smooth || tool==resources::TerrainTool::Sharpen ||
-       tool==resources::TerrainTool::Restore || tool==resources::TerrainTool::Paint);
-  if(!volume &&
-      (state.terrainBrush.shape==resources::TerrainBrushShape::Hemisphere || state.terrainBrush.shape==resources::TerrainBrushShape::Cone))state.terrainBrush.shape=resources::TerrainBrushShape::Circle;
-  if(state.terrainDraft.mode != resources::TerrainMode::Heightfield &&
-      state.terrainBrush.tool==resources::TerrainTool::Hole)state.terrainBrush.tool=resources::TerrainTool::Dig;
+  const auto tool = state.terrainBrush.tool;
+  const bool volume =
+      state.terrainDraft.mode != resources::TerrainMode::Heightfield &&
+      (tool == resources::TerrainTool::Dig ||
+       tool == resources::TerrainTool::Add ||
+       tool == resources::TerrainTool::Smooth ||
+       tool == resources::TerrainTool::Sharpen ||
+       tool == resources::TerrainTool::Restore ||
+       tool == resources::TerrainTool::Paint);
+  if (!volume &&
+      (state.terrainBrush.shape == resources::TerrainBrushShape::Hemisphere ||
+       state.terrainBrush.shape == resources::TerrainBrushShape::Cone))
+    state.terrainBrush.shape = resources::TerrainBrushShape::Circle;
+  if (state.terrainDraft.mode != resources::TerrainMode::Heightfield &&
+      state.terrainBrush.tool == resources::TerrainTool::Hole)
+    state.terrainBrush.tool = resources::TerrainTool::Dig;
   if (state.terrainDraft.mode == resources::TerrainMode::Heightfield &&
       (state.terrainBrush.tool == resources::TerrainTool::Dig ||
        state.terrainBrush.tool == resources::TerrainTool::Add))
     state.terrainBrush.tool = resources::TerrainTool::Raise;
 }
 } // namespace
+namespace {
+TerrainLibraryReader defaultTerrainLibraryReader() {
+  std::error_code ec;
+  auto root = std::filesystem::current_path(ec);
+  if (ec)
+    return {};
+  for (unsigned i = 0; i < 8 && !root.empty(); ++i) {
+    auto library = root / "assets/terrain/library";
+    if (std::filesystem::is_regular_file(library / "catalog.json", ec)) {
+      return [library](std::string_view relative, std::vector<u8> &out) {
+        std::filesystem::path path;
+        return EditorImportTransaction::safePath(library, std::string(relative),
+                                                 path) &&
+               EditorImportTransaction::read(path, out, 64u << 20);
+      };
+    }
+    ec.clear();
+    auto parent = root.parent_path();
+    if (parent == root)
+      break;
+    root = std::move(parent);
+  }
+  return {};
+}
+resources::AssetGuid legacyTerrainTexture(u32 i) {
+  return resources::assetGuidFromSeed("astra.terrain.legacy.texture:" +
+                                      std::to_string(i));
+}
+void initializeTerrainSurface(resources::TerrainRecipe &recipe) {
+  if (!recipe.surface.layers.empty())
+    return;
+  const char *names[] = {"Grama", "Rocha", "Terra", "Caminho"};
+  for (u32 i = 0; i < 4; ++i) {
+    resources::TerrainSurfaceLayer layer;
+    layer.identity = resources::assetGuidFromSeed(
+        "astra.terrain.legacy.layer:" + std::to_string(i));
+    layer.name = names[i];
+    layer.scaleX = layer.scaleY = recipe.textureScale;
+    layer.maps[0].texture = legacyTerrainTexture(i);
+    layer.maps[0].linear = false;
+    layer.maps[0].channel = resources::TerrainSurfaceChannel::RGB;
+    layer.maps[1].channel = resources::TerrainSurfaceChannel::NormalRGB;
+    layer.maps[2].factor = 0;
+    layer.maps[4].factor = .95f;
+    layer.maps[5].factor = 0;
+    layer.maps[6].factor = 0;
+    layer.maps[6].channel = resources::TerrainSurfaceChannel::RGB;
+    recipe.surface.layers.push_back(std::move(layer));
+  }
+}
+} // namespace
+std::shared_ptr<const TerrainMaterialCache> prepareTerrainMaterial(
+    const resources::TerrainRecipe &recipe,
+    const std::shared_ptr<const resources::TerrainSurfaceCatalog> &catalog,
+    const TerrainLibraryReader &reader,
+    const std::shared_ptr<const TerrainMaterialCache> &previous,
+    std::string &error) {
+  if (recipe.surface.layers.empty())
+    return {};
+  std::string key;
+  if (!resources::serializeTerrainSurface(recipe.surface, key, error))
+    return {};
+  key +=
+      "|metersPerUv=" + std::to_string(std::bit_cast<u32>(recipe.textureScale));
+  if (previous && previous->key == key)
+    return previous;
+  auto result = std::make_shared<TerrainMaterialCache>();
+  result->key = std::move(key);
+  if(previous) {
+    const auto currentRefs=resources::terrainSurfaceTextureRefs(recipe.surface);
+    const auto previousRefs=resources::terrainSurfaceTextureRefs(previous->binding.surface);
+    const bool same=currentRefs.size()==previousRefs.size() && std::equal(
+      currentRefs.begin(),currentRefs.end(),previousRefs.begin(),[](const auto &a,const auto &b){
+        return a.identity==b.identity && a.linear==b.linear && a.normal==b.normal && a.normalRG==b.normalRG;
+      });
+    if(same) {
+      result->images=previous->images;result->textures=previous->textures;result->binding=previous->binding;
+      result->binding.surface=recipe.surface;result->binding.localMetersPerUv=recipe.textureScale;
+      error.clear();return result;
+    }
+  }
+  std::vector<resources::AssetGuid> references;
+  std::vector<resources::TerrainSurfaceDiagnostic> diagnostics;
+  if (!resources::resolveTerrainSurface(
+          recipe.surface,
+          [&](resources::AssetGuid id) {
+            if (std::find(references.begin(), references.end(), id) ==
+                references.end())
+              references.push_back(id);
+            return true;
+          },
+          diagnostics, error))
+    return {};
+  u64 total = 0;
+  for (auto id : references) {
+    resources::TerrainSurfaceImage image;
+    image.identity = id;
+    std::vector<u8> encoded;
+    bool found = false;
+    if (previous)
+      for (const auto &old : previous->images)
+        if (old.identity == id) {
+          image = old;
+          found = true;
+          break;
+        }
+    if (!found)
+      for (u32 i = 0; i < 4; ++i)
+        if (legacyTerrainTexture(i) == id) {
+          image = resources::TerrainSurfaceImage(id, textures()[i]);
+          found = true;
+          break;
+        }
+    if (!found && catalog && reader)
+      for (const auto &entry : catalog->textures)
+        if (entry.identity == id) {
+          if (!reader(entry.runtimePath, encoded) ||
+              Sha256::hex(encoded) != entry.runtimeHash) {
+            error = "Textura original do catálogo ausente ou alterada: " +
+                    entry.runtimePath;
+            return {};
+          }
+          image = resources::TerrainSurfaceImage(id, std::move(encoded));
+          found = true;
+          break;
+        }
+    if (!found) {
+      error = "Textura da camada indisponível: " + id.text();
+      return {};
+    }
+    if (image.bytes().empty() || image.bytes().size() > (128u << 20) - total) {
+      error =
+          "Imagens do terreno excedem 128 MiB; qualidade original preservada.";
+      return {};
+    }
+    total += image.bytes().size();
+    result->images.push_back(std::move(image));
+  }
+  if (!resources::importTerrainSurface(
+          recipe.surface, result->images, recipe.textureScale, 128u << 20,
+          result->textures, result->binding, error))
+    return {};
+  return result;
+}
+void EditorSession::setTerrainLibraryReader(TerrainLibraryReader reader) {
+  terrainLibraryReader_ = std::move(reader);
+  state_.terrainCatalog.reset();
+  terrainMaterialCache_.reset();
+  clearTerrainPreview();
+}
+bool EditorSession::loadTerrainCatalog() {
+  if (state_.terrainCatalog)
+    return true;
+  if (!terrainLibraryReader_)
+    terrainLibraryReader_ = defaultTerrainLibraryReader();
+  std::vector<u8> bytes;
+  if (!terrainLibraryReader_ || !terrainLibraryReader_("catalog.json", bytes) ||
+      bytes.size() > (8u << 20)) {
+    state_.terrainMessage = "Biblioteca de materiais indisponível.";
+    return false;
+  }
+  auto catalog = std::make_shared<resources::TerrainSurfaceCatalog>();
+  std::string error;
+  if (!resources::loadTerrainSurfaceCatalog(
+          std::string_view(reinterpret_cast<const char *>(bytes.data()),
+                           bytes.size()),
+          *catalog, error)) {
+    state_.terrainMessage = error;
+    return false;
+  }
+  state_.terrainCatalog = std::move(catalog);
+  return true;
+}
+bool EditorSession::selectTerrainCatalogMaterial(u32 index) {
+  if (!state_.terrainOpen || state_.terrainBusy || !loadTerrainCatalog() ||
+      index >= state_.terrainCatalog->materials.size() ||
+      state_.terrainBrush.layer >= 4)
+    return false;
+  auto recipe = state_.terrainDraft;
+  initializeTerrainSurface(recipe);
+  if (recipe.surface.layers.size() != 4) {
+    state_.terrainMessage =
+        "Este editor usa quatro canais de pintura; superfície preservada.";
+    return false;
+  }
+  const auto &material = state_.terrainCatalog->materials[index];
+  recipe.surface.layers[state_.terrainBrush.layer] = material.layer;
+  // Slot identity belongs to the authored control channel, not its current
+  // catalog material.
+  recipe.surface.layers[state_.terrainBrush.layer].identity =
+      state_.terrainDraft.surface.layers.empty()
+          ? resources::assetGuidFromSeed(
+                "astra.terrain.legacy.layer:" +
+                std::to_string(state_.terrainBrush.layer))
+          : state_.terrainDraft.surface.layers[state_.terrainBrush.layer]
+                .identity;
+  recipe.blendedSurface = true;
+  std::string error;
+  if (!resources::validTerrainRecipe(recipe, error)) {
+    state_.terrainMessage = error;
+    return false;
+  }
+  state_.terrainDraft = std::move(recipe);
+  state_.terrainMaterialView = 2;
+  state_.terrainScroll = 0;
+  state_.terrainMessage = "Material selecionado · prévia em qualidade original";
+  return true;
+}
 struct EditorSession::TerrainJob {
   resources::TerrainRecipe recipe;
   std::shared_ptr<const resources::TerrainBuild> previous, build;
   resources::GltfImport model;
+  std::shared_ptr<const TerrainMaterialCache> material, previousMaterial;
+  std::shared_ptr<const resources::TerrainSurfaceCatalog> catalog;
+  TerrainLibraryReader reader;
   std::vector<u8> bytes;
   std::string error, project;
   u64 epoch = 0, revision = 0;
@@ -126,153 +437,282 @@ struct EditorSession::TerrainJob {
 struct EditorSession::TerrainPreviewJob {
   resources::TerrainRecipe recipe;
   std::shared_ptr<const resources::TerrainBuild> previous;
-  std::shared_ptr<resources::TerrainBuild> build=std::make_shared<resources::TerrainBuild>();
-  std::string error,key;
-  u64 epoch=0, revision=0;
-  EditorEntityId target=0;
-  usize samples=0;
-  bool authoringOnly=false;
-  std::atomic<bool> ready{false},cancel{false};
+  std::shared_ptr<resources::TerrainBuild> build =
+      std::make_shared<resources::TerrainBuild>();
+  std::string error, key;
+  std::shared_ptr<const TerrainMaterialCache> material, previousMaterial;
+  std::shared_ptr<const resources::TerrainSurfaceCatalog> catalog;
+  TerrainLibraryReader reader;
+  u64 epoch = 0, revision = 0;
+  EditorEntityId target = 0;
+  usize samples = 0;
+  bool authoringOnly = false;
+  std::atomic<bool> ready{false}, cancel{false};
 };
 void EditorSession::clearTerrainPreview(bool restore) {
-  if(terrainPreviewJob_)terrainPreviewJob_->cancel=true;
+  if (terrainPreviewJob_)
+    terrainPreviewJob_->cancel = true;
   terrainPreviewJob_.reset();
-  if(!state_.terrainOpen || !terrainPreviewCache_ || resources::serializeTerrainRecipe(terrainPreviewCache_->recipe)!=state_.terrainAppliedRecipe) {
-    terrainPreviewCache_.reset();state_.terrainPreviewBuild.reset();
+  if (!state_.terrainOpen || !terrainPreviewCache_ ||
+      resources::serializeTerrainRecipe(terrainPreviewCache_->recipe) !=
+          state_.terrainAppliedRecipe) {
+    terrainPreviewCache_.reset();
+    state_.terrainPreviewBuild.reset();
   }
-  const bool published=terrainPreviewCount_!=0;
-  terrainPreviewCount_=terrainPreviewFirst_=0;
-  terrainPreviewSamples_=0;terrainPreviewRecipe_.clear();
-  state_.terrainLivePreview=false;
-  if(published && restore && terrainPreviewEpoch_==sceneEpoch_) {
+  const bool published = terrainPreviewCount_ != 0;
+  terrainPreviewCount_ = terrainPreviewFirst_ = 0;
+  terrainPreviewSamples_ = 0;
+  terrainPreviewRecipe_.clear();
+  state_.terrainLivePreview = false;
+  if (published && restore && terrainPreviewEpoch_ == sceneEpoch_) {
     std::string error;
-    if(!publishAndAdopt(flattenSources(importedSources_),error,nullptr,true))
-      state_.terrainMessage="Falha ao restaurar prévia: "+error;
-    appearanceChanged_=true;
+    if (!publishAndAdopt(flattenSources(importedSources_), error, nullptr,
+                         true))
+      state_.terrainMessage = "Falha ao restaurar prévia: " + error;
+    appearanceChanged_ = true;
   }
 }
 void EditorSession::queueTerrainPreview() {
-  if(terrainPreviewJob_ || !state_.terrainOpen || state_.terrainBusy || !state_.terrainTarget)return;
-  auto recipe=state_.terrainDraft;
-  if(terrainGestureActive_)recipe.strokes.insert(recipe.strokes.end(),terrainGestureStrokes_.begin(),terrainGestureStrokes_.end());
-  const auto key=resources::serializeTerrainRecipe(recipe);
-  const bool authoringOnly=key==state_.terrainAppliedRecipe;
-  if(key==terrainPreviewRecipe_ || (authoringOnly && (state_.terrainPreviewBuild || state_.terrainTab!=4 || recipe.paths.empty())))return;
-  auto job=std::make_shared<TerrainPreviewJob>();job->recipe=std::move(recipe);job->key=key;
-  job->epoch=sceneEpoch_;job->revision=document_.revision();job->target=state_.terrainTarget;
-  job->samples=terrainGestureStrokes_.size();job->authoringOnly=authoringOnly;
-  if(terrainPreviewCache_ && !terrainPreviewCache_->mesh.parts.empty())job->previous=terrainPreviewCache_;
-  terrainPreviewJob_=job;
+  if (terrainPreviewJob_ || !state_.terrainOpen || state_.terrainBusy ||
+      !state_.terrainTarget)
+    return;
+  auto recipe = state_.terrainDraft;
+  if (terrainGestureActive_)
+    recipe.strokes.insert(recipe.strokes.end(), terrainGestureStrokes_.begin(),
+                          terrainGestureStrokes_.end());
+  const auto key = resources::serializeTerrainRecipe(recipe);
+  const bool authoringOnly = key == state_.terrainAppliedRecipe;
+  if (key == terrainPreviewRecipe_ ||
+      (authoringOnly && (state_.terrainPreviewBuild || state_.terrainTab != 4 ||
+                         recipe.paths.empty())))
+    return;
+  auto job = std::make_shared<TerrainPreviewJob>();
+  job->recipe = std::move(recipe);
+  job->key = key;
+  job->epoch = sceneEpoch_;
+  job->revision = document_.revision();
+  job->target = state_.terrainTarget;
+  job->samples = terrainGestureStrokes_.size();
+  job->authoringOnly = authoringOnly;
+  if (terrainPreviewCache_ && !terrainPreviewCache_->mesh.parts.empty())
+    job->previous = terrainPreviewCache_;
+  if (!job->recipe.surface.layers.empty() && !terrainMaterialCache_ &&
+      !loadTerrainCatalog())
+    return;
+  job->catalog = state_.terrainCatalog;
+  job->reader = terrainLibraryReader_;
+  job->previousMaterial = terrainMaterialCache_;
+  terrainPreviewJob_ = job;
   std::thread([job] {
-    if(job->authoringOnly) {
-      job->build->recipe=job->recipe;
-      resources::generateTerrainField(job->recipe,job->build->field,job->error,[job](float){return !job->cancel.load();});
-    } else resources::updateTerrain(job->recipe,job->previous.get(),*job->build,job->error,[job](float){return !job->cancel.load();});
-    job->ready.store(true,std::memory_order_release);
+    if (!job->recipe.surface.layers.empty()) {
+      job->material =
+          prepareTerrainMaterial(job->recipe, job->catalog, job->reader,
+                                 job->previousMaterial, job->error);
+      if (!job->material) {
+        job->ready.store(true, std::memory_order_release);
+        return;
+      }
+    }
+    if (job->authoringOnly) {
+      job->build->recipe = job->recipe;
+      resources::generateTerrainField(
+          job->recipe, job->build->field, job->error,
+          [job](float) { return !job->cancel.load(); });
+    } else
+      resources::updateTerrain(job->recipe, job->previous.get(), *job->build,
+                               job->error,
+                               [job](float) { return !job->cancel.load(); });
+    job->ready.store(true, std::memory_order_release);
   }).detach();
 }
-bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,std::string &error) {
-  const auto &mesh=build.mesh;
-  const auto source=std::find_if(importedSources_.begin(),importedSources_.end(),
-      [&](const auto &s){return s.guid==terrainSource_;});
-  if(source==importedSources_.end())return false;
+bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,
+                                          std::string &error) {
+  const auto &mesh = build.mesh;
+  const auto source =
+      std::find_if(importedSources_.begin(), importedSources_.end(),
+                   [&](const auto &s) { return s.guid == terrainSource_; });
+  if (source == importedSources_.end())
+    return false;
   ImportedSource preview;
-  preview.guid=resources::assetGuidFromSeed("terrain-transient-preview");
-  preview.materials=source->materials;preview.textures=source->textures;
+  preview.guid = resources::assetGuidFromSeed("terrain-transient-preview");
+  preview.materials = source->materials;
+  preview.textures = source->textures;
   preview.terrainControls.resize(preview.materials.size());
   // The draft may switch a legacy terrain to blended layers before Apply.
   // Rebind the same decoded albedos without a GLB encode/decode round trip.
-  if(preview.materials.size()>=4) {
+  if (build.recipe.surface.layers.empty() && preview.materials.size() >= 4) {
     u32 layers[4];
-    const bool oldBlend=(source->materials[0].flags&renderer::MapMaterialTerrain)!=0;
-    for(u32 i=0;i<4;++i)layers[i]=oldBlend?source->materials[0].textureIndices[i]:source->materials[i].textureIndices[0];
-    for(u32 i=0;i<4;++i) {
-      auto &material=preview.materials[i];
-      material.flags&=~(renderer::MapMaterialTerrain|renderer::MapMaterialNormalMap|
-        renderer::MapMaterialMetallicRoughnessMap|renderer::MapMaterialEmissiveMap);
-      for(u32 slot=0;slot<4;++slot)material.textureIndices[slot]=state_.terrainDraft.blendedSurface?layers[slot]:
-        slot==0?layers[i]:renderer::InvalidMapTexture;
-      if(state_.terrainDraft.blendedSurface)material.flags|=renderer::MapMaterialTerrain;
+    const bool oldBlend =
+        (source->materials[0].flags & renderer::MapMaterialTerrain) != 0;
+    for (u32 i = 0; i < 4; ++i)
+      layers[i] = oldBlend ? source->materials[0].textureIndices[i]
+                           : source->materials[i].textureIndices[0];
+    for (u32 i = 0; i < 4; ++i) {
+      auto &material = preview.materials[i];
+      material.flags &=
+          ~(renderer::MapMaterialTerrain | renderer::MapMaterialNormalMap |
+            renderer::MapMaterialMetallicRoughnessMap |
+            renderer::MapMaterialEmissiveMap);
+      for (u32 slot = 0; slot < 4; ++slot)
+        material.textureIndices[slot] =
+            state_.terrainDraft.blendedSurface ? layers[slot]
+            : slot == 0                        ? layers[i]
+                                               : renderer::InvalidMapTexture;
+      if (state_.terrainDraft.blendedSurface)
+        material.flags |= renderer::MapMaterialTerrain;
     }
   }
-  if(build.recipe.blendedSurface && build.recipe.controlCells && build.field.height==1 && build.field.controlWidth) {
+  if (!build.recipe.surface.layers.empty()) {
+    if (!terrainMaterialCache_) {
+      error = "Materiais da prévia ainda não preparados.";
+      return false;
+    }
+    preview.textures = terrainMaterialCache_->textures;
+    preview.terrainSurfaces.resize(preview.materials.size(),
+                                   terrainMaterialCache_->binding);
+    for (auto &material : preview.materials) {
+      material.flags &= ~(renderer::MapMaterialNormalMap |
+                          renderer::MapMaterialMetallicRoughnessMap |
+                          renderer::MapMaterialEmissiveMap);
+      material.flags |= renderer::MapMaterialTerrain;
+      std::fill_n(material.textureIndices, 4, renderer::InvalidMapTexture);
+      std::fill_n(material.baseColorFactor, 4, 1.f);
+    }
+  }
+  if (build.recipe.blendedSurface && build.recipe.controlCells &&
+      build.field.height == 1 && build.field.controlWidth) {
     renderer::SharedAuthoringTexture control;
-    if(!resources::makeTerrainControlTexture(build.field,control,error))return false;
-    const auto binding=resources::terrainControlBinding(build.recipe,build.field,u32(preview.textures.size()));
+    if (!resources::makeTerrainControlTexture(build.field, control, error))
+      return false;
+    const auto binding = resources::terrainControlBinding(
+        build.recipe, build.field, u32(preview.textures.size()));
     preview.textures.push_back(std::move(control));
-    for(usize m=0;m<preview.materials.size();++m)
-      if(preview.materials[m].flags&renderer::MapMaterialTerrain)preview.terrainControls[m]=binding;
+    for (usize m = 0; m < preview.materials.size(); ++m)
+      if (preview.materials[m].flags & renderer::MapMaterialTerrain)
+        preview.terrainControls[m] = binding;
   }
   // No file encoding, decoding, asset registry, entity or history mutation.
-  struct Vertex {float p[3];i16 n[4],t[4];float uv[2],uv1[2];u8 color[4];};
-  static_assert(sizeof(Vertex)==renderer::MapVertexStride);
-  for(const auto &part:mesh.parts) {
+  struct Vertex {
+    float p[3];
+    i16 n[4], t[4];
+    float uv[2], uv1[2];
+    u8 color[4];
+  };
+  static_assert(sizeof(Vertex) == renderer::MapVertexStride);
+  for (const auto &part : mesh.parts) {
     renderer::MapDrawRecord draw{};
-    draw.firstIndex=u32(preview.indices.size());draw.indexCount=u32(part.vertices.size());
-    draw.vertexOffset=u32(preview.vertices.size()/sizeof(Vertex));draw.materialIndex=part.layer;
-    draw.model[0]=draw.model[5]=draw.model[10]=draw.model[15]=1;
-    float lo[3]{INFINITY,INFINITY,INFINITY},hi[3]{-INFINITY,-INFINITY,-INFINITY};
+    draw.firstIndex = u32(preview.indices.size());
+    draw.indexCount = u32(part.vertices.size());
+    draw.vertexOffset = u32(preview.vertices.size() / sizeof(Vertex));
+    draw.materialIndex = part.layer;
+    draw.model[0] = draw.model[5] = draw.model[10] = draw.model[15] = 1;
+    float lo[3]{INFINITY, INFINITY, INFINITY},
+        hi[3]{-INFINITY, -INFINITY, -INFINITY};
     std::vector<resources::TerrainVertex> unique;
     std::vector<u32> indices;
     resources::indexTerrainVertices(part.vertices, unique, indices);
-    for(const auto &v:unique) {
+    for (const auto &v : unique) {
       Vertex packed{};
-      for(u32 a=0;a<3;++a) {
-        packed.p[a]=v.position[a];packed.n[a]=i16(std::clamp(v.normal[a],-1.f,1.f)*32767);
-        lo[a]=std::min(lo[a],v.position[a]);hi[a]=std::max(hi[a],v.position[a]);
+      for (u32 a = 0; a < 3; ++a) {
+        packed.p[a] = v.position[a];
+        packed.n[a] = i16(std::clamp(v.normal[a], -1.f, 1.f) * 32767);
+        lo[a] = std::min(lo[a], v.position[a]);
+        hi[a] = std::max(hi[a], v.position[a]);
       }
-      packed.t[0]=packed.t[3]=32767;
-      std::copy_n(v.uv,2,packed.uv);std::copy_n(v.uv1,2,packed.uv1);
-      for(u32 a=0;a<4;++a)packed.color[a]=u8(std::lround(std::clamp(v.weights[a],0.f,1.f)*255));
-      auto offset=preview.vertices.size();preview.vertices.resize(offset+sizeof(packed));
-      std::memcpy(preview.vertices.data()+offset,&packed,sizeof(packed));
+      packed.t[0] = packed.t[3] = 32767;
+      std::copy_n(v.uv, 2, packed.uv);
+      std::copy_n(v.uv1, 2, packed.uv1);
+      for (u32 a = 0; a < 4; ++a)
+        packed.color[a] =
+            u8(std::lround(std::clamp(v.weights[a], 0.f, 1.f) * 255));
+      auto offset = preview.vertices.size();
+      preview.vertices.resize(offset + sizeof(packed));
+      std::memcpy(preview.vertices.data() + offset, &packed, sizeof(packed));
     }
-    preview.indices.insert(preview.indices.end(),indices.begin(),indices.end());
-    float radius2=0;
-    for(u32 a=0;a<3;++a){draw.boundsCenter[a]=(lo[a]+hi[a])*.5f;radius2+=(hi[a]-lo[a])*(hi[a]-lo[a])*.25f;}
-    draw.boundsRadius=std::sqrt(radius2);draw.lodGroupId=u32(preview.draws.size());
-    preview.identities.push_back(resources::assetGuidFromSeed("terrain-preview:"+std::to_string(preview.draws.size())));
-    preview.names.push_back("Prévia de terreno");preview.draws.push_back(draw);
+    preview.indices.insert(preview.indices.end(), indices.begin(),
+                           indices.end());
+    float radius2 = 0;
+    for (u32 a = 0; a < 3; ++a) {
+      draw.boundsCenter[a] = (lo[a] + hi[a]) * .5f;
+      radius2 += (hi[a] - lo[a]) * (hi[a] - lo[a]) * .25f;
+    }
+    draw.boundsRadius = std::sqrt(radius2);
+    draw.lodGroupId = u32(preview.draws.size());
+    preview.identities.push_back(resources::assetGuidFromSeed(
+        "terrain-preview:" + std::to_string(preview.draws.size())));
+    preview.names.push_back("Prévia de terreno");
+    preview.draws.push_back(draw);
   }
-  auto sources=importedSources_;
-  usize previous=0,textureBase=0;
-  for(const auto &s:sources) {
-    previous+=s.draws.size();textureBase+=s.textures.size();
+  auto sources = importedSources_;
+  usize previous = 0, textureBase = 0;
+  for (const auto &s : sources) {
+    previous += s.draws.size();
+    textureBase += s.textures.size();
   }
   sources.push_back(std::move(preview));
-  auto library=flattenSources(sources);
+  auto library = flattenSources(sources);
   // Share immutable albedos under the exact same streaming policy; only the
   // generated control image changes during a stroke. The publication interner
   // remaps both kinds of binding in one transaction, including the new map.
-  for(usize i=textureBase;i<library.textureSources.size();++i)library.textureSources[i]=terrainSource_;
-  usize primitives=0;
-  if(!publishAndAdopt(library,error,&primitives,true))return false;
-  terrainPreviewFirst_=u32(primitives+previous);terrainPreviewCount_=u32(mesh.parts.size());
-  terrainPreviewEpoch_=sceneEpoch_;state_.terrainLivePreview=true;++state_.terrainPreviewUpdates;
-  appearanceChanged_=true;
+  for (usize i = textureBase; i < library.textureSources.size(); ++i)
+    library.textureSources[i] = terrainSource_;
+  usize primitives = 0;
+  if (!publishAndAdopt(library, error, &primitives, true))
+    return false;
+  terrainPreviewFirst_ = u32(primitives + previous);
+  terrainPreviewCount_ = u32(mesh.parts.size());
+  terrainPreviewEpoch_ = sceneEpoch_;
+  state_.terrainLivePreview = true;
+  ++state_.terrainPreviewUpdates;
+  appearanceChanged_ = true;
   return true;
 }
 void EditorSession::refreshTerrainPreview() {
-  if(!terrainGestureActive_ && !state_.terrainBusy && (!state_.terrainOpen || resources::serializeTerrainRecipe(state_.terrainDraft)==state_.terrainAppliedRecipe)) {
-    if(terrainPreviewCount_ || (terrainPreviewJob_ && !terrainPreviewJob_->authoringOnly) || !state_.terrainOpen)clearTerrainPreview();
-    if(!state_.terrainOpen || state_.terrainPreviewBuild || state_.terrainTab!=4 || state_.terrainDraft.paths.empty())return;
+  if (!terrainGestureActive_ && !state_.terrainBusy &&
+      (!state_.terrainOpen ||
+       resources::serializeTerrainRecipe(state_.terrainDraft) ==
+           state_.terrainAppliedRecipe)) {
+    if (terrainPreviewCount_ ||
+        (terrainPreviewJob_ && !terrainPreviewJob_->authoringOnly) ||
+        !state_.terrainOpen)
+      clearTerrainPreview();
+    if (!state_.terrainOpen || state_.terrainPreviewBuild ||
+        state_.terrainTab != 4 || state_.terrainDraft.paths.empty())
+      return;
   }
-  if(!terrainPreviewJob_) {queueTerrainPreview();return;}
-  auto job=terrainPreviewJob_;
-  if(job->epoch!=sceneEpoch_ || job->revision!=document_.revision() ||
-      job->target!=state_.terrainTarget || !state_.terrainOpen || isPlaying()) {
-    terrainGestureActive_=false;terrainGestureStrokes_.clear();clearTerrainPreview();return;
+  if (!terrainPreviewJob_) {
+    queueTerrainPreview();
+    return;
   }
-  if(!job->ready.load(std::memory_order_acquire))return;
+  auto job = terrainPreviewJob_;
+  if (job->epoch != sceneEpoch_ || job->revision != document_.revision() ||
+      job->target != state_.terrainTarget || !state_.terrainOpen ||
+      isPlaying()) {
+    terrainGestureActive_ = false;
+    terrainGestureStrokes_.clear();
+    clearTerrainPreview();
+    return;
+  }
+  if (!job->ready.load(std::memory_order_acquire))
+    return;
   terrainPreviewJob_.reset();
-  terrainPreviewSamples_=job->samples;terrainPreviewRecipe_=job->key;
-  if(!job->error.empty())state_.terrainMessage="Prévia: "+job->error;
-  auto current=state_.terrainDraft;
-  if(terrainGestureActive_)current.strokes.insert(current.strokes.end(),terrainGestureStrokes_.begin(),terrainGestureStrokes_.end());
-  if(!job->cancel && job->error.empty() && job->key==resources::serializeTerrainRecipe(current)) {
+  terrainPreviewSamples_ = job->samples;
+  terrainPreviewRecipe_ = job->key;
+  if (!job->error.empty())
+    state_.terrainMessage = "Prévia: " + job->error;
+  auto current = state_.terrainDraft;
+  if (terrainGestureActive_)
+    current.strokes.insert(current.strokes.end(),
+                           terrainGestureStrokes_.begin(),
+                           terrainGestureStrokes_.end());
+  if (!job->cancel && job->error.empty() &&
+      job->key == resources::serializeTerrainRecipe(current)) {
     std::string error;
-    terrainPreviewCache_=job->build;state_.terrainPreviewBuild=job->build;
-    if(!job->authoringOnly && !publishTerrainPreview(*job->build,error))state_.terrainMessage="Prévia: "+error;
+    terrainMaterialCache_ = job->material;
+    terrainPreviewCache_ = job->build;
+    state_.terrainPreviewBuild = job->build;
+    if (!job->authoringOnly && !publishTerrainPreview(*job->build, error))
+      state_.terrainMessage = "Prévia: " + error;
   }
   queueTerrainPreview();
 }
@@ -280,15 +720,23 @@ void EditorSession::refreshTerrainBudget() {
   state_.terrainRetainedBytes = state_.terrainRetainedDraws = 0;
   state_.terrainRetainedBytesKnown = true;
   std::unordered_set<const renderer::AuthoringTexture *> resident;
+  std::unordered_set<const std::vector<u8> *> originalImages;
   for (const auto &source : importedSources_) {
     state_.terrainRetainedDraws += source.draws.size();
     auto bytes = retainedModelBytes(source);
-    if(bytes!=std::numeric_limits<u64>::max())for(const auto &texture:source.textures)
-      if(texture && !resident.insert(texture.get()).second)bytes-=textureRetainedBytes(*texture);
+    if (bytes != std::numeric_limits<u64>::max())
+      for (const auto &texture : source.textures)
+        if (texture && !resident.insert(texture.get()).second)
+          bytes -= textureRetainedBytes(*texture);
+    if(bytes!=std::numeric_limits<u64>::max())
+      for(const auto &image:source.terrainSurfaceImages)
+        if(image.encoded && !originalImages.insert(image.encoded.get()).second)
+          bytes-=sizeof(*image.encoded)+image.encoded->capacity();
     if (bytes == std::numeric_limits<u64>::max() ||
         bytes > std::numeric_limits<u64>::max() - state_.terrainRetainedBytes) {
       state_.terrainRetainedBytesKnown = false;
-      state_.terrainRetainedBytes = EditorScreenState::TerrainRetainedByteLimit + 1;
+      state_.terrainRetainedBytes =
+          EditorScreenState::TerrainRetainedByteLimit + 1;
     } else if (state_.terrainRetainedBytesKnown)
       state_.terrainRetainedBytes += bytes;
   }
@@ -298,17 +746,20 @@ EditorEntityId EditorSession::terrainRoot(EditorEntityId target) {
     terrainAccessProject_ = files_.rootPath();
     terrainAccess_.clear();
   }
-  // Resolve authoring through ancestors, including attachments or nested imported
-  // models. The recipe identifies a terrain; renaming its group or GLB does not.
+  // Resolve authoring through ancestors, including attachments or nested
+  // imported models. The recipe identifies a terrain; renaming its group or GLB
+  // does not.
   for (usize depth = 0; target && depth < document_.entityCount(); ++depth) {
     const auto *entity = document_.find(target);
     if (!entity)
       break;
     const auto *link = scene::importLink(entity->components);
-    const auto *record = link && link->root ? assets_.find(link->source) : nullptr;
+    const auto *record =
+        link && link->root ? assets_.find(link->source) : nullptr;
     if (record) {
-      auto found = std::find_if(terrainAccess_.begin(), terrainAccess_.end(),
-                               [&](const auto &entry) { return entry.source == record->guid; });
+      auto found = std::find_if(
+          terrainAccess_.begin(), terrainAccess_.end(),
+          [&](const auto &entry) { return entry.source == record->guid; });
       if (found == terrainAccess_.end()) {
         terrainAccess_.push_back({record->guid, {}, {}, false});
         found = std::prev(terrainAccess_.end());
@@ -318,9 +769,10 @@ EditorEntityId EditorSession::terrainRoot(EditorEntityId target) {
         found->hash = record->contentHash;
         resources::TerrainRecipe recipe;
         std::string error;
-        bool recovered=false;
-        found->editable = readTerrainAuthoring(files_.rootPath(),record->path,
-            record->contentHash,recipe,error,recovered);
+        bool recovered = false;
+        found->editable =
+            readTerrainAuthoring(files_.rootPath(), record->path,
+                                 record->contentHash, recipe, error, recovered);
       }
       if (found->editable)
         return entity->id;
@@ -334,18 +786,24 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     return false;
   clearTerrainPreview();
   refreshTerrainBudget();
-  bool restoredFromHistory=false;
+  bool restoredFromHistory = false;
   if (target) {
     // Explicit reopening retries a restored file even if its registry hash did
-    // not change. Automatic refresh checks this per-session negative cache first.
+    // not change. Automatic refresh checks this per-session negative cache
+    // first.
     for (auto ancestor = target, depth = EditorEntityId{0};
          ancestor && depth < document_.entityCount(); ++depth) {
       const auto *entity = document_.find(ancestor);
-      if (!entity) break;
+      if (!entity)
+        break;
       const auto *link = scene::importLink(entity->components);
       if (link && link->root)
-        terrainAccess_.erase(std::remove_if(terrainAccess_.begin(), terrainAccess_.end(),
-            [&](const auto &entry) { return entry.source == link->source && !entry.editable; }),
+        terrainAccess_.erase(
+            std::remove_if(terrainAccess_.begin(), terrainAccess_.end(),
+                           [&](const auto &entry) {
+                             return entry.source == link->source &&
+                                    !entry.editable;
+                           }),
             terrainAccess_.end());
       ancestor = entity->parent;
     }
@@ -355,11 +813,13 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     const auto *record = link ? assets_.find(link->source) : nullptr;
     std::string error;
     resources::TerrainRecipe recipe;
-    if (!record || !readTerrainAuthoring(files_.rootPath(),record->path,
-            record->contentHash,recipe,error,restoredFromHistory)) {
+    if (!record || !readTerrainAuthoring(files_.rootPath(), record->path,
+                                         record->contentHash, recipe, error,
+                                         restoredFromHistory)) {
       if (record)
         for (auto &entry : terrainAccess_)
-          if (entry.source == record->guid) entry.editable = false;
+          if (entry.source == record->guid)
+            entry.editable = false;
       state_.status = error.empty()
                           ? "Selecione a raiz ou um chunk do terreno Astra"
                           : error;
@@ -369,9 +829,11 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     state_.terrainDraft = std::move(recipe);
     state_.terrainTarget = id;
     terrainSource_ = record->guid;
-    state_.terrainMessage = std::string(restoredFromHistory?"Receita recuperada do histórico · aplique para reconstruir · ":"Receita carregada · ") +
-                            std::to_string(state_.terrainDraft.strokes.size()) +
-                            " operações";
+    state_.terrainMessage =
+        std::string(restoredFromHistory ? "Receita recuperada do histórico · "
+                                          "aplique para reconstruir · "
+                                        : "Receita carregada · ") +
+        std::to_string(state_.terrainDraft.strokes.size()) + " operações";
   } else {
     state_.terrainDraft = {};
     state_.terrainDraft.controlCells = 128;
@@ -388,6 +850,18 @@ bool EditorSession::openTerrain(EditorEntityId target) {
     terrainSource_ = {};
     state_.terrainMessage = "Novo terreno · configure e gere";
   }
+  terrainMaterialCache_.reset();
+  if (!state_.terrainDraft.surface.layers.empty()) {
+    const auto source = std::find_if(
+        importedSources_.begin(), importedSources_.end(),
+        [&](const auto &entry) { return entry.guid == terrainSource_; });
+    if (source != importedSources_.end() &&
+        !source->terrainSurfaceImages.empty()) {
+      auto material = std::make_shared<TerrainMaterialCache>();
+      material->images = source->terrainSurfaceImages;
+      terrainMaterialCache_ = std::move(material);
+    }
+  }
   normalizeTerrainBrush(state_);
   state_.terrainOpen = true;
   state_.terrainBrushArmed = false;
@@ -402,44 +876,150 @@ bool EditorSession::openTerrain(EditorEntityId target) {
   state_.terrainPage = 0;
   state_.terrainScroll = 0;
   state_.terrainSection = 0;
-  state_.terrainAppliedRecipe = target && !restoredFromHistory ? resources::serializeTerrainRecipe(state_.terrainDraft) : std::string{};
-  if(terrainPreviewCache_ && resources::serializeTerrainRecipe(terrainPreviewCache_->recipe)!=state_.terrainAppliedRecipe) {
-    terrainPreviewCache_.reset();state_.terrainPreviewBuild.reset();
+  state_.terrainAppliedRecipe =
+      target && !restoredFromHistory
+          ? resources::serializeTerrainRecipe(state_.terrainDraft)
+          : std::string{};
+  if (terrainPreviewCache_ &&
+      resources::serializeTerrainRecipe(terrainPreviewCache_->recipe) !=
+          state_.terrainAppliedRecipe) {
+    terrainPreviewCache_.reset();
+    state_.terrainPreviewBuild.reset();
   }
   return true;
 }
 bool EditorSession::setTerrainNumber(u32 field, double value) {
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
-      (field >= 52 && field != 60))
+      (field >= 52 && field != 60 && !(field >= 64 && field <= 76) &&
+       !(field >= 96 && field <= 110)))
     return false;
-  if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28 || field == 60) &&
+  if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28 ||
+       field == 60) &&
       (value < 0 || value > 4294967295.0 || std::floor(value) != value))
     return false;
   auto r = state_.terrainDraft;
   auto b = state_.terrainBrush;
-  if(field>=32 && field<=51) {
-    if(state_.terrainPath>=r.paths.size())return false;
-    auto &p=r.paths[state_.terrainPath];const float v=float(value);
-    switch(field) {
-      case 32:if(p.keepWidthRatio && p.width>0)p.shoulderWidth*=v/p.width;p.width=v;break;
-      case 33:p.shoulderWidth=v;break;
-      case 34:p.elevation=v;break;case 35:p.slopeLimit=v;break;case 36:p.uniformRamp=v;break;
-      case 37:p.definedHeight=v;break;case 38:p.textureOpacity=v;break;case 39:p.shoulderOpacity=v;break;
-      case 40:p.textureTransition=v;break;case 41:p.vegetationTransition=v;break;
-      case 42:case 43:if(v<0||v>3||std::floor(v)!=v)return false;(field==42?p.surfaceLayer:p.shoulderLayer)=u32(v);break;
-      case 44:case 45:case 46:if(state_.terrainPathPoint>=p.points.size())return false;
-        if(field==44)p.points[state_.terrainPathPoint].x=v;else if(field==45)p.points[state_.terrainPathPoint].y=v;else p.points[state_.terrainPathPoint].z=v;break;
-      case 47:p.profile={{0,1},{.5f,v},{1,0}};break;
-      case 48:p.textureProfile={{0,1},{.5f,v},{1,0}};break;
-      case 49:p.vegetationProfile={{0,1},{.5f,v},{1,0}};break;
-      case 50:case 51:{
-        auto &curve=state_.terrainSection==2?p.textureProfile:p.profile;
-        const auto index=std::min(state_.terrainProfilePoint,u32(curve.size()-1));
-        if(field==50)curve[index].x=v;else curve[index].y=v;
-      }break;
+  if ((field >= 64 && field <= 76) || (field >= 96 && field <= 110)) {
+    if (b.layer >= r.surface.layers.size())
+      return false;
+    auto &layer = r.surface.layers[b.layer];
+    const float v = float(value);
+    if (field >= 64 && field <= 76) {
+      float *values[] = {
+          &layer.scaleX,         &layer.scaleY,         &layer.offsetX,
+          &layer.offsetY,        &layer.rotation,       &layer.tint[0],
+          &layer.tint[1],        &layer.tint[2],        &layer.saturation,
+          &layer.axisContrast,   &layer.heightContrast, &layer.heightWidth,
+          &layer.heightInfluence};
+      *values[field - 64] = v;
+    } else {
+      auto &map = layer.maps[std::min(state_.terrainMapRole, 6u)];
+      if (field == 96)
+        map.factor = v;
+      else if (field == 97)
+        map.remapMin = v;
+      else if (field == 98)
+        map.remapMax = v;
+      else if (field <= 102)
+        map.colorFactor[field - 99] = v;
+      else if (field <= 106)
+        map.colorRemapMin[field - 103] = v;
+      else
+        map.colorRemapMax[field - 107] = v;
     }
-    std::string error;if(!resources::validTerrainRecipe(r,error)){state_.terrainMessage=error;return false;}
-    state_.terrainDraft=std::move(r);state_.terrainMessage="Caminho ajustado · prévia antes de aplicar";return true;
+    std::string error;
+    if (!resources::validTerrainRecipe(r, error)) {
+      state_.terrainMessage = error;
+      return false;
+    }
+    state_.terrainDraft = std::move(r);
+    state_.terrainMessage = "Material ajustado · prévia antes de aplicar";
+    return true;
+  }
+  if (field >= 32 && field <= 51) {
+    if (state_.terrainPath >= r.paths.size())
+      return false;
+    auto &p = r.paths[state_.terrainPath];
+    const float v = float(value);
+    switch (field) {
+    case 32:
+      if (p.keepWidthRatio && p.width > 0)
+        p.shoulderWidth *= v / p.width;
+      p.width = v;
+      break;
+    case 33:
+      p.shoulderWidth = v;
+      break;
+    case 34:
+      p.elevation = v;
+      break;
+    case 35:
+      p.slopeLimit = v;
+      break;
+    case 36:
+      p.uniformRamp = v;
+      break;
+    case 37:
+      p.definedHeight = v;
+      break;
+    case 38:
+      p.textureOpacity = v;
+      break;
+    case 39:
+      p.shoulderOpacity = v;
+      break;
+    case 40:
+      p.textureTransition = v;
+      break;
+    case 41:
+      p.vegetationTransition = v;
+      break;
+    case 42:
+    case 43:
+      if (v < 0 || v > 3 || std::floor(v) != v)
+        return false;
+      (field == 42 ? p.surfaceLayer : p.shoulderLayer) = u32(v);
+      break;
+    case 44:
+    case 45:
+    case 46:
+      if (state_.terrainPathPoint >= p.points.size())
+        return false;
+      if (field == 44)
+        p.points[state_.terrainPathPoint].x = v;
+      else if (field == 45)
+        p.points[state_.terrainPathPoint].y = v;
+      else
+        p.points[state_.terrainPathPoint].z = v;
+      break;
+    case 47:
+      p.profile = {{0, 1}, {.5f, v}, {1, 0}};
+      break;
+    case 48:
+      p.textureProfile = {{0, 1}, {.5f, v}, {1, 0}};
+      break;
+    case 49:
+      p.vegetationProfile = {{0, 1}, {.5f, v}, {1, 0}};
+      break;
+    case 50:
+    case 51: {
+      auto &curve = state_.terrainSection == 2 ? p.textureProfile : p.profile;
+      const auto index =
+          std::min(state_.terrainProfilePoint, u32(curve.size() - 1));
+      if (field == 50)
+        curve[index].x = v;
+      else
+        curve[index].y = v;
+    } break;
+    }
+    std::string error;
+    if (!resources::validTerrainRecipe(r, error)) {
+      state_.terrainMessage = error;
+      return false;
+    }
+    state_.terrainDraft = std::move(r);
+    state_.terrainMessage = "Caminho ajustado · prévia antes de aplicar";
+    return true;
   }
   const float f = float(value);
   switch (field) {
@@ -488,40 +1068,79 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   case 14:
     r.baseDepth = f;
     break;
-  case 15: b.hardness=f;break;
-  case 16: b.rotation=f;break;
-  case 17: b.aspect=f;break;
+  case 15:
+    b.hardness = f;
+    break;
+  case 16:
+    b.rotation = f;
+    break;
+  case 17:
+    b.aspect = f;
+    break;
   case 18:
-    if(f<.05f || f>1)return false;
-    state_.terrainSpacing=f;return true;
-  case 19: r.macroVariation=f;break;
-  case 20: b.verticalAspect=f;break;
-  case 21: b.depthAspect=f;break;
-  case 22: b.pitch=f;break;
-  case 23: b.roll=f;break;
-  case 24: b.roundness=f;break;
-  case 25: b.opacity=f;break;
-  case 26: if(f<1 || f>4 || std::floor(f)!=f)return false;b.filterRadius=u32(f);break;
-  case 27: b.surfaceDepth=f;break;
-  case 28: r.lodLevels=u32(value);break;
-  case 29: r.lodRelativeError=f*.01f;break;
+    if (f < .05f || f > 1)
+      return false;
+    state_.terrainSpacing = f;
+    return true;
+  case 19:
+    r.macroVariation = f;
+    break;
+  case 20:
+    b.verticalAspect = f;
+    break;
+  case 21:
+    b.depthAspect = f;
+    break;
+  case 22:
+    b.pitch = f;
+    break;
+  case 23:
+    b.roll = f;
+    break;
+  case 24:
+    b.roundness = f;
+    break;
+  case 25:
+    b.opacity = f;
+    break;
+  case 26:
+    if (f < 1 || f > 4 || std::floor(f) != f)
+      return false;
+    b.filterRadius = u32(f);
+    break;
+  case 27:
+    b.surfaceDepth = f;
+    break;
+  case 28:
+    r.lodLevels = u32(value);
+    break;
+  case 29:
+    r.lodRelativeError = f * .01f;
+    break;
   case 60:
-    if(r.mode!=resources::TerrainMode::Heightfield)return false;
-    r.controlCells=u32(value);break;
+    if (r.mode != resources::TerrainMode::Heightfield)
+      return false;
+    r.controlCells = u32(value);
+    break;
   default:
     return false;
   }
   std::string error;
-  if(b.dimensionsLinked && (field==17 || field==20 || field==21))b.aspect=b.verticalAspect=b.depthAspect=f;
-  if (!resources::validTerrainRecipe(r, error) || !resources::validTerrainStroke(b,error)) {
-    state_.terrainMessage = error.empty() ? "Valor fora dos limites do pincel" : error;
+  if (b.dimensionsLinked && (field == 17 || field == 20 || field == 21))
+    b.aspect = b.verticalAspect = b.depthAspect = f;
+  if (!resources::validTerrainRecipe(r, error) ||
+      !resources::validTerrainStroke(b, error)) {
+    state_.terrainMessage =
+        error.empty() ? "Valor fora dos limites do pincel" : error;
     return false;
   }
   state_.terrainDraft = std::move(r);
   state_.terrainBrush = b;
-  state_.terrainMessage = (field >= 9 && field <= 13) || (field>=15 && field<=18) || (field>=20 && field<=27)
-      ? "Pincel ajustado · use o terreno ou Aplicar na posição XYZ"
-      : "Rascunho alterado · toque Aplicar alterações para atualizar";
+  state_.terrainMessage =
+      (field >= 9 && field <= 13) || (field >= 15 && field <= 18) ||
+              (field >= 20 && field <= 27)
+          ? "Pincel ajustado · use o terreno ou Aplicar na posição XYZ"
+          : "Rascunho alterado · toque Aplicar alterações para atualizar";
   return true;
 }
 bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
@@ -544,47 +1163,66 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
   // The GLB remains the scene/Undo resource. A separate recipe chain can
   // reconstruct authoring when its source file is lost or truncated.
   std::string previousHash;
-  if(const auto *old=assets_.find(terrainSource_)) {
+  if (const auto *old = assets_.find(terrainSource_)) {
     resources::TerrainRecipe previousRecipe;
-    bool recovered=false;
-    if(readTerrainAuthoring(files_.rootPath(),old->path,old->contentHash,
-          previousRecipe,error,recovered)) {
-      previousHash=old->contentHash;
-      if(!writeTerrainRecovery(files_.rootPath(),previousHash,previousRecipe,{},error))return false;
-    } else {error="Receita anterior indisponível; revisão preservada.";return false;}
+    bool recovered = false;
+    if (readTerrainAuthoring(files_.rootPath(), old->path, old->contentHash,
+                             previousRecipe, error, recovered)) {
+      previousHash = old->contentHash;
+      if (!writeTerrainRecovery(files_.rootPath(), previousHash, previousRecipe,
+                                {}, error))
+        return false;
+    } else {
+      error = "Receita anterior indisponível; revisão preservada.";
+      return false;
+    }
   }
-  if(!writeTerrainRecovery(files_.rootPath(),hash,r,previousHash,error))return false;
+  if (!writeTerrainRecovery(files_.rootPath(), hash, r, previousHash, error))
+    return false;
   auto path = "Terrenos/terrain-" + hash + ".glb";
   ModelImportReport report;
   const auto *known = assets_.findByPath(path);
-  if (!known) for (const auto &entry : importedSources_) {
-    const auto *record = assets_.find(entry.guid);
-    if (record && record->contentHash == hash) {
-      known = record;
-      path = record->path;
-      break;
+  if (!known)
+    for (const auto &entry : importedSources_) {
+      const auto *record = assets_.find(entry.guid);
+      if (record && record->contentHash == hash) {
+        known = record;
+        path = record->path;
+        break;
+      }
     }
-  }
-  if(known && known->contentHash!=hash) {
-    error="O caminho da revisão pertence a outra fonte; terreno preservado.";return false;
+  if (known && known->contentHash != hash) {
+    error = "O caminho da revisão pertence a outra fonte; terreno preservado.";
+    return false;
   }
   refreshTerrainBudget();
   if (!known) {
     std::unordered_set<const renderer::AuthoringTexture *> resident;
-    for(const auto &source:importedSources_)for(const auto &texture:source.textures)if(texture)resident.insert(texture.get());
-    const auto candidateBytes = terrainCandidateBytes(model,std::move(resident));
+    for (const auto &source : importedSources_)
+      for (const auto &texture : source.textures)
+        if (texture)
+          resident.insert(texture.get());
+    std::vector<resources::TerrainSurfaceImage> originals;
+    for(const auto &source:importedSources_)originals.insert(originals.end(),source.terrainSurfaceImages.begin(),source.terrainSurfaceImages.end());
+    const auto candidateBytes =
+        terrainCandidateBytes(model, std::move(resident), originals);
     const auto byteLimit = EditorScreenState::TerrainRetainedByteLimit;
     const auto drawLimit = EditorScreenState::TerrainRetainedDrawLimit;
-    if (!state_.terrainRetainedBytesKnown || candidateBytes == std::numeric_limits<u64>::max()) {
-      error = "Não foi possível contabilizar a biblioteca carregada; nova revisão recusada. "
+    if (!state_.terrainRetainedBytesKnown ||
+        candidateBytes == std::numeric_limits<u64>::max()) {
+      error = "Não foi possível contabilizar a biblioteca carregada; nova "
+              "revisão recusada. "
               "Terreno, fontes e histórico preservados.";
       return false;
     }
     if (candidateBytes > byteLimit ||
-        state_.terrainRetainedBytes > byteLimit-candidateBytes ||
-        model.draws.size() > drawLimit || state_.terrainRetainedDraws > drawLimit-model.draws.size()) {
-      error = "Nova revisão excede o orçamento da biblioteca: 128 MiB CPU contabilizados ou 4096 desenhos. "
-              "Terreno, fontes e histórico preservados; não há limpeza automática.";
+        state_.terrainRetainedBytes > byteLimit - candidateBytes ||
+        model.draws.size() > drawLimit ||
+        state_.terrainRetainedDraws > drawLimit - model.draws.size()) {
+      error =
+          "Nova revisão excede o orçamento da biblioteca: 128 MiB CPU "
+          "contabilizados ou 4096 desenhos. "
+          "Terreno, fontes e histórico preservados; não há limpeza automática.";
       return false;
     }
     if (!commitModelImport(bytes, model, path, "", report)) {
@@ -598,22 +1236,33 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
     error = "Fonte não registrada.";
     return false;
   }
-  if(known) {
+  if (known) {
     std::filesystem::path absolute;
     std::vector<u8> current;
-    if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),path,absolute)) {
-      error="Caminho da revisão inválido.";return false;
+    if (!EditorImportTransaction::safePath(
+            EditorImportTransaction::fromUtf8(files_.rootPath()), path,
+            absolute)) {
+      error = "Caminho da revisão inválido.";
+      return false;
     }
-    if(!EditorImportTransaction::read(absolute,current,64u<<20) || Sha256::hex(current)!=hash) {
+    if (!EditorImportTransaction::read(absolute, current, 64u << 20) ||
+        Sha256::hex(current) != hash) {
       std::filesystem::path temporary;
-      if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),path+".aether-tmp",temporary)) {
-        error="Temporário da revisão inválido.";return false;
+      if (!EditorImportTransaction::safePath(
+              EditorImportTransaction::fromUtf8(files_.rootPath()),
+              path + ".aether-tmp", temporary)) {
+        error = "Temporário da revisão inválido.";
+        return false;
       }
       std::error_code ec;
-      std::filesystem::create_directories(absolute.parent_path(),ec);
-      if(ec || !EditorImportTransaction::write(absolute,bytes,&error))return false;
+      std::filesystem::create_directories(absolute.parent_path(), ec);
+      if (ec || !EditorImportTransaction::write(absolute, bytes, &error))
+        return false;
     }
   }
+  // A reused source may follow a transient preview or history restoration.
+  // Rebuild the canonical library before deriving chunk slots from its size.
+  if(known && !publishAndAdopt(flattenSources(importedSources_),error))return false;
   usize before = 0, total = 0;
   const ImportedSource *source = nullptr;
   for (const auto &entry : importedSources_) {
@@ -759,29 +1408,57 @@ bool EditorSession::applyTerrain(const resources::TerrainRecipe &r,
                                  std::string &error) {
   std::shared_ptr<const resources::TerrainBuild> build = terrainPreviewCache_;
   if (!build || build->mesh.parts.empty() ||
-      resources::serializeTerrainRecipe(build->recipe) != resources::serializeTerrainRecipe(r)) {
+      resources::serializeTerrainRecipe(build->recipe) !=
+          resources::serializeTerrainRecipe(r)) {
     auto updated = std::make_shared<resources::TerrainBuild>();
-    if (!resources::updateTerrain(r, build && !build->mesh.parts.empty() ? build.get() : nullptr,
-                                  *updated, error)) return false;
+    if (!resources::updateTerrain(
+            r, build && !build->mesh.parts.empty() ? build.get() : nullptr,
+            *updated, error))
+      return false;
     build = std::move(updated);
   }
   std::vector<u8> bytes;
   resources::GltfImport model;
-  if (!resources::writeTerrainGlb(*build, textures(), bytes, error))
+  if (!r.surface.layers.empty()) {
+    if (!terrainMaterialCache_ && !loadTerrainCatalog()) {
+      error = state_.terrainMessage;
+      return false;
+    }
+    auto material =
+        prepareTerrainMaterial(r, state_.terrainCatalog, terrainLibraryReader_,
+                               terrainMaterialCache_, error);
+    if (!material)
+      return false;
+    terrainMaterialCache_ = std::move(material);
+  }
+  const std::span<const resources::TerrainSurfaceImage> images =
+      r.surface.layers.empty()
+          ? std::span<const resources::TerrainSurfaceImage>{}
+          : terrainMaterialCache_->images;
+  if (!resources::writeTerrainGlb(*build, textures(), images, bytes, error))
     return false;
   if (!resources::importGlb(bytes, {}, {}, model)) {
     error = model.diagnostic;
     return false;
   }
-  if(!publishTerrain(r, build->mesh, bytes, model, error))return false;
-  terrainPreviewCache_=build;state_.terrainPreviewBuild=std::move(build);return true;
+  clearTerrainPreview(false);
+  if (!publishTerrain(r, build->mesh, bytes, model, error)) {
+    const auto reason=error;std::string restore;
+    if(!publishAndAdopt(flattenSources(importedSources_),restore))error=reason+" Restauração pendente: "+restore;
+    else error=reason;
+    return false;
+  }
+  terrainPreviewCache_ = build;
+  state_.terrainPreviewBuild = std::move(build);
+  return true;
 }
 void EditorSession::startTerrainJob() {
   if (state_.terrainBusy || isPlaying() || history_.isOpen())
     return;
   if (!terrainSourceCurrent(document_, state_.terrainTarget, terrainSource_)) {
     state_.terrainBrushArmed = false;
-    state_.terrainMessage = "Fonte do terreno mudou · reabra o terreno antes de aplicar";
+    state_.terrainMessage =
+        "Fonte do terreno mudou · reabra o terreno antes de aplicar";
     return;
   }
   std::string error;
@@ -797,30 +1474,52 @@ void EditorSession::startTerrainJob() {
   job->epoch = sceneEpoch_;
   job->revision = document_.revision();
   job->project = files_.rootPath();
+  if (!job->recipe.surface.layers.empty() && !terrainMaterialCache_ &&
+      !loadTerrainCatalog())
+    return;
+  job->catalog = state_.terrainCatalog;
+  job->reader = terrainLibraryReader_;
+  job->previousMaterial = terrainMaterialCache_;
   terrainJob_ = job;
   state_.terrainBusy = true;
   state_.terrainProgress = 0;
   state_.terrainMessage = "Gerando malha…";
   std::thread([job] {
+    if (!job->recipe.surface.layers.empty()) {
+      job->material =
+          prepareTerrainMaterial(job->recipe, job->catalog, job->reader,
+                                 job->previousMaterial, job->error);
+      if (!job->material) {
+        job->ready.store(true, std::memory_order_release);
+        return;
+      }
+    }
     const auto progress = [job](float p) {
       job->progress.store(p * .8f);
       return !job->cancel.load();
     };
-    // Immutable snapshots remain valid even if the UI cancels or replaces its preview.
-    if (job->previous && resources::serializeTerrainRecipe(job->previous->recipe) ==
-                             resources::serializeTerrainRecipe(job->recipe)) {
+    // Immutable snapshots remain valid even if the UI cancels or replaces its
+    // preview.
+    if (job->previous &&
+        resources::serializeTerrainRecipe(job->previous->recipe) ==
+            resources::serializeTerrainRecipe(job->recipe)) {
       job->build = job->previous;
       progress(1.f);
     } else {
       auto updated = std::make_shared<resources::TerrainBuild>();
-      if (resources::updateTerrain(job->recipe, job->previous.get(), *updated, job->error, progress))
+      if (resources::updateTerrain(job->recipe, job->previous.get(), *updated,
+                                   job->error, progress))
         job->build = std::move(updated);
-      else if (job->error.empty()) job->error = "Não foi possível gerar o terreno";
+      else if (job->error.empty())
+        job->error = "Não foi possível gerar o terreno";
     }
-    if (job->build &&
-        !job->cancel &&
-        resources::writeTerrainGlb(*job->build, textures(),
-                                   job->bytes, job->error)) {
+    if (job->build && !job->cancel &&
+        resources::writeTerrainGlb(
+            *job->build, textures(),
+            job->material ? std::span<const resources::TerrainSurfaceImage>(
+                                job->material->images)
+                          : std::span<const resources::TerrainSurfaceImage>{},
+            job->bytes, job->error)) {
       if (!resources::importGlb(job->bytes, {}, {}, job->model))
         job->error = job->model.diagnostic;
     }
@@ -830,8 +1529,9 @@ void EditorSession::startTerrainJob() {
 void EditorSession::refreshTerrainJob() {
   refreshTerrainPreview();
   state_.terrainSelectionRoot = isPlaying() ? 0 : terrainRoot(state_.selection);
-  const auto inspected = state_.inspectorTarget ? state_.inspectorTarget :
-                         state_.inspectorLocked ? state_.inspectorLocked : state_.selection;
+  const auto inspected = state_.inspectorTarget   ? state_.inspectorTarget
+                         : state_.inspectorLocked ? state_.inspectorLocked
+                                                  : state_.selection;
   state_.terrainInspectorRoot = isPlaying() ? 0 : terrainRoot(inspected);
   if (!terrainJob_) {
     if (state_.terrainOpen && state_.terrainTarget) {
@@ -848,10 +1548,13 @@ void EditorSession::refreshTerrainJob() {
         terrainGestureStrokes_.clear();
         const auto source = link->source;
         const auto *record = assets_.find(source);
-        const auto access = std::find_if(terrainAccess_.begin(), terrainAccess_.end(),
+        const auto access = std::find_if(
+            terrainAccess_.begin(), terrainAccess_.end(),
             [&](const auto &entry) { return entry.source == source; });
-        const bool failed = access != terrainAccess_.end() && !access->editable &&
-            (record ? access->path == record->path && access->hash == record->contentHash
+        const bool failed =
+            access != terrainAccess_.end() && !access->editable &&
+            (record ? access->path == record->path &&
+                          access->hash == record->contentHash
                     : access->path.empty() && access->hash.empty());
         if (!failed) {
           // Undo/Redo replaces the recipe, not the user's working context. Keep
@@ -867,9 +1570,11 @@ void EditorSession::refreshTerrainJob() {
           state_.terrainPage = page;
           state_.terrainScroll = scroll;
           state_.terrainBrush = brush;
-          if (loaded) normalizeTerrainBrush(state_);
+          if (loaded)
+            normalizeTerrainBrush(state_);
           else {
-            auto cached = std::find_if(terrainAccess_.begin(), terrainAccess_.end(),
+            auto cached = std::find_if(
+                terrainAccess_.begin(), terrainAccess_.end(),
                 [&](const auto &entry) { return entry.source == source; });
             if (cached == terrainAccess_.end()) {
               terrainAccess_.push_back({source, {}, {}, false});
@@ -881,7 +1586,8 @@ void EditorSession::refreshTerrainJob() {
           }
         }
         if (link->source != terrainSource_)
-          state_.terrainMessage = "Fonte do terreno indisponível · rascunho preservado; reabra para tentar novamente";
+          state_.terrainMessage = "Fonte do terreno indisponível · rascunho "
+                                  "preservado; reabra para tentar novamente";
       }
     }
     return;
@@ -905,10 +1611,16 @@ void EditorSession::refreshTerrainJob() {
   }
   std::string error = job->error;
   clearTerrainPreview(false);
-  if (error.empty() && publishTerrain(job->recipe, job->build->mesh, job->bytes, job->model, error)) {
-    terrainPreviewCache_=job->build;state_.terrainPreviewBuild=job->build;
+  if (error.empty() && publishTerrain(job->recipe, job->build->mesh, job->bytes,
+                                      job->model, error)) {
+    terrainMaterialCache_ = job->material;
+    terrainPreviewCache_ = job->build;
+    state_.terrainPreviewBuild = job->build;
   }
-  if(!error.empty()) {std::string ignored;publishAndAdopt(flattenSources(importedSources_),ignored,nullptr,true);}
+  if (!error.empty()) {
+    std::string ignored;
+    publishAndAdopt(flattenSources(importedSources_), ignored, nullptr, true);
+  }
   if (!error.empty()) {
     state_.terrainMessage = error;
     state_.status = error;
@@ -925,107 +1637,139 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     return true;
   }
   if (routing.tapped && id == widgetId(EditorWidget::TerrainEditSelection)) {
-    const auto target = state_.inspectorTarget ? state_.inspectorTarget :
-                        state_.inspectorLocked ? state_.inspectorLocked : state_.selection;
+    const auto target = state_.inspectorTarget   ? state_.inspectorTarget
+                        : state_.inspectorLocked ? state_.inspectorLocked
+                                                 : state_.selection;
     openTerrain(target);
     return true;
   }
   if (!state_.terrainOpen)
     return false;
-  if(routing.tapped && (id==widgetId(EditorWidget::NavigationOrbit) ||
-      id==widgetId(EditorWidget::NavigationPan) || id==widgetId(EditorWidget::NavigationZoom))) {
-    state_.terrainBrushArmed=false;state_.terrainCursorVisible=false;clearTerrainPreview();
+  if (routing.tapped && (id == widgetId(EditorWidget::NavigationOrbit) ||
+                         id == widgetId(EditorWidget::NavigationPan) ||
+                         id == widgetId(EditorWidget::NavigationZoom))) {
+    state_.terrainBrushArmed = false;
+    state_.terrainCursorVisible = false;
+    clearTerrainPreview();
     return false;
   }
-  if(id==widgetId(EditorWidget::ToolMove) || id==widgetId(EditorWidget::ToolRotate) ||
-      id==widgetId(EditorWidget::ToolScale) || id==widgetId(EditorWidget::ToolSelect))return true;
+  if (id == widgetId(EditorWidget::ToolMove) ||
+      id == widgetId(EditorWidget::ToolRotate) ||
+      id == widgetId(EditorWidget::ToolScale) ||
+      id == widgetId(EditorWidget::ToolSelect))
+    return true;
   if (!terrainSourceCurrent(document_, state_.terrainTarget, terrainSource_) &&
       ((routing.tapped && (id == widgetId(EditorWidget::TerrainGenerate) ||
-                          id == widgetId(EditorWidget::TerrainBrushArm) ||
-                          id == widgetId(EditorWidget::TerrainSculpt) ||
-                          id == widgetId(EditorWidget::TerrainStamp))) ||
-       (routing.target == ui::UiPointerTarget::Viewport && state_.terrainBrushArmed) ||
+                           id == widgetId(EditorWidget::TerrainBrushArm) ||
+                           id == widgetId(EditorWidget::TerrainSculpt) ||
+                           id == widgetId(EditorWidget::TerrainStamp))) ||
+       (routing.target == ui::UiPointerTarget::Viewport &&
+        state_.terrainBrushArmed) ||
        terrainGestureActive_)) {
     state_.terrainBrushArmed = false;
     terrainGestureActive_ = false;
     terrainGestureStrokes_.clear();
-    state_.terrainMessage = "Fonte do terreno mudou · reabra o terreno antes de aplicar";
+    state_.terrainMessage =
+        "Fonte do terreno mudou · reabra o terreno antes de aplicar";
     return true;
   }
   if (terrainGestureActive_ && event.phase == ui::UiPointerPhase::Down &&
       routing.target != ui::UiPointerTarget::Viewport) {
     terrainGestureActive_ = false;
     terrainGestureStrokes_.clear();
-    state_.terrainMessage = "Traço cancelado ao usar os controles · cena preservada";
+    state_.terrainMessage =
+        "Traço cancelado ao usar os controles · cena preservada";
   }
-  if ((state_.terrainBrushArmed && routing.target == ui::UiPointerTarget::Viewport) ||
+  if ((state_.terrainBrushArmed &&
+       routing.target == ui::UiPointerTarget::Viewport) ||
       (terrainGestureActive_ && terrainGesturePointer_ == event.pointerId)) {
     if (state_.terrainBusy)
       return true;
     if (event.phase == ui::UiPointerPhase::Down) {
       if (terrainGestureActive_)
-        return true; // One brush owns the gesture; a second finger never paints.
+        return true; // One brush owns the gesture; a second finger never
+                     // paints.
       terrainGestureActive_ = true;
       terrainGesturePointer_ = event.pointerId;
       terrainGestureTarget_ = state_.terrainTarget;
       terrainGestureRevision_ = document_.revision();
       clearTerrainPreview();
       terrainGestureBrush_ = state_.terrainBrush;
-      terrainGestureBrush_.gesture=state_.terrainDraft.strokes.empty()?1:state_.terrainDraft.strokes.back().gesture+1;
-      terrainGestureRecipe_ = resources::serializeTerrainRecipe(state_.terrainDraft);
+      terrainGestureBrush_.gesture =
+          state_.terrainDraft.strokes.empty()
+              ? 1
+              : state_.terrainDraft.strokes.back().gesture + 1;
+      terrainGestureRecipe_ =
+          resources::serializeTerrainRecipe(state_.terrainDraft);
       terrainGestureStrokes_.clear();
       terrainGestureOverflow_ = false;
-      terrainGestureSampler_.reset(terrainGestureBrush_.radius * state_.terrainSpacing);
+      terrainGestureSampler_.reset(terrainGestureBrush_.radius *
+                                   state_.terrainSpacing);
     }
     if (!terrainGestureActive_ || terrainGesturePointer_ != event.pointerId)
       return true;
     if (event.phase == ui::UiPointerPhase::Cancel ||
-        terrainGestureTarget_ != state_.terrainTarget || terrainGestureRevision_ != document_.revision() ||
-        terrainGestureRecipe_ != resources::serializeTerrainRecipe(state_.terrainDraft)) {
+        terrainGestureTarget_ != state_.terrainTarget ||
+        terrainGestureRevision_ != document_.revision() ||
+        terrainGestureRecipe_ !=
+            resources::serializeTerrainRecipe(state_.terrainDraft)) {
       terrainGestureActive_ = false;
       terrainGestureStrokes_.clear();
-      state_.terrainCursorVisible=false;
+      state_.terrainCursorVisible = false;
       clearTerrainPreview();
       state_.terrainMessage = "Traço cancelado · cena e receita preservadas";
       return true;
     }
     const auto append = [&](const resources::TerrainStroke &stroke) {
-      if (state_.terrainDraft.strokes.size() + terrainGestureStrokes_.size() >= 4096) {
+      if (state_.terrainDraft.strokes.size() + terrainGestureStrokes_.size() >=
+          4096) {
         terrainGestureOverflow_ = true;
         terrainGestureStrokes_.clear();
-        state_.terrainMessage = "Limite de 4096 amostras · traço descartado; use raio maior ou um traço menor";
+        state_.terrainMessage = "Limite de 4096 amostras · traço descartado; "
+                                "use raio maior ou um traço menor";
         return false;
       }
       terrainGestureStrokes_.push_back(stroke);
       return true;
     };
     // The pointer keeps capture outside the viewport, but cannot paint through
-    // a panel. Missing the surface suspends brush resampling until the next hit.
+    // a panel. Missing the surface suspends brush resampling until the next
+    // hit.
     if (!terrainGestureOverflow_ && view_.rect.contains(event.position) &&
-        router_.hitTest(event.position).target == ui::UiPointerTarget::Viewport) {
-      auto pointer=event.position;
-      state_.terrainPointer=pointer;
-      if(state_.terrainTouchOffset)pointer.y-=44.f;
+        router_.hitTest(event.position).target ==
+            ui::UiPointerTarget::Viewport) {
+      auto pointer = event.position;
+      state_.terrainPointer = pointer;
+      if (state_.terrainTouchOffset)
+        pointer.y -= 44.f;
       const auto ray = screenPointToRay(view_, pointer);
       buildPickCandidates(nullptr, false, state_.terrainTarget);
       const auto *root = document_.find(state_.terrainTarget);
-      const auto *rootLink = root ? scene::importLink(root->components) : nullptr;
+      const auto *rootLink =
+          root ? scene::importLink(root->components) : nullptr;
       std::erase_if(candidates_, [&](const auto &candidate) {
         const auto *object = document_.find(candidate.id);
-        const auto *link = object ? scene::importLink(object->components) : nullptr;
-        return !rootLink || !link || link->root || link->source != rootLink->source;
+        const auto *link =
+            object ? scene::importLink(object->components) : nullptr;
+        return !rootLink || !link || link->root ||
+               link->source != rootLink->source;
       });
-      // Anchor a gesture to its committed surface. Picking the deforming preview
-      // feeds its own displacement back into the next sample, so a stationary
-      // finger can grow spikes and stroke strength depends on GPU update timing.
-      // The preview remains the source for the visible brush outline below.
+      // Anchor a gesture to its committed surface. Picking the deforming
+      // preview feeds its own displacement back into the next sample, so a
+      // stationary finger can grow spikes and stroke strength depends on GPU
+      // update timing. The preview remains the source for the visible brush
+      // outline below.
       const auto hit = pickNearest(candidates_, ray, 0, true);
       float world[16];
-      if(terrainPreviewCount_ && editorWorldMatrix(document_,state_.terrainTarget,world)) {
+      if (terrainPreviewCount_ &&
+          editorWorldMatrix(document_, state_.terrainTarget, world)) {
         candidates_.clear();
-        for(u32 part=0;part<terrainPreviewCount_;++part) {
-          EditorPickCandidate c;c.id=state_.terrainTarget;
-          if(mapScene_.pickResourceGeometry(terrainPreviewFirst_+part,world,c))candidates_.push_back(std::move(c));
+        for (u32 part = 0; part < terrainPreviewCount_; ++part) {
+          EditorPickCandidate c;
+          c.id = state_.terrainTarget;
+          if (mapScene_.pickResourceGeometry(terrainPreviewFirst_ + part, world,
+                                             c))
+            candidates_.push_back(std::move(c));
         }
       }
       if (hit.hit &&
@@ -1056,37 +1800,68 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
           }
         }
         if (valid) {
-          const bool levelTool=terrainGestureBrush_.tool==resources::TerrainTool::Flatten || terrainGestureBrush_.tool==resources::TerrainTool::Path;
-          if(!levelTool) {
-            local[1]-=terrainGestureBrush_.surfaceDepth;
-            if(terrainGestureBrush_.lockHeight && !terrainGestureStrokes_.empty())local[1]=terrainGestureStrokes_.front().y;
+          const bool levelTool =
+              terrainGestureBrush_.tool == resources::TerrainTool::Flatten ||
+              terrainGestureBrush_.tool == resources::TerrainTool::Path;
+          if (!levelTool) {
+            local[1] -= terrainGestureBrush_.surfaceDepth;
+            if (terrainGestureBrush_.lockHeight &&
+                !terrainGestureStrokes_.empty())
+              local[1] = terrainGestureStrokes_.front().y;
           }
-          state_.terrainCursorVisible=true;
-          for(u32 a=0;a<3;++a)state_.terrainCursor[a]=world[12+a]+world[a]*local[0]+world[4+a]*local[1]+world[8+a]*local[2];
+          state_.terrainCursorVisible = true;
+          for (u32 a = 0; a < 3; ++a)
+            state_.terrainCursor[a] = world[12 + a] + world[a] * local[0] +
+                                      world[4 + a] * local[1] +
+                                      world[8 + a] * local[2];
           state_.terrainCursorLines.clear();
-          const auto &brush=terrainGestureBrush_;
-          const bool volume=state_.terrainDraft.mode!=resources::TerrainMode::Heightfield &&
-            (brush.tool==resources::TerrainTool::Dig || brush.tool==resources::TerrainTool::Add ||
-             brush.tool==resources::TerrainTool::Smooth || brush.tool==resources::TerrainTool::Sharpen ||
-             brush.tool==resources::TerrainTool::Restore || brush.tool==resources::TerrainTool::Paint);
-          for(u32 ring=0;ring<(volume?3u:2u);++ring) {
+          const auto &brush = terrainGestureBrush_;
+          const bool volume =
+              state_.terrainDraft.mode != resources::TerrainMode::Heightfield &&
+              (brush.tool == resources::TerrainTool::Dig ||
+               brush.tool == resources::TerrainTool::Add ||
+               brush.tool == resources::TerrainTool::Smooth ||
+               brush.tool == resources::TerrainTool::Sharpen ||
+               brush.tool == resources::TerrainTool::Restore ||
+               brush.tool == resources::TerrainTool::Paint);
+          for (u32 ring = 0; ring < (volume ? 3u : 2u); ++ring) {
             float previous[3]{};
-            for(u32 segment=0;segment<=48;++segment) {
-              auto outlineBrush=brush;
-              if(!volume){outlineBrush.pitch=outlineBrush.roll=0;if(ring==1)outlineBrush.radius*=.5f+.5f*brush.hardness;}
-              const auto offset=resources::terrainBrushOutline(outlineBrush,volume?ring:0,segment/48.f);
-              const float q[]{local[0]+offset[0],local[1]+offset[1],local[2]+offset[2]};
-              float at[3]{};
-              for(u32 a=0;a<3;++a)at[a]=world[12+a]+world[a]*q[0]+world[4+a]*q[1]+world[8+a]*q[2];
-              if(!volume) {
-                EditorRay probe;probe.valid=true;
-                float len=std::sqrt(world[4]*world[4]+world[5]*world[5]+world[6]*world[6]);
-                for(u32 a=0;a<3;++a){probe.direction[a]=-world[4+a]/len;probe.origin[a]=at[a]-probe.direction[a]*4096;}
-                auto surface=pickNearest(candidates_,probe,0,true);
-                if(surface.hit)for(u32 a=0;a<3;++a)at[a]=probe.origin[a]+probe.direction[a]*(surface.distance-.04f);
+            for (u32 segment = 0; segment <= 48; ++segment) {
+              auto outlineBrush = brush;
+              if (!volume) {
+                outlineBrush.pitch = outlineBrush.roll = 0;
+                if (ring == 1)
+                  outlineBrush.radius *= .5f + .5f * brush.hardness;
               }
-              if(segment)state_.terrainCursorLines.push_back({previous[0],previous[1],previous[2],at[0],at[1],at[2]});
-              std::copy_n(at,3,previous);
+              const auto offset = resources::terrainBrushOutline(
+                  outlineBrush, volume ? ring : 0, segment / 48.f);
+              const float q[]{local[0] + offset[0], local[1] + offset[1],
+                              local[2] + offset[2]};
+              float at[3]{};
+              for (u32 a = 0; a < 3; ++a)
+                at[a] = world[12 + a] + world[a] * q[0] + world[4 + a] * q[1] +
+                        world[8 + a] * q[2];
+              if (!volume) {
+                EditorRay probe;
+                probe.valid = true;
+                float len =
+                    std::sqrt(world[4] * world[4] + world[5] * world[5] +
+                              world[6] * world[6]);
+                for (u32 a = 0; a < 3; ++a) {
+                  probe.direction[a] = -world[4 + a] / len;
+                  probe.origin[a] = at[a] - probe.direction[a] * 4096;
+                }
+                auto surface = pickNearest(candidates_, probe, 0, true);
+                if (surface.hit)
+                  for (u32 a = 0; a < 3; ++a)
+                    at[a] = probe.origin[a] +
+                            probe.direction[a] * (surface.distance - .04f);
+              }
+              if (segment)
+                state_.terrainCursorLines.push_back({previous[0], previous[1],
+                                                     previous[2], at[0], at[1],
+                                                     at[2]});
+              std::copy_n(at, 3, previous);
             }
           }
           const bool fixedLevel =
@@ -1101,22 +1876,29 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
           if (!fixedLevel)
             sample.y = local[1];
           sample.z = local[2];
-          if (!terrainGestureSampler_.sample({sample.x,sample.y,sample.z},volume,
-                event.phase == ui::UiPointerPhase::Up,[&](const auto &point) {
-                  auto between = sample;
-                  between.x=point[0];between.y=point[1];between.z=point[2];
-                  return append(between);
-                })) {
+          if (!terrainGestureSampler_.sample(
+                  {sample.x, sample.y, sample.z}, volume,
+                  event.phase == ui::UiPointerPhase::Up,
+                  [&](const auto &point) {
+                    auto between = sample;
+                    between.x = point[0];
+                    between.y = point[1];
+                    between.z = point[2];
+                    return append(between);
+                  })) {
             if (!terrainGestureOverflow_)
-              state_.terrainMessage = "Posição inválida · traço descartado; cena preservada";
+              state_.terrainMessage =
+                  "Posição inválida · traço descartado; cena preservada";
             terrainGestureOverflow_ = true;
             terrainGestureStrokes_.clear();
             clearTerrainPreview();
           }
-          if (!terrainGestureOverflow_) queueTerrainPreview();
           if (!terrainGestureOverflow_)
-            state_.terrainMessage = "Traço · " + std::to_string(terrainGestureStrokes_.size()) +
-                                    " amostras · prévia durante o gesto";
+            queueTerrainPreview();
+          if (!terrainGestureOverflow_)
+            state_.terrainMessage =
+                "Traço · " + std::to_string(terrainGestureStrokes_.size()) +
+                " amostras · prévia durante o gesto";
         } else {
           terrainGestureActive_ = false;
           terrainGestureStrokes_.clear();
@@ -1125,8 +1907,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
         }
       } else {
         terrainGestureSampler_.disconnect();
-        state_.terrainCursorVisible=false;
-        if (terrainGestureStrokes_.empty()) state_.terrainMessage = "Toque e arraste na superfície do terreno";
+        state_.terrainCursorVisible = false;
+        if (terrainGestureStrokes_.empty())
+          state_.terrainMessage = "Toque e arraste na superfície do terreno";
       }
     } else {
       terrainGestureSampler_.disconnect();
@@ -1135,82 +1918,161 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       terrainGestureActive_ = false;
       if (!terrainGestureOverflow_ && !terrainGestureStrokes_.empty()) {
         state_.terrainDraft.strokes.insert(state_.terrainDraft.strokes.end(),
-                                          terrainGestureStrokes_.begin(), terrainGestureStrokes_.end());
+                                           terrainGestureStrokes_.begin(),
+                                           terrainGestureStrokes_.end());
         terrainGestureStrokes_.clear();
         startTerrainJob();
       }
     }
     return true;
   }
-  const u32 profileBase=widgetId(EditorWidget::TerrainPathNew)+0x500;
-  if(state_.terrainTab==4 && state_.terrainSection>0 && id>=profileBase && id<profileBase+32 && state_.terrainPath<state_.terrainDraft.paths.size()) {
-    auto &path=state_.terrainDraft.paths[state_.terrainPath];
-    auto &curve=state_.terrainSection==2?path.textureProfile:path.profile;
-    const u32 index=id-profileBase;if(index>=curve.size() || state_.terrainBusy)return true;
-    state_.terrainProfilePoint=index;
-    if(event.phase==ui::UiPointerPhase::Down) {
-      terrainGestureRecipe_=resources::serializeTerrainRecipe(state_.terrainDraft);
-      terrainGestureBrush_.x=curve[index].x;terrainGestureBrush_.y=curve[index].y;
-    } else if(event.phase==ui::UiPointerPhase::Cancel) {
-      resources::TerrainRecipe original;std::string error;
-      if(resources::deserializeTerrainRecipe(terrainGestureRecipe_,original,error))state_.terrainDraft=std::move(original);
-    } else if(routing.dragging && event.phase==ui::UiPointerPhase::Move) {
-      const auto panel=terrainPanelRect(state_),content=terrainContentRect(state_,panel);
-      if(index>0 && index+1<curve.size())curve[index].x=std::clamp(terrainGestureBrush_.x+routing.totalDelta.x/std::max(1.f,content.width-32),curve[index-1].x+.00001f,curve[index+1].x-.00001f);
-      const bool geometry=state_.terrainSection==1;
-      curve[index].y=std::clamp(terrainGestureBrush_.y-routing.totalDelta.y*(geometry?3.f:1.f)/(panel.height<400?32.f:56.f),geometry?-1.f:0.f,geometry?2.f:1.f);
+  const u32 profileBase = widgetId(EditorWidget::TerrainPathNew) + 0x500;
+  if (state_.terrainTab == 4 && state_.terrainSection > 0 &&
+      id >= profileBase && id < profileBase + 32 &&
+      state_.terrainPath < state_.terrainDraft.paths.size()) {
+    auto &path = state_.terrainDraft.paths[state_.terrainPath];
+    auto &curve =
+        state_.terrainSection == 2 ? path.textureProfile : path.profile;
+    const u32 index = id - profileBase;
+    if (index >= curve.size() || state_.terrainBusy)
+      return true;
+    state_.terrainProfilePoint = index;
+    if (event.phase == ui::UiPointerPhase::Down) {
+      terrainGestureRecipe_ =
+          resources::serializeTerrainRecipe(state_.terrainDraft);
+      terrainGestureBrush_.x = curve[index].x;
+      terrainGestureBrush_.y = curve[index].y;
+    } else if (event.phase == ui::UiPointerPhase::Cancel) {
+      resources::TerrainRecipe original;
+      std::string error;
+      if (resources::deserializeTerrainRecipe(terrainGestureRecipe_, original,
+                                              error))
+        state_.terrainDraft = std::move(original);
+    } else if (routing.dragging && event.phase == ui::UiPointerPhase::Move) {
+      const auto panel = terrainPanelRect(state_),
+                 content = terrainContentRect(state_, panel);
+      if (index > 0 && index + 1 < curve.size())
+        curve[index].x = std::clamp(
+            terrainGestureBrush_.x +
+                routing.totalDelta.x / std::max(1.f, content.width - 32),
+            curve[index - 1].x + .00001f, curve[index + 1].x - .00001f);
+      const bool geometry = state_.terrainSection == 1;
+      curve[index].y =
+          std::clamp(terrainGestureBrush_.y -
+                         routing.totalDelta.y * (geometry ? 3.f : 1.f) /
+                             (panel.height < 400 ? 32.f : 56.f),
+                     geometry ? -1.f : 0.f, geometry ? 2.f : 1.f);
     }
-    state_.terrainBrushArmed=false;return true;
+    state_.terrainBrushArmed = false;
+    return true;
   }
-  const u32 pointBase=widgetId(EditorWidget::TerrainPathNew)+0x100;
-  if(state_.terrainTab==4 && id>=pointBase && id<pointBase+1024 && state_.terrainPath<state_.terrainDraft.paths.size()) {
-    auto &path=state_.terrainDraft.paths[state_.terrainPath];const u32 index=id-pointBase;
-    if(index>=path.points.size() || state_.terrainBusy)return true;
-    auto &point=path.points[index];state_.terrainPathPoint=index;
-    if(event.phase==ui::UiPointerPhase::Down){
-      terrainGestureBrush_.x=point.x;terrainGestureBrush_.y=point.y;terrainGestureBrush_.z=point.z;
+  const u32 pointBase = widgetId(EditorWidget::TerrainPathNew) + 0x100;
+  if (state_.terrainTab == 4 && id >= pointBase && id < pointBase + 1024 &&
+      state_.terrainPath < state_.terrainDraft.paths.size()) {
+    auto &path = state_.terrainDraft.paths[state_.terrainPath];
+    const u32 index = id - pointBase;
+    if (index >= path.points.size() || state_.terrainBusy)
+      return true;
+    auto &point = path.points[index];
+    state_.terrainPathPoint = index;
+    if (event.phase == ui::UiPointerPhase::Down) {
+      terrainGestureBrush_.x = point.x;
+      terrainGestureBrush_.y = point.y;
+      terrainGestureBrush_.z = point.z;
       // Hold the same preview-height plane for the entire gesture. Rebuilding
       // the path must not feed a moving plane back into this pointer drag.
-      terrainGestureBrush_.surfaceDepth=state_.terrainPreviewBuild?resources::terrainFieldHeight(state_.terrainPreviewBuild->field,point.x,point.z)+.05f:point.y;
+      terrainGestureBrush_.surfaceDepth =
+          state_.terrainPreviewBuild
+              ? resources::terrainFieldHeight(state_.terrainPreviewBuild->field,
+                                              point.x, point.z) +
+                    .05f
+              : point.y;
     }
-    if(event.phase==ui::UiPointerPhase::Cancel){point.x=terrainGestureBrush_.x;point.y=terrainGestureBrush_.y;point.z=terrainGestureBrush_.z;return true;}
-    if(routing.dragging && event.phase==ui::UiPointerPhase::Move) {
-      float world[16];const auto ray=screenPointToRay(view_,event.position);
-      if(ray.valid && editorWorldMatrix(document_,state_.terrainTarget,world)) {
-        float at[3],normal[3]{world[4],world[5],world[6]};float numerator=0,denominator=0;
-        for(u32 k=0;k<3;++k){at[k]=world[12+k]+world[k]*terrainGestureBrush_.x+world[4+k]*terrainGestureBrush_.surfaceDepth+world[8+k]*terrainGestureBrush_.z;numerator+=(at[k]-ray.origin[k])*normal[k];denominator+=ray.direction[k]*normal[k];}
-        if(std::abs(denominator)>1e-6f && numerator/denominator>0) {
+    if (event.phase == ui::UiPointerPhase::Cancel) {
+      point.x = terrainGestureBrush_.x;
+      point.y = terrainGestureBrush_.y;
+      point.z = terrainGestureBrush_.z;
+      return true;
+    }
+    if (routing.dragging && event.phase == ui::UiPointerPhase::Move) {
+      float world[16];
+      const auto ray = screenPointToRay(view_, event.position);
+      if (ray.valid &&
+          editorWorldMatrix(document_, state_.terrainTarget, world)) {
+        float at[3], normal[3]{world[4], world[5], world[6]};
+        float numerator = 0, denominator = 0;
+        for (u32 k = 0; k < 3; ++k) {
+          at[k] = world[12 + k] + world[k] * terrainGestureBrush_.x +
+                  world[4 + k] * terrainGestureBrush_.surfaceDepth +
+                  world[8 + k] * terrainGestureBrush_.z;
+          numerator += (at[k] - ray.origin[k]) * normal[k];
+          denominator += ray.direction[k] * normal[k];
+        }
+        if (std::abs(denominator) > 1e-6f && numerator / denominator > 0) {
           float local[3]{};
-          for(u32 axis=0;axis<3;++axis){float length=0;for(u32 k=0;k<3;++k){length+=world[axis*4+k]*world[axis*4+k];local[axis]+=(ray.origin[k]+ray.direction[k]*numerator/denominator-world[12+k])*world[axis*4+k];}if(length>1e-8f)local[axis]/=length;}
-          if(std::abs(local[0])<=4096 && std::abs(local[2])<=4096){point.x=local[0];point.z=local[2];}
+          for (u32 axis = 0; axis < 3; ++axis) {
+            float length = 0;
+            for (u32 k = 0; k < 3; ++k) {
+              length += world[axis * 4 + k] * world[axis * 4 + k];
+              local[axis] +=
+                  (ray.origin[k] + ray.direction[k] * numerator / denominator -
+                   world[12 + k]) *
+                  world[axis * 4 + k];
+            }
+            if (length > 1e-8f)
+              local[axis] /= length;
+          }
+          if (std::abs(local[0]) <= 4096 && std::abs(local[2]) <= 4096) {
+            point.x = local[0];
+            point.z = local[2];
+          }
         }
       }
     }
-    state_.terrainBrushArmed=false;state_.terrainMessage="Ponto "+std::to_string(index+1)+" selecionado · arraste ou ajuste XYZ";return true;
+    state_.terrainBrushArmed = false;
+    state_.terrainMessage = "Ponto " + std::to_string(index + 1) +
+                            " selecionado · arraste ou ajuste XYZ";
+    return true;
   }
   const bool terrainControl = id >= base && id < base + 0x1000;
-  if(id>=widgetId(EditorWidget::TerrainSliderBase) && id<widgetId(EditorWidget::TerrainSliderBase)+0x300 && !state_.terrainBusy) {
-    const auto encoded=id-widgetId(EditorWidget::TerrainSliderBase);
-    const auto field=encoded%0x100,column=encoded/0x100;
-    const auto range=terrainControlRange(state_,field);
-    if(!range.enabled)return true;
-    if(routing.dragging && std::abs(routing.totalDelta.y)>std::abs(routing.totalDelta.x)) {
-      if(event.phase==ui::UiPointerPhase::Move)
-        state_.terrainScroll=std::clamp(state_.terrainScroll-routing.stepDelta.y,0.f,terrainScrollLimit(state_,terrainPanelRect(state_)));
-    } else if(routing.tapped || (routing.dragging && event.phase==ui::UiPointerPhase::Move)) {
-      auto area=terrainContentRect(state_,terrainPanelRect(state_));
-      if(column) {area.width*=.5f;if(column==2)area.x+=area.width;}
-      const float t=(event.position.x-area.x-10)/std::max(1.f,area.width-20);
-      setTerrainNumber(field,range.value(t));
+  if (id >= widgetId(EditorWidget::TerrainSliderBase) &&
+      id < widgetId(EditorWidget::TerrainSliderBase) + 0x300 &&
+      !state_.terrainBusy) {
+    const auto encoded = id - widgetId(EditorWidget::TerrainSliderBase);
+    const auto field = encoded % 0x100, column = encoded / 0x100;
+    const auto range = terrainControlRange(state_, field);
+    if (!range.enabled)
+      return true;
+    if (routing.dragging &&
+        std::abs(routing.totalDelta.y) > std::abs(routing.totalDelta.x)) {
+      if (event.phase == ui::UiPointerPhase::Move)
+        state_.terrainScroll =
+            std::clamp(state_.terrainScroll - routing.stepDelta.y, 0.f,
+                       terrainScrollLimit(state_, terrainPanelRect(state_)));
+    } else if (routing.tapped ||
+               (routing.dragging && event.phase == ui::UiPointerPhase::Move)) {
+      auto area = terrainContentRect(state_, terrainPanelRect(state_));
+      if (column) {
+        area.width *= .5f;
+        if (column == 2)
+          area.x += area.width;
+      }
+      const float t =
+          (event.position.x - area.x - 10) / std::max(1.f, area.width - 20);
+      setTerrainNumber(field, range.value(t));
     }
     return true;
   }
-  const bool historyControl = id == widgetId(EditorWidget::Undo) || id == widgetId(EditorWidget::Redo);
-  if ((terrainControl || historyControl) && !state_.terrainBusy && !state_.numericField && routing.dragging &&
+  const bool historyControl =
+      id == widgetId(EditorWidget::Undo) || id == widgetId(EditorWidget::Redo);
+  if ((terrainControl || historyControl) && !state_.terrainBusy &&
+      !state_.numericField && routing.dragging &&
       event.phase == ui::UiPointerPhase::Move &&
-      terrainContentRect(state_, terrainPanelRect(state_)).contains(routing.start)) {
-    state_.terrainScroll = std::clamp(state_.terrainScroll - routing.stepDelta.y,
-                                     0.f, terrainScrollLimit(state_, terrainPanelRect(state_)));
+      terrainContentRect(state_, terrainPanelRect(state_))
+          .contains(routing.start)) {
+    state_.terrainScroll =
+        std::clamp(state_.terrainScroll - routing.stepDelta.y, 0.f,
+                   terrainScrollLimit(state_, terrainPanelRect(state_)));
     return true;
   }
   if (!terrainControl)
@@ -1226,16 +2088,111 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     if (terrainJob_)
       terrainJob_->cancel = true;
     clearTerrainPreview();
-    state_.terrainCursorVisible=false;
+    state_.terrainCursorVisible = false;
     state_.terrainOpen = false;
     state_.terrainBrushArmed = false;
     return true;
   }
   if (state_.terrainBusy)
     return true;
+  if (id >= widgetId(EditorWidget::TerrainCatalogItemBase) &&
+      id < widgetId(EditorWidget::TerrainCatalogItemBase) + 6) {
+    selectTerrainCatalogMaterial(
+        state_.terrainCatalogPage * 6 + id -
+        widgetId(EditorWidget::TerrainCatalogItemBase));
+    return true;
+  }
+  if (id >= widgetId(EditorWidget::TerrainMaterialLibrary) &&
+      id <= widgetId(EditorWidget::TerrainMaterialPaint)) {
+    if (id == widgetId(EditorWidget::TerrainMaterialLibrary) &&
+        !loadTerrainCatalog())
+      return true;
+    state_.terrainMaterialView =
+        id == widgetId(EditorWidget::TerrainMaterialLibrary)      ? 1
+        : id == widgetId(EditorWidget::TerrainMaterialProperties) ? 2
+        : id == widgetId(EditorWidget::TerrainMaterialMaps)       ? 3
+                                                                  : 0;
+    state_.terrainScroll = 0;
+    return true;
+  }
+  if (id == widgetId(EditorWidget::TerrainCatalogPrevious) ||
+      id == widgetId(EditorWidget::TerrainCatalogNext)) {
+    if (id == widgetId(EditorWidget::TerrainCatalogPrevious)) {
+      if (state_.terrainCatalogPage)
+        --state_.terrainCatalogPage;
+    } else if (state_.terrainCatalog &&
+               (state_.terrainCatalogPage + 1) * 6 <
+                   state_.terrainCatalog->materials.size())
+      ++state_.terrainCatalogPage;
+    state_.terrainScroll = 0;
+    return true;
+  }
+  if (id == widgetId(EditorWidget::TerrainMapPrevious) ||
+      id == widgetId(EditorWidget::TerrainMapNext)) {
+    state_.terrainMapRole =
+        (state_.terrainMapRole +
+         (id == widgetId(EditorWidget::TerrainMapNext) ? 1 : 6)) %
+        7;
+    state_.terrainScroll = 0;
+    return true;
+  }
+  if (id >= widgetId(EditorWidget::TerrainLayerActive) &&
+      id <= widgetId(EditorWidget::TerrainMapColorSpace)) {
+    auto recipe = state_.terrainDraft;
+    if (state_.terrainBrush.layer >= recipe.surface.layers.size())
+      return true;
+    auto &layer = recipe.surface.layers[state_.terrainBrush.layer];
+    auto &map = layer.maps[std::min(state_.terrainMapRole, 6u)];
+    switch (EditorWidget(id)) {
+    case EditorWidget::TerrainLayerActive:
+      layer.active = !layer.active;
+      break;
+    case EditorWidget::TerrainLayerProjection:
+      layer.projection =
+          resources::TerrainProjection((u32(layer.projection) + 1) % 3);
+      break;
+    case EditorWidget::TerrainLayerFaceNormals:
+      layer.faceNormals = !layer.faceNormals;
+      break;
+    case EditorWidget::TerrainLayerHeightBlend:
+      layer.heightBlend = !layer.heightBlend;
+      break;
+    case EditorWidget::TerrainLayerHeightQuality:
+      layer.heightQuality =
+          resources::TerrainSurfaceQuality((u32(layer.heightQuality) + 1) % 3);
+      break;
+    case EditorWidget::TerrainMapChannel:
+      map.channel =
+          state_.terrainMapRole == 1
+              ? (map.channel == resources::TerrainSurfaceChannel::NormalRG
+                     ? resources::TerrainSurfaceChannel::NormalRGB
+                     : resources::TerrainSurfaceChannel::NormalRG)
+              : resources::TerrainSurfaceChannel((u32(map.channel) + 1) % 5);
+      break;
+    case EditorWidget::TerrainMapInvert:
+      map.invert = !map.invert;
+      break;
+    case EditorWidget::TerrainMapColorSpace:
+      map.linear = !map.linear;
+      break;
+    default:
+      return true;
+    }
+    std::string error;
+    if (resources::validTerrainRecipe(recipe, error)) {
+      state_.terrainDraft = std::move(recipe);
+      state_.terrainMessage = "Material ajustado · prévia antes de aplicar";
+    } else
+      state_.terrainMessage = error;
+    return true;
+  }
   if (id >= widgetId(EditorWidget::TerrainNumberBase) &&
       (id < widgetId(EditorWidget::TerrainNumberBase) + 52 ||
-       id == widgetId(EditorWidget::TerrainNumberBase) + 60)) {
+       id == widgetId(EditorWidget::TerrainNumberBase) + 60 ||
+       (id >= widgetId(EditorWidget::TerrainNumberBase) + 64 &&
+        id <= widgetId(EditorWidget::TerrainNumberBase) + 76) ||
+       (id >= widgetId(EditorWidget::TerrainNumberBase) + 96 &&
+        id <= widgetId(EditorWidget::TerrainNumberBase) + 110))) {
     state_.numericField = id;
     state_.numericEntity = state_.terrainTarget;
     state_.numericInstance = 0;
@@ -1248,41 +2205,61 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     state_.numericError = false;
     return true;
   }
-  const auto minus = widgetId(EditorWidget::TerrainMinusBase), plus = widgetId(EditorWidget::TerrainPlusBase);
-  if ((id >= minus && id < minus + 52) || (id >= plus && id < plus + 52)) {
+  const auto minus = widgetId(EditorWidget::TerrainMinusBase),
+             plus = widgetId(EditorWidget::TerrainPlusBase);
+  if ((id >= minus && id < minus + 111) || (id >= plus && id < plus + 111)) {
     const bool increase = id >= plus;
     const u32 field = id - (increase ? plus : minus);
-    const double steps[]{1,8,8,1,1,.25,1,8,.5,.5,.25,1,1,1,1,.1,15,.25,.05,.1,.25,.25,15,15,.1,.1,1,.25};
-    setTerrainNumber(field, number(state_,field) + (field<28?steps[field]:field==35?5:field==29||field==36||field==38||field==39||field>=47?.1:1) * (increase ? 1 : -1));
+    const double steps[]{1,   8,   8,  1,  1,  .25, 1,  8,   .5,  .5,
+                         .25, 1,   1,  1,  1,  .1,  15, .25, .05, .1,
+                         .25, .25, 15, 15, .1, .1,  1,  .25};
+    setTerrainNumber(field, number(state_, field) +
+                                (field < 28    ? steps[field]
+                                 : field == 35 ? 5
+                                 : field == 29 || field == 36 || field == 38 ||
+                                         field == 39 || field >= 47
+                                     ? .1
+                                     : 1) *
+                                    (increase ? 1 : -1));
     return true;
   }
-  if (id >= widgetId(EditorWidget::TerrainSectionBase) && id < widgetId(EditorWidget::TerrainSectionBase) + 3) {
+  if (id >= widgetId(EditorWidget::TerrainSectionBase) &&
+      id < widgetId(EditorWidget::TerrainSectionBase) + 3) {
     state_.terrainSection = id - widgetId(EditorWidget::TerrainSectionBase);
     state_.terrainScroll = 0;
     return true;
   }
-  if (id >= widgetId(EditorWidget::TerrainModeBase) && id < widgetId(EditorWidget::TerrainModeBase) + 3) {
+  if (id >= widgetId(EditorWidget::TerrainModeBase) &&
+      id < widgetId(EditorWidget::TerrainModeBase) + 3) {
     if (!state_.terrainDraft.strokes.empty()) {
-      state_.terrainMessage = "Crie outro terreno para trocar o tipo após esculpir";
+      state_.terrainMessage =
+          "Crie outro terreno para trocar o tipo após esculpir";
       return true;
     }
     auto recipe = state_.terrainDraft;
-    recipe.mode = resources::TerrainMode(id - widgetId(EditorWidget::TerrainModeBase));
+    recipe.mode =
+        resources::TerrainMode(id - widgetId(EditorWidget::TerrainModeBase));
     std::string error;
-    if (resources::validTerrainRecipe(recipe,error)) {
+    if (resources::validTerrainRecipe(recipe, error)) {
       state_.terrainDraft = std::move(recipe);
       state_.terrainBrush.tool = resources::TerrainTool::Raise;
       normalizeTerrainBrush(state_);
       state_.terrainMessage = "Tipo alterado · aplique para atualizar";
-    } else state_.terrainMessage = error;
+    } else
+      state_.terrainMessage = error;
     return true;
   }
-  if (id >= widgetId(EditorWidget::TerrainPresetBase) && id < widgetId(EditorWidget::TerrainPresetBase) + 4) {
+  if (id >= widgetId(EditorWidget::TerrainPresetBase) &&
+      id < widgetId(EditorWidget::TerrainPresetBase) + 4) {
     const auto index = id - widgetId(EditorWidget::TerrainPresetBase);
     auto &r = state_.terrainDraft;
-    const float amplitude[]{0,8,24,16}, frequency[]{2,2,4,3};
-    r.height=amplitude[index];r.frequency=frequency[index];r.base=4;r.octaves=4;r.island=index==3;
-    state_.terrainMessage="Relevo alterado · traços preservados · aplique";
+    const float amplitude[]{0, 8, 24, 16}, frequency[]{2, 2, 4, 3};
+    r.height = amplitude[index];
+    r.frequency = frequency[index];
+    r.base = 4;
+    r.octaves = 4;
+    r.island = index == 3;
+    state_.terrainMessage = "Relevo alterado · traços preservados · aplique";
     return true;
   }
   if (id >= widgetId(EditorWidget::TerrainTabBase) &&
@@ -1291,8 +2268,12 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     state_.terrainPage = 0;
     state_.terrainSection = 0;
     state_.terrainScroll = 0;
-    if(state_.terrainTab==4){state_.terrainBrushArmed=false;state_.terrainCursorVisible=false;}
-    if (state_.terrainTab == 2) state_.terrainBrush.tool = resources::TerrainTool::Paint;
+    if (state_.terrainTab == 4) {
+      state_.terrainBrushArmed = false;
+      state_.terrainCursorVisible = false;
+    }
+    if (state_.terrainTab == 2)
+      state_.terrainBrush.tool = resources::TerrainTool::Paint;
     normalizeTerrainBrush(state_);
     return true;
   }
@@ -1301,99 +2282,207 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     state_.terrainBrush.tool =
         resources::TerrainTool(id - widgetId(EditorWidget::TerrainToolBase));
     normalizeTerrainBrush(state_);
-    state_.terrainBrushArmed=state_.terrainTarget!=0;
-    state_.terrainCursorVisible=false;
+    state_.terrainBrushArmed = state_.terrainTarget != 0;
+    state_.terrainCursorVisible = false;
     return true;
   }
   if (id >= widgetId(EditorWidget::TerrainLayerBase) &&
       id < widgetId(EditorWidget::TerrainLayerBase) + 4) {
     state_.terrainBrush.layer = id - widgetId(EditorWidget::TerrainLayerBase);
     state_.terrainBrush.tool = resources::TerrainTool::Paint;
-    state_.terrainBrushArmed=state_.terrainTarget!=0;
+    state_.terrainBrushArmed = state_.terrainTarget != 0;
     return true;
   }
-  if(id>=widgetId(EditorWidget::TerrainShapeBase) && id<widgetId(EditorWidget::TerrainShapeBase)+5) {
-    state_.terrainBrush.shape=resources::TerrainBrushShape(id-widgetId(EditorWidget::TerrainShapeBase));
-    normalizeTerrainBrush(state_);return true;
+  if (id >= widgetId(EditorWidget::TerrainShapeBase) &&
+      id < widgetId(EditorWidget::TerrainShapeBase) + 5) {
+    state_.terrainBrush.shape = resources::TerrainBrushShape(
+        id - widgetId(EditorWidget::TerrainShapeBase));
+    normalizeTerrainBrush(state_);
+    return true;
   }
-  if(id>=widgetId(EditorWidget::TerrainPathNew) && id<=widgetId(EditorWidget::TerrainPathEnabled)) {
-    auto &paths=state_.terrainDraft.paths;
-    auto selected=std::min(state_.terrainPath,u32(paths.empty()?0:paths.size()-1));
-    u32 nextId=1;for(const auto &path:paths)nextId=std::max(nextId,path.id+1);
-    if(id==widgetId(EditorWidget::TerrainPathNew)) {
-      if(paths.size()>=64){state_.terrainMessage="Limite de 64 caminhos";return true;}
-      resources::TerrainPath path;path.id=nextId;path.name="Caminho "+std::to_string(nextId);
-      const auto &r=state_.terrainDraft;
-      path.points={{-r.size*.25f,r.base,0,false},{r.size*.25f,r.base,0,false}};
-      paths.push_back(std::move(path));state_.terrainPath=u32(paths.size()-1);state_.terrainPathPoint=0;
-    } else if(!paths.empty()) {
-      auto &path=paths[selected];auto &point=state_.terrainPathPoint;
-      switch(EditorWidget(id)) {
-      case EditorWidget::TerrainPathDelete:paths.erase(paths.begin()+selected);state_.terrainPath=selected?selected-1:0;point=0;break;
-      case EditorWidget::TerrainPathDuplicate:if(paths.size()<64){auto copy=path;copy.id=nextId;copy.name+=" cópia";paths.push_back(std::move(copy));state_.terrainPath=u32(paths.size()-1);}break;
-      case EditorWidget::TerrainPathPrevious:state_.terrainPath=selected?selected-1:u32(paths.size()-1);point=0;break;
-      case EditorWidget::TerrainPathNext:state_.terrainPath=(selected+1)%u32(paths.size());point=0;break;
-      case EditorWidget::TerrainPointPrevious:if(point) --point;break;
-      case EditorWidget::TerrainPointNext:if(point+1<path.points.size())++point;break;
-      case EditorWidget::TerrainPointInsert:if(path.points.size()<1024 && point<path.points.size()) {
-        auto p=path.points[point];if(point+1<path.points.size()){const auto &q=path.points[point+1];p.x=(p.x+q.x)*.5f;p.y=(p.y+q.y)*.5f;p.z=(p.z+q.z)*.5f;}else p.x+=2;
-        path.points.insert(path.points.begin()+point+1,p);++point;
-      }break;
-      case EditorWidget::TerrainPointRemove:if(path.points.size()>2 && point<path.points.size()){path.points.erase(path.points.begin()+point);point=std::min(point,u32(path.points.size()-1));}break;
-      case EditorWidget::TerrainPointCurve:if(point<path.points.size())path.points[point].curved=!path.points[point].curved;break;
-      case EditorWidget::TerrainPathShape:path.shape=!path.shape;break;
-      case EditorWidget::TerrainPathTexture:path.texture=!path.texture;break;
-      case EditorWidget::TerrainPathRatio:path.keepWidthRatio=!path.keepWidthRatio;break;
-      case EditorWidget::TerrainPathAutoRamp:path.autoRamp=!path.autoRamp;break;
-      case EditorWidget::TerrainPathFollowTerrain:path.followTerrain=!path.followTerrain;break;
-      case EditorWidget::TerrainPathDefinedHeight:path.useDefinedHeight=!path.useDefinedHeight;break;
-      case EditorWidget::TerrainPathReverse:path.reverseRamp=!path.reverseRamp;break;
-      case EditorWidget::TerrainPathSmart:path.smartPaint=!path.smartPaint;break;
-      case EditorWidget::TerrainPathCap:path.cap=resources::TerrainPathCap((u32(path.cap)+1)%3);break;
-      case EditorWidget::TerrainPathEnabled:path.enabled=!path.enabled;break;
+  if (id >= widgetId(EditorWidget::TerrainPathNew) &&
+      id <= widgetId(EditorWidget::TerrainPathEnabled)) {
+    auto &paths = state_.terrainDraft.paths;
+    auto selected =
+        std::min(state_.terrainPath, u32(paths.empty() ? 0 : paths.size() - 1));
+    u32 nextId = 1;
+    for (const auto &path : paths)
+      nextId = std::max(nextId, path.id + 1);
+    if (id == widgetId(EditorWidget::TerrainPathNew)) {
+      if (paths.size() >= 64) {
+        state_.terrainMessage = "Limite de 64 caminhos";
+        return true;
+      }
+      resources::TerrainPath path;
+      path.id = nextId;
+      path.name = "Caminho " + std::to_string(nextId);
+      const auto &r = state_.terrainDraft;
+      path.points = {{-r.size * .25f, r.base, 0, false},
+                     {r.size * .25f, r.base, 0, false}};
+      paths.push_back(std::move(path));
+      state_.terrainPath = u32(paths.size() - 1);
+      state_.terrainPathPoint = 0;
+    } else if (!paths.empty()) {
+      auto &path = paths[selected];
+      auto &point = state_.terrainPathPoint;
+      switch (EditorWidget(id)) {
+      case EditorWidget::TerrainPathDelete:
+        paths.erase(paths.begin() + selected);
+        state_.terrainPath = selected ? selected - 1 : 0;
+        point = 0;
+        break;
+      case EditorWidget::TerrainPathDuplicate:
+        if (paths.size() < 64) {
+          auto copy = path;
+          copy.id = nextId;
+          copy.name += " cópia";
+          paths.push_back(std::move(copy));
+          state_.terrainPath = u32(paths.size() - 1);
+        }
+        break;
+      case EditorWidget::TerrainPathPrevious:
+        state_.terrainPath = selected ? selected - 1 : u32(paths.size() - 1);
+        point = 0;
+        break;
+      case EditorWidget::TerrainPathNext:
+        state_.terrainPath = (selected + 1) % u32(paths.size());
+        point = 0;
+        break;
+      case EditorWidget::TerrainPointPrevious:
+        if (point)
+          --point;
+        break;
+      case EditorWidget::TerrainPointNext:
+        if (point + 1 < path.points.size())
+          ++point;
+        break;
+      case EditorWidget::TerrainPointInsert:
+        if (path.points.size() < 1024 && point < path.points.size()) {
+          auto p = path.points[point];
+          if (point + 1 < path.points.size()) {
+            const auto &q = path.points[point + 1];
+            p.x = (p.x + q.x) * .5f;
+            p.y = (p.y + q.y) * .5f;
+            p.z = (p.z + q.z) * .5f;
+          } else
+            p.x += 2;
+          path.points.insert(path.points.begin() + point + 1, p);
+          ++point;
+        }
+        break;
+      case EditorWidget::TerrainPointRemove:
+        if (path.points.size() > 2 && point < path.points.size()) {
+          path.points.erase(path.points.begin() + point);
+          point = std::min(point, u32(path.points.size() - 1));
+        }
+        break;
+      case EditorWidget::TerrainPointCurve:
+        if (point < path.points.size())
+          path.points[point].curved = !path.points[point].curved;
+        break;
+      case EditorWidget::TerrainPathShape:
+        path.shape = !path.shape;
+        break;
+      case EditorWidget::TerrainPathTexture:
+        path.texture = !path.texture;
+        break;
+      case EditorWidget::TerrainPathRatio:
+        path.keepWidthRatio = !path.keepWidthRatio;
+        break;
+      case EditorWidget::TerrainPathAutoRamp:
+        path.autoRamp = !path.autoRamp;
+        break;
+      case EditorWidget::TerrainPathFollowTerrain:
+        path.followTerrain = !path.followTerrain;
+        break;
+      case EditorWidget::TerrainPathDefinedHeight:
+        path.useDefinedHeight = !path.useDefinedHeight;
+        break;
+      case EditorWidget::TerrainPathReverse:
+        path.reverseRamp = !path.reverseRamp;
+        break;
+      case EditorWidget::TerrainPathSmart:
+        path.smartPaint = !path.smartPaint;
+        break;
+      case EditorWidget::TerrainPathCap:
+        path.cap = resources::TerrainPathCap((u32(path.cap) + 1) % 3);
+        break;
+      case EditorWidget::TerrainPathEnabled:
+        path.enabled = !path.enabled;
+        break;
       case EditorWidget::TerrainProfilePrevious:
       case EditorWidget::TerrainProfileNext:
       case EditorWidget::TerrainProfileInsert:
-      case EditorWidget::TerrainProfileRemove:{
-        auto &curve=state_.terrainSection==2?path.textureProfile:path.profile;
-        auto &index=state_.terrainProfilePoint;index=std::min(index,u32(curve.size()-1));
-        if(id==widgetId(EditorWidget::TerrainProfilePrevious))index=index?index-1:u32(curve.size()-1);
-        else if(id==widgetId(EditorWidget::TerrainProfileNext))index=(index+1)%u32(curve.size());
-        else if(id==widgetId(EditorWidget::TerrainProfileInsert) && curve.size()<32) {
-          const auto left=std::min(index,u32(curve.size()-2));
-          const auto a=curve[left],b=curve[left+1];
-          if(b.x-a.x>1e-5f){curve.insert(curve.begin()+left+1,{(a.x+b.x)*.5f,(a.y+b.y)*.5f});index=left+1;}
-        } else if(id==widgetId(EditorWidget::TerrainProfileRemove) && index>0 && index+1<curve.size()) {
-          curve.erase(curve.begin()+index);index=std::min(index,u32(curve.size()-1));
+      case EditorWidget::TerrainProfileRemove: {
+        auto &curve =
+            state_.terrainSection == 2 ? path.textureProfile : path.profile;
+        auto &index = state_.terrainProfilePoint;
+        index = std::min(index, u32(curve.size() - 1));
+        if (id == widgetId(EditorWidget::TerrainProfilePrevious))
+          index = index ? index - 1 : u32(curve.size() - 1);
+        else if (id == widgetId(EditorWidget::TerrainProfileNext))
+          index = (index + 1) % u32(curve.size());
+        else if (id == widgetId(EditorWidget::TerrainProfileInsert) &&
+                 curve.size() < 32) {
+          const auto left = std::min(index, u32(curve.size() - 2));
+          const auto a = curve[left], b = curve[left + 1];
+          if (b.x - a.x > 1e-5f) {
+            curve.insert(curve.begin() + left + 1,
+                         {(a.x + b.x) * .5f, (a.y + b.y) * .5f});
+            index = left + 1;
+          }
+        } else if (id == widgetId(EditorWidget::TerrainProfileRemove) &&
+                   index > 0 && index + 1 < curve.size()) {
+          curve.erase(curve.begin() + index);
+          index = std::min(index, u32(curve.size() - 1));
         }
-      }break;
-      default:break;
+      } break;
+      default:
+        break;
       }
     }
-    state_.terrainBrushArmed=false;state_.terrainMessage="Caminho editável · confira a prévia e aplique";return true;
+    state_.terrainBrushArmed = false;
+    state_.terrainMessage = "Caminho editável · confira a prévia e aplique";
+    return true;
   }
   switch (EditorWidget(id)) {
   case EditorWidget::TerrainNavigate:
-    state_.terrainBrushArmed=false;state_.terrainCursorVisible=false;clearTerrainPreview();break;
+    state_.terrainBrushArmed = false;
+    state_.terrainCursorVisible = false;
+    clearTerrainPreview();
+    break;
   case EditorWidget::TerrainSculpt:
-    state_.terrainBrushArmed=state_.terrainTarget!=0;break;
+    state_.terrainBrushArmed = state_.terrainTarget != 0;
+    break;
   case EditorWidget::TerrainDimensionsLinked:
-    state_.terrainBrush.dimensionsLinked=!state_.terrainBrush.dimensionsLinked;break;
+    state_.terrainBrush.dimensionsLinked =
+        !state_.terrainBrush.dimensionsLinked;
+    break;
   case EditorWidget::TerrainBrushInvert:
-    state_.terrainBrush.inverted=!state_.terrainBrush.inverted;break;
+    state_.terrainBrush.inverted = !state_.terrainBrush.inverted;
+    break;
   case EditorWidget::TerrainHeightLock:
-    state_.terrainBrush.lockHeight=!state_.terrainBrush.lockHeight;break;
+    state_.terrainBrush.lockHeight = !state_.terrainBrush.lockHeight;
+    break;
   case EditorWidget::TerrainOpacityTarget:
-    state_.terrainBrush.application=state_.terrainBrush.application==resources::TerrainBrushApplication::Target?
-      resources::TerrainBrushApplication::Accumulate:resources::TerrainBrushApplication::Target;break;
+    state_.terrainBrush.application =
+        state_.terrainBrush.application ==
+                resources::TerrainBrushApplication::Target
+            ? resources::TerrainBrushApplication::Accumulate
+            : resources::TerrainBrushApplication::Target;
+    break;
   case EditorWidget::TerrainRestoreGeometry:
-    state_.terrainBrush.restoreGeometry=!state_.terrainBrush.restoreGeometry;break;
+    state_.terrainBrush.restoreGeometry = !state_.terrainBrush.restoreGeometry;
+    break;
   case EditorWidget::TerrainRestoreWeights:
-    state_.terrainBrush.restoreWeights=!state_.terrainBrush.restoreWeights;break;
+    state_.terrainBrush.restoreWeights = !state_.terrainBrush.restoreWeights;
+    break;
   case EditorWidget::TerrainTouchOffset:
-    state_.terrainTouchOffset=!state_.terrainTouchOffset;break;
+    state_.terrainTouchOffset = !state_.terrainTouchOffset;
+    break;
   case EditorWidget::TerrainBlend:
-    state_.terrainDraft.blendedSurface=!state_.terrainDraft.blendedSurface;break;
+    state_.terrainDraft.blendedSurface = !state_.terrainDraft.blendedSurface;
+    break;
   case EditorWidget::TerrainGenerate:
     startTerrainJob();
     break;
@@ -1401,22 +2490,30 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     openTerrain();
     break;
   case EditorWidget::TerrainLoad:
-    if (state_.selection) openTerrain(state_.selection);
-    else state_.terrainMessage="Selecione um terreno ou chunk para retomar";
+    if (state_.selection)
+      openTerrain(state_.selection);
+    else
+      state_.terrainMessage = "Selecione um terreno ou chunk para retomar";
     break;
   case EditorWidget::TerrainSurface:
   case EditorWidget::TerrainSolidBase:
-    state_.terrainDraft.solidBase = EditorWidget(id) == EditorWidget::TerrainSolidBase;
-    state_.terrainMessage="Estrutura alterada · aplique para atualizar";
+    state_.terrainDraft.solidBase =
+        EditorWidget(id) == EditorWidget::TerrainSolidBase;
+    state_.terrainMessage = "Estrutura alterada · aplique para atualizar";
     break;
   case EditorWidget::TerrainRevert:
-    if (state_.terrainTarget) openTerrain(state_.terrainTarget);
+    if (state_.terrainTarget)
+      openTerrain(state_.terrainTarget);
     break;
   case EditorWidget::TerrainSave:
-    if (state_.terrainTarget && resources::serializeTerrainRecipe(state_.terrainDraft) == state_.terrainAppliedRecipe) {
+    if (state_.terrainTarget &&
+        resources::serializeTerrainRecipe(state_.terrainDraft) ==
+            state_.terrainAppliedRecipe) {
       state_.saveRequested = true;
-      state_.terrainMessage="Salvamento da cena solicitado";
-    } else state_.terrainMessage="Aplique ou reverta as alterações antes de salvar";
+      state_.terrainMessage = "Salvamento da cena solicitado";
+    } else
+      state_.terrainMessage =
+          "Aplique ou reverta as alterações antes de salvar";
     break;
   case EditorWidget::TerrainMode:
     if (state_.terrainDraft.strokes.empty())
@@ -1433,18 +2530,25 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     state_.terrainDraft.collision = !state_.terrainDraft.collision;
     break;
   case EditorWidget::TerrainBrushArm:
-    if (state_.terrainTab == 2) state_.terrainBrush.tool = resources::TerrainTool::Paint;
+    if (state_.terrainTab == 2)
+      state_.terrainBrush.tool = resources::TerrainTool::Paint;
     state_.terrainBrushArmed =
         state_.terrainTarget && !state_.terrainBrushArmed;
     break;
   case EditorWidget::TerrainStamp:
     if (!state_.terrainTarget) {
-      state_.terrainMessage="Crie ou abra um terreno antes de aplicar o pincel";
+      state_.terrainMessage =
+          "Crie ou abra um terreno antes de aplicar o pincel";
     } else if (state_.terrainDraft.strokes.size() < 4096) {
-      state_.terrainBrush.gesture=state_.terrainDraft.strokes.empty()?1:state_.terrainDraft.strokes.back().gesture+1;
+      state_.terrainBrush.gesture =
+          state_.terrainDraft.strokes.empty()
+              ? 1
+              : state_.terrainDraft.strokes.back().gesture + 1;
       state_.terrainDraft.strokes.push_back(state_.terrainBrush);
       startTerrainJob();
-    } else state_.terrainMessage="Limite de 4096 amostras · remova uma amostra antes de aplicar";
+    } else
+      state_.terrainMessage =
+          "Limite de 4096 amostras · remova uma amostra antes de aplicar";
     break;
   case EditorWidget::TerrainRemoveStroke:
     if (!state_.terrainDraft.strokes.empty()) {

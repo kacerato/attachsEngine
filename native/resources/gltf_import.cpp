@@ -1,4 +1,7 @@
 #include "resources/gltf_import.h"
+#include "resources/terrain_surface_texture_refs.h"
+#include "resources/terrain_surface_import.h"
+#include <map>
 #include "resources/shared_decoded_texture.h"
 #include "resources/json_reader.h"
 #include "resources/gltf_codecs.h"
@@ -956,7 +959,9 @@ struct Importer {
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);
     out->terrainControls.resize(count + 1);
+    out->terrainSurfaces.resize(count + 1);
     std::unordered_map<i64,u32> controlTextures;
+    std::unordered_map<std::string,renderer::TerrainSurfaceBinding> surfaceBindings;
     out->materialNames.assign(count + 1, std::string());
     uvTransforms.assign(count + 1, {});
     declaresTexture.assign(count + 1, 0);
@@ -996,14 +1001,15 @@ struct Importer {
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
       assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);
       if (const auto *extras=json->member(source,"extras");extras &&
-          (json->number(*extras,"astraTerrainSurface",0)==1 || json->number(*extras,"astraTerrainSurface",0)==2)) {
+          (json->number(*extras,"astraTerrainSurface",0)==1 || json->number(*extras,"astraTerrainSurface",0)==2 || json->number(*extras,"astraTerrainSurface",0)==3)) {
         const char *layers[]{"grassTexture","rockTexture","soilTexture","pathTexture"};
         for(u32 layer=0;layer<4;++layer)
           if(!assignTexture(root,*extras,layers[layer],true,layer,target,0,i))
             return fail("Camada da superfície de terreno ausente.");
         target.flags &= ~(renderer::MapMaterialNormalMap|renderer::MapMaterialMetallicRoughnessMap|renderer::MapMaterialEmissiveMap);
         target.flags |= renderer::MapMaterialTerrain;
-        if(json->number(*extras,"astraTerrainSurface",0)==2) {
+        if(json->number(*extras,"astraTerrainSurface",0)==2 ||
+           (json->number(*extras,"astraTerrainSurface",0)==3 && json->member(*extras,"controlTexture"))) {
           auto &binding=out->terrainControls[i];
           if(!readVector(*extras,"controlUvScale",binding.uvScale,2) ||
              !readVector(*extras,"controlUvOffset",binding.uvOffset,2) ||
@@ -1038,6 +1044,50 @@ struct Importer {
           out->textures.push_back(shareDecodedTexture(std::move(made)));
           out->textureImages.push_back(imageLabel(root,textureSource(texture)));
           controlTextures[index]=binding.textureIndex;
+          }
+        }
+        if(json->number(*extras,"astraTerrainSurface",0)==3) {
+          auto &binding=out->terrainSurfaces[i];std::string serialized;
+          if(!terrainSurfaceUnhex(json->string(*extras,"surfaceRecipe"),serialized) ||
+             !deserializeTerrainSurface(serialized,binding.surface,out->diagnostic) || binding.surface.layers.empty())
+            return fail("Invalid terrain surface v3 schema.");
+          // UV0 preserves localXZ / textureScale. Recover its meter scale from
+          // the explicit surface metadata, independently of control maps.
+          binding.localMetersPerUv=float(json->number(*extras,"localMetersPerUv",0));
+          if(!std::isfinite(binding.localMetersPerUv) || binding.localMetersPerUv<=0 || binding.localMetersPerUv>256)
+            return fail("Invalid terrain surface meter scale.");
+          const auto *images=array(*extras,"surfaceImages");
+          if(!images || images->childCount>4096)return fail("Invalid terrain surface image table.");
+          std::map<AssetGuid,i64> imageIndices;
+          for(u32 n=0;n<images->childCount;++n) {
+            const auto &entry=*json->child(*images,n);AssetGuid guid;
+            if(!AssetGuid::parse(json->string(entry,"identity"),guid) || !guid.valid() ||
+               !imageIndices.emplace(guid,json->index(entry,"index")).second)return fail("Invalid/duplicate surface image identity.");
+          }
+          std::string key=serialized+":"+std::to_string(binding.localMetersPerUv);
+          for(const auto &[identity,index]:imageIndices)key+=identity.text()+":"+std::to_string(index);
+          if(const auto found=surfaceBindings.find(key);found!=surfaceBindings.end())binding=found->second;
+          else {
+            std::vector<TerrainSurfaceImage> sourceImages;
+            for(const auto &[identity,index]:imageIndices) {
+              const auto *textureList=array(root,"textures");
+              if(!textureList || index<0 || index>=textureList->childCount)return fail("Invalid terrain surface image index.");
+              const auto &texture=*json->child(*textureList,u32(index));std::span<const u8> bytes;
+              if(!imageBytes(root,textureSource(texture),bytes))return fail("Invalid terrain surface image.");
+              u32 width=0,height=0;if(!readImageDimensions(bytes,limits->image,width,height))return fail("Surface image exceeds image limits.");
+              sourceImages.push_back({identity,std::vector<u8>(bytes.begin(),bytes.end())});
+              const auto original=std::find_if(out->terrainSurfaceImages.begin(),out->terrainSurfaceImages.end(),[&](const auto &image){return image.identity==identity;});
+              if(original==out->terrainSurfaceImages.end())out->terrainSurfaceImages.push_back(sourceImages.back());
+              else if(*original->encoded!=*sourceImages.back().encoded)return fail("Conflicting terrain surface PNG identity.");
+            }
+            if(out->textureBytes>limits->maximumTextureBytes)return fail("Texture memory budget exceeded.");
+            std::vector<renderer::SharedAuthoringTexture> decoded;
+            if(!importTerrainSurface(binding.surface,sourceImages,binding.localMetersPerUv,
+                limits->maximumTextureBytes-out->textureBytes,decoded,binding,out->diagnostic))return false;
+            const u32 base=u32(out->textures.size());
+            for(auto &entry:binding.textures)entry.textureIndex+=base;
+            for(auto &texture:decoded){out->textureBytes+=texture->mipChain.size();out->textures.push_back(std::move(texture));out->textureImages.push_back("Terrain surface");}
+            surfaceBindings[key]=binding;
           }
         }
       }

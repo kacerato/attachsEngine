@@ -42,6 +42,9 @@ function(aether_add_terrain_import_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/family_base_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/import_cache.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/gltf_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/gltf_codecs.cpp
@@ -72,6 +75,7 @@ function(aether_add_terrain_surface_preview)
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/transform_math.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_draw_list.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_text.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_input.cpp

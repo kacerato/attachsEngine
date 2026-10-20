@@ -23,9 +23,17 @@ extension, a shader compiled without the control-map macro, and asymmetric
 scale/offset hits and misses. Each pass saves `terrain-control-mode-N.ppm` in
 the shader build directory for visual review.
 
+The PBR passes publish cold authoring data through production
+`appendTerrainSurfaceTable`, then sample real albedo, normal, packed RGBA,
+gradient and emission textures through `terrain_pbr.glsl`. Readback verifies
+channel mapping/remapping/inversion, tint/saturation, world normals under object
+transforms, normal strength, local/world triplanar coordinates, meter tiling,
+rotation/offset, height blending, activation, RGBA remaps and color variation.
+
 Unavailable Vulkan hardware or a required feature fails the executable; it
 does not silently skip or report success from a CPU device. The texture table
-has five fixed entries and uses dynamically uniform indexing. This test covers
+has ten fixed entries and uses dynamically uniform indexing. This test covers
 the production terrain fragment function and material-row publication. It
 does not establish full renderer bindless allocation, GLB import, editor flow,
-lighting, device performance or Android behavior.
+lighting, device performance or Android behavior. Control storage currently has
+four weights; the 32-layer authoring schema does not imply 32 painted GPU layers.

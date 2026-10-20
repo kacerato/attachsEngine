@@ -50,7 +50,7 @@ from ui_asset_format import cpp_identifier, write_icons
 
 CELL = 96
 PADDING = 2
-ATLAS_WIDTH = 1024
+ATLAS_WIDTH = 2048
 
 # A marca entra no mesmo atlas, mas NÃO na grade: um logotipo tem proporção
 # própria e espremê-lo num quadrado de 96 seria desenhar outra marca. Ele
@@ -161,6 +161,10 @@ def main() -> None:
         # same packed raster feeds native UI and Android editing accessories.
         if "rect" in metadata:
             icon = icon.crop(tuple(metadata["rect"]))
+        # Material thumbnails may carry smoothness/other packed data in alpha.
+        # Opaque preview cells preserve RGB and never modify the source PNG.
+        if metadata.get("force_opaque", False):
+            icon.putalpha(255)
         # A production sheet can declare its solid matte. Resolve it before
         # resampling: otherwise the charcoal edge is baked into small icons.
         # This is deliberately opt-in; dark pixels in other illustrations are
@@ -227,12 +231,15 @@ def main() -> None:
         staged.replace(preview)
     except OSError as error:
         print(f"AVISO: {preview} em uso ({error}); cópia nova ficou em {staged}")
+    binary = arguments.output / f"{arguments.name}.aeui"
+    staged_binary = binary.with_suffix(".tmp.aeui")
     binary_size = write_icons(
-        arguments.output / f"{arguments.name}.aeui",
+        staged_binary,
         (ATLAS_WIDTH, atlas.height),
         rects,
         atlas.tobytes(),
     )
+    staged_binary.replace(binary)
 
     entries = []
     identifiers = []
