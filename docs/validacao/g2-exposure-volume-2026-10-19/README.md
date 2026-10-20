@@ -44,14 +44,28 @@ APKs `0.3.0-dev.118-exposicao` e `0.3.0-dev.119-exposicao` (canal `dev.aether.ed
 
 | Arquivo | Situação | EV100 medido → adaptado |
 |---|---|---|
-| `01-inspector-fixa-migrada.png` | Vila v15 aberta no 118: Exposição **Fixa**, −0,413 EV100 (= os +0,15 EV antigos) | — |
-| `02-poente-17h-fixa.png` | 17,4 h, Fixa: zênite preto, praça apagada (o defeito do G4) | — |
-| `04-inspector-automatica.png` | Modo Automática: aparecem Medição, Adaptação, Cinza alvo, Limites e velocidades | — |
-| `03-poente-17h-auto-sem-limite.png` | Automática com os limites migrados (−8,3 a 7,7) e cinza 18%: clareia demais, parece dia nublado | −3,21 → −3,21 |
-| `05-meio-dia-12h-auto.png` | 12 h, Automática (cinza 18%) | −0,52 → −0,52 |
-| `07-inspector-cinza-12-limite-2.png` | Cinza 12,5% e Limite mínimo −2 | — |
-| `06-poente-17h-auto-limite-min-2.png` | 17,4 h: poente legível, céu avermelhado escurecendo no zênite | −2,69 → −2,00 |
-| `08-noite-22h-auto-limite-min-2.png` | 22 h: o limite segura; noite de lua com estrelas | −4,70 → −2,00 |
+| `01-inspector-fixa-migrada.jpg` | Vila v15 aberta no 118: Exposição **Fixa**, −0,413 EV100 (= os +0,15 EV antigos) | — |
+| `02-poente-17h-fixa.jpg` | 17,4 h, Fixa: zênite preto, praça apagada (o defeito do G4) | — |
+| `04-inspector-automatica.jpg` | Modo Automática: aparecem Medição, Adaptação, Cinza alvo, Limites e velocidades | — |
+| `03-poente-17h-auto-sem-limite.jpg` | Automática com os limites migrados (−8,3 a 7,7) e cinza 18%: clareia demais, parece dia nublado | −3,21 → −3,21 |
+| `05-meio-dia-12h-auto.jpg` | 12 h, Automática (cinza 18%) | −0,52 → −0,52 |
+| `07-inspector-cinza-12-limite-2.jpg` | Cinza 12,5% e Limite mínimo −2 | — |
+| `06-poente-17h-auto-limite-min-2.jpg` | 17,4 h: poente legível, céu avermelhado escurecendo no zênite | −2,69 → −2,00 |
+| `08-noite-22h-auto-limite-min-2.jpg` | 22 h: o limite segura; noite de lua com estrelas | −4,70 → −2,00 |
+| `09-editor-17h-acompanha-hora-119.jpg` | APK 119, vista de edição: trocar a hora atualiza a exposição na hora | — |
+| `10-poente-17h-padrao-119.jpg` | APK 119, Play 17,4 h, padrões novos (Automática, Peso no centro, 12,5%, −2/10) | −2,66 → −2,00 |
+| `11-meio-dia-12h-padrao-119.jpg` | APK 119, Play 12 h, mesmos padrões | 0,01 → 0,01 |
+
+A Vila foi devolvida ao final com o app parado: md5 `2e2e996841f1f0eb5af1572c68dec3fc`, igual ao de antes.
+
+## Conceito, implementado e testado
+
+- **Implementado**: modelo, migração, Inspector, API C#, medição e adaptação na GPU, overrides por efeito.
+- **Testado no host**: aether_tests 1596/1596; autoria de ambiente 46/46 (com os testes novos de padrões HDRP,
+  EV100, adaptação, herança de override e migrações v15/v16 e perfil v10/v11).
+- **Testado no aparelho**: Fixa migrada, Automática, cinza alvo, Limite mínimo, poente/meio-dia/noite, vista de
+  edição acompanhando a hora. **Não testado no aparelho**: Automática por histograma, Medição Pontual/Média,
+  Adaptação Imediata, volume local com Exposição desmarcada (cobertos só no host).
 
 ### Defeito achado no aparelho e corrigido (119)
 
