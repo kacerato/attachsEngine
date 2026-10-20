@@ -461,7 +461,7 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV100",
+            "unit": "EV",
             "help": "EV100 mais baixo que a medição pode atingir: a noite não vira dia"
           }
         },
@@ -479,7 +479,7 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV100",
+            "unit": "EV",
             "help": "EV100 mais alto: limita o escurecimento de cenas muito claras"
           }
         },
@@ -602,7 +602,7 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV100",
+            "unit": "EV",
             "help": "EV100 da câmera: maior escurece",
             "visible": {
               "cpp": "environmentUsesFixedExposure"

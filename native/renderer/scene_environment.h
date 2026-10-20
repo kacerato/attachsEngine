@@ -220,9 +220,10 @@ struct SceneEnvironment final {
   ExposureAdaptation exposureAdaptation = ExposureAdaptation::Progressive;
   float fixedExposure = 0.0f;          // EV100
   float exposureCompensation = 0.0f;   // EV; positivo clareia
-  // Limit Min/Max em EV100 da cena. Os -1/14 do HDRP supõem sol de 100000 lux;
-  // a luz da Astra é ~13 EV abaixo, então a faixa útil é deslocada (ver docs).
-  float exposureLimitMin = -6.0f;
+  // Limit Min/Max em EV100 da cena. Os -1/14 do HDRP supõem sol de 100000 lux
+  // (meio-dia ~EV100 14). Na Astra o meio-dia mede ~0 e o poente da Vila ~-2,7
+  // (POCO, 20/10/2026): -2 deixa o poente legível e segura a noite (~-4,7).
+  float exposureLimitMin = -2.0f;
   float exposureLimitMax = 10.0f;
   float exposureHistogramLow = 40.0f;  // Histogram Percentages, 0 a 100
   float exposureHistogramHigh = 90.0f;

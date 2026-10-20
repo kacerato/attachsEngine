@@ -223,10 +223,16 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   push.metering[0]=look.exposureLimitMin;push.metering[1]=look.exposureLimitMax;
   push.metering[2]=look.exposureTargetMidGrey;
   push.metering[3]=frame->environment.parameters[0];
-  push.adaptation[0]=jumped||(index==0&&autoExposurePaused_)?0.0f:
+  // O editor redesenha sob demanda com o relógio parado (ou com saltos longos):
+  // sem dt a adaptação progressiva nunca andaria e a vista ficaria presa na
+  // exposição antiga depois de mudar a hora. Sem tempo correndo, salta para o
+  // alvo; o Play pausado é a exceção (congela, como o olho de uma imagem parada).
+  const bool paused=index==0&&autoExposurePaused_;
+  const bool snap=!paused && (jumped || timeSeconds==view.previousTime);
+  push.adaptation[0]=jumped||paused?0.0f:
       std::clamp(timeSeconds-view.previousTime,0.0f,0.1f);
   push.adaptation[1]=look.exposureSpeedDarkToLight;push.adaptation[2]=look.exposureSpeedLightToDark;
-  push.adaptation[3]=reset?1.0f:0.0f;
+  push.adaptation[3]=reset||snap?1.0f:0.0f;
   push.range[0]=look.exposureHistogramLow*0.01f;push.range[1]=look.exposureHistogramHigh*0.01f;
   push.range[2]=static_cast<float>(look.exposureMetering);
   push.range[3]=look.exposureMode==renderer::ExposureMode::AutomaticHistogram?2.0f:1.0f;
