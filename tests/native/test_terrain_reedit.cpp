@@ -1056,6 +1056,25 @@ AE_TEST(terrain_control_maps_publish_preview_cancel_history_and_reload) {
   AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),usize(1),"paint persists through undo redo cache reload");
   AE_EXPECT_TRUE(f.session.terrainControlPublication().empty(),"transaction metadata never dangles outside publisher");
   for(const auto &control:f.controls)AE_EXPECT_TRUE(control.textureIndex==renderer::InvalidMapTexture || control.textureIndex<f.textures.size(),"reloaded control slot remains valid");
+  resources::TerrainField finalField;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,finalField,error),error.c_str());
+  AE_EXPECT_TRUE(resources::makeTerrainControlTexture(finalField,expected,error),error.c_str());
+  const auto currentSource=scene::importLink(f.session.document().find(root)->components)->source;
+  std::vector<renderer::MapDrawState> visible;
+  AE_EXPECT_TRUE(f.session.extractMap(visible),"extract reloaded painted terrain");
+  bool checked=false;
+  for(const auto &draw:visible) {
+    const auto *entity=f.session.document().find(draw.objectId);
+    const auto *link=entity?scene::importLink(entity->components):nullptr;
+    if(!draw.visible || !link || link->source!=currentSource || draw.sourceDrawIndex>=f.draws.size())continue;
+    const auto material=f.draws[draw.sourceDrawIndex].materialIndex;
+    if(material==0 || material-1>=f.controls.size())continue;
+    const auto &control=f.controls[material-1];
+    if(control.textureIndex==renderer::InvalidMapTexture)continue;
+    AE_EXPECT_TRUE(f.textures[control.textureIndex]->mipChain==expected->mipChain,"visible reloaded revision samples its exact authored control pixels");
+    checked=true;
+  }
+  AE_EXPECT_TRUE(checked,"validated actual visible material after cold reload, not a retained history revision");
 }
 
 AE_TEST(terrain_material_extension_carries_control_without_overwriting_lightmap) {

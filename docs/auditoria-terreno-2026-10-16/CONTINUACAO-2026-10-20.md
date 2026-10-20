@@ -1,5 +1,7 @@
 # Continuação dos plugins — 20/10/2026
 
+Etapa posterior: [pintura independente na GPU](PINTURA-GPU-2026-10-20.md). Este registro conserva o estágio de contratos/mapas anterior à integração do consumidor por fragmento.
+
 Universo de trabalho: os 71 itens de `plano-implementacao.csv`, com todas as propriedades comprometidas. Esta revisão permanece na branch `codex/terrain-voxel-generator`. ADB suspenso pelo proprietário até concluir a implementação e a conferência local; nenhuma validação Android desta revisão pode ser inferida do APK 110.
 
 ## P11 — mapa de pintura independente

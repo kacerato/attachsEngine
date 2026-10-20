@@ -32,3 +32,17 @@ Sem bindless ou quando o descritor não pode ser alocado, o shader preserva a av
 - Painel de produção executado/rasterizado em 1280×720 e 655×300: `control-ui-1280.png`, `control-ui-655-map.png`, `control-ui-655.png`. Barra, valor preciso, legibilidade, rolagem e ação fixa conferidos. Fundo vazio do teste não é uma cena 3D.
 - Dois testes condicionais de symlink não executaram as asserções específicas por falta de privilégio no Windows; a suíte identifica essa limitação no log. Corrupção, recuperação e publicação atômica foram exercitadas normalmente.
 - **14/14 unidades Android ARM64** passaram na compilação sintática, incluindo importação/cache, sessão, shell e renderer: `terrain-control-android.log`. Isso não prova link, APK ou runtime; sem ADB nesta etapa.
+
+
+## Continuidade
+
+Código funcional `47b4cd6b` publicado na branch de terreno. O teste de reabertura foi reforçado depois para comparar os pixels do material **visível** com a receita reexecutada, distinguindo-o das revisões antigas retidas: passou em execução focal (`terrain-control-reload-pixels.log`), sem alterar o runtime depois da suíte integrada.
+
+A próxima integração é o catálogo original no editor e no renderer PBR: seleção persistida por identidade, imagens originais/canais corretos, publicação de tabela própria de camadas e consumidores de normal/roughness/metallic/AO/altura. O contrato isolado de materiais não constitui esse recurso; M01–M08 e os demais itens permanecem no plano integral.
+
+
+## Publicação
+
+AstraDocs `2f3efbb805f1a0a1b3450badf4bb6573996bf098` publicado na main do site. Nota nova `2026-10-20-terreno-pintura-por-fragmento`; todas as notas anteriores preservadas semanticamente. Guia próprio: https://astraengine.com.br/pt-br/desenvolvimento/2026-10-20/terreno-pintura-gpu/ . Build local: 2436 páginas, 2435 Markdown/JSON e dez exemplos; 594696 links verificados, zero erros. Revisão do guia em desktop e viewport mobile realizada; emulação restaurada, aba temporária fechada e servidor 4187 encerrado.
+
+Vercel `dpl_DUaKJTv9DDrMiqwv5GYkhjDvq399` READY, domínio principal atribuído ao commit acima. HTTP 200 e conteúdo atual confirmados no guia, Markdown, feed e HTML de Atualizações. Nenhum APK novo foi gerado/distribuído; ADB continua suspenso e a meta dos 71 itens permanece ativa.
