@@ -76,6 +76,8 @@ function(aether_add_terrain_surface_preview)
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_catalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/json_reader.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_draw_list.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_text.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ui/ui_input.cpp

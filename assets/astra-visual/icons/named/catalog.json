@@ -2274,7 +2274,13 @@
       "source": "vector/terrain/sculpt.svg"
     },
     "terrain/layers": {
-      "source": "vector/terrain/layers.svg"
+      "source": "vector/terrain/layers.svg",
+      "raster": "terrain/cluster-generated.png",
+      "concepts": [
+        "terrain-layers",
+        "terrain-clusters"
+      ],
+      "generated_source": "Astra cluster icon 2026-10-20; existing TerrainLayers enum retained"
     },
     "terrain/solid-base": {
       "source": "vector/terrain/solid-base.svg",

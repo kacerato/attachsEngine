@@ -1929,7 +1929,10 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   if(edit.purpose==EditorTextPurpose::Number) {
     const auto terrainBase=widgetId(EditorWidget::TerrainNumberBase);
     if(edit.field>=terrainBase&&(edit.field<terrainBase+52 || edit.field==terrainBase+60 ||
-       (edit.field>=terrainBase+64 && edit.field<=terrainBase+110))) {
+       (edit.field>=terrainBase+64 && edit.field<=terrainBase+110) ||
+       (edit.field>=terrainBase+128 && edit.field<=terrainBase+154) ||
+       (edit.field>=terrainBase+160 && edit.field<=terrainBase+165) ||
+       (edit.field>=terrainBase+176 && edit.field<=terrainBase+190))) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
       if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(edit.field-terrainBase,number)) {
         state_.numericError=true;state_.status=reason.empty()?"Valor de terreno fora do limite":reason;return false;

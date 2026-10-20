@@ -160,8 +160,16 @@ try {
         if ($existing -cne $generated) { throw "Header desatualizado: regenere $ShaderName antes do build." }
         Write-Output "SPIR-V validado; header $ShaderName reproduzível."
     } else {
-        [IO.File]::WriteAllLines([IO.Path]::GetFullPath($OutputHeader), $header, [Text.UTF8Encoding]::new($false))
-        Write-Output "SPIR-V validado e gerado em $([IO.Path]::GetFullPath($OutputHeader))."
+        $generated = ($header -join "`n") + "`n"
+        $existing = if (Test-Path -LiteralPath $OutputHeader) {
+            [IO.File]::ReadAllText([IO.Path]::GetFullPath($OutputHeader)).Replace("`r`n", "`n")
+        } else { $null }
+        if ($existing -ceq $generated) {
+            Write-Output "SPIR-V validado; header $ShaderName sem mudanças, timestamp preservado."
+        } else {
+            [IO.File]::WriteAllLines([IO.Path]::GetFullPath($OutputHeader), $header, [Text.UTF8Encoding]::new($false))
+            Write-Output "SPIR-V validado e gerado em $([IO.Path]::GetFullPath($OutputHeader))."
+        }
     }
 }
 finally {

@@ -47,6 +47,7 @@ import numpy as np
 from PIL import Image
 
 from ui_asset_format import cpp_identifier, write_icons
+from generated_output import publish_staged_if_changed, write_text_if_changed
 
 CELL = 96
 PADDING = 2
@@ -191,7 +192,10 @@ def main() -> None:
         if category == "ide":
             code_output = arguments.output / "code-ide"
             code_output.mkdir(parents=True, exist_ok=True)
-            icon.save(code_output / f"{leaf}.png")
+            derived = code_output / f"{leaf}.png"
+            staged_derived = derived.with_suffix(".tmp.png")
+            icon.save(staged_derived)
+            publish_staged_if_changed(staged_derived, derived)
         x = PADDING + (index % columns) * (CELL + PADDING)
         y = PADDING + (index // columns) * (CELL + PADDING)
         atlas.paste(icon, (x, y))
@@ -228,7 +232,7 @@ def main() -> None:
     staged = preview.with_suffix(".tmp.png")
     atlas.save(staged)
     try:
-        staged.replace(preview)
+        publish_staged_if_changed(staged, preview)
     except OSError as error:
         print(f"AVISO: {preview} em uso ({error}); cópia nova ficou em {staged}")
     binary = arguments.output / f"{arguments.name}.aeui"
@@ -239,7 +243,7 @@ def main() -> None:
         rects,
         atlas.tobytes(),
     )
-    staged_binary.replace(binary)
+    publish_staged_if_changed(staged_binary, binary)
 
     entries = []
     identifiers = []
@@ -253,12 +257,12 @@ def main() -> None:
         + "\n"
         + HEADER_EPILOGUE.replace("@COUNT@", str(len(names)))
     )
-    arguments.header.write_text(header, encoding="utf-8")
-    arguments.source.write_text(
+    write_text_if_changed(arguments.header, header)
+    write_text_if_changed(
+        arguments.source,
         SOURCE_TEMPLATE.replace(
             "@NAMES@", "".join(f'    "{name}",\n' for name in names)
         ),
-        encoding="utf-8",
     )
 
     occupancy = sum(rect[2] * rect[3] for rect in rects) / float(ATLAS_WIDTH * atlas.height)

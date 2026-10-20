@@ -364,3 +364,66 @@ AE_TEST(terrain_material_property_undo_redo_changes_actual_visible_binding) {
   AE_EXPECT_TRUE(visible && visible->surface.layers.size()==4 && visible->surface.layers[0].scaleX==3.5f,
                  "redo restores edited PBR on actual visible draw");
 }
+
+AE_TEST(terrain_noise_source_maps_survive_apply_glb_and_property_only_preparation) {
+  MaterialEditorFixture f;AE_EXPECT_TRUE(f.ready,"material fixture");
+  resources::TerrainRecipe recipe;recipe.cells=8;recipe.controlCells=8;recipe.height=0;
+  std::string error;AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  AE_EXPECT_TRUE(f.session.selectTerrainCatalogMaterial(0),"select material");
+  auto authored=f.session.screen().terrainDraft;
+  auto &noise=authored.surface.detailNoise;
+  noise.enabled=true;noise.map=authored.surface.layers[0].maps[0];
+  noise.strength=.37f;noise.fadeStart=12;noise.fadeEnd=45;noise.scale=2.5f;
+  authored.surface.layers[0].globalDetailParticipation=.25f;
+  AE_EXPECT_TRUE(f.session.applyTerrain(authored,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  const auto *visible=f.visibleSurface(root);
+  AE_EXPECT_TRUE(visible && visible->surface.detailNoise.enabled && visible->surface.detailNoise.strength==.37f,
+                 "noise source and parameters reach actual visible binding");
+  const auto cache=f.session.terrainMaterialCache_;
+  const auto reads=f.imageReads->load();
+  auto changed=authored;changed.surface.detailNoise.strength=.61f;
+  const auto prepared=editor::prepareTerrainMaterial(changed,f.session.screen().terrainCatalog,{},cache,error);
+  AE_EXPECT_TRUE(prepared && prepared->binding.surface.detailNoise.strength==.61f,error.c_str());
+  AE_EXPECT_TRUE(prepared->textures[0].get()==cache->textures[0].get() && f.imageReads->load()==reads,
+                 "noise slider change reuses original decoded pixels without rereading PNG");
+  const auto source=scene::importLink(f.session.document().find(root)->components)->source;
+  const auto record=*f.session.assets().find(source);std::vector<u8> bytes;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(f.project/record.path,bytes),"saved source");
+  resources::GltfImport imported;AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},imported),imported.diagnostic.c_str());
+  AE_EXPECT_TRUE(!imported.terrainSurfaces.empty() && imported.terrainSurfaces[0].surface.detailNoise.enabled,
+                 "cold GLB restores enabled noise");
+  const auto &cold=imported.terrainSurfaces[0].surface;
+  AE_EXPECT_TRUE(cold.detailNoise.map.texture==noise.map.texture && cold.detailNoise.scale==2.5f &&
+                 cold.detailNoise.fadeStart==12 && cold.layers[0].globalDetailParticipation==.25f,
+                 "source identity, frequency, fade and participation retained");
+  AE_EXPECT_TRUE(std::any_of(imported.terrainSurfaceImages.begin(),imported.terrainSurfaceImages.end(),
+    [&](const auto &image){return image.identity==noise.map.texture && !image.bytes().empty();}),
+    "cold source includes original PNG needed by noise");
+}
+
+AE_TEST(terrain_actual_catalog_cluster_preserves_all_variant_maps_after_glb_reopen) {
+  MaterialEditorFixture f;AE_EXPECT_TRUE(f.ready,"material fixture");
+  resources::TerrainRecipe recipe;recipe.cells=8;recipe.controlCells=8;recipe.height=0;
+  std::string error;AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  AE_EXPECT_TRUE(f.session.loadTerrainCatalog(),"catalog load");const auto catalog=f.session.screen().terrainCatalog;
+  ae::usize index=0;while(index<catalog->materials.size()&&!catalog->materials[index].layer.cluster.enabled)++index;
+  AE_EXPECT_TRUE(index<catalog->materials.size(),"original supplied catalog contains complete distinct clusters");
+  AE_EXPECT_TRUE(f.session.selectTerrainCatalogMaterial(ae::u32(index)),"select actual supplied cluster");
+  const auto authored=f.session.screen().terrainDraft.surface.layers[0].cluster;
+  AE_EXPECT_TRUE(authored.variants.size()>=2,"original variants present");
+  AE_EXPECT_TRUE(f.session.applyTerrain(f.session.screen().terrainDraft,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;const auto *visible=f.visibleSurface(root);
+  AE_EXPECT_TRUE(visible&&visible->surface.layers[0].cluster.enabled,"actual visible binding contains supplied cluster");
+  const auto source=scene::importLink(f.session.document().find(root)->components)->source;
+  const auto record=*f.session.assets().find(source);std::vector<u8> bytes;
+  AE_EXPECT_TRUE(editor::EditorImportTransaction::read(f.project/record.path,bytes),"saved clustered source");
+  resources::GltfImport imported;AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},imported),imported.diagnostic.c_str());
+  AE_EXPECT_TRUE(!imported.terrainSurfaces.empty(),"cold PBR source");
+  const auto &cold=imported.terrainSurfaces[0].surface.layers[0].cluster;
+  AE_EXPECT_EQ(cold.variants.size(),authored.variants.size(),"variant count survives cold import");
+  for(ae::usize i=0;i<cold.variants.size();++i){
+    AE_EXPECT_TRUE(cold.variants[i].identity==authored.variants[i].identity && cold.variants[i].scale==authored.variants[i].scale,"stable variant identity and metres retained");
+    for(ae::usize role=0;role<7;++role)AE_EXPECT_TRUE(cold.variants[i].maps[role].texture==authored.variants[i].maps[role].texture,"all original seven channel references retained");
+  }
+}

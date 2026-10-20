@@ -5129,7 +5129,11 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
       }
       if(const auto found=shared.find(part);found!=shared.end()){offsets[m]=found->second;continue;}
       if(rows.size()+part.size()>usize(renderer::TerrainSurfaceMaximumRows)*4)return false;
-      offsets[m]=u32(rows.size()/4)+1;shared.emplace(part,offsets[m]);rows.insert(rows.end(),part.begin(),part.end());
+      offsets[m]=u32(rows.size()/4)+1;shared.emplace(part,offsets[m]);
+      if(!renderer::relocateTerrainSurfaceTable(part,u32(rows.size()/4),reason)) {
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] %s",reason.c_str());return false;
+      }
+      rows.insert(rows.end(),part.begin(),part.end());
     }
     return true;
   };

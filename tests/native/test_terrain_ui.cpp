@@ -2,6 +2,7 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
 #include "editor/editor_theme.h"
+#include "editor/editor_terrain_noise_controls.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
 #include "scene/import_link.h"
@@ -769,4 +770,201 @@ AE_TEST(terrain_catalog_touch_selection_sliders_and_vertical_scroll_are_distinct
                  "map factor is reachable through actual navigation and touch");
   AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].maps[0].factor-2.f)<.001f,
                  "map slider updates actual PBR factor");
+}
+
+
+AE_TEST(terrain_m05_noise_touch_sources_exact_input_and_independent_settings) {
+  TerrainUiFixture f(655,300);
+  const auto noiseId=[](u32 action){return id(editor::terrainNoiseAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(noiseId(0)),"open M05 noise through routed compact navigation");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,4u,"opens global detail");
+  const auto catalog=f.session.screen().terrainCatalog;
+  AE_EXPECT_TRUE(catalog && catalog->textures.size()>6,"source picker uses actual transported catalog");
+  AE_EXPECT_TRUE(f.tap(noiseId(10)) && f.tap(noiseId(13)),"open source picker and advance a real page");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,1u,"texture pagination advances");
+  AE_EXPECT_TRUE(f.tap(noiseId(16)),"select first texture from page two through touch");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,4u,"selection returns to originating noise");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.detailNoise.map.texture==catalog->textures[6].identity,"source GUID is the selected catalog texture");
+  AE_EXPECT_TRUE(f.tap(noiseId(5)),"enable source-backed detail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.detailNoise.enabled,"enable changes actual model");
+  AE_EXPECT_TRUE(f.slide(129,.25f),"global strength slider routes to model");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.detailNoise.strength-2.f)<.001f,"global strength becomes two");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,128)),"frequency chip opens precise editor");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"32",true),"numeric text commit accepts frequency outside practical slider");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.detailNoise.scale,32.f,"exact value reaches global noise");
+  AE_EXPECT_TRUE(f.slide(132,.25f),"participation is reachable by compact touch");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].globalDetailParticipation-.25f)<.001f,"participation belongs to selected layer");
+  AE_EXPECT_TRUE(f.tap(noiseId(45)) && f.tap(noiseId(3)) && f.slide(129,.5f),"local detail receives independent slider input");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,6u,"local detail selected");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].detailNoise.strength-4.f)<.001f,"local detail changed");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.detailNoise.strength,2.f,"local adjustment preserves global strength");
+  AE_EXPECT_TRUE(f.tap(noiseId(44)) && f.tap(noiseId(2)) && f.slide(129,.75f),"global distance has independent routed control");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.distanceNoise.strength-6.f)<.001f,"distance strength changed");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.detailNoise.strength,2.f,"distance preserves detail");
+  AE_EXPECT_TRUE(f.tap(noiseId(45)) && f.tap(noiseId(4)) && f.slide(129,.125f),"local distance has its own routed controls");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[0].distanceNoise.strength-1.f)<.001f,"local distance adjusted");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.distanceNoise.strength,6.f,"local distance preserves global distance");
+  AE_EXPECT_TRUE(f.tap(noiseId(44)) && f.tap(noiseId(2)),"return to global distance");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainLayerBase,1)) && f.slide(132,.5f),"participation follows selected layer");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].globalDistanceParticipation,1.f,"first layer remains unchanged");
+  AE_EXPECT_TRUE(std::abs(f.session.screen().terrainDraft.surface.layers[1].globalDistanceParticipation-.5f)<.001f,"second layer receives distance participation");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMaterialLibrary)),"material library remains accessible after texture pagination");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,0u,"material page is reset independently of prior texture page");
+}
+
+AE_TEST(terrain_m05_noise_fade_sliders_preserve_valid_order_at_both_edges) {
+  TerrainUiFixture f(1280,720);
+  const auto noiseId=[](u32 action){return id(editor::terrainNoiseAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(noiseId(0)),"open noise settings");
+  AE_EXPECT_TRUE(f.slide(130,1,1),"fade start reaches its valid upper edge");
+  auto noise=f.session.screen().terrainDraft.surface.detailNoise;
+  AE_EXPECT_TRUE(noise.fadeStart>99 && noise.fadeStart<noise.fadeEnd,"start changes without crossing end");
+  AE_EXPECT_TRUE(f.slide(131,0,2),"fade end reaches its valid lower edge");
+  noise=f.session.screen().terrainDraft.surface.detailNoise;
+  AE_EXPECT_TRUE(noise.fadeEnd>noise.fadeStart,"end remains strictly above start");
+  AE_EXPECT_TRUE(f.slide(131,1,2),"end can expand again after touching near-equal boundary");
+  noise=f.session.screen().terrainDraft.surface.detailNoise;
+  AE_EXPECT_TRUE(noise.fadeEnd>2047 && noise.fadeEnd>noise.fadeStart,"end slider remains responsive");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,130)),"precise fade start remains reachable");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"12",true),"exact fade entry commits through numeric route");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.detailNoise.fadeStart,12.f,"precise start value persists");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+
+AE_TEST(terrain_m06_normal_roles_and_antitile_sources_follow_routed_touch) {
+  TerrainUiFixture f(1280,720);
+  const auto noiseId=[](u32 action){return id(editor::terrainNoiseAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(noiseId(0)),"open noise UI");
+  for(u32 role=0;role<3;++role) {
+    AE_EXPECT_TRUE(f.tap(noiseId(23+role)),"select global normal role");
+    AE_EXPECT_EQ(f.session.screen().terrainMaterialView,12u+role,"normal view identity");
+    AE_EXPECT_TRUE(f.tap(noiseId(10)) && f.tap(noiseId(16)) && f.tap(noiseId(5)),"bind actual source and enable normal");
+    AE_EXPECT_TRUE(f.slide(129,float(role+1)/8),"global normal strength slider");
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,148)),"precise participation chip");
+    AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.25",true),"exact normal participation route");
+    AE_EXPECT_TRUE(f.tap(noiseId(7)),"toggle normal RGB to RG");
+    AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.normalNoise[role].map.channel==resources::TerrainSurfaceChannel::NormalRG,"normal RG metadata applied");
+    AE_EXPECT_TRUE(f.tap(noiseId(editor::terrainNoiseLocal(f.session.screen().terrainMaterialView)?44:45)) && f.slide(129,.75f),"switch scope and adjust local normal");
+    const auto &surface=f.session.screen().terrainDraft.surface;
+    AE_EXPECT_EQ(surface.normalNoise[role].strength,float(role+1),"global strength independent");
+    AE_EXPECT_EQ(surface.layers[0].normalNoise[role].strength,6.f,"local normal strength independent");
+    AE_EXPECT_EQ(surface.layers[0].globalNormalParticipation[role],.25f,"participation indexed by role");
+    AE_EXPECT_TRUE(f.tap(noiseId(editor::terrainNoiseLocal(f.session.screen().terrainMaterialView)?44:45)),"return to global scope");
+  }
+  AE_EXPECT_TRUE(f.tap(noiseId(26)) && f.tap(noiseId(28)),"create anti-tile entry from actual normal");
+  auto surface=f.session.screen().terrainDraft.surface;
+  AE_EXPECT_EQ(surface.antiTileArray.entries.size(),usize(1),"entry created");
+  const auto first=surface.antiTileArray.entries[0].identity;
+  AE_EXPECT_TRUE(surface.layers[0].antiTileEntry==first && surface.antiTileArray.entries[0].normal.enabled && surface.antiTileArray.entries[0].normal.map.texture.valid(),"stable identity binds real enabled normal source");
+  AE_EXPECT_TRUE(f.tap(noiseId(27)) && f.tap(noiseId(31)),"enable set and edit normal");
+  AE_EXPECT_TRUE(!f.tap(noiseId(5)),"last active source cannot be disabled");
+  AE_EXPECT_TRUE(f.tap(noiseId(26)) && f.tap(noiseId(32)),"open bound detail source");
+  AE_EXPECT_TRUE(f.tap(noiseId(10)) && f.tap(noiseId(16)) && f.tap(noiseId(5)),"assign actual detail source");
+  AE_EXPECT_TRUE(f.slide(129,.25f),"entry detail strength slider");
+  AE_EXPECT_TRUE(f.tap(noiseId(26)) && f.slide(149,.5f),"layer anti-normal participation");
+  AE_EXPECT_TRUE(f.slide(150,.25f,1) && f.slide(151,.75f,2),"independent detail and distance participation");
+  AE_EXPECT_TRUE(f.tap(noiseId(28)) && f.tap(noiseId(29)),"create second identity and cycle back to first");
+  surface=f.session.screen().terrainDraft.surface;
+  AE_EXPECT_EQ(surface.antiTileArray.entries.size(),usize(2),"two real entries");
+  AE_EXPECT_TRUE(surface.antiTileArray.entries[1].identity!=first && surface.layers[0].antiTileEntry==first,"binding selects actual stable GUID");
+  AE_EXPECT_EQ(surface.antiTileArray.entries[0].detail.strength,2.f,"first entry edits retained");
+  AE_EXPECT_EQ(surface.layers[0].antiTileParticipation[0],.5f,"normal participation retained");
+  AE_EXPECT_EQ(surface.layers[0].antiTileParticipation[1],.25f,"detail participation retained");
+  AE_EXPECT_EQ(surface.layers[0].antiTileParticipation[2],.75f,"distance participation retained");
+  AE_EXPECT_TRUE(f.tap(noiseId(30)),"unbind layer without removing shared entries");
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.surface.layers[0].antiTileEntry.valid(),"binding cleared");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+
+AE_TEST(terrain_m07_resampling_modes_sources_ranges_and_exact_values_follow_touch) {
+  TerrainUiFixture f(1280,720);
+  const auto noiseId=[](u32 action){return id(editor::terrainNoiseAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(noiseId(0)) && f.tap(noiseId(35)),"open resampling through material noise navigation");
+  AE_EXPECT_TRUE(f.tap(noiseId(36)) && f.tap(noiseId(37)) && f.tap(noiseId(38)),"independent albedo normal and height switches");
+  AE_EXPECT_TRUE(f.tap(noiseId(39)),"select Constant mode");
+  auto layer=f.session.screen().terrainDraft.surface.layers[0];
+  AE_EXPECT_TRUE(layer.resampleAlbedo && layer.resampleNormal && layer.resampleHeightBlend,"all authored roles enabled");
+  AE_EXPECT_TRUE(layer.resampleBlend==resources::TerrainDistanceBlend::Constant,"Constant selected");
+  AE_EXPECT_TRUE(!f.tap(id(Widget::TerrainNumberBase,153)),"Constant does not expose unused distance entry");
+  AE_EXPECT_TRUE(f.tap(noiseId(40)),"Noise mode seeds an actual usable source");
+  layer=f.session.screen().terrainDraft.surface.layers[0];
+  AE_EXPECT_TRUE(layer.resampleBlend==resources::TerrainDistanceBlend::Noise && layer.resampleNoise.enabled && layer.resampleNoise.map.texture.valid(),"Noise mode has effectful source immediately");
+  AE_EXPECT_TRUE(f.slide(153,1,1) && f.slide(154,0,2),"resampling distance edges remain valid");
+  layer=f.session.screen().terrainDraft.surface.layers[0];
+  AE_EXPECT_TRUE(layer.resampleStart>99 && layer.resampleEnd>layer.resampleStart,"start and end cannot cross");
+  AE_EXPECT_TRUE(f.slide(154,1,2),"distance end expands after touching lower boundary");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,153)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"12",true),"exact start distance routes to model");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,152)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"32",true),"precise frequency multiplier can exceed practical slider");
+  AE_EXPECT_TRUE(f.tap(noiseId(42)),"edit reused Noise source settings");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,51u,"resampling noise editor view");
+  AE_EXPECT_TRUE(f.tap(noiseId(10)) && f.tap(noiseId(16)),"actual transported texture picker works for resampling source");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,51u,"picker returns to resampling editor");
+  AE_EXPECT_TRUE(f.slide(129,.25f),"Noise strength slider has its own model consumer");
+  AE_EXPECT_TRUE(f.tap(noiseId(35)) && f.tap(noiseId(41)),"return and switch to Crossfade");
+  layer=f.session.screen().terrainDraft.surface.layers[0];
+  AE_EXPECT_TRUE(layer.resampleBlend==resources::TerrainDistanceBlend::Crossfade,"Crossfade selected explicitly");
+  AE_EXPECT_EQ(layer.resampleScale,32.f,"mode switch preserves frequency multiplier");
+  AE_EXPECT_EQ(layer.resampleStart,12.f,"precise start retained");
+  AE_EXPECT_EQ(layer.resampleNoise.strength,2.f,"noise settings preserved independently of blend mode");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
+}
+
+
+AE_TEST(terrain_m08_clusters_use_actual_distinct_materials_seven_maps_and_precise_transforms) {
+  TerrainUiFixture f(1280,720);
+  const auto clusterId=[](u32 action){return id(editor::terrainClusterAction(action));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(editor::terrainNoiseAction(0))) && f.tap(clusterId(0)),"open cluster authoring through actual navigation");
+  AE_EXPECT_TRUE(f.tap(clusterId(2)),"stochastic can run on base material before variants exist");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].cluster.stochastic,"base stochastic flag retained");
+  AE_EXPECT_TRUE(!f.tap(clusterId(1)),"cluster enable unavailable until two distinct variants exist");
+  const auto catalog=f.session.screen().terrainCatalog;
+  AE_EXPECT_TRUE(catalog && !catalog->materials.empty(),"real original material catalog loaded");
+  u32 second=0;
+  while(second<catalog->materials.size() && catalog->materials[second].layer.maps[0].texture==catalog->materials[0].layer.maps[0].texture) ++second;
+  AE_EXPECT_TRUE(second<catalog->materials.size(),"catalog has another distinct albedo");
+  const auto pick=[&](u32 source) {
+    for(u32 page=0;page<source/6;++page) if(!f.tap(clusterId(17))) return false;
+    return f.tap(clusterId(20+source%6));
+  };
+  AE_EXPECT_TRUE(f.tap(clusterId(5)) && pick(0),"first variant imports a real material");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,70u,"first variant transformation view");
+  AE_EXPECT_TRUE(f.tap(clusterId(0)) && f.tap(clusterId(5)) && pick(0),"attempt duplicate material selection");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].cluster.variants.size(),usize(1),"duplicate material is not appended");
+  AE_EXPECT_TRUE(f.session.screen().terrainMessage.find("duplicada")!=std::string::npos,"duplicate produces explicit explanation");
+  AE_EXPECT_TRUE(pick(second),"choose distinct real albedo");
+  AE_EXPECT_TRUE(f.tap(clusterId(0)) && f.tap(clusterId(1)),"enable complete two-variant cluster");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].cluster.enabled,"cluster enabled reaches model");
+  AE_EXPECT_TRUE(f.tap(clusterId(3)),"quality has actual selectable levels");
+  AE_EXPECT_TRUE(f.slide(164,.5f) && f.slide(165,.25f),"contrast and noise boost sliders route to cluster");
+  AE_EXPECT_TRUE(f.tap(clusterId(40)),"edit first stable variant");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNumberBase,160)) && f.session.completeTextEdit(f.session.pendingTextEdit(),"32",true),"exact absolute metres per tile entry");
+  AE_EXPECT_TRUE(f.slide(161,.75f,1) && f.slide(162,.25f,2) && f.slide(163,.75f),"variant offsets and degrees have real sliders");
+  const auto identity=f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0].identity;
+  AE_EXPECT_TRUE(f.tap(clusterId(7)),"open all variant map roles");
+  for(u32 role=0;role<7;++role) {
+    AE_EXPECT_EQ(f.session.screen().terrainMapRole,role,"map role remains in zero to six domain");
+    AE_EXPECT_TRUE(f.slide(176,float(role+1)/8),"each PBR map has an effectful factor slider");
+    if(role<6) AE_EXPECT_TRUE(f.tap(clusterId(12)),"advance actual PBR role");
+  }
+  AE_EXPECT_TRUE(f.tap(clusterId(9)) && f.tap(clusterId(32)),"variant map source picker selects actual transported texture");
+  auto cluster=f.session.screen().terrainDraft.surface.layers[0].cluster;
+  AE_EXPECT_TRUE(cluster.variants[0].identity==identity,"map editing preserves stable variant identity");
+  AE_EXPECT_EQ(cluster.variants[0].scale,32.f,"absolute tile size retained");
+  AE_EXPECT_EQ(cluster.variants[0].offsetX,1024.f,"offset X is metres");
+  AE_EXPECT_EQ(cluster.variants[0].offsetY,-1024.f,"offset Y is metres");
+  AE_EXPECT_EQ(cluster.variants[0].rotation,90.f,"rotation is degrees");
+  for(u32 role=0;role<7;++role) AE_EXPECT_EQ(cluster.variants[0].maps[role].factor,float(role+1),"all seven independent map factors retained");
+  AE_EXPECT_TRUE(cluster.variants[1].identity==catalog->materials[second].layer.identity,"catalog variant identity remains stable");
+  for(u32 role=0;role<7;++role) AE_EXPECT_TRUE(cluster.variants[1].maps[role].texture==catalog->materials[second].layer.maps[role].texture,"original complete map set preserved");
+  AE_EXPECT_TRUE(f.tap(clusterId(0)) && f.tap(clusterId(41)) && f.tap(clusterId(6)),"remove selected variant through UI");
+  cluster=f.session.screen().terrainDraft.surface.layers[0].cluster;
+  AE_EXPECT_EQ(cluster.variants.size(),usize(1),"removal preserves remaining authored variant");
+  AE_EXPECT_TRUE(!cluster.enabled && cluster.stochastic,"incomplete cluster disables while base stochastic remains authored");
+  std::string error;
+  AE_EXPECT_TRUE(resources::validTerrainRecipe(f.session.screen().terrainDraft,error),error.c_str());
 }

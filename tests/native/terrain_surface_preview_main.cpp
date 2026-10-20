@@ -2,6 +2,7 @@
 // editor session, physics or image codecs. This verifies layout, not gameplay.
 #include "editor/editor_screen.h"
 #include "editor/editor_theme.h"
+#include "editor/editor_terrain_noise_controls.h"
 #include "ui_software_raster.h"
 #include <cstdio>
 #include <cstdlib>
@@ -40,47 +41,56 @@ int main(int argc, char **argv) {
   const std::string_view scenario = argc > 5 ? argv[5] : "lod";
   if (scenario != "lod") {
     if (scenario != "library" && scenario != "layer" && scenario != "maps" &&
-        scenario != "paint")
+        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker")
       return 2;
     state.terrainTab = 2;
     state.terrainMaterialView = scenario == "library" ? 1u
                                 : scenario == "layer" ? 2u
                                 : scenario == "maps"  ? 3u
                                                       : 0u;
+    if(scenario=="noise" || scenario=="noise-source") state.terrainMaterialView=scenario=="noise"?4u:8u;
     state.terrainMapRole = argc > 6 ? u32(std::atoi(argv[6])) : 0;
     if (state.terrainMapRole > 6)
       return 2;
     auto catalog = std::make_shared<resources::TerrainSurfaceCatalog>();
-    // Names/IDs mirror the first six supplied catalog rows. Loading, hashing
-    // and image publication are covered by the editor integration tests.
-    const char *names[] = {"layer_Sand and Rocks",   "layer_Cliff",
-                           "layer_Grass and Clover", "SandLayer",
-                           "RoughRockLayer",         "DirtLayer"};
-    const char *ids[] = {
-        "2c15fa1c5f2e84d4cb5639da6acdeed9", "496367f095928f44994c336d5a4ac797",
-        "5b8ae2f8c0c78a84ca0d97b05588e022", "0834ef114040a42ffb0acb7095171e9a",
-        "1d06ead0f1f64485f9d6ada38156ddbe", "5254a2672ae194b228033c789d8c7483"};
-    for (u32 i = 0; i < 6; ++i) {
-      resources::TerrainCatalogMaterial material;
-      material.id = ids[i];
-      material.layer.name = names[i];
-      material.layer.sourceCatalogId = ids[i];
-      material.layer.identity = {1, i + 1};
-      material.layer.scaleX = material.layer.scaleY = 5;
-      material.layer.heightBlend = true;
-      material.layer.maps[0].texture = {2, i * 2 + 1};
-      material.layer.maps[0].channel = resources::TerrainSurfaceChannel::RGB;
-      material.layer.maps[0].linear = false;
-      material.layer.maps[1].texture = {2, i * 2 + 2};
-      material.layer.maps[1].channel =
-          resources::TerrainSurfaceChannel::NormalRGB;
-      material.layer.maps[2].factor = 0;
-      material.layer.maps[5].factor = material.layer.maps[6].factor = 0;
-      catalog->materials.push_back(std::move(material));
+    const auto catalogBytes=read("assets/terrain/library/catalog.json");
+    std::string catalogError;
+    if(!resources::loadTerrainSurfaceCatalog(std::string_view(reinterpret_cast<const char *>(catalogBytes.data()),catalogBytes.size()),*catalog,catalogError)) {
+      std::fprintf(stderr,"catalog: %s\n",catalogError.c_str());return 3;
     }
     state.terrainCatalog = catalog;
     for (u32 i = 0; i < 4; ++i)
       state.terrainDraft.surface.layers.push_back(catalog->materials[i].layer);
+    if(scenario=="noise" || scenario=="noise-source") {
+      auto &noise=state.terrainDraft.surface.detailNoise;
+      noise.enabled=true;noise.map=state.terrainDraft.surface.layers[0].maps[0];
+      noise.map.channel=state.terrainMapRole==4?resources::TerrainSurfaceChannel::RGB:resources::TerrainSurfaceChannel::R;
+    }
+    if(scenario=="normal" || scenario=="anti-tile") {
+      state.terrainMaterialView=scenario=="normal"?12u:30u;
+      auto &noise=state.terrainDraft.surface.normalNoise[0];
+      noise.enabled=true;noise.map=state.terrainDraft.surface.layers[0].maps[1];
+      for(const auto &material:catalog->materials)if(material.layer.maps[1].texture.valid()){noise.map=material.layer.maps[1];break;}
+      resources::TerrainAntiTileEntry entry;entry.identity={55,1};entry.normal=noise;
+      state.terrainDraft.surface.antiTileArray.enabled=true;
+      state.terrainDraft.surface.antiTileArray.entries.push_back(entry);
+      state.terrainDraft.surface.layers[0].antiTileEntry=entry.identity;
+    }
+    if(scenario=="resample" || scenario=="resample-noise") {
+      state.terrainMaterialView=scenario=="resample"?50u:51u;
+      auto &layer=state.terrainDraft.surface.layers[0];
+      layer.resampleAlbedo=layer.resampleNormal=layer.resampleHeightBlend=true;
+      layer.resampleScale=4;layer.resampleBlend=resources::TerrainDistanceBlend::Noise;
+      layer.resampleNoise.enabled=true;layer.resampleNoise.map=layer.maps[0];
+    }
+    if(scenario=="cluster" || scenario=="variant" || scenario=="variant-maps" || scenario=="cluster-source" || scenario=="variant-picker") {
+      for(const auto &material:catalog->materials)if(material.layer.cluster.enabled) {
+        state.terrainDraft.surface.layers[0]=material.layer;break;
+      }
+      state.terrainMaterialView=scenario=="cluster"?60u:scenario=="variant"?70u:scenario=="variant-maps"?100u:scenario=="cluster-source"?62u:80u;
+      auto &cluster=state.terrainDraft.surface.layers[0].cluster;
+      cluster.stochastic=true;cluster.selection.enabled=true;cluster.selection.map=cluster.variants[0].maps[0];
+    }
     state.terrainMessage = "Materiais originais · confira a prévia e aplique";
   }
 
@@ -127,6 +137,17 @@ int main(int argc, char **argv) {
     if (scenario == "maps" && !reachable.contains(base + 96))
       return 4;
   }
+  const auto requireField=[&](u32 field){
+    const auto id=editor::widgetId(editor::EditorWidget::TerrainNumberBase)+field;
+    if(!reachable.contains(id)){std::fprintf(stderr,"unreachable field %u in %s\n",field,std::string(scenario).c_str());return false;}return true;
+  };
+  if(scenario=="noise")for(u32 field:{128u,129u,130u,131u,132u,133u,134u,135u})if(!requireField(field))return 4;
+  if(scenario=="normal")for(u32 field:{128u,129u,130u,131u,148u,133u,136u,137u,140u,141u,144u,145u})if(!requireField(field))return 4;
+  if(scenario=="anti-tile")for(u32 field:{149u,150u,151u})if(!requireField(field))return 4;
+  if(scenario=="resample")for(u32 field:{152u,153u,154u})if(!requireField(field))return 4;
+  if(scenario=="cluster")for(u32 field:{164u,165u})if(!requireField(field))return 4;
+  if(scenario=="variant")for(u32 field:{160u,161u,162u,163u})if(!requireField(field))return 4;
+  if(scenario=="variant-maps" && !requireField(176))return 4;
   state.terrainScroll = argc > 4 ? std::strtof(argv[4], nullptr) : 0;
   render();
   std::vector<ui::UiInstance> instances;

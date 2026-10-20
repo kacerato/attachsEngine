@@ -2,6 +2,7 @@
 #include "editor/terrain_material_icons.h"
 #include "editor/editor_screen.h"
 #include "editor/terrain_controls.h"
+#include "editor/editor_terrain_noise_controls.h"
 #include "ui/ui_icon_id.h"
 #include <algorithm>
 #include <cmath>
@@ -25,6 +26,32 @@ std::string materialDisplayName(std::string name) {
   if(name.starts_with("layer_"))name.erase(0,6);
   std::replace(name.begin(),name.end(),'_',' ');
   return name;
+}
+std::string terrainNoiseSourceName(const resources::TerrainCatalogTexture &source) {
+  auto name=source.originalAssetPath.empty()?source.sourcePath:source.originalAssetPath;
+  const auto slash=name.find_last_of("/\\");
+  if(slash!=std::string::npos) name.erase(0,slash+1);
+  const auto dot=name.find_last_of('.');
+  if(dot!=std::string::npos) name.resize(dot);
+  return name.empty()?source.id:materialDisplayName(name);
+}
+std::string terrainMaterialContext(const EditorScreenState &s) {
+  if(s.terrainTab!=2) return {};
+  const auto view=s.terrainMaterialView;
+  if(view==60) return "Variantes · Estocástico";
+  if(view==62 || view==69) return "Variantes · Seleção";
+  if(terrainClusterVariantView(view)) {
+    const auto variant="Variante "+std::to_string(terrainClusterVariant(view)+1);
+    return variant+(view>=100?" · Mapas":view>=90?" · Textura":view>=80?" · Material":" · Transformação");
+  }
+  if(view==50) return "Distância · Reamostragem";
+  if(view==51 || view==59) return "Distância · Noise";
+  if(view==30) return "Anti-tile · Conjunto";
+  if(!terrainNoiseView(view)) return {};
+  const auto selection=terrainNoiseSelection(view);
+  if(selection>=10 && selection<=12) return selection==10?"Anti-tile · Normal":selection==11?"Anti-tile · Detalhe":"Anti-tile · Distância";
+  const auto role=selection<4?(selection%2==0?std::string("Detalhe"):std::string("Distância")):"Normal "+std::to_string((selection-4)%3+1);
+  return "Ruído · "+role+(terrainNoiseLocal(view)?" local":" global");
 }
 bool compact(const UiRect &a) { return a.height < 400; }
 float contentHeight(const EditorScreenState &s) {
@@ -77,12 +104,26 @@ float contentHeight(const EditorScreenState &s) {
     if(s.terrainMaterialView==1) {
       const auto count=s.terrainCatalog ? std::min<usize>(6,s.terrainCatalog->materials.size()-
         std::min<usize>(s.terrainCatalog->materials.size(),usize(s.terrainCatalogPage)*6)):0;
-      return 146.f+(s.terrainCatalog?122.f+112.f*float((count+1)/2):58.f)+padding;
+      return 146.f+(s.terrainCatalog?122.f+112.f*float((count+1)/2):58.f)+padding-24;
     }
-    if(s.terrainMaterialView==2 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())return 1076.f+padding;
+    if(s.terrainMaterialView==60) return 914.f+padding-24;
+    if(terrainClusterVariantView(s.terrainMaterialView)) {
+      if(s.terrainMaterialView>=100) return (s.terrainMapRole>=2 && s.terrainMapRole<=5?702.f:1100.f)+padding-24;
+      if(s.terrainMaterialView>=80) return 700.f+padding-24;
+      return 650.f+padding-24;
+    }
+    if(s.terrainMaterialView==30) return 800.f+padding-24;
+    if(s.terrainMaterialView==50) return 712.f+padding-24;
+    if(terrainNoiseAvailable(s.terrainDraft.surface,s.terrainBrush.layer,s.terrainMaterialView)) {
+      if(terrainNoisePicker(s.terrainMaterialView)) return 838.f+padding-24;
+      const auto &n=terrainSelectedNoise(s.terrainDraft.surface,s.terrainBrush.layer,s.terrainMaterialView);
+      return (n.map.channel==resources::TerrainSurfaceChannel::RGB || terrainNoiseNormal(s.terrainMaterialView)?1414.f:1016.f)+
+        (terrainNoiseSelection(s.terrainMaterialView)>=10 && terrainNoiseSelection(s.terrainMaterialView)<=12?32.f:0.f)+(u32(n.map.channel)>4 && !terrainNoiseNormal(s.terrainMaterialView)?32.f:0.f)+padding-24;
+    }
+    if(s.terrainMaterialView==2 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())return 1164.f+(s.terrainDraft.surface.layers[s.terrainBrush.layer].cluster.enabled?32.f:0.f)+padding-24;
     if(s.terrainMaterialView==3 && s.terrainBrush.layer<s.terrainDraft.surface.layers.size())
-      return (s.terrainMapRole>=2 && s.terrainMapRole<=5?514.f:912.f)+padding;
-    return 662.f+padding;
+      return (s.terrainMapRole>=2 && s.terrainMapRole<=5?514.f:912.f)+padding-24;
+    return 662.f+padding-24;
   }
   return 450.f + padding;
 }
@@ -293,13 +334,20 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     if (selected && !primary)
       list.addBorder(box, theme.color.accent, 1.5f, 6);
     auto label = box;
+    const bool compactNoiseIcon=id==terrainNoiseAction(0) && icon!=UiIcon::None && box.width<=98;
+    if(compactNoiseIcon) {
+      list.addImage({box.x+(box.width-18)/2,box.y+3,18,18},static_cast<UiImageId>(icon),ink);
+      label.y+=20;label.height-=20;
+    }
     if (icon != UiIcon::None && box.width > 98) {
       list.addImage({box.x + 9, box.y + (box.height - 22) * .5f, 22, 22},
                     static_cast<UiImageId>(icon), ink);
       label.x += 33;
       label.width -= 33;
     }
-    text(label, value, ink, false, UiAlign::Center);
+    const bool noiseRole=(widgetId(id)>=terrainNoiseActionBase+1 && widgetId(id)<=terrainNoiseActionBase+4) ||
+      (widgetId(id)>=terrainNoiseActionBase+23 && widgetId(id)<=terrainNoiseActionBase+25);
+    text(label, value, ink, compactNoiseIcon || noiseRole, UiAlign::Center);
     if (enabled)
       router.addRegion(rect, widgetId(id));
   };
@@ -311,13 +359,14 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
          EditorWidget::TerrainFrame, false, s.terrainTarget != 0);
   auto name = title;
   name.width -= 100;
+  const auto materialContext=terrainMaterialContext(s);
   if (compact(area))
-    text(name, s.terrainTarget ? "Editar terreno" : "Novo terreno",
+    text(name, materialContext.empty()?(s.terrainTarget ? "Editar terreno" : "Novo terreno"):materialContext,
          theme.color.text);
   else {
     text(take(name, 28), "Terreno e voxel", theme.color.text);
     const auto *e = s.document ? s.document->find(s.terrainTarget) : nullptr;
-    text(name, e ? e->name : "Novo terreno · configure e crie",
+    text(name, materialContext.empty()?(e ? e->name : "Novo terreno · configure e crie"):materialContext,
          theme.color.textMuted, true);
   }
   const char *tabs[]{"Forma", "Pincel", "Pintar", "Gerir", "Traçado"};
@@ -670,22 +719,234 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       const auto current=std::min(b.layer,3u);
       label("CAMADA "+std::to_string(current+1)+" · "+materialDisplayName(
         current<r.surface.layers.size()?r.surface.layers[current].name:layers[current]));
-      auto slots=row(72);
+      auto slots=row(48);
       for(u32 i=0;i<4;++i) {
         UiRect tile{slots.x+slots.width*i/4,slots.y,slots.width/4,slots.height};
         button(tile,"",EditorWidget(widgetId(EditorWidget::TerrainLayerBase)+i),b.layer==i);
         const auto icon=i<r.surface.layers.size() && !r.surface.layers[i].sourceCatalogId.empty()
           ? terrainMaterialIcon(r.surface.layers[i].sourceCatalogId):samples[i];
-        list.addImage({tile.x+(tile.width-40)/2,tile.y+5,40,40},static_cast<UiImageId>(icon));
-        text({tile.x,tile.y+45,tile.width,24},std::to_string(i+1),theme.color.text,true,UiAlign::Center);
+        list.addImage({tile.x+(tile.width-28)/2,tile.y+2,28,28},static_cast<UiImageId>(icon));
+        text({tile.x,tile.y+31,tile.width,14},std::to_string(i+1),theme.color.text,true,UiAlign::Center);
       }
       auto navigation=row(48);
-      const char *sections[]{"Biblioteca","Camada","Mapas","Pincel"};
+      const char *sections[]{"Acervo","Camada","Mapas","Pincel","Ruído"};
       const EditorWidget actions[]{EditorWidget::TerrainMaterialLibrary,EditorWidget::TerrainMaterialProperties,
-                                  EditorWidget::TerrainMaterialMaps,EditorWidget::TerrainMaterialPaint};
-      for(u32 i=0;i<4;++i)button({navigation.x+navigation.width*i/4,navigation.y,navigation.width/4,48},
-        sections[i],actions[i]);
-    if (s.terrainMaterialView == 1) {
+                                  EditorWidget::TerrainMaterialMaps,EditorWidget::TerrainMaterialPaint,terrainNoiseAction(0)};
+      for(u32 i=0;i<5;++i)button({navigation.x+navigation.width*i/5,navigation.y,navigation.width/5,48},
+        sections[i],actions[i],i==4 && s.terrainMaterialView>=4,true,i==4?UiIcon::TerrainNoise:UiIcon::None);
+    if((s.terrainMaterialView==60 || terrainClusterVariantView(s.terrainMaterialView)) && b.layer<r.surface.layers.size()) {
+      const auto &layer=r.surface.layers[b.layer];
+      const auto &cluster=layer.cluster;
+      const auto index=terrainClusterVariant(s.terrainMaterialView);
+      label("VARIANTES E ESTOCÁSTICO · "+layer.name);
+      if(s.terrainMaterialView==60) {
+        button(row(44),cluster.enabled?"Clusters ligados":"Clusters desligados",terrainClusterAction(1),cluster.enabled,cluster.variants.size()>=2);
+        button(row(44),cluster.stochastic?"Estocástico ligado":"Estocástico desligado",terrainClusterAction(2),cluster.stochastic);
+        const char *quality[]{"Baixa · 1 variante","Média · 2 vizinhas","Alta · 3 triangulares"};
+        button(row(44),quality[u32(cluster.quality)],terrainClusterAction(3));
+        field("Contraste da seleção",cluster.contrast,164);
+        field("Reforço do ruído",cluster.noiseBoost,165);
+        button(row(44),"Editar máscara de seleção",terrainClusterAction(4));
+        label(std::to_string(cluster.variants.size())+" / 3 VARIANTES · ALBEDOS DISTINTOS");
+        for(u32 i=0;i<cluster.variants.size();++i) {
+          std::string name="Variante "+std::to_string(i+1);
+          auto icon=UiIcon::AssetsMaterial;
+          if(s.terrainCatalog) for(const auto &material:s.terrainCatalog->materials)
+            if(material.layer.identity==cluster.variants[i].identity) {
+              name=materialDisplayName(material.layer.name);
+              icon=terrainMaterialIcon(material.id);break;
+            }
+          button(row(44),name,terrainClusterAction(40+i),false,true,icon);
+        }
+        button(row(44),"Adicionar material original",terrainClusterAction(5),false,cluster.variants.size()<3);
+        hint("Clusters exigem pelo menos dois albedos distintos.","Estocástico também funciona no material base.");
+        hint("Baixa reduz diversidade; seleção pode marcar bordas.","Média e Alta misturam mais amostras.");
+      } else if(s.terrainMaterialView>=80 && s.terrainMaterialView<=92) {
+        const bool material=s.terrainMaterialView<=82;
+        button(row(44),material?"Voltar às variantes":"Voltar aos mapas",material?terrainClusterAction(0):terrainClusterAction(7));
+        label(material?"MATERIAL ORIGINAL · SETE MAPAS":"TEXTURA ORIGINAL · MAPA SELECIONADO");
+        const auto catalog=s.terrainCatalog;
+        const auto count=catalog?(material?catalog->materials.size():catalog->textures.size()):0;
+        if(count) {
+          auto pager=row(44);
+          button({pager.x,pager.y,48,44},"<",terrainClusterAction(16),false,s.terrainCatalogPage>0);
+          button({pager.right()-48,pager.y,48,44},">",terrainClusterAction(17),false,(s.terrainCatalogPage+1)*6<count);
+          text({pager.x+48,pager.y,pager.width-96,44},std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string((count+5)/6),theme.color.text,true,UiAlign::Center);
+          for(u32 i=0;i<6 && s.terrainCatalogPage*6+i<count;++i) {
+            const auto source=s.terrainCatalogPage*6+i;
+            if(material) button(row(48),materialDisplayName(catalog->materials[source].layer.name),terrainClusterAction(20+i),false,true,terrainMaterialIcon(catalog->materials[source].id));
+            else button(row(48),terrainNoiseSourceName(catalog->textures[source]),terrainClusterAction(32+i));
+          }
+        } else hint("Carregue o catálogo para selecionar uma fonte real.");
+        hint(material?"Identidades e sete mapas do material preservados.":"Canal, remaps e fatores permanecem independentes.");
+      } else if(index<cluster.variants.size()) {
+        const auto &variant=cluster.variants[index];
+        button(row(44),"Voltar às variantes",terrainClusterAction(0));
+        std::string variantName="VARIANTE "+std::to_string(index+1);
+        if(s.terrainCatalog) for(const auto &material:s.terrainCatalog->materials)
+          if(material.layer.identity==variant.identity) {variantName=materialDisplayName(material.layer.name);break;}
+        label(variantName);
+        if(s.terrainMaterialView<80) {
+          field("Tamanho do tile (m)",variant.scale,160);
+          fields("Deslocamento X (m)",variant.offsetX,161,"Deslocamento Y (m)",variant.offsetY,162);
+          field("Rotação (°)",variant.rotation,163);
+          button(row(44),"Editar os sete mapas",terrainClusterAction(7));
+          button(row(44),"Substituir por material original",terrainClusterAction(8));
+          button(row(44),"Remover esta variante",terrainClusterAction(6));
+          hint("Tamanho absoluto em metros por tile.","Offsets e rotação da camada são somados.");
+        } else {
+          const auto role=std::min(s.terrainMapRole,6u);
+          const auto &map=variant.maps[role];
+          const char *roles[]{"Cor base","Normal","Altura","Oclusão ambiente","Rugosidade","Metálico","Emissão"};
+          auto selector=row(44);
+          button({selector.x,selector.y,48,44},"<",terrainClusterAction(11));
+          button({selector.right()-48,selector.y,48,44},">",terrainClusterAction(12));
+          text({selector.x+48,selector.y,selector.width-96,44},roles[role],theme.color.text,false,UiAlign::Center);
+          std::string sourceName="Selecionar textura original";
+          if(s.terrainCatalog) for(const auto &source:s.terrainCatalog->textures)
+            if(source.identity==map.texture) {sourceName=terrainNoiseSourceName(source);break;}
+          button(row(44),sourceName,terrainClusterAction(9));
+          const char *channels[]{"R","G","B","A","RGB","Normal RGB","Normal RG"};
+          button(row(44),std::string("Canal: ")+channels[u32(map.channel)],terrainClusterAction(13),false,map.texture.valid());
+          auto options=row();
+          button({options.x,options.y,options.width/2,options.height},role==1?"Normal · linear":map.linear?"Espaço: linear":"Espaço: sRGB",terrainClusterAction(15),false,role!=1 && map.texture.valid());
+          button({options.x+options.width/2,options.y,options.width/2,options.height},map.invert?"Inversão ligada":"Inversão desligada",terrainClusterAction(14));
+          field(role==1?"Força do normal":"Fator",map.factor,176);
+          if(role>=2 && role<=5) fields("Remap mínimo",map.remapMin,177,"Remap máximo",map.remapMax,178);
+          else {
+            label(role==1?"NORMAL · FATORES XYZ":"FATORES RGBA");
+            fields("Vermelho",map.colorFactor[0],179,"Verde",map.colorFactor[1],180);
+            if(role==1) field("Azul",map.colorFactor[2],181,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+            else fields("Azul",map.colorFactor[2],181,"Alfa",map.colorFactor[3],182);
+            label("REMAP MÍNIMO");
+            fields("Vermelho",map.colorRemapMin[0],183,"Verde",map.colorRemapMin[1],184);
+            if(role==1) field("Azul",map.colorRemapMin[2],185,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+            else fields("Azul",map.colorRemapMin[2],185,"Alfa",map.colorRemapMin[3],186);
+            label("REMAP MÁXIMO");
+            fields("Vermelho",map.colorRemapMax[0],187,"Verde",map.colorRemapMax[1],188);
+            if(role==1) field("Azul",map.colorRemapMax[2],189,map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+            else fields("Azul",map.colorRemapMax[2],189,"Alfa",map.colorRemapMax[3],190);
+          }
+          button(row(44),"Voltar à transformação",terrainClusterAction(10));
+        }
+      } else hint("Selecione uma variante existente nesta camada.");
+    } else if(s.terrainMaterialView==50 && b.layer<r.surface.layers.size()) {
+      const auto &layer=r.surface.layers[b.layer];
+      label("REAMOSTRAGEM · "+layer.name);
+      button(row(44),"Voltar aos ruídos",terrainNoiseAction(1));
+      button(row(44),layer.resampleAlbedo?"Cor distante: ligada":"Cor distante: desligada",terrainNoiseAction(36),layer.resampleAlbedo);
+      button(row(44),layer.resampleNormal?"Normal distante: ligado":"Normal distante: desligado",terrainNoiseAction(37),layer.resampleNormal);
+      button(row(44),layer.resampleHeightBlend?"Mistura de altura: ligada":"Mistura de altura: desligada",terrainNoiseAction(38),layer.resampleHeightBlend);
+      auto modes=row(44);
+      const char *names[]{"Constant","Noise","Crossfade"};
+      for(u32 i=0;i<3;++i)button({modes.x+modes.width*i/3,modes.y,modes.width/3,44},names[i],terrainNoiseAction(39+i),u32(layer.resampleBlend)==i);
+      field("Escala distante (×)",layer.resampleScale,152);
+      const bool distance=layer.resampleBlend!=resources::TerrainDistanceBlend::Constant;
+      fields("Início (m)",layer.resampleStart,153,"Fim (m)",layer.resampleEnd,154,distance);
+      button(row(44),"Editar fonte e parâmetros do Noise",terrainNoiseAction(42),false,layer.resampleBlend==resources::TerrainDistanceBlend::Noise);
+      hint(distance?"Faixa de distância medida pela câmera.":"Constant usa sempre a amostragem distante.","Altura combina amostras próximas e distantes.");
+    } else if(s.terrainMaterialView==30 && b.layer<r.surface.layers.size()) {
+      const auto &layer=r.surface.layers[b.layer];
+      const auto &array=r.surface.antiTileArray;
+      label("ANTI-TILE · CONJUNTO COMPARTILHADO");
+      button(row(44),"Voltar aos ruídos",terrainNoiseAction(1));
+      button(row(44),array.enabled?"Conjunto ligado":"Conjunto desligado",terrainNoiseAction(27),array.enabled,!array.entries.empty());
+      button(row(44),"Criar entrada com normal do material",terrainNoiseAction(28),false,array.entries.size()<32);
+      hint(std::to_string(array.entries.size())+" entradas · até 32", "A criação vincula uma fonte normal real do catálogo.");
+      const auto *entry=terrainBoundAntiTile(r.surface,b.layer);
+      label("VÍNCULO · "+layer.name);
+      button(row(44),entry?"Entrada: "+entry->identity.text().substr(0,12):"Selecionar entrada existente",terrainNoiseAction(29),entry!=nullptr,!array.entries.empty());
+      button(row(44),"Desvincular desta camada",terrainNoiseAction(30),false,entry!=nullptr);
+      auto roles=row(44);
+      const char *names[]{"Normal","Detalhe","Distância"};
+      for(u32 i=0;i<3;++i)button({roles.x+roles.width*i/3,roles.y,roles.width/3,44},names[i],terrainNoiseAction(31+i),false,entry!=nullptr);
+      field("Participação · normal",layer.antiTileParticipation[0],149,entry!=nullptr);
+      fields("Participação · detalhe",layer.antiTileParticipation[1],150,"Distância",layer.antiTileParticipation[2],151,entry!=nullptr);
+      hint("A identidade permanece estável ao reordenar.","Editar uma entrada afeta suas camadas vinculadas.");
+    } else if(terrainNoiseAvailable(r.surface,b.layer,s.terrainMaterialView)) {
+      const auto &layer=r.surface.layers[b.layer];
+      const auto selection=terrainNoiseSelection(s.terrainMaterialView);
+      const auto &noise=terrainSelectedNoise(r.surface,b.layer,s.terrainMaterialView);
+      const bool normal=terrainNoiseNormal(s.terrainMaterialView);
+      const bool local=terrainNoiseLocal(s.terrainMaterialView);
+      auto scope=row(44);
+      button({scope.x,scope.y,scope.width/2,44},"Global",terrainNoiseAction(44),!local);
+      button({scope.x+scope.width/2,scope.y,scope.width/2,44},"Local",terrainNoiseAction(45),local);
+      auto roles=row(44);
+      const char *roleNames[]{"Detalhe","Distância","N1","N2","N3"};
+      const u32 roleActions[]{local?3u:1u,local?4u:2u,23u,24u,25u};
+      const u32 roleSelected=selection<4?selection%2:selection<10?2+(selection-4)%3:5;
+      for(u32 i=0;i<5;++i) button({roles.x+roles.width*i/5,roles.y,roles.width/5,44},roleNames[i],terrainNoiseAction(roleActions[i]),roleSelected==i);
+      auto links=row(44);
+      button({links.x,links.y,links.width/3,44},"Anti-tile",terrainNoiseAction(26));
+      button({links.x+links.width/3,links.y,links.width/3,44},"Distante",terrainNoiseAction(35));
+      button({links.x+links.width*2/3,links.y,links.width/3,44},"Variantes",terrainClusterAction(0));
+      if(selection==14) button(row(44),"Voltar às variantes",terrainClusterAction(0));
+      label(selection==14?"VARIANTES · MÁSCARA DE SELEÇÃO":selection==13?"REAMOSTRAGEM · FONTE DO NOISE":selection>=10?"ANTI-TILE · ENTRADA COMPARTILHADA":terrainNoiseLocal(s.terrainMaterialView)?"LOCAL · "+layer.name:"GLOBAL · TODAS AS CAMADAS");
+      if(terrainNoisePicker(s.terrainMaterialView)) {
+        button(row(44),"Voltar aos parâmetros",terrainNoiseAction(11));
+        label("FONTE · TEXTURAS ORIGINAIS DO CATÁLOGO");
+        const auto catalog=s.terrainCatalog;
+        if(catalog && !catalog->textures.empty()) {
+          auto pager=row(44);
+          button({pager.x,pager.y,48,44},"<",terrainNoiseAction(12),false,s.terrainCatalogPage>0);
+          button({pager.right()-48,pager.y,48,44},">",terrainNoiseAction(13),false,(s.terrainCatalogPage+1)*6<catalog->textures.size());
+          text({pager.x+48,pager.y,pager.width-96,44},std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string((catalog->textures.size()+5)/6),theme.color.text,true,UiAlign::Center);
+          for(u32 i=0;i<6;++i) {
+            const auto index=s.terrainCatalogPage*6+i;
+            if(index>=catalog->textures.size()) break;
+            const auto &source=catalog->textures[index];
+            button(row(48),terrainNoiseSourceName(source),terrainNoiseAction(16+i),noise.map.texture==source.identity);
+          }
+          hint("Selecione a fonte; canal e ajustes são preservados.");
+        } else hint("Nenhuma textura disponível no catálogo.");
+      } else {
+        const auto *bound=selection>=10 && selection<=12?terrainBoundAntiTile(r.surface,b.layer):nullptr;
+        const bool lastSource=bound && noise.enabled &&
+          unsigned(bound->normal.enabled)+unsigned(bound->detail.enabled)+unsigned(bound->distance.enabled)==1;
+        const bool requiredNoise=selection==13 && layer.resampleBlend==resources::TerrainDistanceBlend::Noise;
+        button(row(44),noise.enabled?"Ruído ligado":"Ruído desligado",terrainNoiseAction(5),noise.enabled,noise.map.texture.valid() && !lastSource && !requiredNoise);
+        if(requiredNoise) hint("Modo Noise exige esta fonte ativa.");
+        if(lastSource) hint("Mantenha uma fonte ativa por entrada anti-tile.");
+        std::string sourceName="Selecionar textura original";
+        if(s.terrainCatalog) for(const auto &source:s.terrainCatalog->textures)
+          if(source.identity==noise.map.texture) { sourceName=terrainNoiseSourceName(source); break; }
+        button(row(44),sourceName,terrainNoiseAction(10));
+        const char *projection[]{"UV","Triplanar local","Triplanar mundial"};
+        button(row(44),std::string("Projeção: ")+projection[u32(noise.projection)],terrainNoiseAction(6));
+        field("Frequência (rep/m)",noise.scale,128);
+        field("Força",noise.strength,129);
+        fields("Fade início (m)",noise.fadeStart,130,"Fade fim (m)",noise.fadeEnd,131);
+        if(selection<4) field(selection%2==0?"Participação global · detalhe":"Participação global · distância",
+          selection%2==0?layer.globalDetailParticipation:layer.globalDistanceParticipation,132);
+        else if(selection<10) field("Participação global · normal ",layer.globalNormalParticipation[(selection-4)%3],148);
+        else if(selection<=12) field("Participação desta camada",layer.antiTileParticipation[selection==10?0:selection==11?1:2],selection==10?149:selection==11?150:151);
+        hint((selection==1 || selection==3 || selection==12)?"Distância aparece ao afastar a câmera.":"Detalhe e normal desaparecem ao afastar a câmera.",
+          "Participação pertence à camada selecionada.");
+        const char *channels[]{"R","G","B","A","RGB","Normal RGB","Normal RG"};
+        if(u32(noise.map.channel)>4 && !normal)
+          hint("Canal normal importado · selecione R, G, B, A ou RGB.");
+        button(row(44),std::string("Canal: ")+channels[u32(noise.map.channel)],terrainNoiseAction(7));
+        if(normal) {
+          auto options=row();
+          button({options.x,options.y,options.width/2,options.height},"Normal · linear",terrainNoiseAction(8),false,false);
+          button({options.x+options.width/2,options.y,options.width/2,options.height},noise.map.invert?"Inversão ligada":"Inversão desligada",terrainNoiseAction(9));
+        } else pair(noise.map.linear?"Espaço: linear":"Espaço: sRGB",terrainNoiseAction(8),noise.map.invert?"Inversão ligada":"Inversão desligada",terrainNoiseAction(9));
+        field("Fator do mapa",noise.map.factor,133);
+        if(noise.map.channel==resources::TerrainSurfaceChannel::RGB || normal) {
+          label("RGB · FATORES");
+          fields("Vermelho",noise.map.colorFactor[0],136,"Verde",noise.map.colorFactor[1],137);
+          field("Azul",noise.map.colorFactor[2],138,noise.map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+          label("RGB · REMAP MÍNIMO");
+          fields("Vermelho",noise.map.colorRemapMin[0],140,"Verde",noise.map.colorRemapMin[1],141);
+          field("Azul",noise.map.colorRemapMin[2],142,noise.map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+          label("RGB · REMAP MÁXIMO");
+          fields("Vermelho",noise.map.colorRemapMax[0],144,"Verde",noise.map.colorRemapMax[1],145);
+          field("Azul",noise.map.colorRemapMax[2],146,noise.map.channel!=resources::TerrainSurfaceChannel::NormalRG);
+        } else fields("Remap mínimo",noise.map.remapMin,134,"Remap máximo",noise.map.remapMax,135);
+        hint(normal?"Força zero preserva o normal base sem amostragem.":"0,5 é neutro · força zero evita amostragem.","Toque no valor para digitar com precisão.");
+      }
+    } else if (s.terrainMaterialView == 1) {
       const auto catalog = s.terrainCatalog;
       label("BIBLIOTECA · MATERIAIS ORIGINAIS");
       if (catalog) {
@@ -729,7 +990,8 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
       button(row(), layer.active ? "Camada ativa" : "Camada desativada",
              EditorWidget::TerrainLayerActive, layer.active);
       fields("Escala X (m)", layer.scaleX, 64, "Escala Y (m)", layer.scaleY,
-             65);
+             65,!layer.cluster.enabled);
+      if(layer.cluster.enabled) hint("Tamanho definido em Variantes");
       field("Deslocamento X (m)", layer.offsetX, 66);
       field("Deslocamento Y (m)", layer.offsetY, 67);
       field("Rotação (°)", layer.rotation, 68);
@@ -756,6 +1018,8 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
                  quality[u32(layer.heightQuality)],
              EditorWidget::TerrainLayerHeightQuality, false,
              layer.heightBlend && layer.maps[2].texture.valid());
+      button(row(44),"Reamostragem · perto e longe",terrainNoiseAction(35));
+      button(row(44),"Variantes e estocástico",terrainClusterAction(0),false,true,UiIcon::TerrainLayers);
       hint("Texturas originais · sem redução automática",
            layer.sourceCatalogId.empty()
                ? "Camada legada preservada."

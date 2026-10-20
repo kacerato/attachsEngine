@@ -1,4 +1,5 @@
 #pragma once
+#include "editor/editor_terrain_noise_controls.h"
 #include <algorithm>
 #include <cmath>
 
@@ -45,6 +46,38 @@ TerrainControlRange terrainControlRange(const State &s, unsigned field) {
       range = {0, 8, 0, range.enabled};
     else
       range = {0, 1, 0, range.enabled};
+    return range;
+  }
+  if(terrainClusterField(field)) {
+    range.enabled=terrainClusterNumberAvailable(r.surface,s.terrainBrush.layer,s.terrainMaterialView,field);
+    if(field==160) return {.0001f,2048,0,range.enabled,true};
+    if(field==161 || field==162) return {-2048,2048,0,range.enabled};
+    if(field==163) return {-180,180,0,range.enabled};
+    if(field==164) return {.0001f,8,0,range.enabled,true};
+    if(field==165 || field==176) return {0,8,0,range.enabled};
+    return range;
+  }
+  if(field>=152 && field<=154) {
+    range.enabled=s.terrainMaterialView==50 && s.terrainBrush.layer<r.surface.layers.size();
+    if(!range.enabled) return range;
+    const auto &layer=r.surface.layers[s.terrainBrush.layer];
+    if(field==152) return {.0001f,16,0,true,true};
+    if(field==153) return {0,std::min(2048.f,std::nextafter(layer.resampleEnd,0.f)),0,true,true};
+    const auto low=std::nextafter(layer.resampleStart,1e8f);
+    return {low,std::max(2048.f,low),0,true,true};
+  }
+  if(field>=128 && field<=151) {
+    range.enabled=terrainNoiseAvailable(r.surface,s.terrainBrush.layer,s.terrainMaterialView) ||
+      (field>=149 && s.terrainMaterialView==30 && s.terrainBrush.layer<r.surface.layers.size());
+    if(field==128) return {.0001f,16,0,range.enabled,true};
+    if(field==129 || field==133) return {0,8,0,range.enabled};
+    if(field==130 || field==131) {
+      if(!range.enabled) return range;
+      const auto &noise=terrainSelectedNoise(r.surface,s.terrainBrush.layer,s.terrainMaterialView);
+      if(field==130) return {0,std::min(2048.f,std::nextafter(noise.fadeEnd,0.f)),0,true,true};
+      const auto low=std::nextafter(noise.fadeStart,1e8f);
+      return {low,std::max(2048.f,low),0,true,true};
+    }
     return range;
   }
   switch (field) {

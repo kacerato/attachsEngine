@@ -47,3 +47,10 @@ M01 conserva 32 camadas no contrato, mas o controle e o shader atuais usam quatr
 - **146 PNGs runtime, 302.147.871 bytes**, hashes/CRC/dimensões originais conferidos: `terrain-pbr-assets.json`. São 37 arquivos em textures e 109 PNGs em sources. Miniaturas originais utilizadas não foram alteradas. Atlas final tem 479 entradas de 96 px em 2048×2452, sem eixo acima de 4096; apenas a prévia UI derivada força alfa opaco.
 
 Logs e capturas em `build/terrain-evidence/`. O APK 110 permanece anterior a este código; nenhum ADB foi usado. Publicação do checkpoint no site/branch deve ser registrada abaixo após confirmação remota.
+
+
+## Publicação confirmada
+
+Engine `ebd31aec` publicada em `codex/terrain-voxel-generator`, sem merge na main. AstraDocs `5f1029ea9c790ba001c67a6c9a41da08e61cc436` publicada na main; nota remota de exposição preservada durante a integração. Vercel `dpl_D2hCpAUknMfJhLwie63EsbHRGnzY` READY, alias astraengine.com.br confirmado. Guia HTML, Markdown, feed JSON e Atualizações responderam HTTP 200 com o conteúdo desta revisão. Build local: 2437 páginas; verificador: 2436 páginas, 594931 links, zero erros. Revisão em desktop e largura 390 px sem overflow DOM. Sem APK novo.
+
+Continuação M05 em implementação após este checkpoint; suas mudanças locais não fazem parte da evidência 102/30/16 acima.

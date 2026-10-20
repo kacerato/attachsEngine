@@ -15,6 +15,7 @@ import subprocess
 import sys
 
 from ui_asset_format import cpp_identifier
+from generated_output import write_text_if_changed
 
 
 def main() -> None:
@@ -65,8 +66,8 @@ def main() -> None:
     header.extend(["  return ui::UiIcon::AssetsMaterial;", "}", "}", ""])
     enum_path = root / "native/ui/ui_icon_id.h"
     previous = dict(re.findall(r"\s+(\w+) = (\d+),", enum_path.read_text(encoding="utf-8")))
-    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    (root / "native/editor/terrain_material_icons.h").write_text("\n".join(header), encoding="utf-8")
+    write_text_if_changed(catalog_path, json.dumps(catalog, ensure_ascii=False, indent=2) + "\n")
+    write_text_if_changed(root / "native/editor/terrain_material_icons.h", "\n".join(header))
     subprocess.run([sys.executable, str(root / "tools/pack-icon-atlas.py")], cwd=root, check=True)
     current = dict(re.findall(r"\s+(\w+) = (\d+),", enum_path.read_text(encoding="utf-8")))
     for name, value in previous.items():
