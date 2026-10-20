@@ -98,6 +98,55 @@ void SceneParticles::distributeBudget() {
   }
 }
 
+void SceneParticles::preparePlanes(const SceneGraph &graph, Entry &entry) const {
+  const auto &settings = entry.emitter.settings();
+  renderer::particles::ParticleCollisionPlane planes[2];
+  u32 count = 0;
+  if (settings.collisionEnabled)
+    for (const u64 reference : {settings.collisionPlane0, settings.collisionPlane1}) {
+      const auto id = static_cast<ObjectId>(reference);
+      float world[16];
+      if (!reference || !graph.exists(id) || !graph.activeInHierarchy(id) || !worldMatrix(graph, id, world)) continue;
+      // +Y do objeto é a normal; a escala não muda o plano.
+      const float length = std::sqrt(world[4] * world[4] + world[5] * world[5] + world[6] * world[6]);
+      if (!(length > 1e-6f)) continue;
+      auto &plane = planes[count++];
+      for (u32 k = 0; k < 3; ++k) { plane.point[k] = world[12 + k]; plane.normal[k] = world[4 + k] / length; }
+    }
+  entry.emitter.setCollisionPlanes(planes, count);
+}
+
+SceneParticles::Entry *SceneParticles::firstEntryOf(ObjectId object) {
+  const auto it = entries_.lower_bound({object, 0});
+  return it != entries_.end() && it->first.object == object ? &it->second : nullptr;
+}
+
+void SceneParticles::routeSubEmitters(const SceneGraph &graph) {
+  for (auto &[key, entry] : entries_) {
+    if (!entry.active) continue;
+    const auto &settings = entry.emitter.settings();
+    if (!settings.subEmittersEnabled) continue;
+    const struct { u64 target; float count; const std::vector<renderer::particles::ParticleEvent> &events; } routes[]{
+        {settings.subEmitterBirth, settings.subEmitterBirthCount, entry.emitter.births()},
+        {settings.subEmitterCollision, settings.subEmitterCollisionCount, entry.emitter.collisions()},
+        {settings.subEmitterDeath, settings.subEmitterDeathCount, entry.emitter.deaths()}};
+    for (const auto &route : routes) {
+      const auto child = static_cast<ObjectId>(route.target);
+      // Um sistema não é sub-emissor de si mesmo: seria uma reação em cadeia.
+      if (!route.target || route.events.empty() || route.count < 1 || child == key.object) continue;
+      auto *target = firstEntryOf(child);
+      float world[16];
+      if (!target || !target->active || !worldMatrix(graph, child, world)) continue;
+      // A forma do sub-sistema, com a orientação dele, no ponto do evento.
+      for (const auto &event : route.events) {
+        for (u32 k = 0; k < 3; ++k) world[12 + k] = event.position[k];
+        target->emitter.emit(static_cast<u32>(route.count), world);
+      }
+      target->idle = 0;
+    }
+  }
+}
+
 void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::vector<Finished> *finished) {
   const auto start = std::chrono::steady_clock::now();
   reconcile(graph);
@@ -107,6 +156,8 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
   for (auto &[key, entry] : entries_) {
     if (!entry.active) continue;
     if (!worldMatrix(graph, key.object, entry.world)) continue;
+    entry.emitter.clearEvents();
+    preparePlanes(graph, entry);
     work.push_back(&entry);
     alive += entry.emitter.alive();
   }
@@ -122,6 +173,7 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
     } else {
       for (auto *entry : work) step(entry);
     }
+    routeSubEmitters(graph);
     for (auto &[key, entry] : entries_) {
       if (!entry.active) continue;
       if (entry.emitter.takeFinished()) {

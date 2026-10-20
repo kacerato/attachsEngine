@@ -145,7 +145,8 @@ inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{part
   {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
   {particleType,"start_lifetime",7.f},{particleType,"start_speed",1.2f},{particleType,"start_size",.07f},
   {particleType,"gravity_modifier",.03f},{particleType,"max_particles",6000.f},{particleType,"emission_rate",0.f},
-  {particleType,"start_color_a",.9f}};
+  {particleType,"start_color_a",.9f},{particleType,"noise_enabled",true},{particleType,"noise_strength",.8f},
+  {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
 inline const CreationComponent rain[]{{particleType,rainValues}};
 inline const CreationComponent snow[]{{particleType,snowValues}};
 inline const CreationChild weatherChildren[]{{"Chuva",rain,weatherType,"rain"},{"Neve",snow,weatherType,"snow"}};

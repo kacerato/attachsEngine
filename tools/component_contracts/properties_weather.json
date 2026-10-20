@@ -159,6 +159,34 @@
           "type": "Weather"
         },
         {
+          "id": "wind_influence",
+          "label": "Vento na precipitação",
+          "member": "windInfluence",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "0.35f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "×",
+            "help": "Quanto o vento das nuvens deste Ambiente inclina a chuva e arrasta a neve",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
           "id": "fog_density",
           "label": "Neblina máxima",
           "member": "fogDensity",
@@ -355,6 +383,7 @@
         "weatherNumbers/rain_rate",
         "weatherNumbers/snow_rate",
         "weatherNumbers/height_above_camera",
+        "weatherNumbers/wind_influence",
         "weatherNumbers/fog_density",
         "weatherNumbers/lightning_interval",
         "weatherNumbers/lightning_brightness",

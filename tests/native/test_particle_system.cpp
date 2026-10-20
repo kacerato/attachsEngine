@@ -32,7 +32,7 @@ std::string serialize(const scene::ParticleSystem &system) {
 bool roundTrip(const scene::ParticleSystem &source, scene::ParticleSystem &out) {
   std::istringstream in(serialize(source));
   in.imbue(std::locale::classic());
-  return out.read(in, 1);
+  return out.read(in, scene::ParticleSystem::descriptor.version);
 }
 std::vector<ParticleInstance> run(const scene::ParticleSystemSettings &settings, u32 seed, u32 frames, float dt) {
   ParticleEmitter emitter;
@@ -124,7 +124,7 @@ AE_TEST(particle_system_archive_rejects_unknown_ids_versions_and_ranges) {
   auto text = serialize(source);
   {
     std::istringstream in(text);
-    AE_EXPECT_TRUE(!target.read(in, 2), "versão futura recusada");
+    AE_EXPECT_TRUE(!target.read(in, 3), "versão futura recusada");
   }
   {
     auto bad = text;
@@ -456,4 +456,258 @@ AE_TEST(particle_textures_are_deterministic_tileable_and_shaped) {
   AE_EXPECT_TRUE(seam <= interior * 3 + 64, "ruído sem costura");
   AE_EXPECT_EQ(renderer::particles::particleNoiseLayer(scene::ParticleNoise::None), ~0u, "sem ruído, sem camada");
   AE_EXPECT_EQ(renderer::particles::particleMaskLayer(scene::ParticleMask::Ring), 13u, "última camada");
+}
+
+// --- P2a: Velocity, Limit Velocity, Force over Lifetime e Noise -----------
+namespace {
+// Uma partícula parada na origem, vida longa, para medir só o módulo.
+scene::ParticleSystem still() {
+  scene::ParticleSystem s;
+  s.shapeEnabled = false;
+  s.emissionEnabled = false;
+  s.startSpeed = scene::particleCurveDefault(0);
+  s.startLifetime = scene::particleCurveDefault(100);
+  s.gravityModifier = scene::particleCurveDefault(0);
+  s.simulationSpace = scene::ParticleSimulationSpace::World;
+  return s;
+}
+std::vector<ParticleInstance> one(const scene::ParticleSystemSettings &settings, u32 frames, float dt,
+                                  const float (&world)[16] = kIdentity) {
+  ParticleEmitter emitter;
+  emitter.configure(settings, 3);
+  emitter.play();
+  emitter.emit(1, world);
+  for (u32 i = 0; i < frames; ++i) emitter.simulate(dt, world);
+  std::vector<ParticleInstance> out;
+  emitter.build(world, kCamera, out);
+  return out;
+}
+} // namespace
+
+AE_TEST(particle_p2a_archive_v1_opens_with_modules_off_and_v2_round_trips) {
+  std::istringstream old("1 duration 2 0 0 0");
+  scene::ParticleSystem fromV1;
+  AE_EXPECT_TRUE(fromV1.read(old, 1), "arquivo v1 aceito");
+  AE_EXPECT_TRUE(!fromV1.velocityOverLifetimeEnabled && !fromV1.forceOverLifetimeEnabled && !fromV1.limitVelocityEnabled &&
+                 !fromV1.noiseEnabled, "módulos novos desligados");
+  scene::ParticleSystem source;
+  source.forceOverLifetimeEnabled = true;source.forceX = scene::particleCurveDefault(3);
+  source.forceSpace = scene::ParticleSimulationSpace::Local;
+  source.noiseEnabled = true;source.noiseFrequency = 1.5f;source.noiseOctaves = 3;
+  source.limitVelocityEnabled = true;source.limitDrag = 0.4f;
+  source.velocityOverLifetimeEnabled = true;source.velocityY.mode = scene::ParticleCurveMode::Curve;
+  source.velocityY.curveMax = scene::particleLinearCurve(0, 2);source.velocityY.multiplier = 4;
+  scene::ParticleSystem back;
+  AE_EXPECT_TRUE(roundTrip(source, back), "ida e volta v2");
+  AE_EXPECT_TRUE(back.forceOverLifetimeEnabled && back.forceX.constantMax == 3 &&
+                 back.forceSpace == scene::ParticleSimulationSpace::Local && back.noiseOctaves == 3 &&
+                 back.limitDrag == 0.4f && back.velocityY.mode == scene::ParticleCurveMode::Curve &&
+                 back.velocityY.multiplier == 4 && back.velocityY.curveMax.keys.size() == 2, "módulos preservados");
+  scene::ParticleSystem fraction = source;fraction.noiseOctaves = 2.5f;
+  AE_EXPECT_TRUE(!fraction.valid(), "oitavas inteiras");
+}
+
+AE_TEST(particle_p2a_force_accelerates_and_velocity_adds_without_accumulating) {
+  auto force = still();
+  force.forceOverLifetimeEnabled = true;force.forceX = scene::particleCurveDefault(2);
+  const auto pushed = one(force, 60, 1.0f / 60);
+  // x = a t² / 2 = 1 m depois de 1 s (integração explícita: um pouco acima).
+  AE_EXPECT_TRUE(pushed.size() == 1 && pushed[0].position[0] > 0.95f && pushed[0].position[0] < 1.1f, "força acelera");
+  AE_EXPECT_TRUE(std::abs(pushed[0].velocity[0] - 2.0f) < 0.05f, "velocidade acumulada pela força");
+  auto velocity = still();
+  velocity.velocityOverLifetimeEnabled = true;velocity.velocityX = scene::particleCurveDefault(2);
+  velocity.velocitySpace = scene::ParticleSimulationSpace::World;
+  const auto moved = one(velocity, 60, 1.0f / 60);
+  AE_EXPECT_TRUE(std::abs(moved[0].position[0] - 2.0f) < 0.05f, "velocidade no tempo: 2 m em 1 s, sem acelerar");
+  AE_EXPECT_TRUE(std::abs(moved[0].velocity[0] - 2.0f) < 1e-3f, "o traço esticado vê a velocidade animada");
+  velocity.speedModifier = scene::particleCurveDefault(0.5f);
+  AE_EXPECT_TRUE(std::abs(one(velocity, 60, 1.0f / 60)[0].position[0] - 1.0f) < 0.05f, "modificador de velocidade escala");
+  // Força de mundo num emissor Local girado 90° em Y continua apontando +X do mundo.
+  const float turned[16]{0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1};
+  auto local = force;local.simulationSpace = scene::ParticleSimulationSpace::Local;
+  local.forceSpace = scene::ParticleSimulationSpace::World;
+  const auto world = one(local, 60, 1.0f / 60, turned);
+  AE_EXPECT_TRUE(world[0].position[0] > 0.95f && std::abs(world[0].position[2]) < 1e-3f, "vento de mundo não gira com o objeto");
+}
+
+AE_TEST(particle_p2a_limit_velocity_clamps_and_drag_slows) {
+  auto fast = still();
+  fast.startSpeed = scene::particleCurveDefault(10);
+  fast.shapeEnabled = true;fast.shapeType = scene::ParticleShapeType::Box;fast.shapeBox[0] = fast.shapeBox[1] = fast.shapeBox[2] = 0;
+  fast.limitVelocityEnabled = true;fast.limitSpeed = scene::particleCurveDefault(3);fast.limitDampen = 1;
+  const auto clamped = one(fast, 10, 1.0f / 60);
+  const float speed = std::sqrt(clamped[0].velocity[0] * clamped[0].velocity[0] + clamped[0].velocity[1] * clamped[0].velocity[1] +
+                                clamped[0].velocity[2] * clamped[0].velocity[2]);
+  AE_EXPECT_TRUE(std::abs(speed - 3.0f) < 1e-3f, "Dampen 1 corta no limite");
+  fast.limitDampen = 0.2f;
+  const auto soft = one(fast, 1, 1.0f / 30);
+  const float softSpeed = std::abs(soft[0].velocity[2]);
+  AE_EXPECT_TRUE(std::abs(softSpeed - (3.0f + 7.0f * 0.8f)) < 0.05f, "Dampen 0,2 tira 20% do excesso por quadro de 30 Hz");
+  fast.limitSpeed = scene::particleCurveDefault(1000);fast.limitDrag = 1;
+  const auto dragged = one(fast, 30, 1.0f / 60);
+  AE_EXPECT_TRUE(std::abs(dragged[0].velocity[2]) < 10.0f * 0.65f && std::abs(dragged[0].velocity[2]) > 10.0f * 0.55f,
+                 "arrasto de 1/s: cerca de 60% depois de meio segundo");
+}
+
+AE_TEST(particle_p2a_noise_is_deterministic_and_turbulent) {
+  auto noisy = still();
+  noisy.noiseEnabled = true;noisy.noiseStrength = scene::particleCurveDefault(2);noisy.noiseFrequency = 0.8f;
+  noisy.noiseOctaves = 2;noisy.noiseScrollSpeed = 0.5f;
+  const auto a = one(noisy, 90, 1.0f / 60), b = one(noisy, 90, 1.0f / 60);
+  AE_EXPECT_TRUE(std::memcmp(a.data(), b.data(), sizeof(ParticleInstance)) == 0, "mesma semente, mesma trajetória");
+  const float moved = std::sqrt(a[0].position[0] * a[0].position[0] + a[0].position[1] * a[0].position[1] +
+                                a[0].position[2] * a[0].position[2]);
+  AE_EXPECT_TRUE(moved > 0.05f && moved < 5.5f, "o ruído desloca sem passar da força (2 m/s por eixo, 1,5 s)");
+  noisy.noiseEnabled = false;
+  const auto calm = one(noisy, 90, 1.0f / 60);
+  AE_EXPECT_TRUE(calm[0].position[0] == 0 && calm[0].position[1] == 0 && calm[0].position[2] == 0, "desligado não mexe");
+}
+
+// --- P2b: Colisão com planos e Sub-emissores -------------------------------
+AE_TEST(particle_p2b_collision_plane_bounces_dampens_and_kills) {
+  auto falling = still();
+  falling.gravityModifier = scene::particleCurveDefault(1);
+  falling.startSize = scene::particleCurveDefault(0);
+  falling.collisionEnabled = true;falling.collisionBounce = 0.5f;falling.collisionDampen = 0;
+  const float above[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 2, 0, 1};  // nasce 2 m acima do plano y=0
+  ParticleEmitter emitter;
+  emitter.configure(falling, 5);
+  emitter.play();
+  emitter.emit(1, above);
+  const renderer::particles::ParticleCollisionPlane ground{};
+  emitter.setCollisionPlanes(&ground, 1);
+  float lowest = 10, upward = 0;
+  for (u32 i = 0; i < 120; ++i) {
+    emitter.simulate(1.0f / 60, above);
+    std::vector<ParticleInstance> out;
+    emitter.build(above, kCamera, out);
+    lowest = std::min(lowest, out[0].position[1]);
+    upward = std::max(upward, out[0].velocity[1]);
+  }
+  AE_EXPECT_TRUE(lowest >= -1e-4f, "não atravessa o chão");
+  // Queda de 2 m: ~6,26 m/s; quique 0,5 devolve ~3 m/s para cima.
+  AE_EXPECT_TRUE(upward > 2.5f && upward < 3.5f, "quique devolve metade da velocidade");
+  falling.collisionLifetimeLoss = 1;
+  falling.subEmittersEnabled = true;falling.subEmitterDeath = 9;falling.subEmitterCollision = 9;
+  emitter.configure(falling, 5);
+  emitter.clear();
+  emitter.emit(1, above);
+  u32 collisions = 0, deaths = 0;
+  for (u32 i = 0; i < 120; ++i) {
+    emitter.clearEvents();
+    emitter.simulate(1.0f / 60, above);
+    collisions += static_cast<u32>(emitter.collisions().size());
+    deaths += static_cast<u32>(emitter.deaths().size());
+  }
+  AE_EXPECT_TRUE(emitter.alive() == 0 && collisions == 1 && deaths == 1, "perda de vida 1: morre no primeiro toque, com eventos");
+}
+
+AE_TEST(particle_p2b_sub_emitters_spawn_where_particles_collide_and_die) {
+  runtime::SceneGraph graph;
+  const auto parent = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Gotas");
+  const auto splash = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Respingo");
+  const auto floor = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Chão");
+  {
+    auto values = *graph.find(splash);
+    auto *p = static_cast<scene::ParticleSystem *>(values.components.add(scene::ParticleSystem::descriptor));
+    p->emissionEnabled = false;p->shapeEnabled = false;p->startLifetime = scene::particleCurveDefault(5);
+    p->startSpeed = scene::particleCurveDefault(0);p->gravityModifier = scene::particleCurveDefault(0);
+    p->simulationSpace = scene::ParticleSimulationSpace::World;
+    graph.applyEntityValues(splash, values);
+  }
+  {
+    auto values = *graph.find(parent);
+    values.transform.position[1] = 1;values.transform.position[0] = 4;
+    auto *p = static_cast<scene::ParticleSystem *>(values.components.add(scene::ParticleSystem::descriptor));
+    *static_cast<scene::ParticleSystemSettings *>(p) = still();
+    p->emissionEnabled = true;p->emissionRate = scene::particleCurveDefault(0);
+    p->burstCount = 1;p->bursts[0].countMin = p->bursts[0].countMax = 3;
+    p->gravityModifier = scene::particleCurveDefault(1);p->startSize = scene::particleCurveDefault(0);
+    p->collisionEnabled = true;p->collisionPlane0 = floor;p->collisionLifetimeLoss = 1;
+    p->subEmittersEnabled = true;p->subEmitterCollision = splash;p->subEmitterCollisionCount = 2;
+    p->subEmitterDeath = splash;p->subEmitterDeathCount = 1;
+    graph.applyEntityValues(parent, values);
+  }
+  runtime::SceneParticles particles;
+  for (u32 i = 0; i < 60; ++i) particles.advance(graph, 1.0f / 60);
+  const auto instance = graph.find(splash)->components.find(scene::ParticleSystem::descriptor)->instanceId();
+  runtime::SceneParticles::Status status;
+  AE_EXPECT_TRUE(particles.status(graph, splash, instance, status) && status.alive == 3 * (2 + 1), "2 no toque + 1 na morte, por gota");
+  renderer::particles::ParticleFrame frame;
+  particles.build(graph, kCamera, frame);
+  bool onFloor = true;
+  for (const auto &p : frame.instances) if (std::abs(p.position[0] - 4) > 1e-4f || std::abs(p.position[1]) > 1e-3f) onFloor = false;
+  AE_EXPECT_TRUE(frame.alive == status.alive && onFloor, "respingos no ponto do toque, no chão");
+  // Plano desativado: a gota passa direto e não há respingo.
+  graph.setActive(floor, false);
+  runtime::SceneParticles fresh;
+  for (u32 i = 0; i < 60; ++i) fresh.advance(graph, 1.0f / 60);
+  AE_EXPECT_TRUE(fresh.status(graph, splash, instance, status) && status.alive == 0, "sem plano a gota não toca nem morre: nenhum respingo");
+}
+
+// --- P2c: Herdar velocidade, Taxa por distância e "pela velocidade" --------
+AE_TEST(particle_p2c_inherit_velocity_and_rate_over_distance_follow_the_emitter) {
+  auto moving = still();
+  moving.emissionEnabled = true;moving.emissionRate = scene::particleCurveDefault(0);
+  moving.emissionRateOverDistance = 10;
+  moving.inheritVelocityEnabled = true;moving.inheritVelocityMultiplier = 0.5f;
+  moving.maxParticles = 1000;
+  ParticleEmitter emitter;
+  emitter.configure(moving, 1);
+  emitter.play();
+  float world[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  // 4 m/s em +X por 1 s: 4 m andados, 40 partículas, cada uma com +2 m/s.
+  for (u32 i = 0; i < 60; ++i) {
+    world[12] = 4.0f * static_cast<float>(i) / 60.0f;
+    emitter.simulate(1.0f / 60, world);
+  }
+  AE_EXPECT_TRUE(emitter.alive() >= 38 && emitter.alive() <= 40, "10 por metro em 3,93 m");
+  std::vector<ParticleInstance> out;
+  emitter.build(world, kCamera, out);
+  bool inherited = true;
+  for (const auto &p : out) inherited = inherited && std::abs(p.velocity[0] - 2.0f) < 1e-3f;
+  AE_EXPECT_TRUE(inherited, "metade da velocidade do emissor");
+  ParticleEmitter parked;
+  parked.configure(moving, 1);
+  parked.play();
+  for (u32 i = 0; i < 60; ++i) parked.simulate(1.0f / 60, kIdentity);
+  AE_EXPECT_TRUE(parked.alive() == 0, "parado não emite por distância");
+}
+
+AE_TEST(particle_p2c_size_and_color_by_speed_read_the_speed_range) {
+  auto fast = still();
+  fast.shapeEnabled = true;fast.shapeType = scene::ParticleShapeType::Box;fast.shapeBox[0] = fast.shapeBox[1] = fast.shapeBox[2] = 0;
+  fast.startSpeed = scene::particleCurveDefault(5);
+  fast.startSize = scene::particleCurveDefault(2);
+  fast.sizeBySpeedEnabled = true;fast.sizeBySpeedRange[0] = 0;fast.sizeBySpeedRange[1] = 10;  // curva linear 0→1
+  fast.colorBySpeedEnabled = true;fast.colorBySpeedRange[0] = 0;fast.colorBySpeedRange[1] = 5;  // gradiente de alfa 1→0
+  const auto p = one(fast, 1, 1.0f / 60);
+  AE_EXPECT_TRUE(std::abs(p[0].size - 1.0f) < 0.02f, "5 m/s na faixa 0–10: metade do tamanho");
+  AE_EXPECT_TRUE(renderer::particles::halfToFloat(p[0].color[3]) < 0.02f, "no topo da faixa de cor: alfa do fim do gradiente");
+  fast.rotationBySpeedEnabled = true;fast.rotationBySpeed = scene::particleCurveDefault(90);
+  fast.rotationBySpeedRange[0] = 0;fast.rotationBySpeedRange[1] = 5;
+  const auto spun = one(fast, 60, 1.0f / 60);
+  AE_EXPECT_TRUE(std::abs(spun[0].rotation - 3.14159265f / 2) < 0.02f, "90°/s constante por 1 s");
+}
+
+AE_TEST(particle_p2d_donut_and_rectangle_shapes_stay_in_their_volumes) {
+  scene::ParticleSystem donut;
+  donut.shapeType = scene::ParticleShapeType::Donut;donut.shapeRadius = 2;donut.shapeDonutRadius = 0.25f;
+  donut.startSpeed = scene::particleCurveDefault(0);donut.startLifetime = scene::particleCurveDefault(10);
+  donut.gravityModifier = scene::particleCurveDefault(0);donut.emissionRate = scene::particleCurveDefault(600);
+  bool inside = true;
+  for (const auto &p : run(donut, 9, 30, 1.0f / 30)) {
+    const float ring = std::sqrt(p.position[0] * p.position[0] + p.position[1] * p.position[1]);
+    const float tube = std::sqrt((ring - 2) * (ring - 2) + p.position[2] * p.position[2]);
+    inside = inside && tube <= 0.25f + 1e-4f;
+  }
+  AE_EXPECT_TRUE(inside, "rosca: todo ponto dentro do tubo em volta do anel");
+  scene::ParticleSystem rect = donut;
+  rect.shapeType = scene::ParticleShapeType::Rectangle;rect.shapeBox[0] = 4;rect.shapeBox[1] = 1;
+  rect.startSpeed = scene::particleCurveDefault(1);
+  bool flat = true;
+  for (const auto &p : run(rect, 9, 2, 1.0f / 30)) {
+    flat = flat && std::abs(p.position[0]) <= 2 + 1e-4f && std::abs(p.position[1]) <= .5f + 1e-4f && p.velocity[2] > 0.99f;
+  }
+  AE_EXPECT_TRUE(flat, "retângulo 4×1 no plano XY emitindo para +Z");
 }

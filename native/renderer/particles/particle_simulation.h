@@ -93,6 +93,16 @@ struct BakedMinMaxGradient {
   void evaluate(float t, float random, float (&out)[4]) const;
 };
 
+// Plano de colisão em mundo: um ponto e a normal unitária (lado de cima).
+struct ParticleCollisionPlane {
+  float point[3]{}, normal[3]{0, 1, 0};
+};
+// Acontecimento de uma partícula para os sub-emissores: posição e velocidade
+// em mundo no instante do nascimento, do toque ou da morte.
+struct ParticleEvent {
+  float position[3]{}, velocity[3]{};
+};
+
 // PCG32 (O'Neill, pcg-random.org): pequeno, rápido e reproduzível.
 struct Pcg32 {
   u64 state = 0x853c49e6748fea9bULL, increment = 0xda3e39cb94b95bdbULL;
@@ -112,6 +122,16 @@ public:
   void configure(const scene::ParticleSystemSettings &settings, u32 seed);
   // Teto efetivo deste quadro (autoral reduzido pelo nível do aparelho).
   void setCapacityLimit(u32 limit) { capacityLimit_ = limit; }
+  // Planos do módulo Colisão neste quadro, em mundo (no máximo dois).
+  void setCollisionPlanes(const ParticleCollisionPlane *planes, u32 count);
+  // Acontecimentos do último simulate/emit, para os sub-emissores. Só são
+  // registrados quando o módulo Sub-emissores pede aquele tipo, e no máximo
+  // kMaximumEvents por tipo e quadro (o resto é descartado, não adiado).
+  static constexpr u32 kMaximumEvents = 256;
+  const std::vector<ParticleEvent> &births() const noexcept { return births_; }
+  const std::vector<ParticleEvent> &collisions() const noexcept { return collisions_; }
+  const std::vector<ParticleEvent> &deaths() const noexcept { return deaths_; }
+  void clearEvents() { births_.clear(); collisions_.clear(); deaths_.clear(); }
 
   void play();
   // `clear` = StopEmittingAndClear; sem ele as vivas terminam a vida.
@@ -144,19 +164,32 @@ private:
   void spawn(u32 count, const float (&world)[16], float systemNormalized, float spreadSeconds);
   void sampleShape(Pcg32 &rng, float (&position)[3], float (&direction)[3]) const;
   void kill(u32 index);
-  void advanceParticles(float dt, const float (&gravity)[3]);
+  void record(std::vector<ParticleEvent> &events, u32 index, const float (&world)[16]);
+  void collide(float dt, const float (&world)[16]);
+  void advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]);
 
   scene::ParticleSystemSettings settings_;
   BakedMinMaxCurve startDelay_, startLifetime_, startSpeed_, startSize_, startRotation_, gravity_, rate_;
   BakedMinMaxCurve sizeOverLifetime_, rotationOverLifetime_;
+  BakedMinMaxCurve velocity_[3], speedModifier_, limitSpeed_, force_[3], noiseStrength_, sizeBySpeed_, rotationBySpeed_;
+  BakedMinMaxGradient colorBySpeed_;
+  // Velocidade do emissor (mundo), para Herdar velocidade e Taxa por distância.
+  float lastOrigin_[3]{}, emitterVelocity_[3]{}, distanceAccumulator_ = 0;
+  bool hasLastOrigin_ = false;
   BakedMinMaxGradient startColor_, colorOverLifetime_;
   float shapeMatrix_[12]{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};  // rotação 3x3 (colunas) + posição
 
   // SoA. Posição e velocidade no espaço da simulação (local do objeto ou mundo).
   std::vector<float> px_, py_, pz_, vx_, vy_, vz_;
+  // Velocidade animada do quadro (Velocity over Lifetime + Noise), que não se
+  // acumula em v mas move e estica a partícula. Mesmo espaço da simulação.
+  std::vector<float> ax_, ay_, az_;
   std::vector<float> age_, lifetime_, baseSize_, rotation_;
   std::vector<float> colorR_, colorG_, colorB_, colorA_;
   std::vector<u32> seed_;
+  ParticleCollisionPlane planes_[2];
+  u32 planeCount_ = 0;
+  std::vector<ParticleEvent> births_, collisions_, deaths_;
 
   Pcg32 rng_;
   u32 baseSeed_ = 0, capacityLimit_ = ~0u;

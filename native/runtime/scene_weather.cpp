@@ -59,7 +59,9 @@ bool applyEnvironment(SceneGraph &graph, ObjectId id, const scene::Weather &weat
 
 // Taxa de emissão do sistema: a constante (modos Constante e Entre duas
 // constantes) ou o multiplicador da curva -- o rateOverTimeMultiplier da Unity.
-bool applyEmission(SceneGraph &graph, ObjectId id, float rate) {
+// O vento entra pela Velocidade no tempo em espaço Mundo: a gota cai inclinada
+// e o traço esticado mostra a inclinação, como o vento de um script da Unity.
+bool applyPrecipitation(SceneGraph &graph, ObjectId id, float rate, const float (&wind)[2]) {
   const auto *object = graph.find(id);
   if (!object) return false;
   const auto *found = object->components.find(scene::ParticleSystem::descriptor);
@@ -73,11 +75,28 @@ bool applyEmission(SceneGraph &graph, ObjectId id, float rate) {
     assign(next.constantMax, rate, changed);
     if (next.mode == scene::ParticleCurveMode::TwoConstants) assign(next.constantMin, rate * 0.8f, changed);
   }
+  const bool windy = std::abs(wind[0]) > 1e-4f || std::abs(wind[1]) > 1e-4f;
+  bool velocityEnabled = current.velocityOverLifetimeEnabled;
+  auto space = current.velocitySpace;
+  auto vx = current.velocityX, vz = current.velocityZ;
+  if (windy || current.velocityOverLifetimeEnabled) {
+    assign(velocityEnabled, true, changed);
+    assign(space, scene::ParticleSimulationSpace::World, changed);
+    assign(vx.mode, scene::ParticleCurveMode::Constant, changed);
+    assign(vz.mode, scene::ParticleCurveMode::Constant, changed);
+    assign(vx.constantMax, wind[0], changed);
+    assign(vz.constantMax, wind[1], changed);
+  }
   if (!changed) return false;
   auto *components = graph.editComponents(id);
   auto *target = components ? components->edit(scene::ParticleSystem::descriptor) : nullptr;
   if (!target) return false;
-  scene::particleSystem(*target).emissionRate = next;
+  auto &system = scene::particleSystem(*target);
+  system.emissionRate = next;
+  system.velocityOverLifetimeEnabled = velocityEnabled;
+  system.velocitySpace = space;
+  system.velocityX = vx;
+  system.velocityZ = vz;
   return true;
 }
 
@@ -206,12 +225,23 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       flash = lightningFlash(static_cast<u32>(id) * 2654435761U, seconds, weather.lightningInterval) * state.look.storm;
     report.flash = std::max(report.flash, flash);
     report.writes += applyEnvironment(graph, id, weather, state.look, flash);
-    const std::pair<u64, float> systems[]{{weather.rain, state.look.rain * weather.rainRate},
-                                          {weather.snow, state.look.snow * weather.snowRate}};
-    for (const auto &[system, rate] : systems) {
-      const auto target = static_cast<ObjectId>(system);
-      if (!system || !graph.exists(target)) continue;
-      report.writes += applyEmission(graph, target, rate);
+    // Vento do Cloud Layer deste Ambiente (0° sopra para +X, como as nuvens).
+    float wind[2]{0, 0};
+    if (const auto *env = static_cast<const scene::Environment *>(object->components.find(scene::Environment::descriptor))) {
+      const float radians = env->values.clouds.windOrientationDegrees * 0.017453292f;
+      const float speed = env->values.clouds.windSpeedKmh / 3.6f * weather.windInfluence;
+      wind[0] = std::cos(radians) * speed;
+      wind[1] = std::sin(radians) * speed;
+    }
+    // A neve é leve: o mesmo vento a arrasta mais que a gota.
+    const float snowWind[2]{wind[0] * 1.6f, wind[1] * 1.6f};
+    const struct { u64 system; float rate; const float (&wind)[2]; } systems[]{
+        {weather.rain, state.look.rain * weather.rainRate, wind},
+        {weather.snow, state.look.snow * weather.snowRate, snowWind}};
+    for (const auto &entry : systems) {
+      const auto target = static_cast<ObjectId>(entry.system);
+      if (!entry.system || !graph.exists(target)) continue;
+      report.writes += applyPrecipitation(graph, target, entry.rate, entry.wind);
       if (weather.followCamera && camera)
         report.writes += followCamera(graph, target, camera, weather.heightAboveCamera, writeTransform);
     }

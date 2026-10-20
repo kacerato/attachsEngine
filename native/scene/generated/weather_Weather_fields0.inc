@@ -6,6 +6,7 @@
   float rainRate = 1800.0f;
   float snowRate = 700.0f;
   float heightAboveCamera = 10.0f;
+  float windInfluence = 0.35f;
   float fogDensity = 0.02f;
   float lightningInterval = 9.0f;
   float lightningBrightness = 3.0f;

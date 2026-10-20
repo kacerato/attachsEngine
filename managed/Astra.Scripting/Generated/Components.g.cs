@@ -1327,6 +1327,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         InteracaoObjetoLevantado = 36,
         InteracaoEntrouNoGatilho = 37,
         InteracaoSaiuDoGatilho = 38,
+        ParticulasParou = 39,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1385,6 +1386,11 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         RecuoDisparar = 32,
         ImpactoGolpearDeFrente = 33,
         PersonagemSubirDescer = 34,
+        ParticulasTocar = 35,
+        ParticulasParar = 36,
+        ParticulasPararELimpar = 37,
+        ParticulasPausar = 38,
+        ParticulasLimpar = 39,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -4807,6 +4813,13 @@ public readonly struct Weather : IComponentFacade<Weather>
     {
         get => Component.GetFloat("height_above_camera");
         set => Component.SetFloat("height_above_camera", value);
+    }
+    /// <summary>Vento na precipitação (×). Quanto o vento das nuvens deste Ambiente inclina a chuva e arrasta a neve</summary>
+    /// <remarks>Faixa válida: 0 a 2.</remarks>
+    public float WindInfluence
+    {
+        get => Component.GetFloat("wind_influence");
+        set => Component.SetFloat("wind_influence", value);
     }
     /// <summary>Neblina máxima (1/m). Densidade da neblina do Ambiente com chuva ou neve no máximo; vale com Sobrescrever neblina</summary>
     /// <remarks>Faixa válida: 0 a 0.2.</remarks>
@@ -11765,6 +11778,391 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetFloat("material_soft_distance");
         set => Component.SetFloat("material_soft_distance", value);
     }
+    /// <summary>Velocidade X (m/s). Somada à velocidade da partícula, sem acumular</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityX
+    {
+        get => Component.GetFloat("velocity_x");
+        set => Component.SetFloat("velocity_x", value);
+    }
+    /// <summary>Velocidade X mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityXMin
+    {
+        get => Component.GetFloat("velocity_x_min");
+        set => Component.SetFloat("velocity_x_min", value);
+    }
+    /// <summary>Velocidade X · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityXMultiplier
+    {
+        get => Component.GetFloat("velocity_x_multiplier");
+        set => Component.SetFloat("velocity_x_multiplier", value);
+    }
+    /// <summary>Velocidade Y (m/s). Somada à velocidade da partícula, sem acumular</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityY
+    {
+        get => Component.GetFloat("velocity_y");
+        set => Component.SetFloat("velocity_y", value);
+    }
+    /// <summary>Velocidade Y mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityYMin
+    {
+        get => Component.GetFloat("velocity_y_min");
+        set => Component.SetFloat("velocity_y_min", value);
+    }
+    /// <summary>Velocidade Y · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityYMultiplier
+    {
+        get => Component.GetFloat("velocity_y_multiplier");
+        set => Component.SetFloat("velocity_y_multiplier", value);
+    }
+    /// <summary>Velocidade Z (m/s). Somada à velocidade da partícula, sem acumular</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityZ
+    {
+        get => Component.GetFloat("velocity_z");
+        set => Component.SetFloat("velocity_z", value);
+    }
+    /// <summary>Velocidade Z mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityZMin
+    {
+        get => Component.GetFloat("velocity_z_min");
+        set => Component.SetFloat("velocity_z_min", value);
+    }
+    /// <summary>Velocidade Z · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float VelocityZMultiplier
+    {
+        get => Component.GetFloat("velocity_z_multiplier");
+        set => Component.SetFloat("velocity_z_multiplier", value);
+    }
+    /// <summary>Modificador de velocidade (×). Speed Modifier: escala o deslocamento ao longo da vida</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float SpeedModifier
+    {
+        get => Component.GetFloat("speed_modifier");
+        set => Component.SetFloat("speed_modifier", value);
+    }
+    /// <summary>Modificador de velocidade mínimo (×). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float SpeedModifierMin
+    {
+        get => Component.GetFloat("speed_modifier_min");
+        set => Component.SetFloat("speed_modifier_min", value);
+    }
+    /// <summary>Modificador de velocidade · multiplicador (×). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float SpeedModifierMultiplier
+    {
+        get => Component.GetFloat("speed_modifier_multiplier");
+        set => Component.SetFloat("speed_modifier_multiplier", value);
+    }
+    /// <summary>Velocidade máxima (m/s). Acima disso a partícula é freada</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float LimitSpeed
+    {
+        get => Component.GetFloat("limit_speed");
+        set => Component.SetFloat("limit_speed", value);
+    }
+    /// <summary>Velocidade máxima mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float LimitSpeedMin
+    {
+        get => Component.GetFloat("limit_speed_min");
+        set => Component.SetFloat("limit_speed_min", value);
+    }
+    /// <summary>Velocidade máxima · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float LimitSpeedMultiplier
+    {
+        get => Component.GetFloat("limit_speed_multiplier");
+        set => Component.SetFloat("limit_speed_multiplier", value);
+    }
+    /// <summary>Amortecimento. Dampen: fração do excesso removida (1 corta no limite)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float LimitDampen
+    {
+        get => Component.GetFloat("limit_dampen");
+        set => Component.SetFloat("limit_dampen", value);
+    }
+    /// <summary>Arrasto (1/s). Drag: perda de velocidade por segundo, como resistência do ar</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float LimitDrag
+    {
+        get => Component.GetFloat("limit_drag");
+        set => Component.SetFloat("limit_drag", value);
+    }
+    /// <summary>Força X (m/s²). Aceleração neste eixo</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceX
+    {
+        get => Component.GetFloat("force_x");
+        set => Component.SetFloat("force_x", value);
+    }
+    /// <summary>Força X mínimo (m/s²). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceXMin
+    {
+        get => Component.GetFloat("force_x_min");
+        set => Component.SetFloat("force_x_min", value);
+    }
+    /// <summary>Força X · multiplicador (m/s²). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceXMultiplier
+    {
+        get => Component.GetFloat("force_x_multiplier");
+        set => Component.SetFloat("force_x_multiplier", value);
+    }
+    /// <summary>Força Y (m/s²). Aceleração neste eixo</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceY
+    {
+        get => Component.GetFloat("force_y");
+        set => Component.SetFloat("force_y", value);
+    }
+    /// <summary>Força Y mínimo (m/s²). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceYMin
+    {
+        get => Component.GetFloat("force_y_min");
+        set => Component.SetFloat("force_y_min", value);
+    }
+    /// <summary>Força Y · multiplicador (m/s²). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceYMultiplier
+    {
+        get => Component.GetFloat("force_y_multiplier");
+        set => Component.SetFloat("force_y_multiplier", value);
+    }
+    /// <summary>Força Z (m/s²). Aceleração neste eixo</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceZ
+    {
+        get => Component.GetFloat("force_z");
+        set => Component.SetFloat("force_z", value);
+    }
+    /// <summary>Força Z mínimo (m/s²). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceZMin
+    {
+        get => Component.GetFloat("force_z_min");
+        set => Component.SetFloat("force_z_min", value);
+    }
+    /// <summary>Força Z · multiplicador (m/s²). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -1000 a 1000.</remarks>
+    public float ForceZMultiplier
+    {
+        get => Component.GetFloat("force_z_multiplier");
+        set => Component.SetFloat("force_z_multiplier", value);
+    }
+    /// <summary>Força do ruído (m/s). Velocidade máxima do desvio</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float NoiseStrength
+    {
+        get => Component.GetFloat("noise_strength");
+        set => Component.SetFloat("noise_strength", value);
+    }
+    /// <summary>Força do ruído mínimo (m/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float NoiseStrengthMin
+    {
+        get => Component.GetFloat("noise_strength_min");
+        set => Component.SetFloat("noise_strength_min", value);
+    }
+    /// <summary>Força do ruído · multiplicador (m/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float NoiseStrengthMultiplier
+    {
+        get => Component.GetFloat("noise_strength_multiplier");
+        set => Component.SetFloat("noise_strength_multiplier", value);
+    }
+    /// <summary>Frequência (1/m). Tamanho do redemoinho: maior frequência, turbulência mais miúda</summary>
+    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
+    public float NoiseFrequency
+    {
+        get => Component.GetFloat("noise_frequency");
+        set => Component.SetFloat("noise_frequency", value);
+    }
+    /// <summary>Rolagem (1/s). Faz o campo de ruído mudar com o tempo</summary>
+    /// <remarks>Faixa válida: -20 a 20.</remarks>
+    public float NoiseScrollSpeed
+    {
+        get => Component.GetFloat("noise_scroll_speed");
+        set => Component.SetFloat("noise_scroll_speed", value);
+    }
+    /// <summary>Oitavas. Camadas de detalhe; cada uma custa uma amostra a mais por partícula</summary>
+    /// <remarks>Faixa válida: 1 a 4.</remarks>
+    public float NoiseOctaves
+    {
+        get => Component.GetFloat("noise_octaves");
+        set => Component.SetFloat("noise_octaves", value);
+    }
+    /// <summary>Amortecimento. Fração da velocidade ao longo do plano perdida no toque</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CollisionDampen
+    {
+        get => Component.GetFloat("collision_dampen");
+        set => Component.SetFloat("collision_dampen", value);
+    }
+    /// <summary>Quique. Fração da velocidade contra o plano devolvida (0 gruda, 1 quica inteiro)</summary>
+    /// <remarks>Faixa válida: 0 a 2.</remarks>
+    public float CollisionBounce
+    {
+        get => Component.GetFloat("collision_bounce");
+        set => Component.SetFloat("collision_bounce", value);
+    }
+    /// <summary>Perda de vida. Fração da vida consumida a cada toque (1 morre ao tocar)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CollisionLifetimeLoss
+    {
+        get => Component.GetFloat("collision_lifetime_loss");
+        set => Component.SetFloat("collision_lifetime_loss", value);
+    }
+    /// <summary>Velocidade mínima (m/s). Depois do toque, abaixo disso a partícula morre</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float CollisionMinKillSpeed
+    {
+        get => Component.GetFloat("collision_min_kill_speed");
+        set => Component.SetFloat("collision_min_kill_speed", value);
+    }
+    /// <summary>Escala do raio (×). Raio de colisão em relação ao tamanho da partícula</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float CollisionRadiusScale
+    {
+        get => Component.GetFloat("collision_radius_scale");
+        set => Component.SetFloat("collision_radius_scale", value);
+    }
+    /// <summary>Partículas ao nascer. Quantas o sub-sistema emite por partícula nascida</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SubEmitterBirthCount
+    {
+        get => Component.GetFloat("sub_emitter_birth_count");
+        set => Component.SetFloat("sub_emitter_birth_count", value);
+    }
+    /// <summary>Partículas ao colidir. Quantas o sub-sistema emite por toque</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SubEmitterCollisionCount
+    {
+        get => Component.GetFloat("sub_emitter_collision_count");
+        set => Component.SetFloat("sub_emitter_collision_count", value);
+    }
+    /// <summary>Partículas ao morrer. Quantas o sub-sistema emite por partícula morta</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SubEmitterDeathCount
+    {
+        get => Component.GetFloat("sub_emitter_death_count");
+        set => Component.SetFloat("sub_emitter_death_count", value);
+    }
+    /// <summary>Taxa por distância (/m). Rate over Distance: partículas por metro que o emissor anda (rastro de pegadas, fumaça de carro)</summary>
+    /// <remarks>Faixa válida: 0 a 100000.</remarks>
+    public float EmissionRateOverDistance
+    {
+        get => Component.GetFloat("emission_rate_over_distance");
+        set => Component.SetFloat("emission_rate_over_distance", value);
+    }
+    /// <summary>Multiplicador (×). Parte da velocidade do emissor herdada no nascimento</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float InheritVelocityMultiplier
+    {
+        get => Component.GetFloat("inherit_velocity_multiplier");
+        set => Component.SetFloat("inherit_velocity_multiplier", value);
+    }
+    /// <summary>Tamanho (×). Fator sobre o tamanho inicial</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeBySpeed
+    {
+        get => Component.GetFloat("size_by_speed");
+        set => Component.SetFloat("size_by_speed", value);
+    }
+    /// <summary>Tamanho mínimo (×). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeBySpeedMin
+    {
+        get => Component.GetFloat("size_by_speed_min");
+        set => Component.SetFloat("size_by_speed_min", value);
+    }
+    /// <summary>Tamanho · multiplicador (×). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeBySpeedMultiplier
+    {
+        get => Component.GetFloat("size_by_speed_multiplier");
+        set => Component.SetFloat("size_by_speed_multiplier", value);
+    }
+    /// <summary>Faixa mínima (m/s). Velocidade que lê o início da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeBySpeedRangeMin
+    {
+        get => Component.GetFloat("size_by_speed_range_min");
+        set => Component.SetFloat("size_by_speed_range_min", value);
+    }
+    /// <summary>Faixa máxima (m/s). Velocidade que lê o fim da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SizeBySpeedRangeMax
+    {
+        get => Component.GetFloat("size_by_speed_range_max");
+        set => Component.SetFloat("size_by_speed_range_max", value);
+    }
+    /// <summary>Faixa mínima (m/s). Velocidade que lê o início da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ColorBySpeedRangeMin
+    {
+        get => Component.GetFloat("color_by_speed_range_min");
+        set => Component.SetFloat("color_by_speed_range_min", value);
+    }
+    /// <summary>Faixa máxima (m/s). Velocidade que lê o fim da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ColorBySpeedRangeMax
+    {
+        get => Component.GetFloat("color_by_speed_range_max");
+        set => Component.SetFloat("color_by_speed_range_max", value);
+    }
+    /// <summary>Velocidade angular (°/s). Giro por segundo</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationBySpeed
+    {
+        get => Component.GetFloat("rotation_by_speed");
+        set => Component.SetFloat("rotation_by_speed", value);
+    }
+    /// <summary>Velocidade angular mínimo (°/s). Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationBySpeedMin
+    {
+        get => Component.GetFloat("rotation_by_speed_min");
+        set => Component.SetFloat("rotation_by_speed_min", value);
+    }
+    /// <summary>Velocidade angular · multiplicador (°/s). Escala aplicada à curva</summary>
+    /// <remarks>Faixa válida: -36000 a 36000.</remarks>
+    public float RotationBySpeedMultiplier
+    {
+        get => Component.GetFloat("rotation_by_speed_multiplier");
+        set => Component.SetFloat("rotation_by_speed_multiplier", value);
+    }
+    /// <summary>Faixa mínima (m/s). Velocidade que lê o início da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float RotationBySpeedRangeMin
+    {
+        get => Component.GetFloat("rotation_by_speed_range_min");
+        set => Component.SetFloat("rotation_by_speed_range_min", value);
+    }
+    /// <summary>Faixa máxima (m/s). Velocidade que lê o fim da curva</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float RotationBySpeedRangeMax
+    {
+        get => Component.GetFloat("rotation_by_speed_range_max");
+        set => Component.SetFloat("rotation_by_speed_range_max", value);
+    }
+    /// <summary>Raio do tubo (m). Grossura da rosca; o Raio é o do anel</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ShapeDonutRadius
+    {
+        get => Component.GetFloat("shape_donut_radius");
+        set => Component.SetFloat("shape_donut_radius", value);
+    }
     /// <summary>Repetir. Recomeça o ciclo ao terminar a duração</summary>
     public bool Looping
     {
@@ -11818,6 +12216,66 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     {
         get => Component.GetBool("rotation_over_lifetime_enabled");
         set => Component.SetBool("rotation_over_lifetime_enabled", value);
+    }
+    /// <summary>Velocidade no tempo ativa. Velocity over Lifetime: soma uma velocidade ao longo da vida</summary>
+    public bool VelocityOverLifetimeEnabled
+    {
+        get => Component.GetBool("velocity_over_lifetime_enabled");
+        set => Component.SetBool("velocity_over_lifetime_enabled", value);
+    }
+    /// <summary>Limite de velocidade ativo. Limit Velocity over Lifetime: freia acima do limite e aplica arrasto</summary>
+    public bool LimitVelocityEnabled
+    {
+        get => Component.GetBool("limit_velocity_enabled");
+        set => Component.SetBool("limit_velocity_enabled", value);
+    }
+    /// <summary>Força no tempo ativa. Force over Lifetime: aceleração somada à velocidade (vento, sucção)</summary>
+    public bool ForceOverLifetimeEnabled
+    {
+        get => Component.GetBool("force_over_lifetime_enabled");
+        set => Component.SetBool("force_over_lifetime_enabled", value);
+    }
+    /// <summary>Ruído ativo. Noise: turbulência que desvia as partículas (neve, fumaça, magia)</summary>
+    public bool NoiseEnabled
+    {
+        get => Component.GetBool("noise_enabled");
+        set => Component.SetBool("noise_enabled", value);
+    }
+    /// <summary>Colisão ativa. Collision (Planes): partículas quicam em até dois planos da cena</summary>
+    public bool CollisionEnabled
+    {
+        get => Component.GetBool("collision_enabled");
+        set => Component.SetBool("collision_enabled", value);
+    }
+    /// <summary>Sub-emissores ativos. Sub Emitters: outro sistema emite quando a partícula nasce, colide ou morre</summary>
+    public bool SubEmittersEnabled
+    {
+        get => Component.GetBool("sub_emitters_enabled");
+        set => Component.SetBool("sub_emitters_enabled", value);
+    }
+    /// <summary>Herdar velocidade ativo. Inherit Velocity (Initial): a partícula nasce com a velocidade do emissor</summary>
+    public bool InheritVelocityEnabled
+    {
+        get => Component.GetBool("inherit_velocity_enabled");
+        set => Component.SetBool("inherit_velocity_enabled", value);
+    }
+    /// <summary>Tamanho pela velocidade ativo. Size by Speed: tamanho lido pela velocidade da partícula</summary>
+    public bool SizeBySpeedEnabled
+    {
+        get => Component.GetBool("size_by_speed_enabled");
+        set => Component.SetBool("size_by_speed_enabled", value);
+    }
+    /// <summary>Cor pela velocidade ativa. Color by Speed: cor lida pela velocidade da partícula</summary>
+    public bool ColorBySpeedEnabled
+    {
+        get => Component.GetBool("color_by_speed_enabled");
+        set => Component.SetBool("color_by_speed_enabled", value);
+    }
+    /// <summary>Rotação pela velocidade ativa. Rotation by Speed: velocidade angular lida pela velocidade da partícula</summary>
+    public bool RotationBySpeedEnabled
+    {
+        get => Component.GetBool("rotation_by_speed_enabled");
+        set => Component.SetBool("rotation_by_speed_enabled", value);
     }
     public enum StartDelayModeOption : uint
     {
@@ -11954,6 +12412,8 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         Caixa = 3,
         Circulo = 4,
         Aresta = 5,
+        Rosca = 6,
+        Retangulo = 7,
     }
     /// <summary>Forma</summary>
     public ShapeTypeOption ShapeType
@@ -12098,6 +12558,212 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     {
         get => (MaterialMaskOption)Component.GetEnum("material_mask");
         set => Component.SetEnum("material_mask", (uint)value);
+    }
+    public enum VelocityXModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade X · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public VelocityXModeOption VelocityXMode
+    {
+        get => (VelocityXModeOption)Component.GetEnum("velocity_x_mode");
+        set => Component.SetEnum("velocity_x_mode", (uint)value);
+    }
+    public enum VelocityYModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade Y · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public VelocityYModeOption VelocityYMode
+    {
+        get => (VelocityYModeOption)Component.GetEnum("velocity_y_mode");
+        set => Component.SetEnum("velocity_y_mode", (uint)value);
+    }
+    public enum VelocityZModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade Z · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public VelocityZModeOption VelocityZMode
+    {
+        get => (VelocityZModeOption)Component.GetEnum("velocity_z_mode");
+        set => Component.SetEnum("velocity_z_mode", (uint)value);
+    }
+    public enum VelocitySpaceOption : uint
+    {
+        Local = 0,
+        Mundo = 1,
+    }
+    /// <summary>Espaço da velocidade. Local: eixos do objeto. Mundo: eixos da cena</summary>
+    public VelocitySpaceOption VelocitySpace
+    {
+        get => (VelocitySpaceOption)Component.GetEnum("velocity_space");
+        set => Component.SetEnum("velocity_space", (uint)value);
+    }
+    public enum SpeedModifierModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Modificador de velocidade · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public SpeedModifierModeOption SpeedModifierMode
+    {
+        get => (SpeedModifierModeOption)Component.GetEnum("speed_modifier_mode");
+        set => Component.SetEnum("speed_modifier_mode", (uint)value);
+    }
+    public enum LimitSpeedModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade máxima · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public LimitSpeedModeOption LimitSpeedMode
+    {
+        get => (LimitSpeedModeOption)Component.GetEnum("limit_speed_mode");
+        set => Component.SetEnum("limit_speed_mode", (uint)value);
+    }
+    public enum ForceXModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Força X · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public ForceXModeOption ForceXMode
+    {
+        get => (ForceXModeOption)Component.GetEnum("force_x_mode");
+        set => Component.SetEnum("force_x_mode", (uint)value);
+    }
+    public enum ForceYModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Força Y · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public ForceYModeOption ForceYMode
+    {
+        get => (ForceYModeOption)Component.GetEnum("force_y_mode");
+        set => Component.SetEnum("force_y_mode", (uint)value);
+    }
+    public enum ForceZModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Força Z · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public ForceZModeOption ForceZMode
+    {
+        get => (ForceZModeOption)Component.GetEnum("force_z_mode");
+        set => Component.SetEnum("force_z_mode", (uint)value);
+    }
+    public enum ForceSpaceOption : uint
+    {
+        Local = 0,
+        Mundo = 1,
+    }
+    /// <summary>Espaço da força. Mundo: o vento não gira com o objeto</summary>
+    public ForceSpaceOption ForceSpace
+    {
+        get => (ForceSpaceOption)Component.GetEnum("force_space");
+        set => Component.SetEnum("force_space", (uint)value);
+    }
+    public enum NoiseStrengthModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Força do ruído · modo. Constante, curva ao longo da vida, ou sorteio entre dois valores por partícula</summary>
+    public NoiseStrengthModeOption NoiseStrengthMode
+    {
+        get => (NoiseStrengthModeOption)Component.GetEnum("noise_strength_mode");
+        set => Component.SetEnum("noise_strength_mode", (uint)value);
+    }
+    public enum SizeBySpeedModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Tamanho · modo. Constante, curva pela velocidade, ou sorteio entre dois valores</summary>
+    public SizeBySpeedModeOption SizeBySpeedMode
+    {
+        get => (SizeBySpeedModeOption)Component.GetEnum("size_by_speed_mode");
+        set => Component.SetEnum("size_by_speed_mode", (uint)value);
+    }
+    public enum ColorBySpeedModeOption : uint
+    {
+        Gradiente = 1,
+        EntreDoisGradientes = 3,
+    }
+    /// <summary>Cor · modo. Gradiente lido pela velocidade, ou sorteio entre dois</summary>
+    public ColorBySpeedModeOption ColorBySpeedMode
+    {
+        get => (ColorBySpeedModeOption)Component.GetEnum("color_by_speed_mode");
+        set => Component.SetEnum("color_by_speed_mode", (uint)value);
+    }
+    public enum RotationBySpeedModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Velocidade angular · modo. Constante, curva pela velocidade, ou sorteio entre dois valores</summary>
+    public RotationBySpeedModeOption RotationBySpeedMode
+    {
+        get => (RotationBySpeedModeOption)Component.GetEnum("rotation_by_speed_mode");
+        set => Component.SetEnum("rotation_by_speed_mode", (uint)value);
+    }
+    /// <summary>Plano 1. O +Y do objeto é a normal; a partícula quica do lado de cima</summary>
+    public ObjectReference CollisionPlane0
+    {
+        get => Component.GetReference("collision_plane_0");
+        set => Component.SetReference("collision_plane_0", value);
+    }
+    /// <summary>Plano 2. Segundo plano (parede, teto)</summary>
+    public ObjectReference CollisionPlane1
+    {
+        get => Component.GetReference("collision_plane_1");
+        set => Component.SetReference("collision_plane_1", value);
+    }
+    /// <summary>Ao nascer. Sistema que emite onde cada partícula nasce</summary>
+    public ObjectReference SubEmitterBirth
+    {
+        get => Component.GetReference("sub_emitter_birth");
+        set => Component.SetReference("sub_emitter_birth", value);
+    }
+    /// <summary>Ao colidir. Sistema que emite no ponto do toque (respingo, faísca)</summary>
+    public ObjectReference SubEmitterCollision
+    {
+        get => Component.GetReference("sub_emitter_collision");
+        set => Component.SetReference("sub_emitter_collision", value);
+    }
+    /// <summary>Ao morrer. Sistema que emite onde cada partícula morre (fogos)</summary>
+    public ObjectReference SubEmitterDeath
+    {
+        get => Component.GetReference("sub_emitter_death");
+        set => Component.SetReference("sub_emitter_death", value);
     }
     /// <summary>Tocar. Inicia ou retoma a simulação e a emissão</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>

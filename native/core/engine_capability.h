@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 54> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 55> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -180,7 +180,7 @@ inline constexpr std::array<EngineCapability, 54> engineCapabilities{{
   // --- Partículas (G5) -----------------------------------------------------
   {"render.particles.simulation", "Simulação de partículas em CPU", CapabilityState::Implemented,
    "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
-   "Main, Emission (taxa e rajadas), Shape (6 formas) e Cor/Tamanho/Rotação ao longo da vida; jobs por sistema, SoA, semente determinística"},
+   "Main, Emission (taxa e rajadas), Shape (6 formas), Velocity/Limit Velocity/Force over Lifetime, Noise (ruído de valor) e Cor/Tamanho/Rotação ao longo da vida; jobs por sistema, SoA, semente determinística"},
   {"render.particles.billboard", "Partículas billboard e esticadas", CapabilityState::Implemented,
    "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert", "Ordenação por sistema e dentro do sistema; desenhadas depois dos transparentes da malha"},
   {"render.particles.material", "Material de partícula mistura/aditivo", CapabilityState::Implemented,
@@ -190,7 +190,11 @@ inline constexpr std::array<EngineCapability, 54> engineCapabilities{{
    "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
   {"render.particles.mesh", "Partícula de malha", CapabilityState::Planned, "renderer/particles/", "Pacote P2"},
   {"render.particles.trails", "Rastros, TrailRenderer e LineRenderer", CapabilityState::Planned, "renderer/particles/", "Pacote P3"},
-  {"render.particles.collision", "Colisão de partículas", CapabilityState::Planned, "renderer/particles/", "Pacote P4"},
+  {"render.particles.collision", "Colisão de partículas com planos", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp",
+   "Modo Planes da Unity: até dois objetos-plano com quique, amortecimento, perda de vida e velocidade mínima; sem colisão com a física da cena (modo World)"},
+  {"render.particles.sub_emitters", "Sub-emissores", CapabilityState::Implemented, "runtime/scene_particles.cpp",
+   "Ao nascer, ao colidir e ao morrer, com quantidade por evento; o sub-sistema usa a própria forma e visual. Sem herdar cor, tamanho ou velocidade"},
   {"render.particles.compute", "Simulação de partículas em compute (níveis A/S)", CapabilityState::Planned, "renderer/particles/", "Pacote P5"},
 
   // --- Animação ------------------------------------------------------------

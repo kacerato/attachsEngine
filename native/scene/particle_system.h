@@ -36,7 +36,7 @@ enum class ParticleCurveMode : u32 { Constant = 0, Curve = 1, TwoConstants = 2, 
 enum class ParticleGradientMode : u32 { Color = 0, Gradient = 1, TwoColors = 2, TwoGradients = 3, RandomColor = 4 };
 enum class ParticleSimulationSpace : u32 { Local = 0, World = 1 };
 enum class ParticleStopAction : u32 { None = 0, Disable = 1, Destroy = 2, Callback = 3 };
-enum class ParticleShapeType : u32 { Sphere = 0, Hemisphere = 1, Cone = 2, Box = 3, Circle = 4, Edge = 5 };
+enum class ParticleShapeType : u32 { Sphere = 0, Hemisphere = 1, Cone = 2, Box = 3, Circle = 4, Edge = 5, Donut = 6, Rectangle = 7 };
 enum class ParticleConeEmitFrom : u32 { Base = 0, Volume = 1 };
 enum class ParticleBoxEmitFrom : u32 { Volume = 0, Shell = 1, Edge = 2 };
 enum class ParticleRenderMode : u32 { Billboard = 0, StretchedBillboard = 1 };
@@ -165,6 +165,7 @@ struct ParticleSystemSettings {
   float shapeAngle = 25;
   float shapeArc = 360;
   float shapeLength = 5;
+  float shapeDonutRadius = 0.2f;  // raio do tubo da Rosca (Unity Donut Radius)
   ParticleConeEmitFrom shapeConeEmitFrom = ParticleConeEmitFrom::Base;
   ParticleBoxEmitFrom shapeBoxEmitFrom = ParticleBoxEmitFrom::Volume;
   float shapeBox[3]{1, 1, 1};
@@ -190,6 +191,76 @@ struct ParticleSystemSettings {
   }();
   bool rotationOverLifetimeEnabled = false;
   ParticleMinMaxCurve rotationOverLifetime = particleCurveDefault(45);
+
+  // --- Movimento ao longo da vida (P2a) ------------------------------------
+  // Velocity over Lifetime: velocidade somada à da partícula (não acumula) e
+  // Speed Modifier, que escala o deslocamento. Espaço próprio, como na Unity.
+  bool velocityOverLifetimeEnabled = false;
+  ParticleMinMaxCurve velocityX = particleCurveDefault(0), velocityY = particleCurveDefault(0), velocityZ = particleCurveDefault(0);
+  ParticleSimulationSpace velocitySpace = ParticleSimulationSpace::Local;
+  ParticleMinMaxCurve speedModifier = particleCurveDefault(1);
+  // Limit Velocity over Lifetime: teto de velocidade com Dampen e Drag.
+  bool limitVelocityEnabled = false;
+  ParticleMinMaxCurve limitSpeed = particleCurveDefault(1);
+  float limitDampen = 1;
+  float limitDrag = 0;
+  // Force over Lifetime: aceleração (m/s²) integrada na velocidade.
+  bool forceOverLifetimeEnabled = false;
+  ParticleMinMaxCurve forceX = particleCurveDefault(0), forceY = particleCurveDefault(0), forceZ = particleCurveDefault(0);
+  ParticleSimulationSpace forceSpace = ParticleSimulationSpace::World;
+  // Noise: turbulência por ruído de valor 3D no espaço da simulação.
+  bool noiseEnabled = false;
+  ParticleMinMaxCurve noiseStrength = particleCurveDefault(1);
+  float noiseFrequency = 0.5f;
+  float noiseScrollSpeed = 0;
+  float noiseOctaves = 1;
+
+  // --- Herança e "pela velocidade" (P2c) ------------------------------------
+  // Inherit Velocity (modo Initial): a partícula nasce com parte da velocidade
+  // do emissor. Rate over Distance fica no módulo Emissão (partículas por metro).
+  bool inheritVelocityEnabled = false;
+  float inheritVelocityMultiplier = 1;
+  float emissionRateOverDistance = 0;
+  // Size/Color/Rotation by Speed: a curva ou o gradiente é lido pela
+  // velocidade da partícula, normalizada entre Mínimo e Máximo da faixa.
+  bool sizeBySpeedEnabled = false;
+  ParticleMinMaxCurve sizeBySpeed = [] {
+    auto value = particleCurveDefault(1);
+    value.mode = ParticleCurveMode::Curve;
+    value.curveMin = value.curveMax = particleLinearCurve(0, 1);
+    return value;
+  }();
+  float sizeBySpeedRange[2]{0, 1};
+  bool colorBySpeedEnabled = false;
+  ParticleMinMaxGradient colorBySpeed = [] {
+    ParticleMinMaxGradient value;
+    value.mode = ParticleGradientMode::Gradient;
+    value.gradientMin = value.gradientMax = particleFadeGradient();
+    return value;
+  }();
+  float colorBySpeedRange[2]{0, 1};
+  bool rotationBySpeedEnabled = false;
+  ParticleMinMaxCurve rotationBySpeed = particleCurveDefault(45);
+  float rotationBySpeedRange[2]{0, 1};
+
+  // --- Colisão (P2b) --------------------------------------------------------
+  // Collision no modo Planes da Unity: até dois objetos-plano (o +Y do objeto é
+  // a normal, a posição dele passa pelo plano). Sem consulta à física: é o que
+  // cabe em milhares de partículas por quadro no celular.
+  bool collisionEnabled = false;
+  u64 collisionPlane0 = 0, collisionPlane1 = 0;
+  float collisionDampen = 0;        // fração da velocidade tangencial perdida no toque
+  float collisionBounce = 1;        // fração da velocidade normal devolvida
+  float collisionLifetimeLoss = 0;  // fração da vida consumida a cada toque
+  float collisionMinKillSpeed = 0;  // abaixo disso depois do toque, morre
+  float collisionRadiusScale = 1;   // raio de colisão = tamanho × escala / 2
+
+  // --- Sub-emissores (P2b) --------------------------------------------------
+  // Sub Emitters da Unity: outro objeto com Sistema de partículas emite onde a
+  // partícula nasce, colide ou morre. A forma e o visual são os do sub-sistema.
+  bool subEmittersEnabled = false;
+  u64 subEmitterBirth = 0, subEmitterCollision = 0, subEmitterDeath = 0;
+  float subEmitterBirthCount = 1, subEmitterCollisionCount = 3, subEmitterDeathCount = 5;
 
   // --- Renderização -------------------------------------------------------
   ParticleRenderMode renderMode = ParticleRenderMode::Billboard;
@@ -260,11 +331,15 @@ template <ParticleMinMaxGradient ParticleSystemSettings::*M> bool particleGradie
 }
 inline bool particleLooping(const ComponentValue &v) { return particleSystem(v).looping; }
 inline bool particleManualSeed(const ComponentValue &v) { return !particleSystem(v).autoRandomSeed; }
-inline bool particleShapeRadius(const ComponentValue &v) { return particleSystem(v).shapeType != ParticleShapeType::Box; }
+inline bool particleShapeRadius(const ComponentValue &v) {
+  const auto t = particleSystem(v).shapeType;
+  return t != ParticleShapeType::Box && t != ParticleShapeType::Rectangle;
+}
 inline bool particleShapeThickness(const ComponentValue &v) {
   const auto t = particleSystem(v).shapeType;
-  return t != ParticleShapeType::Box && t != ParticleShapeType::Edge;
+  return t != ParticleShapeType::Box && t != ParticleShapeType::Edge && t != ParticleShapeType::Rectangle;
 }
+inline bool particleShapeDonut(const ComponentValue &v) { return particleSystem(v).shapeType == ParticleShapeType::Donut; }
 inline bool particleShapeCone(const ComponentValue &v) { return particleSystem(v).shapeType == ParticleShapeType::Cone; }
 inline bool particleShapeConeVolume(const ComponentValue &v) {
   const auto &p = particleSystem(v);
@@ -272,9 +347,12 @@ inline bool particleShapeConeVolume(const ComponentValue &v) {
 }
 inline bool particleShapeArc(const ComponentValue &v) {
   const auto t = particleSystem(v).shapeType;
-  return t == ParticleShapeType::Cone || t == ParticleShapeType::Circle;
+  return t == ParticleShapeType::Cone || t == ParticleShapeType::Circle || t == ParticleShapeType::Donut;
 }
-inline bool particleShapeBox(const ComponentValue &v) { return particleSystem(v).shapeType == ParticleShapeType::Box; }
+inline bool particleShapeBox(const ComponentValue &v) {
+  const auto t = particleSystem(v).shapeType;
+  return t == ParticleShapeType::Box || t == ParticleShapeType::Rectangle;
+}
 inline bool particleStretched(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::StretchedBillboard; }
 inline bool particleNoiseOn(const ComponentValue &v) { return particleSystem(v).materialNoise != ParticleNoise::None; }
 template <usize N> bool particleBurstVisible(const ComponentValue &v) { return particleSystem(v).activeBursts() > N; }
@@ -290,8 +368,8 @@ inline constexpr std::array<ComponentEnumOption, 2> particleLifetimeGradientMode
 inline constexpr std::array<ComponentEnumOption, 2> particleSpaceOptions{{{0, "Local"}, {1, "Mundo"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleStopActionOptions{{
   {0, "Nenhuma"}, {1, "Desativar objeto"}, {2, "Destruir objeto"}, {3, "Evento Parou"}}};
-inline constexpr std::array<ComponentEnumOption, 6> particleShapeOptions{{
-  {0, "Esfera"}, {1, "Hemisfério"}, {2, "Cone"}, {3, "Caixa"}, {4, "Círculo"}, {5, "Aresta"}}};
+inline constexpr std::array<ComponentEnumOption, 8> particleShapeOptions{{
+  {0, "Esfera"}, {1, "Hemisfério"}, {2, "Cone"}, {3, "Caixa"}, {4, "Círculo"}, {5, "Aresta"}, {6, "Rosca"}, {7, "Retângulo"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleConeEmitOptions{{{0, "Base"}, {1, "Volume"}}};
 inline constexpr std::array<ComponentEnumOption, 3> particleBoxEmitOptions{{{0, "Volume"}, {1, "Casca"}, {2, "Arestas"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleRenderModeOptions{{{0, "Billboard"}, {1, "Billboard esticado"}}};
@@ -305,9 +383,40 @@ inline constexpr std::array<ComponentEnumOption, 4> particleNoiseOptions{{
 inline constexpr std::array<ComponentEnumOption, 4> particleMaskOptions{{
   {0, "Nenhuma"}, {1, "Radial"}, {2, "Desvanece para cima"}, {3, "Anel"}}};
 
+inline bool particleCollides(const ComponentValue &v) { return particleSystem(v).collisionEnabled; }
+inline bool particleHasSubEmitters(const ComponentValue &v) { return particleSystem(v).subEmittersEnabled; }
 #include "scene/generated/particle_system_particleSystemNumbers.inc"
 #include "scene/generated/particle_system_particleSystemBooleans.inc"
 #include "scene/generated/particle_system_particleSystemEnums.inc"
+// Planos e sub-sistemas são objetos da cena, com referência persistente
+// remapeada por clone e prefab como qualquer outra.
+inline constexpr std::array<ComponentObjectReference, 5> particleSystemReferences{{
+  {"collision_plane_0", "Plano 1", "", ObjectReferenceScope::Other, "Nenhum",
+   [](const ComponentValue &v) { return particleSystem(v).collisionPlane0; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane0 = id; },
+   {"Colisão", "", "O +Y do objeto é a normal; a partícula quica do lado de cima", particleCollides, nullptr,
+    "render.particles.collision", "renderer/particles/particle_simulation.cpp"}},
+  {"collision_plane_1", "Plano 2", "", ObjectReferenceScope::Other, "Nenhum",
+   [](const ComponentValue &v) { return particleSystem(v).collisionPlane1; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane1 = id; },
+   {"Colisão", "", "Segundo plano (parede, teto)", particleCollides, nullptr,
+    "render.particles.collision", "renderer/particles/particle_simulation.cpp"}},
+  {"sub_emitter_birth", "Ao nascer", "astra.effects.particle_system", ObjectReferenceScope::Other, "Nenhum",
+   [](const ComponentValue &v) { return particleSystem(v).subEmitterBirth; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterBirth = id; },
+   {"Sub-emissores", "", "Sistema que emite onde cada partícula nasce", particleHasSubEmitters, nullptr,
+    "render.particles.sub_emitters", "runtime/scene_particles.cpp"}},
+  {"sub_emitter_collision", "Ao colidir", "astra.effects.particle_system", ObjectReferenceScope::Other, "Nenhum",
+   [](const ComponentValue &v) { return particleSystem(v).subEmitterCollision; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterCollision = id; },
+   {"Sub-emissores", "", "Sistema que emite no ponto do toque (respingo, faísca)", particleHasSubEmitters, nullptr,
+    "render.particles.sub_emitters", "runtime/scene_particles.cpp"}},
+  {"sub_emitter_death", "Ao morrer", "astra.effects.particle_system", ObjectReferenceScope::Other, "Nenhum",
+   [](const ComponentValue &v) { return particleSystem(v).subEmitterDeath; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterDeath = id; },
+   {"Sub-emissores", "", "Sistema que emite onde cada partícula morre (fogos)", particleHasSubEmitters, nullptr,
+    "render.particles.sub_emitters", "runtime/scene_particles.cpp"}},
+}};
 
 inline constexpr std::array<ComponentTriple, 7> particleSystemTriples{{
   {"start_color", "Cor inicial", {"start_color_r", "start_color_g", "start_color_b"}, ComponentTripleKind::LinearColor},
@@ -339,12 +448,12 @@ inline constexpr std::array<ComponentEvent, 1> particleSystemEvents{{
   {"stopped", "Parou", "O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)"}}};
 
 inline const ComponentType ParticleSystem::descriptor{
-  "astra.effects.particle_system", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
-  particleSystemNumbers, particleSystemBooleans, particleSystemEnums, nullptr, false, {}, particleSystemTriples,
+  "astra.effects.particle_system", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
+  particleSystemNumbers, particleSystemBooleans, particleSystemEnums, nullptr, false, particleSystemReferences, particleSystemTriples,
   {}, {}, {}, {}, particleSystemMethods, particleSystemEvents};
 
 inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
-  static constexpr std::array<CurveSlot, 18> slots{{
+  static constexpr std::array<CurveSlot, 40> slots{{
     {"start_delay.min", &ParticleSystem::startDelay, false}, {"start_delay.max", &ParticleSystem::startDelay, true},
     {"start_lifetime.min", &ParticleSystem::startLifetime, false}, {"start_lifetime.max", &ParticleSystem::startLifetime, true},
     {"start_speed.min", &ParticleSystem::startSpeed, false}, {"start_speed.max", &ParticleSystem::startSpeed, true},
@@ -354,13 +463,25 @@ inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
     {"emission_rate.min", &ParticleSystem::emissionRate, false}, {"emission_rate.max", &ParticleSystem::emissionRate, true},
     {"size_over_lifetime.min", &ParticleSystem::sizeOverLifetime, false}, {"size_over_lifetime.max", &ParticleSystem::sizeOverLifetime, true},
     {"rotation_over_lifetime.min", &ParticleSystem::rotationOverLifetime, false}, {"rotation_over_lifetime.max", &ParticleSystem::rotationOverLifetime, true},
+    {"velocity_x.min", &ParticleSystem::velocityX, false}, {"velocity_x.max", &ParticleSystem::velocityX, true},
+    {"velocity_y.min", &ParticleSystem::velocityY, false}, {"velocity_y.max", &ParticleSystem::velocityY, true},
+    {"velocity_z.min", &ParticleSystem::velocityZ, false}, {"velocity_z.max", &ParticleSystem::velocityZ, true},
+    {"speed_modifier.min", &ParticleSystem::speedModifier, false}, {"speed_modifier.max", &ParticleSystem::speedModifier, true},
+    {"limit_speed.min", &ParticleSystem::limitSpeed, false}, {"limit_speed.max", &ParticleSystem::limitSpeed, true},
+    {"force_x.min", &ParticleSystem::forceX, false}, {"force_x.max", &ParticleSystem::forceX, true},
+    {"force_y.min", &ParticleSystem::forceY, false}, {"force_y.max", &ParticleSystem::forceY, true},
+    {"force_z.min", &ParticleSystem::forceZ, false}, {"force_z.max", &ParticleSystem::forceZ, true},
+    {"noise_strength.min", &ParticleSystem::noiseStrength, false}, {"noise_strength.max", &ParticleSystem::noiseStrength, true},
+    {"size_by_speed.min", &ParticleSystem::sizeBySpeed, false}, {"size_by_speed.max", &ParticleSystem::sizeBySpeed, true},
+    {"rotation_by_speed.min", &ParticleSystem::rotationBySpeed, false}, {"rotation_by_speed.max", &ParticleSystem::rotationBySpeed, true},
   }};
   return slots;
 }
 inline std::span<const ParticleSystem::GradientSlot> ParticleSystem::gradientSlots() {
-  static constexpr std::array<GradientSlot, 4> slots{{
+  static constexpr std::array<GradientSlot, 6> slots{{
     {"start_color.min", &ParticleSystem::startColor, false}, {"start_color.max", &ParticleSystem::startColor, true},
     {"color_over_lifetime.min", &ParticleSystem::colorOverLifetime, false}, {"color_over_lifetime.max", &ParticleSystem::colorOverLifetime, true},
+    {"color_by_speed.min", &ParticleSystem::colorBySpeed, false}, {"color_by_speed.max", &ParticleSystem::colorBySpeed, true},
   }};
   return slots;
 }
@@ -391,17 +512,22 @@ inline bool ParticleSystem::valid() const {
   for (const auto &burst : bursts)
     if (burst.countMin != std::floor(burst.countMin) || burst.countMax != std::floor(burst.countMax) || burst.cycles != std::floor(burst.cycles))
       return false;
-  return maxParticles == std::floor(maxParticles) && randomSeed == std::floor(randomSeed) && burstCount == std::floor(burstCount);
+  for (const auto &reference : particleSystemReferences)
+    if (reference.read(*this) > std::numeric_limits<u32>::max()) return false;
+  return maxParticles == std::floor(maxParticles) && randomSeed == std::floor(randomSeed) && burstCount == std::floor(burstCount) &&
+         noiseOctaves == std::floor(noiseOctaves) && subEmitterBirthCount == std::floor(subEmitterBirthCount) &&
+         subEmitterCollisionCount == std::floor(subEmitterCollisionCount) && subEmitterDeathCount == std::floor(subEmitterDeathCount);
 }
 
 // v1: "<n> id valor … <c> id "curva" … <g> id "gradiente" …".
 // Números, booleanos e enumerações saem dos descritores; o leitor aceita
 // qualquer ordem e recusa id desconhecido ou repetido.
 inline void ParticleSystem::write(std::ostream &out) const {
-  out << (descriptor.numbers.size() + descriptor.booleans.size() + descriptor.enums.size());
+  out << (descriptor.numbers.size() + descriptor.booleans.size() + descriptor.enums.size() + descriptor.references.size());
   for (const auto &p : descriptor.numbers) out << ' ' << p.id << ' ' << p.read(*this);
   for (const auto &p : descriptor.booleans) out << ' ' << p.id << ' ' << (p.read(*this) ? 1 : 0);
   for (const auto &p : descriptor.enums) out << ' ' << p.id << ' ' << p.read(*this);
+  for (const auto &p : descriptor.references) out << ' ' << p.id << ' ' << p.read(*this);
   out << ' ' << curveSlots().size();
   for (const auto &slot : curveSlots())
     out << ' ' << slot.id << ' ' << std::quoted(scriptCurveValue(*curve(slot.id)));
@@ -411,7 +537,9 @@ inline void ParticleSystem::write(std::ostream &out) const {
 }
 
 inline bool ParticleSystem::read(std::istream &in, u32 version) {
-  if (version != 1) return false;
+  // v2 (P2a) só acrescenta ids; um arquivo v1 lê os mesmos campos e deixa os
+  // módulos novos desligados no padrão. Versão futura é recusada.
+  if (version < 1 || version > 2) return false;
   ParticleSystem candidate;
   std::vector<std::string> seen;
   const auto fresh = [&](const std::string &id) {
@@ -434,6 +562,11 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
       if (p.id == id) {
         if (value < 0 || value > 1024 || value != std::floor(value)) return false;
         p.write(candidate, static_cast<u32>(value)); applied = true; break;
+      }
+    if (!applied) for (const auto &p : descriptor.references)
+      if (p.id == id) {
+        if (value < 0 || value > 4294967295.0 || value != std::floor(value)) return false;
+        p.write(candidate, static_cast<u64>(value)); applied = true; break;
       }
     if (!applied) return false;
   }

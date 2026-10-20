@@ -81,6 +81,11 @@ private:
   };
   void reconcile(const SceneGraph &graph);
   void distributeBudget();
+  // Planos do módulo Colisão, lidos do grafo a cada quadro (o plano pode andar).
+  void preparePlanes(const SceneGraph &graph, Entry &entry) const;
+  // Sub-emissores: cada evento do quadro faz o sistema referenciado emitir ali.
+  void routeSubEmitters(const SceneGraph &graph);
+  Entry *firstEntryOf(ObjectId object);
 
   std::map<Key, Entry> entries_;
   u64 knownRevision_ = ~u64{0};

@@ -14,8 +14,38 @@ constexpr float kGravity = 9.81f;
 // toda cena salva com semente manual.
 enum Channel : u32 {
   ChannelLifetime = 1, ChannelSpeed, ChannelSize, ChannelRotation, ChannelColor,
-  ChannelSizeOverLifetime, ChannelRotationOverLifetime, ChannelColorOverLifetime, ChannelGravity
+  ChannelSizeOverLifetime, ChannelRotationOverLifetime, ChannelColorOverLifetime, ChannelGravity,
+  ChannelVelocityX, ChannelVelocityY, ChannelVelocityZ, ChannelSpeedModifier, ChannelLimit,
+  ChannelForceX, ChannelForceY, ChannelForceZ, ChannelNoise,
+  ChannelSizeBySpeed, ChannelColorBySpeed, ChannelRotationBySpeed
 };
+// Velocidade normalizada na faixa autoral (Size/Color/Rotation by Speed).
+float speedFraction(float speed, const float (&range)[2]) {
+  const float span = range[1] - range[0];
+  if (!(std::abs(span) > 1e-6f)) return speed >= range[1] ? 1.0f : 0.0f;
+  return std::clamp((speed - range[0]) / span, 0.0f, 1.0f);
+}
+
+// Ruído de valor 3D suave (trilinear com smoothstep). Barato e contínuo:
+// basta para turbulência de partícula.
+float latticeValue(i32 x, i32 y, i32 z, u32 seed) {
+  u32 h = static_cast<u32>(x) * 0x8da6b343U ^ static_cast<u32>(y) * 0xd8163841U ^ static_cast<u32>(z) * 0xcb1ab31fU ^ seed;
+  h ^= h >> 15; h *= 0x2c1b3c6dU; h ^= h >> 12; h *= 0x297a2d39U; h ^= h >> 15;
+  return static_cast<float>(h >> 8) * (2.0f / 16777216.0f) - 1.0f;
+}
+float valueNoise(float x, float y, float z, u32 seed) {
+  const float fx = std::floor(x), fy = std::floor(y), fz = std::floor(z);
+  const auto ix = static_cast<i32>(fx), iy = static_cast<i32>(fy), iz = static_cast<i32>(fz);
+  const auto smooth = [](float t) { return t * t * (3 - 2 * t); };
+  const float tx = smooth(x - fx), ty = smooth(y - fy), tz = smooth(z - fz);
+  float plane[2];
+  for (i32 k = 0; k < 2; ++k) {
+    const float a = latticeValue(ix, iy, iz + k, seed) + (latticeValue(ix + 1, iy, iz + k, seed) - latticeValue(ix, iy, iz + k, seed)) * tx;
+    const float b = latticeValue(ix, iy + 1, iz + k, seed) + (latticeValue(ix + 1, iy + 1, iz + k, seed) - latticeValue(ix, iy + 1, iz + k, seed)) * tx;
+    plane[k] = a + (b - a) * ty;
+  }
+  return plane[0] + (plane[1] - plane[0]) * tz;
+}
 
 void transformPoint(const float (&m)[16], const float (&p)[3], float (&out)[3]) {
   for (u32 k = 0; k < 3; ++k) out[k] = m[12 + k] + m[k] * p[0] + m[4 + k] * p[1] + m[8 + k] * p[2];
@@ -207,6 +237,14 @@ void ParticleEmitter::configure(const scene::ParticleSystemSettings &settings, u
   gravity_.bake(settings.gravityModifier);
   rate_.bake(settings.emissionRate);
   sizeOverLifetime_.bake(settings.sizeOverLifetime);
+  velocity_[0].bake(settings.velocityX); velocity_[1].bake(settings.velocityY); velocity_[2].bake(settings.velocityZ);
+  speedModifier_.bake(settings.speedModifier);
+  limitSpeed_.bake(settings.limitSpeed);
+  force_[0].bake(settings.forceX); force_[1].bake(settings.forceY); force_[2].bake(settings.forceZ);
+  noiseStrength_.bake(settings.noiseStrength);
+  sizeBySpeed_.bake(settings.sizeBySpeed);
+  rotationBySpeed_.bake(settings.rotationBySpeed);
+  colorBySpeed_.bake(settings.colorBySpeed);
   rotationOverLifetime_.bake(settings.rotationOverLifetime);
   startColor_.bake(settings.startColor);
   colorOverLifetime_.bake(settings.colorOverLifetime);
@@ -251,12 +289,14 @@ void ParticleEmitter::pause() {
   if (state_ == State::Playing) state_ = State::Paused;
 }
 void ParticleEmitter::clear() {
-  for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
+  for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &ax_, &ay_, &az_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
     v->clear();
   seed_.clear();
 }
 void ParticleEmitter::restart() {
   clear();
+  hasLastOrigin_ = false;
+  distanceAccumulator_ = 0;
   rng_.seed(baseSeed_);
   state_ = State::Stopped;
   emitting_ = false;
@@ -269,17 +309,89 @@ void ParticleEmitter::emit(u32 count, const float (&world)[16]) {
   if (state_ == State::Stopped && alive()) state_ = State::Playing;
 }
 
+void ParticleEmitter::setCollisionPlanes(const ParticleCollisionPlane *planes, u32 count) {
+  planeCount_ = std::min<u32>(count, 2);
+  for (u32 i = 0; i < planeCount_; ++i) planes_[i] = planes[i];
+}
+
+void ParticleEmitter::record(std::vector<ParticleEvent> &events, u32 i, const float (&world)[16]) {
+  if (events.size() >= kMaximumEvents) return;
+  ParticleEvent event;
+  const float p[3]{px_[i], py_[i], pz_[i]}, v[3]{vx_[i], vy_[i], vz_[i]};
+  if (settings_.simulationSpace == scene::ParticleSimulationSpace::Local) {
+    transformPoint(world, p, event.position);
+    transformVector(world, v, event.velocity);
+  } else {
+    std::copy(p, p + 3, event.position);
+    std::copy(v, v + 3, event.velocity);
+  }
+  events.push_back(event);
+}
+
+// Collision (Planes): a partícula que atravessa o plano volta à superfície
+// (mais o raio), devolve a velocidade normal pelo Quique e perde a tangencial
+// pelo Amortecimento. Os planos chegam em mundo e vão ao espaço da simulação.
+void ParticleEmitter::collide(float dt, const float (&world)[16]) {
+  (void)dt;
+  if (!settings_.collisionEnabled || !planeCount_) return;
+  const bool local = settings_.simulationSpace == scene::ParticleSimulationSpace::Local;
+  float inverse[9]{1, 0, 0, 0, 1, 0, 0, 0, 1};
+  if (local && !inverseLinear(world, inverse)) return;
+  ParticleCollisionPlane planes[2];
+  for (u32 k = 0; k < planeCount_; ++k) {
+    planes[k] = planes_[k];
+    if (!local) continue;
+    // Ponto: inversa afim. Normal: transposta da linear, ou seja (M^-1)^T aplicada à normal.
+    const float d[3]{planes_[k].point[0] - world[12], planes_[k].point[1] - world[13], planes_[k].point[2] - world[14]};
+    for (u32 r = 0; r < 3; ++r) {
+      planes[k].point[r] = inverse[r] * d[0] + inverse[3 + r] * d[1] + inverse[6 + r] * d[2];
+      planes[k].normal[r] = world[r * 4] * planes_[k].normal[0] + world[r * 4 + 1] * planes_[k].normal[1] + world[r * 4 + 2] * planes_[k].normal[2];
+    }
+    const float up[3]{0, 1, 0};
+    normalize3(planes[k].normal, up);
+  }
+  const bool wantsCollisions = settings_.subEmittersEnabled && settings_.subEmitterCollision != 0;
+  const float bounce = std::max(0.0f, settings_.collisionBounce), keepTangent = 1.0f - std::clamp(settings_.collisionDampen, 0.0f, 1.0f);
+  for (u32 i = alive(); i-- > 0;) {
+    bool hit = false;
+    for (u32 k = 0; k < planeCount_; ++k) {
+      const auto &plane = planes[k];
+      const float radius = baseSize_[i] * std::max(0.0f, settings_.collisionRadiusScale) * 0.5f;
+      const float distance = (px_[i] - plane.point[0]) * plane.normal[0] + (py_[i] - plane.point[1]) * plane.normal[1] +
+                             (pz_[i] - plane.point[2]) * plane.normal[2] - radius;
+      const float approach = vx_[i] * plane.normal[0] + vy_[i] * plane.normal[1] + vz_[i] * plane.normal[2];
+      if (distance >= 0 || approach >= 0) continue;
+      // De volta à superfície; normal refletida, tangencial amortecida.
+      px_[i] -= plane.normal[0] * distance; py_[i] -= plane.normal[1] * distance; pz_[i] -= plane.normal[2] * distance;
+      const float nx = plane.normal[0] * approach, ny = plane.normal[1] * approach, nz = plane.normal[2] * approach;
+      vx_[i] = (vx_[i] - nx) * keepTangent - nx * bounce;
+      vy_[i] = (vy_[i] - ny) * keepTangent - ny * bounce;
+      vz_[i] = (vz_[i] - nz) * keepTangent - nz * bounce;
+      hit = true;
+    }
+    if (!hit) continue;
+    if (wantsCollisions) record(collisions_, i, world);
+    age_[i] += lifetime_[i] * std::clamp(settings_.collisionLifetimeLoss, 0.0f, 1.0f);
+    const float speed = std::sqrt(vx_[i] * vx_[i] + vy_[i] * vy_[i] + vz_[i] * vz_[i]);
+    if (age_[i] >= lifetime_[i] || speed < settings_.collisionMinKillSpeed) {
+      if (settings_.subEmittersEnabled && settings_.subEmitterDeath) record(deaths_, i, world);
+      kill(i);
+    }
+  }
+}
+
 void ParticleEmitter::kill(u32 index) {
   const u32 last = alive() - 1;
   if (index != last) {
     px_[index] = px_[last]; py_[index] = py_[last]; pz_[index] = pz_[last];
     vx_[index] = vx_[last]; vy_[index] = vy_[last]; vz_[index] = vz_[last];
+    ax_[index] = ax_[last]; ay_[index] = ay_[last]; az_[index] = az_[last];
     age_[index] = age_[last]; lifetime_[index] = lifetime_[last]; baseSize_[index] = baseSize_[last];
     rotation_[index] = rotation_[last];
     colorR_[index] = colorR_[last]; colorG_[index] = colorG_[last]; colorB_[index] = colorB_[last]; colorA_[index] = colorA_[last];
     seed_[index] = seed_[last];
   }
-  for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
+  for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &ax_, &ay_, &az_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
     v->pop_back();
   seed_.pop_back();
 }
@@ -353,6 +465,22 @@ void ParticleEmitter::sampleShape(Pcg32 &rng, float (&position)[3], float (&dire
     }
     break;
   }
+  case scene::ParticleShapeType::Donut: {
+    // Ponto no anel (plano XY, como o Círculo) e, em volta dele, no tubo; a
+    // direção sai do centro do tubo (Unity Donut).
+    const float theta = rng.unit() * arc, phi = rng.unit() * 2 * kPi;
+    const float inner = 1 - thickness;
+    const float tube = std::max(0.0f, s.shapeDonutRadius) * std::sqrt(lerp(inner * inner, 1.0f, rng.unit()));
+    const float radial[3]{std::cos(theta), std::sin(theta), 0};
+    const float out[3]{radial[0] * std::cos(phi), radial[1] * std::cos(phi), std::sin(phi)};
+    for (u32 k = 0; k < 3; ++k) { position[k] = radial[k] * s.shapeRadius + out[k] * tube; direction[k] = out[k]; }
+    break;
+  }
+  case scene::ParticleShapeType::Rectangle:
+    // Retângulo no plano XY, emitindo para +Z (Unity Rectangle).
+    position[0] = (rng.unit() * 2 - 1) * s.shapeBox[0] * .5f;
+    position[1] = (rng.unit() * 2 - 1) * s.shapeBox[1] * .5f;
+    break;
   case scene::ParticleShapeType::Edge:
     position[0] = (rng.unit() * 2 - 1) * s.shapeRadius;
     direction[0] = 0; direction[1] = 1; direction[2] = 0;
@@ -407,23 +535,40 @@ void ParticleEmitter::spawn(u32 count, const float (&world)[16], float systemNor
     px_.push_back(position[0] + direction[0] * speed * offset);
     py_.push_back(position[1] + direction[1] * speed * offset);
     pz_.push_back(position[2] + direction[2] * speed * offset);
-    vx_.push_back(direction[0] * speed);
-    vy_.push_back(direction[1] * speed);
-    vz_.push_back(direction[2] * speed);
+    float inherited[3]{0, 0, 0};
+    if (settings_.inheritVelocityEnabled) {
+      for (u32 k = 0; k < 3; ++k) inherited[k] = emitterVelocity_[k] * settings_.inheritVelocityMultiplier;
+      if (!worldSpace) {
+        float inverse[9];
+        if (inverseLinear(world, inverse)) {
+          const float w[3]{inherited[0], inherited[1], inherited[2]};
+          for (u32 k = 0; k < 3; ++k) inherited[k] = inverse[k] * w[0] + inverse[3 + k] * w[1] + inverse[6 + k] * w[2];
+        }
+      }
+    }
+    vx_.push_back(direction[0] * speed + inherited[0]);
+    vy_.push_back(direction[1] * speed + inherited[1]);
+    vz_.push_back(direction[2] * speed + inherited[2]);
+    ax_.push_back(0); ay_.push_back(0); az_.push_back(0);
     age_.push_back(std::min(offset, lifetime * .999f));
     lifetime_.push_back(lifetime);
     baseSize_.push_back(std::max(0.0f, startSize_.evaluate(systemNormalized, particleRandom(seed, ChannelSize))));
     rotation_.push_back(startRotation_.evaluate(systemNormalized, particleRandom(seed, ChannelRotation)) * kDegrees);
     colorR_.push_back(color[0]); colorG_.push_back(color[1]); colorB_.push_back(color[2]); colorA_.push_back(color[3]);
     seed_.push_back(seed);
+    if (settings_.subEmittersEnabled && settings_.subEmitterBirth) record(births_, alive() - 1, world);
   }
 }
 
-void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3]) {
+void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]) {
   // Morte primeiro: a lista fica compacta antes de integrar.
+  const bool wantsDeaths = settings_.subEmittersEnabled && settings_.subEmitterDeath != 0;
   for (u32 i = alive(); i-- > 0;) {
     age_[i] += dt;
-    if (age_[i] >= lifetime_[i]) kill(i);
+    if (age_[i] >= lifetime_[i]) {
+      if (wantsDeaths) record(deaths_, i, world);
+      kill(i);
+    }
   }
   const u32 n = alive();
   const float norm = settings_.duration > 0 ? std::clamp(systemTime_ / settings_.duration, 0.0f, 1.0f) : 0;
@@ -435,14 +580,87 @@ void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3]) {
     vy_[i] += gravity[1] * g * dt;
     vz_[i] += gravity[2] * g * dt;
   }
-  for (u32 i = 0; i < n; ++i) {
-    px_[i] += vx_[i] * dt;
-    py_[i] += vy_[i] * dt;
-    pz_[i] += vz_[i] * dt;
+  // Vetores dos módulos levados ao espaço da simulação: o vento de mundo não
+  // gira com um emissor Local, e a velocidade Local gira com o objeto no Mundo.
+  const bool simLocal = settings_.simulationSpace == scene::ParticleSimulationSpace::Local;
+  float inverse[9]{1, 0, 0, 0, 1, 0, 0, 0, 1};
+  const bool invertible = inverseLinear(world, inverse);
+  const auto toSimulation = [&](scene::ParticleSimulationSpace space, float (&v)[3]) {
+    float out[3];
+    if (simLocal && space == scene::ParticleSimulationSpace::World) {
+      if (!invertible) return;
+      for (u32 k = 0; k < 3; ++k) out[k] = inverse[k] * v[0] + inverse[3 + k] * v[1] + inverse[6 + k] * v[2];
+    } else if (!simLocal && space == scene::ParticleSimulationSpace::Local) {
+      transformVector(world, v, out);
+    } else {
+      return;
+    }
+    std::copy(out, out + 3, v);
+  };
+  if (settings_.forceOverLifetimeEnabled)
+    for (u32 i = 0; i < n; ++i) {
+      const float t = age_[i] / lifetime_[i];
+      float f[3]{force_[0].evaluate(t, particleRandom(seed_[i], ChannelForceX)),
+                 force_[1].evaluate(t, particleRandom(seed_[i], ChannelForceY)),
+                 force_[2].evaluate(t, particleRandom(seed_[i], ChannelForceZ))};
+      toSimulation(settings_.forceSpace, f);
+      vx_[i] += f[0] * dt; vy_[i] += f[1] * dt; vz_[i] += f[2] * dt;
+    }
+  if (settings_.limitVelocityEnabled) {
+    // Dampen calibrado em quadros de 30 Hz, como a Unity; independente do passo.
+    const float keep = std::pow(1.0f - std::clamp(settings_.limitDampen, 0.0f, 1.0f), dt * 30.0f);
+    const float drag = std::max(0.0f, 1.0f - settings_.limitDrag * dt);
+    for (u32 i = 0; i < n; ++i) {
+      const float limit = std::max(0.0f, limitSpeed_.evaluate(age_[i] / lifetime_[i], particleRandom(seed_[i], ChannelLimit)));
+      const float speed = std::sqrt(vx_[i] * vx_[i] + vy_[i] * vy_[i] + vz_[i] * vz_[i]);
+      float scale = drag;
+      if (speed > limit && speed > 0) scale *= (limit + (speed - limit) * keep) / speed;
+      vx_[i] *= scale; vy_[i] *= scale; vz_[i] *= scale;
+    }
   }
+  const bool animated = settings_.velocityOverLifetimeEnabled || settings_.noiseEnabled;
+  for (u32 i = 0; i < n; ++i) {
+    float a[3]{0, 0, 0};
+    float speedScale = 1;
+    const float t = age_[i] / lifetime_[i];
+    if (settings_.velocityOverLifetimeEnabled) {
+      a[0] = velocity_[0].evaluate(t, particleRandom(seed_[i], ChannelVelocityX));
+      a[1] = velocity_[1].evaluate(t, particleRandom(seed_[i], ChannelVelocityY));
+      a[2] = velocity_[2].evaluate(t, particleRandom(seed_[i], ChannelVelocityZ));
+      toSimulation(settings_.velocitySpace, a);
+      speedScale = speedModifier_.evaluate(t, particleRandom(seed_[i], ChannelSpeedModifier));
+    }
+    if (settings_.noiseEnabled) {
+      const float strength = noiseStrength_.evaluate(t, particleRandom(seed_[i], ChannelNoise));
+      const float scroll = settings_.noiseScrollSpeed * systemTime_;
+      float frequency = std::max(0.01f, settings_.noiseFrequency), amplitude = 1, total = 0;
+      float sum[3]{0, 0, 0};
+      const auto octaves = static_cast<u32>(std::clamp(settings_.noiseOctaves, 1.0f, 4.0f));
+      for (u32 o = 0; o < octaves; ++o) {
+        const float x = px_[i] * frequency + scroll, y = py_[i] * frequency, z = pz_[i] * frequency - scroll;
+        for (u32 k = 0; k < 3; ++k) sum[k] += amplitude * valueNoise(x, y, z, baseSeed_ + k * 0x9e3779b9U + o * 0x632be5abU);
+        total += amplitude;
+        amplitude *= 0.5f;
+        frequency *= 2.0f;
+      }
+      for (u32 k = 0; k < 3; ++k) a[k] += strength * sum[k] / total;
+    }
+    if (animated) { ax_[i] = a[0]; ay_[i] = a[1]; az_[i] = a[2]; }
+    px_[i] += (vx_[i] + a[0]) * speedScale * dt;
+    py_[i] += (vy_[i] + a[1]) * speedScale * dt;
+    pz_[i] += (vz_[i] + a[2]) * speedScale * dt;
+  }
+  if (settings_.rotationBySpeedEnabled)
+    for (u32 i = 0; i < alive(); ++i) {
+      const float vx = vx_[i] + ax_[i], vy = vy_[i] + ay_[i], vz = vz_[i] + az_[i];
+      const float t = speedFraction(std::sqrt(vx * vx + vy * vy + vz * vz), settings_.rotationBySpeedRange);
+      rotation_[i] += rotationBySpeed_.evaluate(t, particleRandom(seed_[i], ChannelRotationBySpeed)) * kDegrees * dt;
+    }
   if (settings_.rotationOverLifetimeEnabled)
-    for (u32 i = 0; i < n; ++i)
+    for (u32 i = 0; i < alive(); ++i)
       rotation_[i] += rotationOverLifetime_.evaluate(age_[i] / lifetime_[i], particleRandom(seed_[i], ChannelRotationOverLifetime)) * kDegrees * dt;
+  // Por último: a colisão pode matar partículas e encurtar a lista.
+  collide(dt, world);
 }
 
 void ParticleEmitter::simulate(float deltaSeconds, const float (&world)[16]) {
@@ -462,7 +680,27 @@ void ParticleEmitter::simulate(float deltaSeconds, const float (&world)[16]) {
     if (inverseLinear(world, inverse))
       for (u32 k = 0; k < 3; ++k) gravity[k] = inverse[3 + k] * -kGravity;
   }
-  advanceParticles(dt, gravity);
+  // Velocidade do emissor pelo deslocamento do objeto (primeiro quadro: zero).
+  if (hasLastOrigin_) {
+    float travelled = 0;
+    for (u32 k = 0; k < 3; ++k) {
+      const float delta = world[12 + k] - lastOrigin_[k];
+      emitterVelocity_[k] = delta / dt;
+      travelled += delta * delta;
+    }
+    distanceAccumulator_ += std::sqrt(travelled) * std::max(0.0f, settings_.emissionRateOverDistance);
+  } else {
+    emitterVelocity_[0] = emitterVelocity_[1] = emitterVelocity_[2] = 0;
+  }
+  std::copy(world + 12, world + 15, lastOrigin_);
+  hasLastOrigin_ = true;
+  advanceParticles(dt, gravity, world);
+  if (emitting_ && settings_.emissionEnabled && distanceAccumulator_ >= 1) {
+    const auto count = static_cast<u32>(std::min(distanceAccumulator_, 1.0e6f));
+    distanceAccumulator_ -= static_cast<float>(count);
+    const float norm = settings_.duration > 0 ? std::clamp(systemTime_ / settings_.duration, 0.0f, 1.0f) : 0;
+    spawn(count, world, norm, 0);
+  }
 
   float remaining = dt;
   if (emitting_ && delayRemaining_ > 0) {
@@ -562,7 +800,7 @@ void ParticleEmitter::build(const float (&world)[16], const float (&camera)[3], 
     float p[3];
     worldPosition(i, p);
     std::copy(p, p + 3, instance.position);
-    const float lv[3]{vx_[i], vy_[i], vz_[i]};
+    const float lv[3]{vx_[i] + ax_[i], vy_[i] + ay_[i], vz_[i] + az_[i]};
     float v[3];
     if (local) transformVector(world, lv, v);
     else std::copy(lv, lv + 3, v);
@@ -570,6 +808,9 @@ void ParticleEmitter::build(const float (&world)[16], const float (&camera)[3], 
     const float t = age_[i] / lifetime_[i];
     float size = baseSize_[i];
     if (settings_.sizeOverLifetimeEnabled) size *= std::max(0.0f, sizeOverLifetime_.evaluate(t, particleRandom(seed_[i], ChannelSizeOverLifetime)));
+    const float speed = std::sqrt(lv[0] * lv[0] + lv[1] * lv[1] + lv[2] * lv[2]);
+    if (settings_.sizeBySpeedEnabled)
+      size *= std::max(0.0f, sizeBySpeed_.evaluate(speedFraction(speed, settings_.sizeBySpeedRange), particleRandom(seed_[i], ChannelSizeBySpeed)));
     instance.size = size;
     instance.rotation = rotation_[i];
     float color[4]{colorR_[i], colorG_[i], colorB_[i], colorA_[i]};
@@ -577,6 +818,11 @@ void ParticleEmitter::build(const float (&world)[16], const float (&camera)[3], 
       float over[4];
       colorOverLifetime_.evaluate(t, particleRandom(seed_[i], ChannelColorOverLifetime), over);
       for (u32 k = 0; k < 4; ++k) color[k] *= over[k];
+    }
+    if (settings_.colorBySpeedEnabled) {
+      float bySpeed[4];
+      colorBySpeed_.evaluate(speedFraction(speed, settings_.colorBySpeedRange), particleRandom(seed_[i], ChannelColorBySpeed), bySpeed);
+      for (u32 k = 0; k < 4; ++k) color[k] *= bySpeed[k];
     }
     for (u32 k = 0; k < 4; ++k) instance.color[k] = floatToHalf(std::max(0.0f, color[k]));
     instance.random = seed_[i];

@@ -106,6 +106,14 @@ AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.02f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 900.0f, "1800/s × 0,5");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.snow).emissionRate.constantMax == 0.0f, "neve parada na chuva");
+  // Vento padrão das nuvens (20 km/h para +X) × 0,35 inclina a gota pela
+  // Velocidade no tempo em espaço Mundo; a neve é arrastada 1,6× mais.
+  const auto &rainSystem = particlesOf(s.graph, s.rain);
+  AE_EXPECT_TRUE(rainSystem.velocityOverLifetimeEnabled && rainSystem.velocitySpace == scene::ParticleSimulationSpace::World &&
+                 std::abs(rainSystem.velocityX.constantMax - 20.0f / 3.6f * 0.35f) < 1e-4f &&
+                 std::abs(rainSystem.velocityZ.constantMax) < 1e-4f, "vento das nuvens na chuva");
+  AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).velocityX.constantMax - 20.0f / 3.6f * 0.35f * 1.6f) < 1e-4f,
+                 "neve arrastada mais");
   float world[16];
   AE_EXPECT_TRUE(runtime::worldMatrix(s.graph, s.rain, world) && std::abs(world[12] - 3) < 1e-4f &&
                  std::abs(world[13] - 12) < 1e-4f && std::abs(world[14] + 4) < 1e-4f, "chuva 10 m acima da câmera");
