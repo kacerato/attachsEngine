@@ -14,6 +14,7 @@
 //
 // Sem Vulkan, sem Android, sem I/O: testável integralmente no host.
 #pragma once
+#include "editor/editor_terrain_fx_controller.h"
 #include "resources/rig_asset.h"
 #include "resources/terrain_stroke_sampler.h"
 #include "editor/editor_terrain_material.h"
@@ -163,13 +164,26 @@ public:
   bool selectTerrainCatalogMaterial(u32 index);
   TerrainLibraryReader terrainLibraryReader_;
   std::shared_ptr<const TerrainMaterialCache> terrainMaterialCache_;
+  TerrainFxEditorController terrainFxController_;
+  TerrainFxEditToken terrainFxToken_;
+  u32 terrainFxPointer_=0;
+  u64 terrainFxEpoch_=0;
+  double terrainFxLastTime_=0;
+  bool handleTerrainFxInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
+  bool commitTerrainFx(std::shared_ptr<const resources::TerrainFxAsset>,std::shared_ptr<const resources::TerrainFxAsset>,std::string_view);
   bool handleTerrainInput(const ui::UiPointerEvent &,const ui::UiPointerRouting &);
   void refreshTerrainJob();
   void startTerrainJob();
   void queueTerrainPreview();
   void refreshTerrainPreview();
   void clearTerrainPreview(bool restore=true);
-  bool publishTerrainPreview(const resources::TerrainBuild &,std::string &);
+  bool publishTerrainPreview(const resources::TerrainBuild &,std::string &,const resources::TerrainFxField *overrideFx=nullptr);
+  struct TerrainFxLivePreview;
+  std::shared_ptr<TerrainFxLivePreview> terrainFxLivePreview_;
+  double terrainFxLastPreviewTime_=-1e9;
+  std::string terrainPreviewIdentityToken_,terrainPreviewQueuedToken_;
+  std::string terrainPreviewLightToken() const;
+  void refreshTerrainPreviewIdentity(const std::string &);
   struct TerrainPreviewJob;
   std::shared_ptr<TerrainPreviewJob> terrainPreviewJob_;
   std::shared_ptr<const resources::TerrainBuild> terrainPreviewCache_;

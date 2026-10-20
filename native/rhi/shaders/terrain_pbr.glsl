@@ -509,6 +509,7 @@ void terrainPbrApplyModules(inout TerrainPBRResult layer,uint root,uint index,Te
   }
 }
 #include "terrain_snow.glsl"
+#include "terrain_static_fx.glsl"
 TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
   TerrainPBRResult result;result.color=vec4(0);result.normalWorld=worldNormal;result.roughness=1;result.metallic=0;result.occlusion=1;result.emission=vec3(0);result.transmission=vec3(0);result.height=0;result.valid=false;
   if(!aetherHasMaterialExtension()||aetherMaterialRow(14u).z<.5)return result;
@@ -546,11 +547,13 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
   if(sum<1e-8){result.valid=true;result.color=vec4(0,0,0,1);return result;}
   result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.valid=true;
   for(uint i=0u;i<supported;++i){if(terrainSurfaceRows[offset+2u+i*40u].x<.5)continue;float w=amounts[i]/sum;result.color+=layers[i].color*w;result.normalWorld+=layers[i].normalWorld*w;result.roughness+=layers[i].roughness*w;result.metallic+=layers[i].metallic*w;result.occlusion+=layers[i].occlusion*w;result.emission+=layers[i].emission*w;result.height+=layers[i].height*w;}
+  float flowSnowClearing=0.0;
+  if(moduleRoot!=0u)flowSnowClearing=terrainPbrApplyStaticFx(result,moduleRoot,localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),amounts,supported,sum);
   if(moduleRoot!=0u&&terrainSurfaceRows[moduleRoot+1u].w>.5){
     uint snow=uint(terrainSurfaceRows[moduleRoot+1u].w+.5)-1u,controls=uint(terrainSurfaceRows[snow+13u].w+.5);float participation=0.0,porosity=0.0;
     for(uint i=0u;i<supported;++i){float w=amounts[i]/sum;participation+=terrainSurfaceRows[controls+i].x*w;porosity+=terrainSurfaceRows[controls+i].y*w;}
     result.normalWorld=terrainPbrSafeNormal(result.normalWorld,worldNormal);
-    terrainPbrApplySnow(result,snow,terrainSurfaceRows[moduleRoot+2u],localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),participation,porosity);
+    terrainPbrApplySnow(result,snow,terrainSurfaceRows[moduleRoot+2u],localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),participation,porosity,flowSnowClearing);
   }
   float variation=clamp(vUv1.y<0.0?-vUv1.y-1.0:vUv1.y,0.0,1.0);
   result.color.rgb*=1.0+variation*(terrainNoise(vUv0*.11)-.5)*.6;

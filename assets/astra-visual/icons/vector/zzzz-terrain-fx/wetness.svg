@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <title>Umidade</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="43,10 37,19 27,32 21,43 20,53 23,63 30,71 40,75 50,74 59,69 65,60 67,50 64,40 56,27 43,10"/>
+    <polyline points="30,49 30,55 34,61 40,64"/>
+    <polyline points="77,22 71,31 69,38 72,44 78,46 84,42 86,36 83,30 77,22"/>
+    <polyline points="15,84 72,84"/>
+  </g>
+</svg>

@@ -16,7 +16,7 @@ vec4 terrainSnowSample(uint row,uint role,vec3 p,vec3 px,vec3 py,vec3 axes,vec4 
   }
   return value;
 }
-void terrainPbrApplySnow(inout TerrainPBRResult material,uint row,vec4 domain,vec3 localPosition,vec3 worldPosition,vec3 geometricNormal,float participation,float porosity){
+void terrainPbrApplySnow(inout TerrainPBRResult material,uint row,vec4 domain,vec3 localPosition,vec3 worldPosition,vec3 geometricNormal,float participation,float porosity,float flowSnowClearing){
   vec4 header=terrainSurfaceRows[row];uint flags=uint(header.z+.5);bool rich=header.y>1.5;
   vec4 core=terrainSurfaceRows[row+3u],uvScale=terrainSurfaceRows[row+4u],heightAngle=terrainSurfaceRows[row+5u],parameters=terrainSurfaceRows[row+6u];
   vec3 up=terrainPbrSafeNormal(terrainSurfaceRows[row+1u].xyz,vec3(0,1,0));
@@ -44,7 +44,7 @@ void terrainPbrApplySnow(inout TerrainPBRResult material,uint row,vec4 domain,ve
   float d=max(level*.5,dot(material.normalWorld,up));
   float heightFade=clamp((worldPosition.y-heightAngle.x)/max(heightAngle.y-heightAngle.x,.001),0.0,1.0);
   float angle=clamp(max(0.0,(d-heightAngle.z)*6.0)*(1.0-max(0.0,(d-heightAngle.w)*6.0)),0.0,1.0);
-  float fade=clamp(level*heightFade*angle,0.0,1.0);
+  float fade=clamp(level*heightFade*angle-flowSnowClearing,0.0,1.0);
   if((flags&8u)!=0u){vec4 mask=terrainPbrColor(maps+30u,terrainPbrFetchGrad(maps+30u,clamp(maskUv,vec2(0),vec2(1)),maskDx,maskDy,1.0));fade=max(min(fade,mask.r),mask.g);}
   float h=clamp((rich?material.height:0.0)-(1.0-parameters.x),0.0,1.0),e=clamp((rich?material.occlusion:1.0)*parameters.y,0.0,1.0);e*=e;
   float m=clamp(fade-h-e,0.0,1.0),coverage=clamp(m*m*m*clamp(d-(h+e)*.5,0.0,1.0)*8.0,0.0,1.0),normalWeight=coverage*coverage;

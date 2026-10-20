@@ -1935,7 +1935,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
-    if(edit.field>=terrainSnowNumberBase && edit.field<terrainSnowNumberBase+64) {
+    if(edit.field>=terrainSnowNumberBase && edit.field<terrainSnowNumberBase+96) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
       if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(256+edit.field-terrainSnowNumberBase,number)) {
         state_.numericError=true;state_.status=reason.empty()?"Valor de neve fora do limite":reason;return false;

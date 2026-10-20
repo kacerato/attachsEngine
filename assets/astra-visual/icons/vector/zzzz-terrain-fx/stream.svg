@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <title>Correnteza</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="12,21 27,21 37,28 47,30 58,26 69,19 83,19"/>
+    <polyline points="74,10 83,19 74,28"/>
+    <polyline points="12,48 25,48 37,55 49,57 60,53 71,46 84,46"/>
+    <polyline points="75,37 84,46 75,55"/>
+    <polyline points="12,75 25,75 37,82 49,84 60,80 71,73 84,73"/>
+    <polyline points="75,64 84,73 75,82"/>
+  </g>
+</svg>

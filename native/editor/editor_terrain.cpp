@@ -1,4 +1,6 @@
 #include "resources/terrain_surface_texture_refs.h"
+#include "resources/terrain_static_fx_import.h"
+#include "renderer/terrain_static_fx_binding.h"
 #include "core/sha256.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_screen.h"
@@ -25,6 +27,13 @@
 
 namespace ae::editor {
 namespace {
+bool captureTerrainFxFrame(const EditorDocument &document,EditorEntityId target,resources::TerrainFxSlopeFrame &frame) {
+  if(!target)return true;float world[16];if(!editorWorldMatrix(document,target,world))return false;
+  for(u32 axis=0;axis<3;++axis){double length=0;for(u32 k=0;k<3;++k)length+=world[axis*4+k]*world[axis*4+k];
+    if(length<1e-12)return false;for(u32 k=0;k<3;++k)frame.normalToWorld[axis*3+k]=world[axis*4+k]/length;
+    for(u32 other=axis+1;other<3;++other){double dot=0;for(u32 k=0;k<3;++k)dot+=world[axis*4+k]*world[other*4+k];if(std::abs(dot)>1e-4)return false;}}
+  return true;
+}
 std::array<std::vector<u8>, 4> textures() {
   using namespace resources;
   return {{{std::begin(terrainTexture0), std::end(terrainTexture0)},
@@ -35,6 +44,11 @@ std::array<std::vector<u8>, 4> textures() {
 double number(const EditorScreenState &s, u32 i) {
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
+  if(terrainStaticFlowField(i)){
+    if(i==343)return s.terrainDraft.surface.flow.distanceWetnessParams[0]+s.terrainDraft.surface.flow.distanceWetnessParams[2];
+    if(const auto *v=terrainStaticFlowNumber(s.terrainDraft.surface,b.layer,i))return *v;
+  }
+  if(terrainFxField(i)){auto copy=s.terrainFx;if(auto *v=terrainFxNumber(copy,i))return *v;}
   if(terrainSnowNumberAvailable(s,i))return *terrainSnowNumber(r.surface,b.layer,s.terrainMaterialView,i);
   if(i>=128 && i<=154 && (terrainNoiseAvailable(r.surface,b.layer,s.terrainMaterialView) || (i>=149 && i<=151 && s.terrainMaterialView==30 && b.layer<r.surface.layers.size()) || (i>=152 && s.terrainMaterialView==50 && b.layer<r.surface.layers.size())))
     return *terrainNoiseNumber(r.surface,b.layer,s.terrainMaterialView,i);
@@ -436,6 +450,7 @@ bool EditorSession::selectTerrainCatalogMaterial(u32 index) {
   return true;
 }
 struct EditorSession::TerrainJob {
+  resources::TerrainFxLimits fxLimits;resources::TerrainFxSlopeFrame fxFrame;
   resources::TerrainRecipe recipe;
   std::shared_ptr<const resources::TerrainBuild> previous, build;
   resources::GltfImport model;
@@ -450,6 +465,8 @@ struct EditorSession::TerrainJob {
   std::atomic<float> progress{0};
 };
 struct EditorSession::TerrainPreviewJob {
+  std::string lightToken;
+  resources::TerrainFxLimits fxLimits;resources::TerrainFxSlopeFrame fxFrame;
   resources::TerrainRecipe recipe;
   std::shared_ptr<const resources::TerrainBuild> previous;
   std::shared_ptr<resources::TerrainBuild> build =
@@ -464,7 +481,44 @@ struct EditorSession::TerrainPreviewJob {
   bool authoringOnly = false;
   std::atomic<bool> ready{false}, cancel{false};
 };
+struct EditorSession::TerrainFxLivePreview {
+  ImportedLibrary library;
+  const resources::TerrainBuild *build=nullptr;
+  u64 epoch=0,revision=0;EditorEntityId target=0;
+  u32 textureIndex=renderer::InvalidMapTexture;
+};
+std::string EditorSession::terrainPreviewLightToken() const {
+  // Never copies TerrainRecipe/FxAsset or touches seed bytes/checkpoint hex.
+  auto body=resources::terrainRecipeNonFxKey(state_.terrainDraft);
+  std::string key=std::to_string(body.size())+":";key+=body;
+  const auto integer=[&](u64 value){for(u32 i=0;i<8;++i)key.push_back(char(value>>(i*8)));};
+  integer(terrainFxEpoch_);integer(sceneEpoch_);integer(document_.revision());integer(state_.terrainTarget);
+  integer(state_.terrainTab);integer(state_.terrainMaterialView);integer(state_.terrainFx.budgetMiB);integer(terrainFxController_.active());
+  integer(terrainGestureActive_);integer(terrainGestureRevision_);integer(terrainGestureTarget_);integer(terrainGesturePointer_);
+  if(terrainGestureActive_){
+    integer(terrainGestureStrokes_.size());
+    for(const auto &stroke:terrainGestureStrokes_){
+      // Explicit fields, not struct padding or only sample count: equal-length
+      // geometric gesture edits still invalidate and all extensions participate.
+      for(float value:{stroke.x,stroke.y,stroke.z,stroke.radius,stroke.strength,stroke.hardness,
+          stroke.rotation,stroke.aspect,stroke.verticalAspect,stroke.depthAspect,stroke.pitch,stroke.roll,
+          stroke.roundness,stroke.opacity,stroke.surfaceDepth})integer(std::bit_cast<u32>(value));
+      for(u32 value:{u32(stroke.tool),stroke.layer,u32(stroke.shape),stroke.gesture,stroke.filterRadius,
+          u32(stroke.application),u32(stroke.inverted),u32(stroke.restoreGeometry),u32(stroke.restoreWeights),
+          u32(stroke.lockHeight),u32(stroke.dimensionsLinked)})integer(value);
+    }
+  }
+  return key;
+}
+void EditorSession::refreshTerrainPreviewIdentity(const std::string &token) {
+  if(token==terrainPreviewIdentityToken_)return;
+  if(state_.terrainTarget){++state_.terrainFx.previewFullEncodes;state_.terrainFx.recipePending=resources::serializeTerrainRecipe(state_.terrainDraft)!=state_.terrainAppliedRecipe;}
+  else state_.terrainFx.recipePending=true;
+  terrainPreviewIdentityToken_=token;
+}
 void EditorSession::clearTerrainPreview(bool restore) {
+  terrainPreviewIdentityToken_.clear();terrainPreviewQueuedToken_.clear();
+  terrainFxLivePreview_.reset();
   if (terrainPreviewJob_)
     terrainPreviewJob_->cancel = true;
   terrainPreviewJob_.reset();
@@ -491,17 +545,22 @@ void EditorSession::queueTerrainPreview() {
   if (terrainPreviewJob_ || !state_.terrainOpen || state_.terrainBusy ||
       !state_.terrainTarget)
     return;
+  const auto lightToken=terrainPreviewLightToken();
+  if(lightToken==terrainPreviewQueuedToken_)return;
+  refreshTerrainPreviewIdentity(lightToken);
+  const bool authoringOnly=!state_.terrainFx.recipePending && !terrainGestureActive_ && !terrainFxController_.active();
+  terrainPreviewQueuedToken_=lightToken;
+  if(authoringOnly && (state_.terrainPreviewBuild || state_.terrainTab!=4 || state_.terrainDraft.paths.empty()))return;
+  ++state_.terrainFx.previewSnapshotCopies;
   auto recipe = state_.terrainDraft;
   if (terrainGestureActive_)
-    recipe.strokes.insert(recipe.strokes.end(), terrainGestureStrokes_.begin(),
-                          terrainGestureStrokes_.end());
-  const auto key = resources::serializeTerrainRecipe(recipe);
-  const bool authoringOnly = key == state_.terrainAppliedRecipe;
-  if (key == terrainPreviewRecipe_ ||
-      (authoringOnly && (state_.terrainPreviewBuild || state_.terrainTab != 4 ||
-                         recipe.paths.empty())))
-    return;
+    recipe.strokes.insert(recipe.strokes.end(), terrainGestureStrokes_.begin(),terrainGestureStrokes_.end());
+  ++state_.terrainFx.previewFullEncodes;
+  const auto key=resources::serializeTerrainRecipe(recipe);
   auto job = std::make_shared<TerrainPreviewJob>();
+  job->lightToken=lightToken;
+  job->fxLimits=terrainFxLimits(state_.terrainFx);
+  if(!captureTerrainFxFrame(document_,state_.terrainTarget,job->fxFrame)){state_.terrainMessage="Transformação FX inválida";return;}
   job->recipe = std::move(recipe);
   job->key = key;
   job->epoch = sceneEpoch_;
@@ -517,7 +576,7 @@ void EditorSession::queueTerrainPreview() {
   job->catalog = state_.terrainCatalog;
   job->reader = terrainLibraryReader_;
   job->previousMaterial = terrainMaterialCache_;
-  terrainPreviewJob_ = job;
+  terrainPreviewJob_ = job;++state_.terrainFx.previewJobsQueued;
   std::thread([job] {
     if (!job->recipe.surface.layers.empty()) {
       job->material =
@@ -528,20 +587,41 @@ void EditorSession::queueTerrainPreview() {
         return;
       }
     }
-    if (job->authoringOnly) {
+    if (job->authoringOnly && !job->recipe.fx.enabled) {
       job->build->recipe = job->recipe;
       resources::generateTerrainField(
           job->recipe, job->build->field, job->error,
           [job](float) { return !job->cancel.load(); });
     } else
-      resources::updateTerrain(job->recipe, job->previous.get(), *job->build,
-                               job->error,
-                               [job](float) { return !job->cancel.load(); });
+      resources::updateTerrainWithFxFrame(job->recipe, job->previous.get(), *job->build,
+                               job->error,job->fxFrame,
+                               [job](float) { return !job->cancel.load(); },job->fxLimits);
     job->ready.store(true, std::memory_order_release);
   }).detach();
 }
 bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,
-                                          std::string &error) {
+                                          std::string &error,const resources::TerrainFxField *overrideFx) {
+  // Reuse immutable indexed geometry. Only the derived texture and its binding
+  // metadata change between captured FX samples; no mesh/recipe clone here.
+  if(overrideFx && terrainFxLivePreview_ && terrainFxLivePreview_->build==&build &&
+      terrainFxLivePreview_->epoch==sceneEpoch_ && terrainFxLivePreview_->revision==document_.revision() &&
+      terrainFxLivePreview_->target==state_.terrainTarget) {
+    auto &cached=*terrainFxLivePreview_;auto &library=cached.library;
+    renderer::SharedAuthoringTexture texture;renderer::TerrainStaticFxBinding fx;
+    if(!resources::makeTerrainStaticFxTexture(*overrideFx,cached.textureIndex,texture,fx,error,terrainFxLimits(state_.terrainFx)))return false;
+    if(cached.textureIndex>=library.textures.size()){error="Slot da prévia FX mudou";return false;}
+    const auto oldTexture=library.textures[cached.textureIndex];
+    std::vector<std::pair<usize,renderer::TerrainStaticFxBinding>> previous;
+    for(usize i=0;i<library.terrainSurfaces.size();++i)if(library.terrainSurfaces[i].staticFx.textureIndex==cached.textureIndex){
+      previous.emplace_back(i,library.terrainSurfaces[i].staticFx);library.terrainSurfaces[i].staticFx=fx;
+    }
+    const auto rollback=[&]{library.textures[cached.textureIndex]=oldTexture;for(const auto &[i,binding]:previous)library.terrainSurfaces[i].staticFx=binding;};
+    library.textures[cached.textureIndex]=std::move(texture);
+    for(const auto &[i,binding]:previous)if(!renderer::diagnoseStaticTerrainFlowPublication(library.terrainSurfaces[i],error)){rollback();return false;}
+    if(!publishAndAdopt(library,error,nullptr,true)){rollback();return false;}
+    state_.terrainLivePreview=true;++state_.terrainPreviewUpdates;appearanceChanged_=true;return true;
+  }
+  u32 fxTextureIndex=renderer::InvalidMapTexture;
   const auto &mesh = build.mesh;
   const auto source =
       std::find_if(importedSources_.begin(), importedSources_.end(),
@@ -606,6 +686,14 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,
       if (preview.materials[m].flags & renderer::MapMaterialTerrain)
         preview.terrainControls[m] = binding;
   }
+  // Single immutable derived bitmap from Recipe::fx; no second authoring mask.
+  if(build.recipe.fx.enabled || overrideFx) {
+    renderer::SharedAuthoringTexture texture;renderer::TerrainStaticFxBinding fx;
+    fxTextureIndex=u32(preview.textures.size());
+    if(!resources::makeTerrainStaticFxTexture(overrideFx?*overrideFx:build.fxField,u32(preview.textures.size()),texture,fx,error,terrainFxLimits(state_.terrainFx)))return false;
+    preview.textures.push_back(std::move(texture));
+    for(auto &binding:preview.terrainSurfaces){binding.staticFx=fx;if(!renderer::diagnoseStaticTerrainFlowPublication(binding,error))return false;}
+  } else for(auto &binding:preview.terrainSurfaces){binding.staticFx={};if(!renderer::diagnoseStaticTerrainFlowPublication(binding,error))return false;}
   // No file encoding, decoding, asset registry, entity or history mutation.
   struct Vertex {
     float p[3];
@@ -674,6 +762,11 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,
   usize primitives = 0;
   if (!publishAndAdopt(library, error, &primitives, true))
     return false;
+  if(fxTextureIndex!=renderer::InvalidMapTexture){
+    auto cached=std::make_shared<TerrainFxLivePreview>();cached->library=std::move(library);cached->build=&build;
+    cached->epoch=sceneEpoch_;cached->revision=document_.revision();cached->target=state_.terrainTarget;cached->textureIndex=u32(textureBase)+fxTextureIndex;
+    terrainFxLivePreview_=std::move(cached);
+  }
   terrainPreviewFirst_ = u32(primitives + previous);
   terrainPreviewCount_ = u32(mesh.parts.size());
   terrainPreviewEpoch_ = sceneEpoch_;
@@ -683,10 +776,10 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,
   return true;
 }
 void EditorSession::refreshTerrainPreview() {
-  if (!terrainGestureActive_ && !state_.terrainBusy &&
-      (!state_.terrainOpen ||
-       resources::serializeTerrainRecipe(state_.terrainDraft) ==
-           state_.terrainAppliedRecipe)) {
+  if(!state_.terrainOpen){if(terrainPreviewCount_ || terrainPreviewJob_ || terrainPreviewCache_ || state_.terrainPreviewBuild)clearTerrainPreview();return;}
+  const auto lightToken=terrainPreviewLightToken();refreshTerrainPreviewIdentity(lightToken);
+  if (!terrainGestureActive_ && !terrainFxController_.active() && !state_.terrainBusy &&
+      !state_.terrainFx.recipePending) {
     if (terrainPreviewCount_ ||
         (terrainPreviewJob_ && !terrainPreviewJob_->authoringOnly) ||
         !state_.terrainOpen)
@@ -715,18 +808,12 @@ void EditorSession::refreshTerrainPreview() {
   terrainPreviewRecipe_ = job->key;
   if (!job->error.empty())
     state_.terrainMessage = "Prévia: " + job->error;
-  auto current = state_.terrainDraft;
-  if (terrainGestureActive_)
-    current.strokes.insert(current.strokes.end(),
-                           terrainGestureStrokes_.begin(),
-                           terrainGestureStrokes_.end());
-  if (!job->cancel && job->error.empty() &&
-      job->key == resources::serializeTerrainRecipe(current)) {
+  if (!job->cancel && job->error.empty() && job->lightToken==lightToken) {
     std::string error;
     terrainMaterialCache_ = job->material;
     terrainPreviewCache_ = job->build;
     state_.terrainPreviewBuild = job->build;
-    if (!job->authoringOnly && !publishTerrainPreview(*job->build, error))
+    if (!job->authoringOnly && !publishTerrainPreview(*job->build, error,terrainFxController_.active() && terrainFxController_.bitmap()?&terrainFxController_.bitmap()->field:nullptr))
       state_.terrainMessage = "Prévia: " + error;
   }
   queueTerrainPreview();
@@ -797,6 +884,7 @@ EditorEntityId EditorSession::terrainRoot(EditorEntityId target) {
   return 0;
 }
 bool EditorSession::openTerrain(EditorEntityId target) {
+  ++terrainFxEpoch_;terrainPreviewIdentityToken_.clear();terrainPreviewQueuedToken_.clear();
   if (isPlaying() || state_.terrainBusy)
     return false;
   clearTerrainPreview();
@@ -848,7 +936,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
         std::string(restoredFromHistory ? "Receita recuperada do histórico · "
                                           "aplique para reconstruir · "
                                         : "Receita carregada · ") +
-        std::to_string(state_.terrainDraft.strokes.size()) + " operações";
+        std::to_string(state_.terrainDraft.strokes.size()) + " operações geométricas";
   } else {
     state_.terrainDraft = {};
     state_.terrainDraft.controlCells = 128;
@@ -887,6 +975,14 @@ bool EditorSession::openTerrain(EditorEntityId target) {
   state_.contextMenuCreating = false;
   state_.inspectorMenu = false;
   state_.workspace = EditorWorkspace::Scene;
+  // An explicit document open begins at the discoverable painting root.
+  // Retain brush/budget preferences, but never a previous asset's gesture/map.
+  state_.terrainMaterialView = 0;
+  terrainFxController_ = {};
+  terrainFxToken_ = {};
+  state_.terrainFx.mode = 0;
+  state_.terrainFx.cursorVisible = false;
+  state_.terrainFx.bitmap.reset();
   state_.terrainTab = target ? 1u : 0u;
   state_.terrainPage = 0;
   state_.terrainScroll = 0;
@@ -904,6 +1000,22 @@ bool EditorSession::openTerrain(EditorEntityId target) {
   return true;
 }
 bool EditorSession::setTerrainNumber(u32 field, double value) {
+  if(terrainStaticFlowField(field)) {
+    if(!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) || !terrainStaticFlowNumberAvailable(state_,field) || terrainFxController_.active())return false;
+    auto recipe=state_.terrainDraft;auto &distance=recipe.surface.flow.distanceWetnessParams;
+    if(field==342){const double end=double(distance[0])+distance[2];distance[0]=float(value);distance[2]=float(end-distance[0]);if(distance[2]<=0)return false;}
+    else if(field==343){distance[2]=float(value-distance[0]);if(distance[2]<=0)return false;}
+    else {auto *target=terrainStaticFlowNumber(recipe.surface,state_.terrainBrush.layer,field);if(!target)return false;*target=float(value);}
+    std::string error;if(!resources::validTerrainRecipe(recipe,error)){state_.terrainMessage=error;return false;}
+    state_.terrainDraft=std::move(recipe);state_.terrainMessage="Material molhado ajustado · prévia antes de aplicar";queueTerrainPreview();return true;
+  }
+  if(terrainFxField(field)) {
+    if(!state_.terrainOpen || state_.terrainBusy || !terrainFxNumberAvailable(state_,field) || !std::isfinite(value) || terrainFxController_.active())return false;
+    auto next=state_.terrainFx;auto *target=terrainFxNumber(next,field);if(!target)return false;*target=value;
+    resources::TerrainFxAsset probe;auto brush=next.brush;brush.identity=1;brush.gesture=1;probe.strokes.push_back(brush);
+    std::string error;if(!resources::validTerrainFxAsset(probe,error,terrainFxLimits(next))){state_.terrainMessage=error;return false;}
+    state_.terrainFx=std::move(next);return true;
+  }
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
       (field >= 52 && field != 60 && !(field >= 64 && field <= 76) &&
        !(field >= 96 && field <= 110) && !(field >= 128 && field <= 154) && !terrainClusterField(field) && !terrainModuleField(field) && !terrainSnowField(field)))
@@ -1207,6 +1319,7 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
                                    const std::vector<u8> &bytes,
                                    const resources::GltfImport &model,
                                    std::string &error) {
+  if(bytes.size()>resources::TerrainSourceMaximumBytes){error="Terrain source exceeds explicit project persistence byte budget; project unchanged.";return false;}
   if (isPlaying() || history_.isOpen() || files_.rootPath().empty()) {
     error = "Abra um projeto e finalize a edição antes de gerar.";
     return false;
@@ -1304,7 +1417,7 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
       error = "Caminho da revisão inválido.";
       return false;
     }
-    if (!EditorImportTransaction::read(absolute, current, 64u << 20) ||
+    if (!EditorImportTransaction::read(absolute, current,std::size_t(resources::TerrainSourceMaximumBytes)) ||
         Sha256::hex(current) != hash) {
       std::filesystem::path temporary;
       if (!EditorImportTransaction::safePath(
@@ -1453,12 +1566,13 @@ bool EditorSession::publishTerrain(const resources::TerrainRecipe &r,
   terrainSource_ = record->guid;
   state_.terrainDraft = r;
   state_.terrainAppliedRecipe = resources::serializeTerrainRecipe(r);
+  ++terrainFxEpoch_;terrainPreviewIdentityToken_.clear();terrainPreviewQueuedToken_.clear();state_.terrainFx.recipePending=false;
   setSelection(root);
   if (!oldSource.valid())
     frameSelection();
   state_.terrainMessage = std::to_string(mesh.chunks) + " chunks · " +
                           std::to_string(mesh.triangles) + " tris · " +
-                          std::to_string(r.strokes.size()) + " operações";
+                          std::to_string(r.strokes.size()) + " operações geométricas";
   state_.status = "Terreno aplicado · salvar a cena para preservar os objetos";
   error.clear();
   return true;
@@ -1470,9 +1584,11 @@ bool EditorSession::applyTerrain(const resources::TerrainRecipe &r,
       resources::serializeTerrainRecipe(build->recipe) !=
           resources::serializeTerrainRecipe(r)) {
     auto updated = std::make_shared<resources::TerrainBuild>();
-    if (!resources::updateTerrain(
+    resources::TerrainFxSlopeFrame frame;
+    if(!captureTerrainFxFrame(document_,state_.terrainTarget,frame)){error="Transformação FX inválida";return false;}
+    if (!resources::updateTerrainWithFxFrame(
             r, build && !build->mesh.parts.empty() ? build.get() : nullptr,
-            *updated, error))
+            *updated, error,frame,{},terrainFxLimits(state_.terrainFx)))
       return false;
     build = std::move(updated);
   }
@@ -1526,6 +1642,8 @@ void EditorSession::startTerrainJob() {
     return;
   }
   auto job = std::make_shared<TerrainJob>();
+  job->fxLimits=terrainFxLimits(state_.terrainFx);
+  if(!captureTerrainFxFrame(document_,state_.terrainTarget,job->fxFrame)){state_.terrainMessage="Transformação FX inválida";return;}
   job->recipe = state_.terrainDraft;
   if (terrainPreviewCache_ && !terrainPreviewCache_->mesh.parts.empty())
     job->previous = terrainPreviewCache_;
@@ -1566,8 +1684,8 @@ void EditorSession::startTerrainJob() {
       progress(1.f);
     } else {
       auto updated = std::make_shared<resources::TerrainBuild>();
-      if (resources::updateTerrain(job->recipe, job->previous.get(), *updated,
-                                   job->error, progress))
+      if (resources::updateTerrainWithFxFrame(job->recipe, job->previous.get(), *updated,
+                                   job->error,job->fxFrame, progress,job->fxLimits))
         job->build = std::move(updated);
       else if (job->error.empty())
         job->error = "Não foi possível gerar o terreno";
@@ -1704,6 +1822,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (!state_.terrainOpen)
     return false;
+  if(handleTerrainFxInput(event,routing))return true;
   TerrainCatalogContextGuard catalogContext(state_);
   if (routing.tapped && (id == widgetId(EditorWidget::NavigationOrbit) ||
                          id == widgetId(EditorWidget::NavigationPan) ||
@@ -1717,7 +1836,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       id == widgetId(EditorWidget::ToolRotate) ||
       id == widgetId(EditorWidget::ToolScale) ||
       id == widgetId(EditorWidget::ToolSelect))
-    return true;
+    return !(terrainFxView(state_.terrainMaterialView) && state_.terrainFx.mode==2);
   if (!terrainSourceCurrent(document_, state_.terrainTarget, terrainSource_) &&
       ((routing.tapped && (id == widgetId(EditorWidget::TerrainGenerate) ||
                            id == widgetId(EditorWidget::TerrainBrushArm) ||
@@ -2094,7 +2213,8 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
                             " selecionado · arraste ou ajuste XYZ";
     return true;
   }
-  const bool terrainControl = id >= base && id < base + 0x2000;
+  const bool terrainControl = (id >= base && id < base + 0x2000) ||
+      (id >= terrainFxActionBase && id <= terrainFxActionBase + 115);
   if(id>=terrainSnowSliderBase && id<terrainSnowSliderBase+0x300 && !state_.terrainBusy) {
     const auto encoded=id-terrainSnowSliderBase,field=256+encoded%0x100,column=encoded/0x100;
     const auto range=terrainControlRange(state_,field);if(!range.enabled)return true;
@@ -2251,9 +2371,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     } else state_.terrainMessage=error;
     return true;
   }
-  if(id>=terrainSnowNumberBase && id<terrainSnowNumberBase+64) {
+  if(id>=terrainSnowNumberBase && id<terrainSnowNumberBase+96) {
     const auto field=256+id-terrainSnowNumberBase;
-    if(!terrainSnowNumberAvailable(state_,field))return true;
+    if(!terrainStaticFlowNumberAvailable(state_,field) && !terrainFxNumberAvailable(state_,field) && !terrainSnowNumberAvailable(state_,field))return true;
     state_.numericField=id;state_.numericEntity=state_.terrainTarget;state_.numericInstance=0;state_.numericProperty.clear();
     state_.numericCurrent=number(state_,field);std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",state_.numericCurrent);
     state_.numericReplace=true;state_.numericError=false;return true;
@@ -3132,4 +3252,5 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   return true;
 }
+#include "editor/editor_terrain_fx_session.inl"
 } // namespace ae::editor

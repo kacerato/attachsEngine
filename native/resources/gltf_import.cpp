@@ -1,6 +1,10 @@
 #include "resources/gltf_import.h"
 #include "resources/terrain_surface_texture_refs.h"
 #include "resources/terrain_surface_import.h"
+#include "resources/terrain_static_fx_import.h"
+#include "resources/terrain_png_integrity.h"
+#include "renderer/terrain_static_fx_binding.h"
+#include <charconv>
 #include <map>
 #include "resources/shared_decoded_texture.h"
 #include "resources/json_reader.h"
@@ -963,6 +967,7 @@ struct Importer {
     out->terrainSurfaces.resize(count + 1);
     std::unordered_map<i64,u32> controlTextures;
     std::unordered_map<std::string,renderer::TerrainSurfaceBinding> surfaceBindings;
+    std::unordered_map<std::string,renderer::TerrainStaticFxBinding> staticFxBindings;
     out->materialNames.assign(count + 1, std::string());
     uvTransforms.assign(count + 1, {});
     declaresTexture.assign(count + 1, 0);
@@ -1066,7 +1071,7 @@ struct Importer {
               if(!std::isfinite(binding.terrainDomain[d]))return fail("Invalid terrain surface domain.");
             }
             if(binding.terrainDomain[2]<=0 || binding.terrainDomain[3]<=0)return fail("Invalid terrain surface extent.");
-          } else if(serialized.starts_with("AETERRAINSURFACE2")||serialized.starts_with("AETERRAINSURFACE3")) {
+          } else if(serialized.starts_with("AETERRAINSURFACE2")||serialized.starts_with("AETERRAINSURFACE3")||serialized.starts_with("AETERRAINSURFACE4")) {
             return fail("Terrain surface v2 requires its full domain.");
           }
           const auto *images=array(*extras,"surfaceImages");
@@ -1103,6 +1108,51 @@ struct Importer {
             for(auto &texture:decoded){out->textureBytes+=texture->mipChain.size();out->textures.push_back(std::move(texture));out->textureImages.push_back("Terrain surface");}
             surfaceBindings[key]=binding;
           }
+          if(const auto *fx=json->member(*extras,"staticFx")) {
+            if(fx->kind!=Kind::Object || json->number(*fx,"version",0)!=1)return fail("Unsupported static FX snapshot schema.");
+            renderer::TerrainStaticFxBinding snapshot;snapshot.enabled=true;
+            snapshot.rgbaSha256=json->string(*fx,"rgbaSha256");
+            if(!AssetGuid::parse(json->string(*fx,"identity"),snapshot.identity))return fail("Invalid static FX identity.");
+            const auto revision=json->string(*fx,"revision");
+            const auto parsed=std::from_chars(revision.data(),revision.data()+revision.size(),snapshot.revision);
+            if(revision.empty()||parsed.ec!=std::errc{}||parsed.ptr!=revision.data()+revision.size()||!snapshot.revision)
+              return fail("Invalid static FX revision.");
+            const auto width=json->index(*fx,"width"),height=json->index(*fx,"height"),index=json->index(*fx,"index");
+            if(width<1||height<1||width>2048||height>2048||index<0)return fail("Invalid static FX dimensions/index.");
+            snapshot.width=u32(width);snapshot.height=u32(height);
+            const auto *domain=array(*fx,"domain");
+            if(!domain||domain->childCount!=4)return fail("Missing static FX domain.");
+            for(u32 d=0;d<4;++d){const auto *value=json->child(*domain,d);
+              if(!value||value->kind!=Kind::Number||!std::isfinite(value->number))return fail("Invalid static FX domain.");
+              snapshot.domain[d]=float(value->number);
+            }
+            if(snapshot.domain!=binding.terrainDomain)return fail("Static FX must use the full terrain domain.");
+            std::string fxKey=snapshot.identity.text()+":"+snapshot.rgbaSha256+":"+std::string(revision)+":"+std::to_string(index);
+            fxKey+=":"+std::to_string(width)+":"+std::to_string(height);
+            for(float value:snapshot.domain)fxKey+=":"+std::to_string(std::bit_cast<u32>(value));
+            if(const auto cached=staticFxBindings.find(fxKey);cached!=staticFxBindings.end())binding.staticFx=cached->second;
+            else {
+              const auto *textureList=array(root,"textures");
+              if(!textureList||index>=textureList->childCount)return fail("Invalid static FX image index.");
+              const auto &source=*json->child(*textureList,u32(index));std::span<const u8> bytes;
+              if(!imageBytes(root,textureSource(source),bytes)||!validTerrainPng(bytes))return fail("Static FX requires lossless PNG.");
+              u32 w=0,h=0;
+              if(!readImageDimensions(bytes,limits->image,w,h)||w!=snapshot.width||h!=snapshot.height)return fail("Static FX image dimensions mismatch.");
+              const u64 required=u64(w)*h*4;
+              if(out->textureBytes>limits->maximumTextureBytes||required>limits->maximumTextureBytes-out->textureBytes)
+                return fail("Static FX full-resolution snapshot exceeds texture budget.");
+              DecodedImage decoded;std::string error;
+              if(!decodeImageRgba8(bytes,limits->image,decoded,error))return fail(error.c_str());
+              renderer::AuthoringTexture made;made.width=w;made.height=h;made.srgb=false;made.levels=1;
+              made.samplerFlags=renderer::encodeGltfTextureSampler(9729,9729)|renderer::AuthoringTextureNoAnisotropy;
+              made.mipChain=std::move(decoded.rgba);
+              snapshot.textureIndex=u32(out->textures.size());
+              if(!validateTerrainStaticFxTexture(snapshot,made,binding.terrainDomain,error))return fail(error.c_str());
+              out->textureBytes+=required;out->textures.push_back(shareDecodedTexture(std::move(made)));
+              out->textureImages.push_back("Terrain static FX");binding.staticFx=snapshot;staticFxBindings.emplace(std::move(fxKey),std::move(snapshot));
+            }
+          }
+          if(!renderer::diagnoseStaticTerrainFlowPublication(binding,out->diagnostic))return false;
         }
       }
       // Oclusão (R4): o quadro de material não tem um quinto slot de textura.

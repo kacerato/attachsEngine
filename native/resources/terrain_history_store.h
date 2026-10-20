@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include "resources/terrain_persistence_limits.h"
 namespace ae::resources {
 // Single writer per directory; callers synchronize put/recover/collect.
 // Opaque serialized recipes: callers retain revision/undo metadata and live
@@ -11,7 +12,7 @@ namespace ae::resources {
 class TerrainHistoryStore {
 public:
   struct Limits {
-    std::size_t maxBytes = 64 * 1024 * 1024;
+    std::size_t maxBytes = std::size_t(TerrainRecipeMaximumBytes);
     unsigned maxDeltaDepth = 16;
   };
   explicit TerrainHistoryStore(std::filesystem::path directory);

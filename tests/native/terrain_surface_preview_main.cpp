@@ -6,6 +6,7 @@
 #include "editor/editor_terrain_modules_controls.h"
 #include "editor/editor_terrain_catalog_search.h"
 #include "editor/editor_terrain_snow_controls.h"
+#include "editor/editor_terrain_fx_controller.h"
 #include "ui_software_raster.h"
 #include <cstdio>
 #include <cstdlib>
@@ -44,7 +45,7 @@ int main(int argc, char **argv) {
   const std::string_view scenario = argc > 5 ? argv[5] : "lod";
   if (scenario != "lod") {
     if (scenario != "library" && scenario != "layer" && scenario != "maps" &&
-        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off" && scenario!="catalog-search" && scenario!="catalog-empty" && scenario!="map-source" && scenario!="noise-search" && scenario!="global-search" && !scenario.starts_with("snow-") && scenario!="quality" && scenario!="pbr-normal-source" && scenario!="geo-normal-source" && scenario!="global-normal-source" && scenario!="normal-noise-source" && scenario!="variant-normal-source" && scenario!="anti-normal-source")
+        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off" && scenario!="catalog-search" && scenario!="catalog-empty" && scenario!="map-source" && scenario!="noise-search" && scenario!="global-search" && !scenario.starts_with("snow-") && !scenario.starts_with("fx-") && scenario!="quality" && scenario!="pbr-normal-source" && scenario!="geo-normal-source" && scenario!="global-normal-source" && scenario!="normal-noise-source" && scenario!="variant-normal-source" && scenario!="anti-normal-source")
       return 2;
     state.terrainTab = 2;
     state.terrainMaterialView = (scenario == "library" || scenario=="catalog-search" || scenario=="catalog-empty") ? 1u
@@ -153,6 +154,24 @@ int main(int argc, char **argv) {
     if(scenario=="noise-search" || scenario=="global-search")state.terrainCatalogQuery=catalog->textures.back().identity.text();
     // Preview fixtures construct the state directly. Mirror a fresh picker
     // entry, while routed tests separately verify saved-context overrides.
+    if(scenario.starts_with("fx-")) {
+      state.terrainMaterialView=scenario=="fx-mode"?306:scenario=="fx-channel"?307:scenario=="fx-brush"?301:scenario=="fx-filter"?302:scenario=="fx-budget"?303:300;
+      state.terrainFx.mode=scenario=="fx-paint"?1:0;
+      if(scenario=="fx-budget")state.terrainFx.resolution=2048;
+      if(scenario!="fx-empty" && scenario!="fx-budget") {
+        resources::TerrainFxAsset fx;fx.enabled=true;fx.width=fx.height=64;const double size=state.terrainDraft.size;fx.domain={-size*.5,-size*.5,size,size};
+        resources::TerrainFxStroke stroke;stroke.identity=1;stroke.gesture=1;stroke.target=.8;stroke.sampleSeconds=.2;stroke.radiusMeters=size*.25;fx.strokes.push_back(stroke);
+        std::string error;std::shared_ptr<const editor::TerrainFxEditorBitmap> bitmap;
+        if(!editor::TerrainFxEditorController::prepareBitmap(fx,{},nullptr,bitmap,error))return 4;
+        state.terrainDraft.fx=std::move(fx);state.terrainFx.bitmap=std::move(bitmap);
+      }
+    }
+    if(scenario=="fx-wetness" || scenario=="fx-wetness-empty" || scenario=="fx-wet-height" || scenario=="fx-wet-distance" || scenario=="fx-porosity" || scenario=="fx-puddle") {
+      state.terrainMaterialView=scenario=="fx-wet-height"?311:scenario=="fx-wet-distance"?312:scenario=="fx-porosity"?313:scenario=="fx-puddle"?320:310;
+      auto &flow=state.terrainDraft.surface.flow;
+      if(scenario=="fx-wetness-empty"){state.terrainDraft.fx={};state.terrainFx.bitmap.reset();}
+      else {flow.wetness=true;flow.puddles=scenario=="fx-puddle";flow.heightWetness=scenario=="fx-wet-height";flow.distanceWetness=scenario=="fx-wet-distance";flow.perTexPorosity=scenario=="fx-porosity";}
+    }
     if(editor::terrainCatalogSearchView(state.terrainMaterialView))state.terrainCatalogRoleFilter=editor::terrainCatalogDefaultRole(state.terrainMaterialView,state.terrainMapRole);
     state.terrainMessage = "Materiais originais · confira a prévia e aplique";
   }
@@ -182,9 +201,9 @@ int main(int argc, char **argv) {
         !reachable.contains(base + 60))
       return 4;
   } else {
-    const bool compactModule=panel.height<400 && state.terrainMaterialView!=0;
+    const bool compactModule=(panel.height<400 || editor::terrainFxView(state.terrainMaterialView)) && state.terrainMaterialView!=0;
     if(compactModule) {
-      for(u32 action:{61u,62u,63u}) if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action)))) return 4;
+      for(u32 action:(scenario.starts_with("fx-")?std::vector<u32>{61}:std::vector<u32>{61,62,63})) if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action)))) return 4;
     } else if (!reachable.contains(
             editor::widgetId(editor::EditorWidget::TerrainMaterialLibrary)) ||
         !reachable.contains(
@@ -270,6 +289,27 @@ int main(int argc, char **argv) {
   if(scenario=="global-saom-maps")for(u32 field:{222u,223u,224u})if(!requireField(field))return 4;
   if(scenario=="geo-curve-empty" && !reachable.contains(editor::widgetId(editor::terrainModuleAction(42)))) return 4;
   if(scenario=="geo-fontes")for(u32 action:{1u,2u,3u,4u,9u,10u,11u})if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action))))return 4;
+  if(scenario.starts_with("fx-")) {
+    if(!editor::terrainStaticFlowView(state.terrainMaterialView)){
+      if(panel.height<400){if(!reachable.contains(editor::terrainFxActionBase+24) || !reachable.contains(editor::terrainFxActionBase+25))return 4;}
+      else if(!reachable.contains(editor::terrainFxActionBase+1) || !reachable.contains(editor::terrainFxActionBase+2) || !reachable.contains(editor::terrainFxActionBase+3))return 4;
+    }
+    if(scenario=="fx-empty" || scenario=="fx-paint") {
+      state.terrainScroll=0;render();const auto content=editor::terrainContentRect(state,panel);bool first=false;
+      for(float y=content.y;y<content.bottom();y+=4)for(float x=content.x;x<content.right();x+=4)if(router.hitTest({x,y}).widgetId==editor::terrainSnowSliderBase+64+0x100)first=true;
+      if(!first || state.terrainFx.canvas.y<content.y || state.terrainFx.canvas.bottom()>content.bottom())return 4;
+    }
+  }
+  if(editor::terrainStaticFlowView(state.terrainMaterialView)){
+    const auto view=state.terrainMaterialView;
+    for(u32 field=336;field<=349;++field)if(editor::terrainStaticFlowNumberAvailable(state,field) && !reachable.contains(editor::terrainSnowNumberBase+field-256))return 4;
+    if(scenario=="fx-wetness-empty" && reachable.contains(editor::terrainFxActionBase+110))return 4;
+    if(view==310 || view==320){state.terrainScroll=0;render();const auto content=editor::terrainContentRect(state,panel);bool first=false;
+      const auto slider=editor::terrainSnowSliderBase+(view==310?336:346)-256+0x100;
+      for(float y=content.y;y<content.bottom();y+=4)for(float x=content.x;x<content.right();x+=4)if(router.hitTest({x,y}).widgetId==slider)first=true;
+      if(!first)return 4;
+    }
+  }
   state.terrainScroll = argc > 4 ? std::strtof(argv[4], nullptr) : 0;
   render();
   std::vector<ui::UiInstance> instances;

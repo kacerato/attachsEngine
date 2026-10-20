@@ -586,8 +586,8 @@ int main(int argc, char **argv) {
     qi.queryType=VK_QUERY_TYPE_TIMESTAMP;qi.queryCount=2;
     check(vkCreateQueryPool(f.device,&qi,nullptr,&timestamps),"create GPU timestamp queries");
   }
-  std::array<std::vector<uint8_t>,238> modePixels;
-  for (uint32_t mode = 0; mode < 238; ++mode) {
+  std::array<std::vector<uint8_t>,252> modePixels;
+  for (uint32_t mode = 0; mode < 252; ++mode) {
     if(mode==189&&argc!=3)continue;
     if (mode == 29 || mode==50) {
       auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -874,7 +874,7 @@ int main(int argc, char **argv) {
         }
         if(mode==188){geo.rangeEnabled=true;geo.range={0,0,1,1};}
       }
-      if(mode>=199){
+      if(mode>=199&&mode<238){
         binding.surface.geo.mode=TerrainGeoMode::Off;
         mapSlot(layer.maps[0],3,TerrainSurfaceChannel::RGB);mapSlot(layer.maps[1],5,TerrainSurfaceChannel::NormalRGB);
         layer.maps[4].factor=0;layer.maps[5].factor=0;layer.maps[6].factor=0;mapSlot(layer.maps[2],3,TerrainSurfaceChannel::R);layer.maps[2].factor=0;
@@ -907,6 +907,18 @@ int main(int argc, char **argv) {
         if(mode==235){s.amount=.1f;s.heightAngleRange={0,.0001f,0,1};}
         if(mode==236||mode==237){mapSlot(s.normal,6,mode==236?TerrainSurfaceChannel::NormalRGB:TerrainSurfaceChannel::NormalRG);s.normal.factor=1;}
       }
+      if(mode>=238){
+        for(auto &map:layer.maps){map.texture={};map.factor=1;map.invert=false;map.remapMin=0;map.remapMax=1;}
+        layer.maps[0].colorFactor={1,1,1,1};layer.maps[2].factor=mode==245?.35f:0;layer.maps[3].factor=.25f;layer.maps[4].factor=.8f;layer.maps[5].factor=0;layer.maps[6].factor=0;
+        layer.snowPorosity=.15f;auto &flow=binding.surface.flow;flow.wetness=mode!=240&&mode!=241&&mode!=245;flow.puddles=!flow.wetness;flow.puddleParams={1,1,0,0};flow.globalPorosity=.6f;
+        auto &fx=binding.staticFx;fx.enabled=true;fx.textureIndex=12;fx.width=fx.height=1;fx.domain=binding.terrainDomain;fx.identity={71,2};fx.revision=1;fx.rgbaSha256=std::string(64,'a');
+        if(mode==242){flow.heightWetness=true;flow.heightWetnessParams={.75f,1,0,0};}
+        if(mode==243){flow.distanceWetness=true;flow.distanceWetnessParams={0,.5f,1000000,.5f};}
+        if(mode>=250){fx.textureIndex=11;fx.width=fx.height=65;}
+        if(mode==244)flow.perTexPorosity=true;
+        if(mode==246)flow.wetnessParams={.5f,.6f,0,0};
+        if(mode==247||mode==249){auto &snow=binding.surface.snow;snow.mode=TerrainSnowMode::Simple;snow.amount=.5f;snow.parameters={0,0,1,0};snow.heightAngleRange={-100,-50,0,1};mapSlot(snow.diffuse,0,TerrainSurfaceChannel::RGB);mapSlot(snow.height,3,TerrainSurfaceChannel::A);snow.height.factor=0;mapSlot(snow.normal,7,TerrainSurfaceChannel::NormalGA);snow.normal.factor=0;mapSlot(snow.smoothness,3,TerrainSurfaceChannel::R);snow.smoothness.factor=0;mapSlot(snow.ao,3,TerrainSurfaceChannel::R);if(mode==247)flow.wetnessMaskSnow=true;}
+      }
       binding.surface.layers.push_back(layer);
       if (mode == 13 || mode == 15) {
         auto second = layer;
@@ -935,7 +947,7 @@ int main(int argc, char **argv) {
         for(const auto &ref:terrainSurfaceTextureRefs(binding.surface))
           binding.textures.push_back({ref.identity,ref.linear,ref.normal,ref.clampSampling?(ref.identity.low==9?11u:12u):uint32_t(ref.identity.low-1),ref.normalChannel,ref.residencyCap,ref.clampSampling});
       }
-      std::array<ae::u32, 13> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,mode>=233?13u:11u,12};
+      std::array<ae::u32, 13> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,mode>=250?11u:mode>=233?13u:11u,12};
       std::vector<float> published;
       ae::u32 offset = 0;
       std::string error;
@@ -948,7 +960,7 @@ int main(int argc, char **argv) {
       require(
           appendTerrainSurfaceTable(binding, slots, published, offset, error),
           error.c_str());
-      if(mode==48||mode==110||mode==181||mode==218){
+      if(mode==48||mode==110||mode==181||mode==218||mode==248){
         require(relocateTerrainSurfaceTable(published,3,error),error.c_str());
         published.insert(published.begin(),12,0.f);offset+=3;
       }
@@ -1018,6 +1030,15 @@ int main(int argc, char **argv) {
     require(bool(evidence), "write real GPU evidence PPM");
     evidence.flush();
     modePixels[mode].assign(rgba,rgba+width*height*4);
+    if(mode>=238){
+      const auto byte=[](double value){return uint8_t(std::lround(std::clamp(value,0.0,1.0)*255));};
+      double amount=mode==240||mode==241?.4:mode==242?.75:mode==243?.1:mode==245?.05:mode==246?.5:mode==250?0:mode==251?1:.2;
+      double dark=mode==244?.2:.6,color=1-(1-dark)*amount*amount;
+      if(mode==239||mode==241)expectPixel(16,{byte(.8+(.08-.8)*amount*amount),0,byte(.25+.75*amount),255},"StaticFX real R/G bytes alter roughness and AO independently");
+      else if(mode==249){double snow=.216;expectPixel(16,{byte(color*(1-snow)+snow),byte(color*(1-snow)),byte(color*(1-snow)),255},"StaticFX clearing precedes real Snow cubic coverage");}
+      else expectPixel(16,{byte(color),byte(color),byte(color),255},"StaticFX snapshot, height/distance, per-layer porosity, minmax, maskSnow and relocation");
+      continue;
+    }
     if(mode>=199){
       if(mode==199||mode==203||mode==204||mode==206||mode==217)expectPixel(16,{255,255,255,255},"Snow off/clearing/participation/height or zero level preserves base");
       else if(mode==200||mode==205||mode==207)expectPixel(16,{255,223,223,255},"Snow source cubic coverage is one eighth");

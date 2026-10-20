@@ -3,6 +3,10 @@
 #include "resources/terrain_png_integrity.h"
 #include "resources/terrain_vertex_index.h"
 #include "resources/shared_decoded_texture.h"
+#include "resources/terrain_text_reader.h"
+#include "resources/terrain_static_fx_import.h"
+#include "renderer/terrain_static_fx_binding.h"
+#include <charconv>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -14,6 +18,32 @@
 
 namespace ae::resources {
 namespace {
+void writeTerrainRecipeJsonString(std::ostream &s,std::string_view value){
+  constexpr char digits[]="0123456789abcdef";s<<'"';
+  for(unsigned char c:value){if(c=='"'||c=='\\')s<<'\\'<<char(c);else if(c<32)s<<"\\u00"<<digits[c>>4]<<digits[c&15];else s<<char(c);}s<<'"';
+}
+bool readTerrainRecipeJsonString(std::string_view json,usize offset,std::string &out){
+  if(offset>=json.size()||json[offset++]!='"')return false;std::string result;
+  const auto digit=[](char c){return c>='0'&&c<='9'?c-'0':c>='a'&&c<='f'?c-'a'+10:c>='A'&&c<='F'?c-'A'+10:-1;};
+  const auto unit=[&](u32 &v){if(json.size()-offset<4)return false;v=0;for(u32 i=0;i<4;++i){int x=digit(json[offset++]);if(x<0)return false;v=(v<<4)|u32(x);}return true;};
+  while(offset<json.size()){
+    unsigned char c=json[offset++];if(c=='"'){out=std::move(result);return true;}if(c<32)return false;
+    if(c!='\\')result.push_back(char(c));else{
+      if(offset>=json.size())return false;char escape=json[offset++];
+      if(escape=='"'||escape=='\\'||escape=='/')result.push_back(escape);
+      else if(escape=='b')result.push_back('\b');else if(escape=='f')result.push_back('\f');else if(escape=='n')result.push_back('\n');else if(escape=='r')result.push_back('\r');else if(escape=='t')result.push_back('\t');
+      else if(escape=='u'){u32 code=0;if(!unit(code))return false;
+        if(code>=0xd800&&code<=0xdbff){if(json.size()-offset<2||json[offset++]!='\\'||json[offset++]!='u')return false;u32 low=0;if(!unit(low)||low<0xdc00||low>0xdfff)return false;code=0x10000+((code-0xd800)<<10)+(low-0xdc00);}
+        else if(code>=0xdc00&&code<=0xdfff)return false;
+        if(code<0x80)result.push_back(char(code));else if(code<0x800){result.push_back(char(0xc0|(code>>6)));result.push_back(char(0x80|(code&63)));}
+        else if(code<0x10000){result.push_back(char(0xe0|(code>>12)));result.push_back(char(0x80|((code>>6)&63)));result.push_back(char(0x80|(code&63)));}
+        else{result.push_back(char(0xf0|(code>>18)));result.push_back(char(0x80|((code>>12)&63)));result.push_back(char(0x80|((code>>6)&63)));result.push_back(char(0x80|(code&63)));}
+      }else return false;
+    }
+    if(result.size()>TerrainRecipeMaximumBytes)return false;
+  }
+  return false;
+}
 struct V {
   float x, y, z;
   V operator+(V b) const { return {x + b.x, y + b.y, z + b.z}; }
@@ -267,13 +297,18 @@ bool validTerrainRecipe(const TerrainRecipe &r, std::string &error) {
     }
   }
   if(!r.surface.layers.empty() && !validTerrainSurface(r.surface,error))return false;
+  if(!validTerrainFxAsset(r.fx,error))return false;
+  const bool authoredFx=r.fx.enabled||!r.fx.seedPixels.empty()||!r.fx.strokes.empty();
+  if(authoredFx&&(r.mode!=TerrainMode::Heightfield||r.fx.domain!=TerrainFxDomain{-double(r.size)*.5,-double(r.size)*.5,double(r.size),double(r.size)})){
+    error="FX authoring requires heightfield and matching full terrain domain; explicit rebase required after size changes.";return false;
+  }
   error.clear();
   return true;
 }
-std::string serializeTerrainRecipe(const TerrainRecipe &r) {
+static std::string serializeTerrainRecipeImpl(const TerrainRecipe &r,bool includeFx) {
   std::ostringstream s;
   s.imbue(std::locale::classic());
-  s << std::setprecision(9) << "AETERRAIN8 " << u32(r.mode) << ' ' << r.seed
+  s << std::setprecision(9) << "AETERRAIN9 " << u32(r.mode) << ' ' << r.seed
     << ' ' << r.cells << ' ' << r.verticalCells << ' ' << r.octaves << ' '
     << r.size << ' ' << r.height << ' ' << r.base << ' ' << r.frequency << ' '
     << r.textureScale << ' ' << r.island << ' ' << r.collision << ' '
@@ -303,28 +338,41 @@ std::string serializeTerrainRecipe(const TerrainRecipe &r) {
   std::string surface,error;
   if(!r.surface.layers.empty() && !serializeTerrainSurface(r.surface,surface,error))return {};
   s << ' ' << (surface.empty()?"-":terrainSurfaceHex(surface));
-  return s.str();
+  if(!includeFx)return std::move(s).str();
+  if((r.fx.enabled||!r.fx.seedPixels.empty()||!r.fx.strokes.empty())&&
+    (r.mode!=TerrainMode::Heightfield||r.fx.domain!=TerrainFxDomain{-double(r.size)*.5,-double(r.size)*.5,double(r.size),double(r.size)}))return {};
+  std::string fx;if(!serializeTerrainFxAsset(r.fx,fx,error))return {};
+  // Length-prefixed raw FX, not surface hex: 2048² seed remains32 MiB text,
+  // rather than doubling again or hitting the surface's2 MiB helper limit.
+  s<<" 1 "<<fx.size()<<' '<<fx;
+  if(s.tellp()<0||u64(s.tellp())>TerrainRecipeMaximumBytes)return {};
+  return std::move(s).str();
 }
+std::string serializeTerrainRecipe(const TerrainRecipe &r){return serializeTerrainRecipeImpl(r,true);}
+std::string terrainRecipeNonFxKey(const TerrainRecipe &recipe){return serializeTerrainRecipeImpl(recipe,false);}
 bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
                               std::string &error) {
   // 64 paths with 1024 full-precision points plus 4096 brush samples.
-  if (text.size() > 8 * 1048576) {
+  if (text.size() > TerrainRecipeMaximumBytes||text.find('\0')!=std::string_view::npos) {
     error = "Receita muito grande.";
     return false;
   }
-  std::istringstream s{std::string(text)};
+  terrain_detail::TextBuffer buffer(text);std::istream s(&buffer);
   s.imbue(std::locale::classic());
   std::string magic;
   TerrainRecipe r;
   u32 mode = 0, count = 0;
-  if (!(s >> magic >> mode >> r.seed >> r.cells >> r.verticalCells >>
+  if(!(s>>magic)||!magic.starts_with("AETERRAIN")){error="Receita de terreno inválida.";return false;}
+  const auto suffix=std::string_view(magic).substr(9);u32 version=0;
+  const auto parsed=std::from_chars(suffix.data(),suffix.data()+suffix.size(),version);
+  if(suffix.empty()||suffix.front()=='0'||parsed.ec!=std::errc{}||parsed.ptr!=suffix.data()+suffix.size()||version<1||version>9){error="Unsupported terrain recipe version.";return false;}
+  if(version<9&&text.size()>TerrainRecipeLegacyMaximumBytes){error="Legacy terrain recipe exceeds8 MiB budget.";return false;}
+  if (!(s >> mode >> r.seed >> r.cells >> r.verticalCells >>
         r.octaves >> r.size >> r.height >> r.base >> r.frequency >>
-        r.textureScale >> r.island >> r.collision) ||
-      (magic.size()!=10 || magic.substr(0,9)!="AETERRAIN" || magic[9]<'1' || magic[9]>'8')) {
+        r.textureScale >> r.island >> r.collision)) {
     error = "Receita de terreno inválida.";
     return false;
   }
-  const u32 version=u32(magic[9]-'0');
   r.blendedSurface = false;
   if ((version>=2 && !(s >> r.solidBase >> r.baseDepth)) ||
       (version>=3 && !(s >> r.blendedSurface >> r.macroVariation)) ||
@@ -379,6 +427,16 @@ bool deserializeTerrainRecipe(std::string_view text, TerrainRecipe &out,
     if(!(s>>token))return false;
     if(token!="-" && (!terrainSurfaceUnhex(token,surface) || !deserializeTerrainSurface(surface,r.surface,error)))return false;
   }
+  if(version>=9){u32 extensionVersion=0;u64 bytes=0;
+    s>>std::ws;bool header=s.peek()>='0'&&s.peek()<='9';header=header&&bool(s>>extensionVersion);s>>std::ws;
+    header=header&&s.peek()>='0'&&s.peek()<='9';header=header&&bool(s>>bytes);
+    if(!header||extensionVersion!=1||bytes>TerrainFxLimits{}.maximumMetadataBytes||s.get()!=' '||bytes>buffer.remaining()){
+      error="Invalid/truncated FX recipe extension or explicit metadata budget exceeded.";return false;
+    }
+    const auto payload=text.substr(buffer.offset(),usize(bytes));
+    if(!deserializeTerrainFxAsset(payload,r.fx,error))return false;
+    s.ignore(std::streamsize(bytes));if(!s){error="Truncated FX recipe extension.";return false;}
+  }
   s >> std::ws;
   if (!s.eof()) {
     error = "Dados extras na receita.";
@@ -402,6 +460,29 @@ float terrainFieldHeight(const TerrainField &field,float x,float z) {
   const u32 ix=std::min(u32(gx),field.width-2),iz=std::min(u32(gz),field.depth-2);
   const auto at=[&](u32 a,u32 b){return field.heights[usize(b)*field.width+a];};
   return std::lerp(std::lerp(at(ix,iz),at(ix+1,iz),gx-ix),std::lerp(at(ix,iz+1),at(ix+1,iz+1),gx-ix),gz-iz);
+}
+bool makeTerrainFxSlopeField(const TerrainField &field,const TerrainFxAsset &fx,const TerrainFxSlopeFrame &frame,
+    std::vector<float> &out,std::string &error){
+  if(!validTerrainFxAsset(fx,error))return false;
+  if(field.height!=1||field.width<2||field.depth<2||!std::isfinite(field.step)||field.step<=0||field.heights.size()!=usize(field.width)*field.depth){error="FX slope requires a complete heightfield.";return false;}
+  for(float h:field.heights)if(!std::isfinite(h)){error="Nonfinite height in FX slope producer.";return false;}
+  for(double x:frame.normalToWorld)if(!std::isfinite(x)||std::abs(x)>1e8){error="Invalid FX normal transform.";return false;}
+  const auto &m=frame.normalToWorld;
+  const double determinant=m[0]*(m[4]*m[8]-m[7]*m[5])-m[3]*(m[1]*m[8]-m[7]*m[2])+m[6]*(m[1]*m[5]-m[4]*m[2]);
+  double upLength=0;for(double x:frame.upWorld){if(!std::isfinite(x)||std::abs(x)>1e8){error="Invalid FX slope up direction.";return false;}upLength+=x*x;}
+  if(std::abs(determinant)<1e-12||!std::isfinite(determinant)||upLength<1e-12){error="Degenerate FX slope frame.";return false;}
+  const double upScale=1/std::sqrt(upLength),step=field.step;std::vector<float> next(usize(fx.width)*fx.height);
+  for(u32 z=0;z<fx.height;++z)for(u32 x=0;x<fx.width;++x){
+    const double px=fx.domain.originX+(double(x)+.5)/fx.width*fx.domain.sizeX,pz=fx.domain.originZ+(double(z)+.5)/fx.height*fx.domain.sizeZ;
+    const double nx=(terrainFieldHeight(field,float(px-step),float(pz))-terrainFieldHeight(field,float(px+step),float(pz)))/(2*step);
+    const double nz=(terrainFieldHeight(field,float(px),float(pz-step))-terrainFieldHeight(field,float(px),float(pz+step)))/(2*step);
+    const std::array<double,3> normal{m[0]*nx+m[3]+m[6]*nz,m[1]*nx+m[4]+m[7]*nz,m[2]*nx+m[5]+m[8]*nz};
+    const double length=std::sqrt(normal[0]*normal[0]+normal[1]*normal[1]+normal[2]*normal[2]);
+    if(length<1e-12||!std::isfinite(length)){error="Degenerate transformed FX slope normal.";return false;}
+    const double dot=(normal[0]*frame.upWorld[0]+normal[1]*frame.upWorld[1]+normal[2]*frame.upWorld[2])*upScale/length;
+    next[usize(z)*fx.width+x]=float(1-std::clamp(dot,0.0,1.0));
+  }
+  out=std::move(next);error.clear();return true;
 }
 static std::array<float,4> evaluateTerrainWeights(const TerrainRecipe &r,V p,V nm,
     bool volume,u32 fixedLayer,const std::vector<const TerrainStroke *> &localPaint,
@@ -1077,11 +1158,32 @@ bool generateTerrain(const TerrainRecipe &r,TerrainMesh &out,std::string &error,
 }
 bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBuild &out,
                    std::string &error,const std::function<bool(float)> &progress) {
+  return updateTerrainWithFxFrame(r,previous,out,error,{},progress);
+}
+bool updateTerrainWithFxFrame(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBuild &out,
+                   std::string &error,const TerrainFxSlopeFrame &fxFrame,const std::function<bool(float)> &progress,const TerrainFxLimits &fxLimits) {
+  if(!validTerrainRecipe(r,error))return false;
+  if(!validTerrainFxAsset(r.fx,error,fxLimits))return false;
+  if(progress&&!progress(0)){error="Terrain update cancelled before publication.";return false;}
   TerrainBuild next;next.recipe=r;
+  const auto buildFx=[&]()->bool{
+    if(!r.fx.enabled&&r.fx.seedPixels.empty()&&r.fx.strokes.empty()){next.fxField={};next.fxDirty={};return true;}
+    std::vector<float> slope;
+    const bool needsSlope=std::any_of(r.fx.strokes.begin()+r.fx.bakedStrokeCount,r.fx.strokes.end(),[](const auto &stroke){return stroke.slopeFilter;});
+    if(needsSlope&&!makeTerrainFxSlopeField(next.field,r.fx,fxFrame,slope,error))return false;
+    return rasterTerrainFx(r.fx,slope,previous?&previous->fxField:nullptr,next.fxField,next.fxDirty,error,fxLimits,
+      [&](double p){return !progress||progress(float(p));});
+  };
+  if(previous&&!previous->mesh.parts.empty()&&previous->field.width>=2&&previous->field.height>0&&terrainRecipeNonFxKey(r)==terrainRecipeNonFxKey(previous->recipe)){
+    // FX-only edits retain exact collision/geometry/PBR data. Do not route
+    // them through meshing merely because the full recipe string changed.
+    next.field=previous->field;next.mesh=previous->mesh;next.mesh.rebuiltChunks=0;next.mesh.reusedChunks=next.mesh.chunks;
+    if(!buildFx())return false;out=std::move(next);error.clear();return true;
+  }
   bool incremental=false;
   if(previous && r.strokes.size()>=previous->recipe.strokes.size()) {
     auto prefix=r;prefix.strokes.resize(previous->recipe.strokes.size());
-    incremental=r.paths.empty() && serializeTerrainRecipe(prefix)==serializeTerrainRecipe(previous->recipe);
+    incremental=r.paths.empty() && terrainRecipeNonFxKey(prefix)==terrainRecipeNonFxKey(previous->recipe);
     // Changing height under an existing carved volume requires replay; material
     // and density-only edits keep their exact ordered semantics incrementally.
     for(usize i=previous->recipe.strokes.size();incremental && i<r.strokes.size();++i) {
@@ -1117,7 +1219,7 @@ bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBu
     // paths here used to invalidate every chunk on any point/profile edit.
     a.paths.clear();b.paths.clear();
     a.lodLevels=b.lodLevels=1;a.lodRelativeError=b.lodRelativeError=.01f;
-    compatible=compatible && serializeTerrainRecipe(a)==serializeTerrainRecipe(b) &&
+    compatible=compatible && terrainRecipeNonFxKey(a)==terrainRecipeNonFxKey(b) &&
       next.field.solidBottom==previous->field.solidBottom && next.field.heights.size()==previous->field.heights.size() &&
       next.field.density.size()==previous->field.density.size();
     compatible=compatible && next.field.controlWidth==previous->field.controlWidth &&
@@ -1208,6 +1310,7 @@ bool updateTerrain(const TerrainRecipe &r,const TerrainBuild *previous,TerrainBu
   for(u32 z=0;z<nx;++z)for(u32 y=0;y<ny;++y)for(u32 x=0;x<nx;++x)
     if(changed[(usize(z)*ny+y)*nx+x])next.dirty.push_back({x,y,z});
   if(!meshTerrainField(r,next.field,next.mesh,error,progress,compatible?&previous->mesh:nullptr,next.dirty))return false;
+  if(!buildFx())return false;
   out=std::move(next);return true;
 }
 // PNG RGBA8 with stored DEFLATE blocks: deterministic, lossless, no codec
@@ -1280,10 +1383,12 @@ static std::vector<u8> terrainControlPng(const renderer::AuthoringTexture &textu
 }
 static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
                      const std::array<std::vector<u8>, 4> &textures,
-                     std::vector<u8> &out, std::string &error,const TerrainField *prepared,std::span<const TerrainSurfaceImage> surfaceImages={}) {
+                     std::vector<u8> &out, std::string &error,const TerrainField *prepared,std::span<const TerrainSurfaceImage> surfaceImages={},const TerrainFxField *fxPrepared=nullptr) {
   if (!validTerrainRecipe(r, error) || mesh.parts.empty() ||
       mesh.triangles > 200000)
     return false;
+  std::string recipeText=serializeTerrainRecipe(r);
+  if(recipeText.empty()){error="Terrain recipe/FX metadata exceeds its explicit serialization budget.";return false;}
   std::vector<u8> binary;
   std::ostringstream views, accessors, nodes, meshes, materials, images, tex;
   u32 viewCount = 0, accessorCount = 0, imageCount = 0;
@@ -1335,6 +1440,26 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
       selectedImages.push_back(found);
     }
     surfaceMetadata << ']';
+  }
+  renderer::SharedAuthoringTexture fxTexture;renderer::TerrainStaticFxBinding fx;
+  if(surface && r.fx.enabled) {
+    if(!fxPrepared || fxPrepared->width!=r.fx.width || fxPrepared->height!=r.fx.height || fxPrepared->domain!=r.fx.domain) {
+      error="FX export requires its matching TerrainBuild snapshot.";return false;
+    }
+    if(!makeTerrainStaticFxTexture(*fxPrepared,4+u32(control)+u32(selectedImages.size()),fxTexture,fx,error))return false;
+    surfaceMetadata << ",\"staticFx\":{\"version\":1,\"index\":" << fx.textureIndex
+      << ",\"identity\":\"" << fx.identity.text() << "\",\"rgbaSha256\":\"" << fx.rgbaSha256
+      << "\",\"revision\":\"" << fx.revision << "\",\"width\":" << fx.width << ",\"height\":" << fx.height
+      << ",\"domain\":[" << fx.domain[0] << ',' << fx.domain[1] << ',' << fx.domain[2] << ',' << fx.domain[3] << "]}";
+  }
+  if(surface) {
+    renderer::TerrainSurfaceBinding publication;publication.surface=r.surface;publication.staticFx=fx;
+    publication.terrainDomain={-r.size*.5f,-r.size*.5f,r.size,r.size};
+    for(usize n=0;n<selectedImages.size();++n) {
+      renderer::TerrainSurfaceTextureBinding entry;entry.identity=selectedImages[n]->identity;
+      entry.textureIndex=4+u32(control)+u32(n);publication.textures.push_back(entry);
+    }
+    if(!renderer::diagnoseStaticTerrainFlowPublication(publication,error))return false;
   }
   TerrainField generatedField;
   const TerrainField *controlField=prepared;
@@ -1391,6 +1516,11 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
     images << ",{\"bufferView\":" << v << ",\"mimeType\":\"image/png\"}";
     tex << ",{\"source\":" << imageCount++ << ",\"sampler\":0}";
   }
+  if(fxTexture) {
+    const auto png=terrainControlPng(*fxTexture);const u32 v=view(png.data(),png.size(),0);
+    images << ",{\"bufferView\":" << v << ",\"mimeType\":\"image/png\"}";
+    tex << ",{\"source\":" << imageCount++ << ",\"sampler\":1}";
+  }
   for (usize i = 0; i < mesh.parts.size(); ++i) {
     const auto &p = mesh.parts[i];
     if (p.vertices.empty() || p.layer > 3) {
@@ -1444,9 +1574,10 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
   std::ostringstream json;
   json.imbue(std::locale::classic());
   json << "{\"asset\":{\"version\":\"2.0\",\"generator\":\"Astra Terrain "
-          "1\"},\"extras\":{\"astraTerrain\":\""
-       << serializeTerrainRecipe(r)
-       << "\"},\"scene\":0,\"scenes\":[{\"nodes\":[";
+          "1\"},\"extras\":{\"astraTerrain\":";
+  writeTerrainRecipeJsonString(json,recipeText);
+  std::string{}.swap(recipeText); // release large FX text before constructing GLB bytes
+  json<<"},\"scene\":0,\"scenes\":[{\"nodes\":[";
   for (usize i = 0; i < mesh.parts.size(); ++i) {
     if (i)
       json << ',';
@@ -1461,7 +1592,10 @@ static bool writeTerrainGlbImpl(const TerrainRecipe &r, const TerrainMesh &mesh,
          << "],\"samplers\":[{\"magFilter\":9729,\"minFilter\":9987,\"wrapS\":"
             "10497,\"wrapT\":10497},{\"magFilter\":9729,\"minFilter\":9729,\"wrapS\":33071,\"wrapT\":33071}]";
   json << '}';
-  auto text = json.str();
+  auto text = std::move(json).str();
+  if(text.size()>TerrainRecipeGlbMaximumJsonBytes||u64(text.size())+binary.size()+28>TerrainSourceMaximumBytes||u64(text.size())+binary.size()+28>std::numeric_limits<u32>::max()){
+    error="Terrain GLB metadata or total byte size exceeds explicit budget.";return false;
+  }
   while (text.size() % 4)
     text.push_back(' ');
   std::vector<u8> bytes;
@@ -1484,11 +1618,11 @@ bool writeTerrainGlb(const TerrainRecipe &r,const TerrainMesh &mesh,
 }
 bool writeTerrainGlb(const TerrainBuild &build,const std::array<std::vector<u8>,4> &textures,
                      std::vector<u8> &out,std::string &error) {
-  return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field);
+  return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field,{},&build.fxField);
 }
 bool writeTerrainGlb(const TerrainBuild &build,const std::array<std::vector<u8>,4> &textures,
                      std::span<const TerrainSurfaceImage> images,std::vector<u8> &out,std::string &error) {
-  return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field,images);
+  return writeTerrainGlbImpl(build.recipe,build.mesh,textures,out,error,&build.field,images,&build.fxField);
 }
 bool terrainRecipeFromGlb(std::span<const u8> b, TerrainRecipe &out,
                           std::string &error) {
@@ -1500,18 +1634,15 @@ bool terrainRecipeFromGlb(std::span<const u8> b, TerrainRecipe &out,
   }
   std::string_view json(reinterpret_cast<const char *>(b.data() + 20),
                         word(b, 12));
+  if(json.size()>TerrainRecipeGlbMaximumJsonBytes){error="Terrain GLB JSON exceeds explicit recipe metadata budget.";return false;}
   constexpr std::string_view marker = "\"astraTerrain\":\"";
   auto start = json.find(marker);
   if (start == json.npos) {
     error = "Selecione um terreno gerado pela Astra.";
     return false;
   }
-  start += marker.size();
-  auto end = json.find('"', start);
-  if (end == json.npos) {
-    error = "Receita truncada.";
-    return false;
-  }
-  return deserializeTerrainRecipe(json.substr(start, end - start), out, error);
+  start+=marker.size()-1;std::string recipe;
+  if(!readTerrainRecipeJsonString(json,start,recipe)){error="Terrain GLB recipe string is truncated, invalid or exceeds byte budget.";return false;}
+  return deserializeTerrainRecipe(recipe,out,error);
 }
 } // namespace ae::resources

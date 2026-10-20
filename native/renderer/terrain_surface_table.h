@@ -1,5 +1,6 @@
 #pragma once
 #include "renderer/terrain_surface_binding.h"
+#include "renderer/terrain_static_fx_binding.h"
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -12,7 +13,7 @@ inline constexpr usize AdvancedHeaderRows=2, LayerDirectoryRows=2, NoiseHeaderRo
 inline constexpr usize GlobalRows=AdvancedHeaderRows+NoiseCount*NoiseRows;
 inline constexpr usize LayerRows=LayerDirectoryRows+NoiseCount*NoiseRows;
 inline constexpr usize LayerExtraRows=3, AntiEntryRows=3*NoiseRows, AntiDirectoryRows=1;
-inline constexpr u32 FeatureM05=1, FeatureM06=2, FeatureAntiTile=4, FeatureM07=8, FeatureM08=16, FeatureGeo=32, FeatureGlobals=64, FeatureSnow=128;
+inline constexpr u32 FeatureM05=1, FeatureM06=2, FeatureAntiTile=4, FeatureM07=8, FeatureM08=16, FeatureGeo=32, FeatureGlobals=64, FeatureSnow=128, FeatureStaticFx=256;
 inline constexpr usize SnowHeaderRows=16,SnowMaps=8,SnowRows=SnowHeaderRows+SnowMaps*TerrainSurfaceMapRows;
 inline constexpr usize ResampleHeaderRows=2, ResampleRows=ResampleHeaderRows+NoiseRows;
 inline constexpr usize ClusterHeaderRows=2, ClusterRows=ClusterHeaderRows+NoiseRows;
@@ -55,7 +56,13 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   const bool globals=std::any_of(binding.surface.globalMaps.begin(),binding.surface.globalMaps.end(),[](const auto &g){return g.enabled;});
   const bool snow=binding.surface.snow.mode!=resources::TerrainSnowMode::Off;
   if(snow&&(binding.surface.snow.useGlobalLevel||binding.surface.snow.useGlobalHeight)){error="Snow global flags require an authored runtime controller; no controller source is available.";return false;}
-  const bool modules=geo||globals||snow;
+  const auto &flow=binding.surface.flow;
+  const bool fx=flow.wetness||flow.puddles||flow.wetnessMaskSnow;
+  if(!diagnoseStaticTerrainFlowPublication(binding,error))return false;
+  if(fx&&(!binding.staticFx.enabled||binding.staticFx.textureIndex>=slots.size()||slots[binding.staticFx.textureIndex]==InvalidMapTexture||slots[binding.staticFx.textureIndex]>=16777216u)){
+    error="Static FX requires an immutable snapshot with a valid GPU descriptor.";return false;
+  }
+  const bool modules=geo||globals||snow||fx;
   for(float value:binding.terrainDomain)if(!std::isfinite(value)||std::abs(value)>1e8f){error="Invalid terrain domain.";return false;}
   if(binding.terrainDomain[2]<=0||binding.terrainDomain[3]<=0){error="Invalid terrain domain extent.";return false;}
   const bool advanced=modules || m08 || m07 || m06 || binding.surface.detailNoise.enabled || binding.surface.distanceNoise.enabled ||
@@ -67,13 +74,15 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   const usize clusterStart=resampleRow+(m07?binding.surface.layers.size()*ResampleRows:0);
   std::vector<usize> clusterRows(binding.surface.layers.size());usize clusterEnd=clusterStart;
   if(m08)for(usize i=0;i<binding.surface.layers.size();++i){clusterRows[i]=clusterEnd;clusterEnd+=ClusterRows+binding.surface.layers[i].cluster.variants.size()*VariantRows;}
-  const usize moduleRoot=clusterEnd,moduleLayers=moduleRoot+ModuleRows;
+  const usize moduleRoot=clusterEnd,moduleLayers=moduleRoot+ModuleRows+(fx?1:0);
   const usize geoRow=moduleLayers+binding.surface.layers.size()*ModuleLayerRows;
   const usize globalRow=geoRow+(geo?GeoRows:0);
   const usize curveRow=globalRow+(globals?GlobalRecords*GlobalRecordRows:0);
   const bool curve=geo&&binding.surface.geo.curveEnabled;
   const usize snowRow=curveRow+(curve?GeoCurveRows:0),snowLayers=snowRow+SnowRows;
-  const usize rows=advanced?(modules?snowRow+(snow?SnowRows+binding.surface.layers.size():0):clusterEnd):baseRows;
+  const usize fxDirectory=snowRow+(snow?SnowRows+binding.surface.layers.size():0);
+  const usize fxSnapshot=fxDirectory+3,fxWetness=fxSnapshot+3,fxPuddles=fxWetness+4,fxLayers=fxPuddles+1;
+  const usize rows=advanced?(modules?(fx?fxLayers+binding.surface.layers.size():fxDirectory):clusterEnd):baseRows;
   if(table.size()%4 || table.size()/4+rows>TerrainSurfaceMaximumRows) {
     error="Tabela de materiais do terreno excede o orçamento.";return false;
   }
@@ -120,7 +129,7 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
     header[0]=1;header[1]=float(binding.surface.layers.size());
     header[2]=float(absoluteBase+baseRows+AdvancedHeaderRows);header[3]=float(absoluteBase+baseRows+GlobalRows);
     header[4]=antiTile?float(absoluteBase+antiDirectoryRow):0;
-    header[5]=float(entries.size());header[6]=float(absoluteBase+rows);header[7]=float(FeatureM05+(m06?FeatureM06:0)+(antiTile?FeatureAntiTile:0)+(m07?FeatureM07:0)+(m08?FeatureM08:0)+(geo?FeatureGeo:0)+(globals?FeatureGlobals:0)+(snow?FeatureSnow:0));
+    header[5]=float(entries.size());header[6]=float(absoluteBase+rows);header[7]=float(FeatureM05+(m06?FeatureM06:0)+(antiTile?FeatureAntiTile:0)+(m07?FeatureM07:0)+(m08?FeatureM08:0)+(geo?FeatureGeo:0)+(globals?FeatureGlobals:0)+(snow?FeatureSnow:0)+(fx?FeatureStaticFx:0));
     auto writeNoise=[&](const resources::TerrainSurfaceNoise &noise,usize row,bool normalRole=false)->bool {
       float *out=next.data()+row*4;
       out[0]=noise.enabled?1.f:0.f;out[1]=float(noise.projection);out[2]=noise.scale;out[3]=noise.strength;
@@ -190,10 +199,25 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   if(modules){
     const usize absoluteBase=table.size()/4;next[5]=float(absoluteBase+moduleRoot+1);
     float *root=next.data()+moduleRoot*4;
-    root[0]=snow?2:1;root[1]=geo?float(absoluteBase+geoRow):0;root[2]=globals?float(absoluteBase+globalRow):0;root[3]=float(absoluteBase+moduleLayers);
+    root[0]=fx?3:(snow?2:1);root[1]=geo?float(absoluteBase+geoRow):0;root[2]=globals?float(absoluteBase+globalRow):0;root[3]=float(absoluteBase+moduleLayers);
     root[4]=float(absoluteBase+rows);root[5]=curve?float(absoluteBase+curveRow):0;root[6]=curve?float(GeoCurveSamples):0;
     root[7]=snow?float(absoluteBase+snowRow+1):0;
     std::copy(binding.terrainDomain.begin(),binding.terrainDomain.end(),root+8);
+    if(fx){
+      root[12]=float(absoluteBase+fxDirectory+1);root[13]=3;root[14]=1;root[15]=float(absoluteBase+rows);
+      for(usize n=0;n<3;++n){float *entry=next.data()+(fxDirectory+n)*4;entry[0]=float(n+1);entry[1]=1;entry[2]=float(absoluteBase+(n==0?fxSnapshot:n==1?fxWetness:fxPuddles));entry[3]=float(n==0?3:n==1?4:1);}
+      float *snapshot=next.data()+fxSnapshot*4;
+      snapshot[0]=float(slots[binding.staticFx.textureIndex]);snapshot[1]=float(binding.staticFx.width);snapshot[2]=float(binding.staticFx.height);snapshot[3]=1;
+      std::copy(binding.terrainDomain.begin(),binding.terrainDomain.end(),snapshot+4);
+      snapshot[8]=float(absoluteBase+fxLayers);snapshot[9]=float(binding.surface.layers.size());snapshot[11]=float(absoluteBase+rows);
+      float *wet=next.data()+fxWetness*4;
+      wet[0]=flow.wetness?1:0;wet[1]=flow.heightWetness?1:0;wet[2]=flow.distanceWetness?1:0;wet[3]=flow.globalPorosity;
+      std::copy(flow.wetnessParams.begin(),flow.wetnessParams.end(),wet+4);
+      std::copy(flow.heightWetnessParams.begin(),flow.heightWetnessParams.end(),wet+8);
+      std::copy(flow.distanceWetnessParams.begin(),flow.distanceWetnessParams.end(),wet+12);
+      float *puddle=next.data()+fxPuddles*4;puddle[0]=flow.puddles?1:0;puddle[1]=flow.puddleParams[0];puddle[2]=flow.puddleParams[1];puddle[3]=float((flow.perTexPorosity?1:0)|(flow.wetnessMaskSnow?2:0));
+      for(usize n=0;n<binding.surface.layers.size();++n){next[(fxLayers+n)*4]=binding.surface.layers[n].snowPorosity;next[(fxLayers+n)*4+1]=binding.surface.layers[n].flow.foam;}
+    }
     for(usize i=0;i<binding.surface.layers.size();++i){const auto &layer=binding.surface.layers[i];float *out=next.data()+(moduleLayers+i*ModuleLayerRows)*4;
       out[0]=layer.geoParticipation;out[1]=layer.geoHeightFilterEnabled?1.f:0.f;out[2]=layer.geoHeightThreshold;out[3]=layer.geoHeightStrength;
       std::copy(layer.globalMapParticipation.begin(),layer.globalMapParticipation.end(),out+4);
@@ -251,9 +275,9 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
   const usize count=usize(part[0]);
   if(advanced!=TerrainSurfaceHeaderRows+count*TerrainSurfaceLayerRows || advanced+AdvancedHeaderRows>rows)return fail();
   float *header=part.data()+advanced*4;
-  if(!integer(header[7])||header[7]<1||header[7]>FeatureM05+FeatureM06+FeatureAntiTile+FeatureM07+FeatureM08+FeatureGeo+FeatureGlobals+FeatureSnow)return fail();
+  if(!integer(header[7])||header[7]<1||header[7]>FeatureM05+FeatureM06+FeatureAntiTile+FeatureM07+FeatureM08+FeatureGeo+FeatureGlobals+FeatureSnow+FeatureStaticFx)return fail();
   const u32 features=u32(header[7]);const bool m06=(features&FeatureM06)!=0,antiTile=(features&FeatureAntiTile)!=0,m07=(features&FeatureM07)!=0,m08=(features&FeatureM08)!=0,geo=(features&FeatureGeo)!=0,globals=(features&FeatureGlobals)!=0;
-  const bool snow=(features&FeatureSnow)!=0,modules=geo||globals||snow;
+  const bool snow=(features&FeatureSnow)!=0,fx=(features&FeatureStaticFx)!=0,modules=geo||globals||snow||fx;
   if(!(features&FeatureM05)||(antiTile&&!m06))return fail();
   const usize extension=advanced+GlobalRows+count*LayerRows;
   const usize antiDirectory=extension+(m06?count*LayerExtraRows:0);
@@ -304,15 +328,33 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
     }else if(entry[2]!=0||entry[3]!=0)return fail();
   }
   if(modules){
-    const usize moduleRoot=clusterCursor,moduleLayers=moduleRoot+ModuleRows,geoRow=moduleLayers+count*ModuleLayerRows,globalRow=geoRow+(geo?GeoRows:0),curveRow=globalRow+(globals?GlobalRecords*GlobalRecordRows:0);
-    if(moduleRoot+ModuleRows>rows||part[5]!=float(moduleRoot+1)||curveRow>rows)return fail();
+    const usize moduleRoot=clusterCursor,moduleLayers=moduleRoot+ModuleRows+(fx?1:0),geoRow=moduleLayers+count*ModuleLayerRows,globalRow=geoRow+(geo?GeoRows:0),curveRow=globalRow+(globals?GlobalRecords*GlobalRecordRows:0);
+    if(moduleRoot+ModuleRows+(fx?1:0)>rows||part[5]!=float(moduleRoot+1)||curveRow>rows)return fail();
     const float *root=part.data()+moduleRoot*4;
     const bool curve=root[6]!=0;
     const usize snowRow=curveRow+(curve?GeoCurveRows:0),snowLayers=snowRow+SnowRows;
-    if(root[0]!=(snow?2.f:1.f)||root[1]!=(geo?float(geoRow):0.f)||root[2]!=(globals?float(globalRow):0.f)||root[3]!=float(moduleLayers)||root[4]!=float(rows)||
-      root[5]!=(curve?float(curveRow):0.f)||root[6]!=(curve?float(GeoCurveSamples):0.f)||root[7]!=(snow?float(snowRow+1):0.f)||rows!=snowRow+(snow?SnowRows+count:0)||(!geo&&curve))return fail();
+    if(root[0]!=(fx?3.f:(snow?2.f:1.f))||root[1]!=(geo?float(geoRow):0.f)||root[2]!=(globals?float(globalRow):0.f)||root[3]!=float(moduleLayers)||root[4]!=float(rows)||
+      root[5]!=(curve?float(curveRow):0.f)||root[6]!=(curve?float(GeoCurveSamples):0.f)||root[7]!=(snow?float(snowRow+1):0.f)||rows!=snowRow+(snow?SnowRows+count:0)+(fx?11+count:0)||(!geo&&curve))return fail();
     if(snow){const float *s=part.data()+snowRow*4;if(s[0]!=1||!integer(s[1])||s[1]<1||s[1]>2||!integer(s[2])||s[2]>4095||s[3]!=float(rows)||s[55]!=float(snowLayers))return fail();
       pointers.push_back(moduleRoot*4+7);pointers.push_back(snowRow*4+3);pointers.push_back(snowRow*4+55);}
+    if(fx){
+      const usize directory=snowRow+(snow?SnowRows+count:0),snapshot=directory+3,wet=snapshot+3,puddle=wet+4,controls=puddle+1;
+      if(root[12]!=float(directory+1)||root[13]!=3||root[14]!=1||root[15]!=float(rows))return fail();
+      pointers.push_back(moduleRoot*4+12);pointers.push_back(moduleRoot*4+15);
+      for(usize n=0;n<3;++n){const float *entry=part.data()+(directory+n)*4;
+        if(entry[0]!=float(n+1)||entry[1]!=1||entry[2]!=float(n==0?snapshot:n==1?wet:puddle)||entry[3]!=float(n==0?3:n==1?4:1))return fail();
+        pointers.push_back((directory+n)*4+2);
+      }
+      const float *record=part.data()+snapshot*4;
+      if(!integer(record[0])||record[0]>=16777216||!integer(record[1])||record[1]<1||record[1]>2048||!integer(record[2])||record[2]<1||record[2]>2048||record[3]!=1||record[8]!=float(controls)||record[9]!=float(count)||record[10]!=0||record[11]!=float(rows))return fail();
+      for(usize n=0;n<4;++n)if(record[4+n]!=root[8+n])return fail();
+      for(usize n=0;n<16;++n)if(!std::isfinite(part[wet*4+n]))return fail();
+      const float *w=part.data()+wet*4,*p=part.data()+puddle*4;
+      for(usize n=0;n<3;++n)if(w[n]!=0&&w[n]!=1)return fail();
+      if(w[3]<0||w[3]>1||(w[0]==1&&(w[4]<0||w[5]<w[4]||w[5]>1||(w[2]==1&&(w[14]<=0||w[13]<0||w[13]>1||w[15]<0||w[15]>1))))||!integer(p[0])||p[0]>1||!std::isfinite(p[1])||(p[0]==1&&p[1]<0)||!std::isfinite(p[2])||(p[0]==1&&(p[2]<0||p[2]>1))||!integer(p[3])||p[3]>3)return fail();
+      for(usize n=0;n<count;++n){const float *layer=part.data()+(controls+n)*4;if(!std::isfinite(layer[0])||layer[0]<0||layer[0]>1||!std::isfinite(layer[1])||layer[1]<0||layer[1]>2||layer[2]!=0||layer[3]!=0)return fail();}
+      pointers.push_back(snapshot*4+8);pointers.push_back(snapshot*4+11);
+    }
     if(geo&&((part[geoRow*4+7]>.5)!=curve))return fail();
     for(usize i=0;i<4;++i)if(!std::isfinite(root[8+i])||std::abs(root[8+i])>1e8f)return fail();
     if(root[10]<=0||root[11]<=0)return fail();

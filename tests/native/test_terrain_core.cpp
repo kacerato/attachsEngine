@@ -585,7 +585,10 @@ AE_TEST(terrain_path_point_heights_ramps_and_crest_have_independent_effects) {
   resources::TerrainRecipe loaded;auto encoded=resources::serializeTerrainRecipe(r);
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
   AE_EXPECT_TRUE(!loaded.paths[0].followTerrain,"point-height mode persists");
-  // Remove v7 map resolution, v6 LOD fields, then v5 followTerrain.
+  // Project the legacy parser boundary from the non-FX body: surface reference,
+  // v7 map resolution, v6 LOD fields, then v5 followTerrain. This constructed
+  // boundary is separate from the real frozen historical-writer fixtures.
+  encoded=resources::terrainRecipeNonFxKey(r);
   encoded.replace(0,10,"AETERRAIN4");
   for(u32 i=0;i<5;++i)encoded.resize(encoded.rfind(' '));
   AE_EXPECT_TRUE(resources::deserializeTerrainRecipe(encoded,loaded,error),error.c_str());
@@ -675,7 +678,7 @@ AE_TEST(terrain_control_map_replays_recipe_independently_of_mesh_cells) {
 AE_TEST(terrain_control_map_legacy_volume_cancellation_and_limits) {
   using namespace resources;std::string error;
   TerrainRecipe r;r.cells=8;r.height=0;
-  auto legacy=serializeTerrainRecipe(r);legacy.replace(0,10,"AETERRAIN6");legacy.erase(legacy.find_last_of(' '));legacy.erase(legacy.find_last_of(' '));
+  auto legacy=terrainRecipeNonFxKey(r);legacy.replace(0,10,"AETERRAIN6");legacy.erase(legacy.find_last_of(' '));legacy.erase(legacy.find_last_of(' '));
   TerrainRecipe old;AE_EXPECT_TRUE(deserializeTerrainRecipe(legacy,old,error),"version six remains readable");
   AE_EXPECT_EQ(old.controlCells,0u,"legacy map disabled");
   TerrainMesh before,after;AE_EXPECT_TRUE(generateTerrain(r,before,error),"legacy baseline");

@@ -17,7 +17,7 @@ AE_TEST(terrain_snow_real_checkpoint_v2_migrates_to_v3_with_neutral_new_defaults
   AE_EXPECT_EQ(surface.geo.scaleMeters,5.f,"real V2 Geo authoring survives");AE_EXPECT_EQ(surface.globalMaps[0].scaleX,-2.f,"V2 signed UV authoring survives");AE_EXPECT_EQ(surface.globalMaps[0].scaleY,0.f,"V2 zero UV authoring survives");
   AE_EXPECT_EQ(surface.layers[0].snowParticipation,1.f,"new layer participation is neutral");AE_EXPECT_EQ(surface.layers[0].snowPorosity,.4f,"source core porosity default");
   AE_EXPECT_EQ(surface.layers[0].maps[0].textureResidency.mode,TerrainTextureResidencyMode::InheritTerrain,"legacy maps inherit Original");
-  std::string migrated,again;AE_EXPECT_TRUE(serializeTerrainSurface(surface,migrated,error),error.c_str());AE_EXPECT_TRUE(migrated.starts_with("AETERRAINSURFACE3 "),"migration declares current version");
+  std::string migrated,again;AE_EXPECT_TRUE(serializeTerrainSurface(surface,migrated,error),error.c_str());AE_EXPECT_TRUE(migrated.starts_with("AETERRAINSURFACE4 "),"migration declares current version");
   TerrainSurfaceAsset cold;AE_EXPECT_TRUE(deserializeTerrainSurface(migrated,cold,error),error.c_str());AE_EXPECT_TRUE(serializeTerrainSurface(cold,again,error),error.c_str());AE_EXPECT_EQ(again,migrated,"cold migration preserves every old/new field");
 }
 namespace {
@@ -54,7 +54,7 @@ AE_TEST(terrain_snow_v3_roundtrip_preserves_authored_fields_and_all_map_policies
   s.distanceResample={-.25f,.4f,3,77};s.parameters={.2f,.1f,.8f,.6f};s.sssTint={.1f,.2f,.3f,.4f};s.sparkleViewDependency=.8f;
   s.normal.textureResidency={TerrainTextureResidencyMode::Cap,512};s.sourcePropertiesJson="{\"preserved\":42}";s.sourceKeywordsJson="[\"TRACKS_PENDING\"]";
   s.normalNoiseEnabled=s.distanceResampleEnabled=s.perLayerEnabled=s.maskEnabled=s.worldSpaceUV=s.stochasticEnabled=s.triplanarEnabled=s.useGlobalLevel=s.useGlobalHeight=s.sssEnabled=s.rimEnabled=s.sparkleEnabled=true;
-  std::string encoded,error;AE_EXPECT_TRUE(serializeTerrainSurface(surface,encoded,error),"disabled Snow retains every authored field and deferred flag");AE_EXPECT_TRUE(encoded.starts_with("AETERRAINSURFACE3 "),"new format explicit");
+  std::string encoded,error;AE_EXPECT_TRUE(serializeTerrainSurface(surface,encoded,error),"disabled Snow retains every authored field and deferred flag");AE_EXPECT_TRUE(encoded.starts_with("AETERRAINSURFACE4 "),"new format explicit");
   TerrainSurfaceAsset restored;AE_EXPECT_TRUE(deserializeTerrainSurface(encoded,restored,error),"V3 parses complete authored tail");
   std::string again;AE_EXPECT_TRUE(serializeTerrainSurface(restored,again,error),"reserialized V3");AE_EXPECT_EQ(again,encoded,"all Snow/residency fields survive bit-exact textual roundtrip");
   auto before=again;AE_EXPECT_TRUE(!deserializeTerrainSurface(encoded.substr(0,encoded.size()-10),restored,error),"truncated residency coverage rejected");

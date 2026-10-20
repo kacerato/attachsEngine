@@ -38,6 +38,7 @@ namespace ae::ui { class UiDrawList; }
 #include <algorithm>
 #include <array>
 #include "ui/ui_theme.h"
+#include "editor/editor_terrain_fx_controls.h"
 #include "editor/editor_rig_screen.h"
 #include <string>
 
@@ -1144,6 +1145,7 @@ struct EditorScreenState final {
   bool editingHierarchySearch=false;
   char hierarchySearch[kEditorNameCapacity]{};
   u32 waterTab=0,routePoint=0;
+  TerrainFxUiState terrainFx;
   bool terrainOpen=false,terrainBusy=false,terrainBrushArmed=false;
   bool terrainCursorVisible=false,terrainLivePreview=false,terrainTouchOffset=false;
   ui::UiPoint terrainPointer{};

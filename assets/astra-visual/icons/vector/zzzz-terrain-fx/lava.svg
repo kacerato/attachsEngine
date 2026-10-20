@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <title>Lava</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="49,9 49,27 43,38 34,32 27,43 23,55 26,68 34,78 47,84 60,82 71,74 77,62 76,49 68,35 64,48 56,40 59,27 49,9"/>
+    <polyline points="48,51 38,65 39,73 46,78 54,76 59,69 56,61 48,51"/>
+    <polyline points="12,88 31,88"/>
+    <polyline points="66,88 85,88"/>
+  </g>
+</svg>

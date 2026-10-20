@@ -33,6 +33,14 @@ inline std::vector<TerrainSurfaceTextureRef> terrainSurfaceTextureRefs(const Ter
     for(const auto &n:layer.normalNoise)noise(n,true);
     for(const auto &variant:layer.cluster.variants)for(u32 i=0;i<7;++i)add(variant.maps[i],i==1);
   }
+  // Flow textures pack unrelated scalar channels beside normal components.
+  // Retain them as raw linear data; normal mip generation would overwrite foam,
+  // heat, crust or lifetime. Authoring channel/provenance remains untouched.
+  const auto flowData=[&](const TerrainSurfaceMap &map,bool clampSampling){
+    auto raw=map;raw.channel=TerrainSurfaceChannel::RGB;raw.linear=true;add(raw,false,clampSampling);
+  };
+  flowData(surface.flow.streamControl,true);flowData(surface.flow.dynamicStreamControl,true);
+  flowData(surface.flow.streamNormal,false);flowData(surface.flow.lavaDiffuse,false);flowData(surface.flow.rainDropTexture,false);
   return refs;
 }
 inline std::string terrainSurfaceHex(std::string_view text) {

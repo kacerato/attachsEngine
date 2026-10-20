@@ -59,11 +59,10 @@ TerrainHistoryStore::TerrainHistoryStore(std::filesystem::path p)
 TerrainHistoryStore::TerrainHistoryStore(std::filesystem::path p, Limits l)
     : directory_(std::move(p)), limits_(l) {
   std::error_code ec;
-  if (!safeDirectory(directory_, true))
+  if (!l.maxBytes||l.maxBytes>1024ull*1024*1024||l.maxDeltaDepth>64||!safeDirectory(directory_, true))
     return;
   std::filesystem::create_directories(directory_, ec);
-  ready_ = !ec && l.maxBytes > 0 && l.maxBytes <= 1024ull * 1024 * 1024 &&
-           l.maxDeltaDepth <= 64 && safeDirectory(directory_);
+  ready_ = !ec && safeDirectory(directory_);
 }
 bool TerrainHistoryStore::load(const std::string &id, unsigned depth,
                                std::vector<std::string> *refs,
@@ -122,14 +121,13 @@ bool TerrainHistoryStore::put(const std::string &recipe,
                               const std::string &base, std::string &out) {
   if (!ready_ || !safeDirectory(directory_) || recipe.size() > limits_.maxBytes)
     return false;
-  std::string s = "ATH1F";
-  number(s, recipe.size());
-  s += recipe;
+  std::string s;
   if (!base.empty()) {
     std::vector<std::string> refs;
     std::string old;
     if (!load(base, 0, &refs, old))
       return false;
+    if(old==recipe){out=base;return true;} // unchanged authoring never duplicates a bitmap/delta
     if (refs.size() <= limits_.maxDeltaDepth) {
       std::size_t a = 0, b = 0;
       while (a < old.size() && a < recipe.size() && old[a] == recipe[a])
@@ -143,10 +141,11 @@ bool TerrainHistoryStore::put(const std::string &recipe,
       number(d, a);
       number(d, b);
       d += recipe.substr(a, recipe.size() - a - b);
-      if (d.size() < s.size())
+      if (d.size() < recipe.size()+13)
         s = std::move(d);
     }
   }
+  if(s.empty()){s="ATH1F";number(s,recipe.size());s+=recipe;}
   auto id = sha(s);
   auto dest = directory_ / (id + ".aethist");
   std::error_code ec;

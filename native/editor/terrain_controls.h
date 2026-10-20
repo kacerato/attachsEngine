@@ -2,6 +2,7 @@
 #include "editor/editor_terrain_noise_controls.h"
 #include "editor/editor_terrain_modules_controls.h"
 #include "editor/editor_terrain_snow_controls.h"
+#include "editor/editor_terrain_fx_controls.h"
 #include <algorithm>
 #include <cmath>
 
@@ -28,6 +29,30 @@ template <class State>
 TerrainControlRange terrainControlRange(const State &s, unsigned field) {
   const auto &r = s.terrainDraft;
   TerrainControlRange range{0, 1, 0, true, false};
+  if(terrainStaticFlowField(field)) {
+    if(!terrainStaticFlowNumberAvailable(s,field))return {0,1,0,false};
+    const auto &flow=r.surface.flow;
+    if(field==336)return {0,flow.wetnessParams[1],0,true};
+    if(field==337)return {flow.wetnessParams[0],1,0,true};
+    if(field==338)return {-128,128,0,true};
+    if(field==339 || field==340)return {-8,8,0,true};
+    if(field==341)return {-16,16,0,true};
+    if(field==342){const float high=std::nextafter(flow.distanceWetnessParams[0]+flow.distanceWetnessParams[2],-INFINITY);return {std::min(-2048.f,high),std::min(2048.f,high),0,true};}
+    if(field==343){const float low=std::nextafter(flow.distanceWetnessParams[0],INFINITY);return {low,std::max(2048.f,low),0,true};}
+    if(field==346)return {0,16,0,true,true};
+    return range;
+  }
+  if(terrainFxField(field)) {
+    if(!terrainFxNumberAvailable(s,field))return {0,1,0,false};
+    if(field==321)return {.05f,64,0,true,true};
+    if(field==322)return {0,64,0,true,true};
+    if(field==323)return {.01f,8,0,true};
+    if(field==326)return {0,float(s.terrainFx.brush.slopeMax),0,true};
+    if(field==327)return {float(s.terrainFx.brush.slopeMin),1,0,true};
+    if(field==328)return {.05f,8,0,true};
+    if(field==329)return {-180,180,0,true};
+    return range;
+  }
   if(terrainSnowField(field)) {
     if(!terrainSnowNumberAvailable(s,field))return {0,1,0,false};
     const auto &snow=r.surface.snow;

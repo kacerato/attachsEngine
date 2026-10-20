@@ -13,12 +13,23 @@ struct TerrainSurfaceTextureBinding {
   u32 residencyCap=0; // resolved max side; 0 Original
   bool clampSampling=false; // fixed Snow mask role, independent of authored map
 };
+// Derived immutable RecipeFX snapshot; never a second authoring asset.
+struct TerrainStaticFxBinding {
+  bool enabled=false;
+  u32 textureIndex=InvalidMapTexture,width=0,height=0;
+  std::array<float,4> domain{};
+  resources::AssetGuid identity;
+  std::string rgbaSha256;
+  u64 revision=0;
+  bool linear=true,clampSampling=true;
+};
 struct TerrainSurfaceBinding {
   resources::TerrainSurfaceAsset surface;
   float localMetersPerUv=1;
   // Local X/Z origin and full terrain extent in metres; independent of layer tiling.
   std::array<float,4> terrainDomain{-32,-32,64,64};
   std::vector<TerrainSurfaceTextureBinding> textures;
+  TerrainStaticFxBinding staticFx;
 };
 // std430 vec4 rows. The first header contains layer count/version; the second
 // contains local meters per stored UV. Each layer has five property rows and

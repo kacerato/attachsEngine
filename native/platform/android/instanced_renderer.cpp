@@ -125,7 +125,7 @@ struct DirtRoadFrameUniform {
   float shadowWorldUnitsPerTexel[4]{};
   float shadowFilterParameters[4]{}; // near radius, far radius, reserved
   float shadowTransitionParameters[4]{}; // cascade blend, distance fade, reserved
-  float materialDistanceParameters[4]{}; // MR map, emissive map, reserved
+  float materialDistanceParameters[4]{}; // MR map, emissive map, fade band, material time seconds
   float waterParameters[4]{}; // wave count, base height, time, reserved
   float waterOptics[4]{}; // IOR, roughness, turbidity, foam threshold
   float waterDeepColorFoam[4]{}; // linear RGB, foam decay
@@ -5921,6 +5921,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         renderingPolicy_.materialDistance.emissiveMaximumDistance;
     frame->materialDistanceParameters[2] =
         renderingPolicy_.materialDistance.fadeBandRatio;
+    // Dedicated material clock; independent of a water component's authored time.
+    // Reuses the reserved UBO lane without changing offsets or push constants.
+    frame->materialDistanceParameters[3] = timeSeconds;
     frame->waterParameters[0] = static_cast<float>(waterProfile_.waveCount);
     frame->waterParameters[1] = waterBaseHeight_;
     frame->waterParameters[2] = authoredWaterTime_>=0?authoredWaterTime_:timeSeconds;

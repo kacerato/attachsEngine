@@ -1,3 +1,4 @@
+#include "editor/editor_terrain_fx_cursor.h"
 #include "editor/editor_import_transaction.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_session.h"
@@ -109,8 +110,24 @@ struct TerrainUiFixture {
     render();
     const auto window = editor::terrainContentRect(
         session.screen(), editor::terrainPanelRect(session.screen()));
-    const ui::UiPoint from{window.x + window.width * .5f,
-                           window.y + window.height * .5f};
+    ui::UiPoint from{window.x + window.width * .5f,
+                     window.y + window.height * .5f};
+    // Scroll through an actual panel background/label, not an armed paint canvas.
+    bool background=false;
+    for(float y=window.y+2;y<window.bottom() && !background;y+=4)
+      for(float x=window.x+2;x<window.right();x+=4)
+        if(router.hitTest({x,y}).widgetId==id(Widget::TerrainScroll)){
+          from={x,y};background=true;break;
+        }
+    if(!background && router.hitTest(from).widgetId==id(editor::terrainFxAction(90))) {
+      for(float y=window.y+2;y<window.bottom() && !background;y+=4)
+        for(float x=window.x+2;x<window.right();x+=4){
+          const auto hit=router.hitTest({x,y});
+          const bool slider=(hit.widgetId>=id(Widget::TerrainSliderBase) && hit.widgetId<id(Widget::TerrainSliderBase)+0x300) ||
+            (hit.widgetId>=editor::terrainSnowSliderBase && hit.widgetId<editor::terrainSnowSliderBase+0x300);
+          if(hit.target==ui::UiPointerTarget::Widget && hit.widgetId!=id(editor::terrainFxAction(90)) && !slider){from={x,y};background=true;break;}
+        }
+    }
     const ui::UiPoint to{from.x, from.y - amount};
     time += 1;
     session.handlePointer({91, ui::UiPointerPhase::Down, from, time});
@@ -1633,4 +1650,269 @@ AE_TEST(terrain_snow_normal_rgb_rg_source_replacement_apply_and_reopen_preserve_
     AE_EXPECT_TRUE(target!=0 && f.session.openTerrain(target),"reopen actual terrain");
     AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"reopen retains RGB/RG source and logical factors");
   }
+}
+
+AE_TEST(terrain_fx_ui_explicit_budget_resolution_and_exclusive_modes) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)),"open independent FX authoring");
+  f.render();ui::UiPoint first;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"FX opens at zero scroll");
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+64+0x100,first),"first target slider visible at655x300 without scrolling");
+  const auto window=editor::terrainContentRect(f.session.screen(),editor::terrainPanelRect(f.session.screen()));
+  const auto canvas=f.session.screen().terrainFx.canvas;
+  AE_EXPECT_TRUE(canvas.y>=window.y && canvas.bottom()<=window.bottom(),"entire80px bitmap/cursor fits before footer atzero scroll");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(326,.2),"hidden filter field cannot mutate from Map page");
+  AE_EXPECT_TRUE(f.slide(320,.65f,1) && f.slide(321,.25f,2),"target/radius are real first-row sliders");
+  AE_EXPECT_TRUE(f.tap(editor::terrainSnowNumberBase+64) && f.session.completeTextEdit(f.session.pendingTextEdit(),"0.375",true),"FX target exact entry routes through real keyboard namespace");
+  AE_EXPECT_EQ(f.session.screen().terrainFx.brush.target,.375,"exact target retains author precision");
+  AE_EXPECT_TRUE(f.tap(fx(23)) && f.tap(fx(43)) && f.tap(fx(10)),"request2048 explicitly at default96MiB");
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.fx.enabled,"refused allocation never creates/resizes asset");
+  AE_EXPECT_EQ(f.session.screen().terrainFx.resolution,2048u,"refusal keeps requested resolution explicit");
+  AE_EXPECT_TRUE(f.tap(fx(41)) && f.tap(fx(10)),"explicit512 creation fits unchanged96MiB budget");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.fx.width,512u,"recipe owns actual chosen resolution");
+  AE_EXPECT_TRUE(f.tap(fx(24)) && f.tap(fx(2)),"enter FX paint exclusively");
+  AE_EXPECT_TRUE(!f.session.screen().terrainBrushArmed && f.session.screen().terrainFx.mode==1,"PBR brush stays disarmed");
+  AE_EXPECT_TRUE(f.tap(fx(24)) && f.tap(fx(3)) && f.session.screen().terrainFx.mode==2,"Transformar exits paint mode");
+}
+AE_TEST(terrain_fx_ui_canvas_gesture_cancel_undo_redo_preserve_independent_recipe) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(24)) && f.tap(fx(2)),"create bitmap and enter real paint");
+  const auto pbr=f.session.screen().terrainDraft.strokes.size();
+  const auto gesture=[&](ui::UiPointerPhase end){
+    f.scroll(-10000);ui::UiPoint point;for(u32 i=0;i<40;++i){f.render();if(f.point(fx(90),point))break;f.scroll(20);}
+    if(!f.point(fx(90),point))return false;
+    f.time+=1;f.session.handlePointer({77,ui::UiPointerPhase::Down,point,f.time});
+    point.x+=3;f.session.handlePointer({77,ui::UiPointerPhase::Move,point,f.time+.1});
+    f.session.handlePointer({77,end,point,f.time+.2});return true;
+  };
+  AE_EXPECT_TRUE(gesture(ui::UiPointerPhase::Cancel),"pointer cancellation routed");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.fx.strokes.empty(),"cancel does not publish captured samples");
+  AE_EXPECT_TRUE(gesture(ui::UiPointerPhase::Up),"complete actual bitmap gesture");
+  const auto authored=f.session.screen().terrainDraft.fx.strokes.size();
+  AE_EXPECT_TRUE(authored>0 && f.session.screen().terrainDraft.fx.bakedStrokeCount==authored,"pointer release commits full checkpoint");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),pbr,"FX never appends PBR or sculpt strokes");
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo resource snapshot");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.fx.strokes.empty(),"undo restores entire pre-gesture log and seed");
+  AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo resource snapshot");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.fx.strokes.size(),authored,"redo restores authored checkpoint");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply publishes actual Recipe9 FX checkpoint via terrain pipeline");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root!=0 && f.session.openTerrain(root),"reopen published FX terrain");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"recipe/source roundtrip retains independent FX authoring");
+}
+
+AE_TEST(terrain_static_material_ui_requires_real_mask_and_preserves_reserved_properties) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(100)),"open real static Wetness page");
+  f.render();ui::UiPoint first;
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+80+0x100,first),"Wetness first slider visible atzero scroll");
+  AE_EXPECT_TRUE(!f.tap(fx(110)),"missing real bitmap disables enable control");
+  AE_EXPECT_TRUE(f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(100)) && f.tap(fx(110)),"explicit mask creation unlocks static Wetness");
+  AE_EXPECT_TRUE(f.slide(336,.25f,1) && f.slide(337,.75f,2),"ordered min/max use effectful bars");
+  AE_EXPECT_TRUE(f.tap(editor::terrainSnowNumberBase+80) && f.session.completeTextEdit(f.session.pendingTextEdit(),"0.2",true),"Wetness exact keyboard entry");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(346,5),"hidden Puddle field cannot mutate from Wetness");
+  AE_EXPECT_TRUE(f.tap(fx(115)),"actual static wetness can mask Snow");
+  AE_EXPECT_TRUE(f.tap(fx(102)) && f.tap(fx(112)),"height Wetness actual modifier");
+  for(const auto pair:{std::pair{338u,-2.},std::pair{339u,1.5},std::pair{340u,.2},std::pair{341u,.4}})AE_EXPECT_TRUE(f.session.setTerrainNumber(pair.first,pair.second),"every height formula parameter authorable");
+  AE_EXPECT_TRUE(f.tap(fx(103)) && f.tap(fx(113)),"distance Wetness actual modifier");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(342,25) && f.session.setTerrainNumber(343,100),"UI end converts to source length");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.flow.distanceWetnessParams[2],75.f,"stored value is length, not mislabeled end");
+  AE_EXPECT_TRUE(f.slide(342,1,1) && f.slide(343,0,2),"dragging endpoints never crosses");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.flow.distanceWetnessParams[2]>0,"positive source length retained");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(343,200) && f.session.setTerrainNumber(342,50) && f.session.setTerrainNumber(344,.75) && f.session.setTerrainNumber(345,.25),"prepare exact distance response");
+  AE_EXPECT_TRUE(f.tap(fx(104)) && f.tap(fx(114)) && f.session.setTerrainNumber(349,.3),"per-material porosity uses actual canonical field");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].snowPorosity,.3f,"Snow and Flow share one porosity authority");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(348,.8),"inactive global override cannot mutate through exact input");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(63))) && f.session.setTerrainNumber(349,.6),"select another real layer");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].snowPorosity,.3f,"previous layer remains independent");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[1].snowPorosity,.6f,"selected layer receives porosity");
+  AE_EXPECT_TRUE(f.tap(fx(114)) && f.session.setTerrainNumber(348,.45),"explicit global porosity mode");
+  AE_EXPECT_TRUE(f.tap(fx(101)) && f.tap(fx(111)) && f.slide(346,.5f,1) && f.session.setTerrainNumber(347,.8),"Puddle contrast/max actual material controls");
+  const auto &flow=f.session.screen().terrainDraft.surface.flow;
+  AE_EXPECT_TRUE(flow.wetness && flow.puddles && flow.heightWetness && flow.distanceWetness && flow.wetnessMaskSnow,"only supported static flags enabled");
+  AE_EXPECT_TRUE(!flow.streams && !flow.lava && !flow.globalWetness && !flow.rainDrops,"unsupported consumers never enabled by navigation");
+  AE_EXPECT_EQ(flow.wetnessParams[2],0.f,"reserved Wetness component preserved");
+  AE_EXPECT_EQ(flow.puddleParams[2],0.f,"reserved Puddle component preserved");
+  AE_EXPECT_EQ(flow.puddleParams[3],0.f,"reserved Puddle component preserved");
+}
+AE_TEST(terrain_static_material_ui_rg_mask_apply_reopen_transports_real_material_consumer) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(24)) && f.tap(fx(2)),"create real FX bitmap");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(321,16),"actual metre brush radius");
+  for(u32 channel:{4u,5u}){
+    AE_EXPECT_TRUE(f.tap(fx(25)) && f.tap(fx(channel)),"choose independent R/G channel");
+    f.scroll(-10000);f.render();ui::UiPoint point;
+    for(u32 attempt=0;attempt<40 && !f.point(fx(90),point);++attempt){f.scroll(16);f.render();}
+    AE_EXPECT_TRUE(f.point(fx(90),point),"actual bitmap region reached");
+    f.time+=1;f.session.handlePointer({88,ui::UiPointerPhase::Down,point,f.time});
+    f.session.handlePointer({88,ui::UiPointerPhase::Move,point,f.time+.1});
+    f.session.handlePointer({88,ui::UiPointerPhase::Up,point,f.time+.2});
+  }
+  AE_EXPECT_TRUE(f.tap(fx(100)) && f.tap(fx(110)) && f.tap(fx(101)) && f.tap(fx(111)),"enable real static Wetness/Puddle consumers over painted channels");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply uses actual texture bridge/material publisher");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root!=0 && f.session.openTerrain(root),"reopen published material");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,0u,"explicit reopen restores painting root instead of stale Puddle subcontext");
+  AE_EXPECT_EQ(f.session.screen().terrainFx.mode,0u,"explicit reopen starts in Edit rather than retaining another gesture mode");
+  AE_EXPECT_TRUE(!f.session.screen().terrainFx.bitmap && !f.session.screen().terrainFx.cursorVisible,"reopen releases transient bitmap and cursor from prior authoring context");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"V9 FX plus V4 material fields survive actual GLB source roundtrip");
+  AE_EXPECT_TRUE(f.visit(2) && f.tap(fx(0)) && f.tap(fx(24)) && f.tap(fx(2)),"paint on reopened actual terrain");
+  f.scroll(-10000);f.render();ui::UiPoint point;AE_EXPECT_TRUE(f.point(fx(90),point),"complete bitmap immediately available");
+  AE_EXPECT_TRUE(f.text("FX: "+std::to_string(f.session.screen().terrainDraft.fx.strokes.size())+" amostras"),"FX status counts authored samples without adding the baked prefix again");
+  const auto publications=f.session.screen().terrainPreviewUpdates;
+  const auto revision=f.session.document().revision();
+  f.time+=1;f.session.handlePointer({89,ui::UiPointerPhase::Down,point,f.time});
+  point.x+=4;f.session.handlePointer({89,ui::UiPointerPhase::Move,point,f.time+.1});
+  for(u32 i=0;i<3000 && f.session.screen().terrainPreviewUpdates==publications;++i){f.render();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewUpdates>publications && f.session.screen().terrainLivePreview,"real renderer publication occurs while pointer is still down");
+  f.render();
+  AE_EXPECT_TRUE(f.text("Prévia"),"transient FX renderer preview has a real preview badge instead of Applied");
+  AE_EXPECT_TRUE(!f.session.screen().terrainFx.recipePending,"preview badge does not mark unchanged authoring pending");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"Move never commits authoring recipe");
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"live texture does not mutate scene document");
+  const auto geometry=f.session.screen().terrainPreviewBuild;
+  point.x+=4;f.session.handlePointer({89,ui::UiPointerPhase::Move,point,f.time+.2});
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild==geometry,"further samples retain immutable terrain build");
+  f.session.handlePointer({89,ui::UiPointerPhase::Cancel,point,f.time+.3});
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"cancel restores authoring without publishing strokes");
+  AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview,"cancel explicitly clears transient surface texture before restore job");
+  AE_EXPECT_TRUE(f.text("Gesto FX cancelado"),"cancel diagnostic is preserved instead of replaced by sample statistics");
+  f.render();ui::UiPoint footerPoint;
+  AE_EXPECT_TRUE(!f.point(id(Widget::TerrainSculpt),footerPoint) && f.point(fx(2),footerPoint),"applied FX footer exposes its own paint action without geometric brush");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNavigate),false),"applied footer navigation exits FX painting");
+  AE_EXPECT_TRUE(f.session.screen().terrainFx.mode==0 && !f.session.screen().terrainBrushArmed,"navigation leaves both authoring brushes disarmed");
+  AE_EXPECT_TRUE(f.tap(fx(2),false),"applied footer reenters actual FX painting");
+  AE_EXPECT_TRUE(f.session.screen().terrainFx.mode==1 && !f.session.screen().terrainBrushArmed,"FX footer never arms geometric/PBR painting");
+  f.render();AE_EXPECT_TRUE(f.point(fx(90),point),"actual bitmap available for footer gesture test");
+  f.time+=1;f.session.handlePointer({86,ui::UiPointerPhase::Down,point,f.time});point.x+=3;
+  f.session.handlePointer({86,ui::UiPointerPhase::Move,point,f.time+.1});
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainNavigate),false),"footer navigation cancels an in-flight FX gesture");
+  AE_EXPECT_TRUE(f.session.screen().terrainFx.mode==0 && !f.session.screen().terrainFx.cursorVisible && !f.session.screen().terrainBrushArmed,"footer cancellation clears FX cursor and preserves mode exclusion");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"footer cancellation retains applied FX and geometric authoring exactly");
+}
+
+AE_TEST(terrain_preview_idle_2048_seed_skips_snapshot_encoding_and_job_for_real_frames) {
+  TerrainUiFixture f;AE_EXPECT_TRUE(f.ready,"fixture");
+  resources::TerrainRecipe recipe;recipe.cells=8;recipe.height=0;
+  recipe.fx.enabled=true;recipe.fx.width=recipe.fx.height=2048;
+  recipe.fx.seedPixels.assign(usize(2048)*2048*4,17);
+  std::string error;AE_EXPECT_TRUE(f.session.applyTerrain(recipe,error),error.c_str());
+  // Existing authored data may load at full resolution under the core20B/pixel
+  // budget; UI editing still independently requires explicit256MiB preflight.
+  for(u32 i=0;i<4;++i){f.render();f.session.queueTerrainPreview();}
+  const auto before=f.session.screen().terrainFx;
+  const auto *seed=f.session.screen().terrainDraft.fx.seedPixels.data();
+  const auto geometry=f.session.screen().terrainPreviewBuild;
+  for(u32 i=0;i<64;++i){f.session.queueTerrainPreview();f.render();}
+  const auto &after=f.session.screen().terrainFx;
+  AE_EXPECT_EQ(after.previewFullEncodes,before.previewFullEncodes,"actual update+queue+UI footer idle frames do not encode16MiB seed");
+  AE_EXPECT_EQ(after.previewSnapshotCopies,before.previewSnapshotCopies,"idle queue performs no recipe snapshot copy");
+  AE_EXPECT_EQ(after.previewJobsQueued,before.previewJobsQueued,"idle frames enqueue no duplicate work");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.fx.seedPixels.data()==seed,"authoring seed retains exact storage identity");
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewBuild==geometry,"idle retains immutable built geometry");
+  AE_EXPECT_TRUE(!after.recipePending,"cached footer state reflects actual applied recipe");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(3,1),"real geometric edit changes nonFX key");
+  f.session.queueTerrainPreview();
+  AE_EXPECT_TRUE(f.session.screen().terrainFx.previewFullEncodes>before.previewFullEncodes &&
+    f.session.screen().terrainFx.previewSnapshotCopies>before.previewSnapshotCopies &&
+    f.session.screen().terrainFx.previewJobsQueued>before.previewJobsQueued,"dirty positive control reaches real encoder/snapshot/job producers");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainClose)),"closing cancels pending dirty preview");
+}
+
+AE_TEST(terrain_fx_transform_modes_expose_real_tools_gizmo_down_and_navigation_cancels_paint) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  resources::TerrainRecipe recipe;recipe.cells=16;recipe.height=0;std::string error;
+  AE_EXPECT_TRUE(f.ready && f.session.applyTerrain(recipe,error),error.c_str());
+  AE_EXPECT_TRUE(f.visit(2) && f.tap(fx(0)),"open real FX context");
+  const auto find=[&](u32 widget,ui::UiPoint &point){for(float y=2;y<f.session.screen().surface.height;y+=2)for(float x=2;x<f.session.screen().surface.width;x+=2)if(f.router.hitTest({x,y}).widgetId==widget){point={x,y};return true;}return false;};
+  const auto click=[&](u32 widget){f.render();ui::UiPoint point;if(!find(widget,point))return false;f.time+=1;f.session.handlePointer({60,ui::UiPointerPhase::Down,point,f.time});f.session.handlePointer({60,ui::UiPointerPhase::Up,point,f.time+.1});return true;};
+  ui::UiPoint point;f.render();
+  AE_EXPECT_TRUE(!find(id(Widget::ToolMove),point),"Edit mode hides transform rail");
+  AE_EXPECT_TRUE(f.tap(fx(24)) && f.tap(fx(3)),"explicit Transformar mode");
+  for(const auto tool:{Widget::ToolMove,Widget::ToolRotate,Widget::ToolScale}){
+    AE_EXPECT_TRUE(click(id(tool)),"real transform tool visible and touchable");f.render();bool hit=false;
+    for(u32 axis=0;axis<6 && !hit;++axis)hit=find(id(Widget::GizmoAxisBase,axis),point);
+    AE_EXPECT_TRUE(hit,"selected transform exposes actual gizmo region while terrain stays open");
+    f.time+=1;f.session.handlePointer({61,ui::UiPointerPhase::Down,point,f.time});
+    AE_EXPECT_TRUE(f.session.screen().activeGizmoAxis!=editor::EditorGizmoHandle::None,"routed Down activates real transform handle");
+    f.session.handlePointer({61,ui::UiPointerPhase::Cancel,point,f.time+.1});
+  }
+  AE_EXPECT_TRUE(f.tap(fx(24)) && f.tap(fx(1)),"return Edit exclusively");f.render();
+  AE_EXPECT_TRUE(!find(id(Widget::ToolMove),point),"Edit hides rail again");
+  AE_EXPECT_TRUE(f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(24)) && f.tap(fx(2)),"create actual mask and enter Paint");f.render();
+  AE_EXPECT_TRUE(!find(id(Widget::ToolMove),point),"Paint hides transform rail");
+  AE_EXPECT_TRUE(f.point(fx(90),point),"actual bitmap pointer target");
+  f.time+=1;f.session.handlePointer({62,ui::UiPointerPhase::Down,point,f.time});
+  f.session.handlePointer({62,ui::UiPointerPhase::Move,point,f.time+.1});f.render();
+  AE_EXPECT_TRUE(find(id(Widget::NavigationOrbit),point),"navigation control remains discoverable");
+  f.session.handlePointer({63,ui::UiPointerPhase::Down,point,f.time+.2});
+  AE_EXPECT_EQ(f.session.screen().terrainFx.mode,0u,"navigation Down exits Paint before camera handling");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.fx.strokes.empty(),"navigation cancels captured paint atomically");
+  f.session.handlePointer({63,ui::UiPointerPhase::Up,point,f.time+.3});
+  AE_EXPECT_TRUE(!f.session.screen().terrainBrushArmed,"navigation never rearms PBR painting");
+}
+
+AE_TEST(terrain_fx_auxiliary_canvas_vertical_exit_scrolls_without_committing_authoring) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(24)) && f.tap(fx(2)),"create bitmap and enter paint");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(fx(90),point),"auxiliary canvas is visible");
+  const auto before=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  const auto canvas=f.session.screen().terrainFx.canvas;
+  f.time+=1;
+  f.session.handlePointer({79,ui::UiPointerPhase::Down,point,f.time});
+  point.y=canvas.y-40;
+  f.session.handlePointer({79,ui::UiPointerPhase::Move,point,f.time+.1});
+  f.session.handlePointer({79,ui::UiPointerPhase::Up,point,f.time+.2});
+  AE_EXPECT_TRUE(f.session.screen().terrainScroll>0,"vertical swipe leaving bitmap scrolls panel");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),before,"panel scrolling cannot publish captured brush samples");
+  AE_EXPECT_TRUE(!f.session.screen().terrainFx.cursorVisible,"cancelled canvas gesture clears cursor");
+}
+
+AE_TEST(terrain_fx_auxiliary_canvas_vertical_paint_preserves_all_brush_directions) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(24)) && f.tap(fx(2)),"prepare FX paint");
+  f.render();const auto canvas=f.session.screen().terrainFx.canvas;
+  ui::UiPoint point{canvas.x+canvas.width/2,canvas.y+canvas.height/2};
+  AE_EXPECT_EQ(f.router.hitTest(point).widgetId,fx(90),"actual bitmap starts paint");
+  f.time+=1;f.session.handlePointer({78,ui::UiPointerPhase::Down,point,f.time});point.y-=20;
+  AE_EXPECT_TRUE(canvas.contains(point),"vertical stroke stays inside bitmap");
+  f.session.handlePointer({78,ui::UiPointerPhase::Move,point,f.time+.1});f.session.handlePointer({78,ui::UiPointerPhase::Up,point,f.time+.2});
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.fx.strokes.empty(),"vertical stroke commits real FX authoring");
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"painting does not scroll panel");
+  AE_EXPECT_TRUE(f.tap(fx(100)) && f.tap(fx(110)) && f.tap(fx(101)) && f.tap(fx(111)),"fixture uses actual non-paint scroll route to both material pages");
+}
+
+AE_TEST(terrain_fx_cursor_matches_rotated_local_brush_world_surface_and_mode) {
+  editor::TerrainFxUiState ui;ui.mode=1;ui.cursorVisible=true;ui.cursorU=.5f;ui.cursorV=.5f;
+  ui.brush.radiusMeters=2;ui.brush.aspect=2;ui.brush.rotationDegrees=90;ui.brush.shape=resources::TerrainFxBrushShape::Box;
+  resources::TerrainFxAsset fx;fx.enabled=true;fx.domain={-8,-8,16,16};
+  float world[16]{2,0,0,0,0,3,0,0,0,0,4,0,10,20,30,1};
+  const auto lines=editor::terrainFxCursorSegments(ui,fx,world,[](float x,float z){return x+z;});
+  AE_EXPECT_EQ(lines.size(),usize(64),"all box edges follow sixteen terrain samples");
+  AE_EXPECT_TRUE(std::abs(lines[0][0]-14)<.001f && std::abs(lines[0][2]-14)<.001f,"rotation aspect and world transform preserve actual metre footprint");
+  AE_EXPECT_TRUE(std::abs(lines[0][1]-14.15f)<.001f,"cursor follows terrain height then root transform");
+  const auto raised=editor::terrainFxCursorSegments(ui,fx,world,[](float x,float z){return x+z+10*std::max(0.f,1-std::abs(z)/4);});
+  AE_EXPECT_TRUE(std::abs(raised[8][1]-56.15f)<.001f,"mid-edge terrain elevation deforms the box contour between its corners");
+  ui.mode=0;AE_EXPECT_TRUE(editor::terrainFxCursorSegments(ui,fx,world,[](float,float){return 0.f;}).empty(),"Edit hides paint cursor");
+  ui.mode=2;AE_EXPECT_TRUE(editor::terrainFxCursorSegments(ui,fx,world,[](float,float){return 0.f;}).empty(),"Transform hides paint cursor");
+  ui.mode=1;ui.cursorVisible=false;AE_EXPECT_TRUE(editor::terrainFxCursorSegments(ui,fx,world,[](float,float){return 0.f;}).empty(),"Cancel hides cursor");
+}
+
+AE_TEST(terrain_fx_desktop_context_keeps_first_controls_and_root_back_without_pbr_navigation) {
+  TerrainUiFixture f(1280,720);const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)),"open actual FX context");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+64+0x100,point),"target slider is visible before scrolling on desktop");
+  AE_EXPECT_TRUE(!f.point(id(Widget::TerrainMaterialLibrary),point) && !f.point(id(Widget::TerrainLayerBase),point),"unrelated PBR rail stays on root painting page");
+  AE_EXPECT_TRUE(f.point(fx(4),point) && f.point(fx(1),point),"desktop keeps direct real channel and mode choices");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61)),false),"root painting breadcrumb remains directly reachable");
+  AE_EXPECT_EQ(f.session.screen().terrainMaterialView,0u,"Back returns to root painting capabilities");
+  f.render();
+  AE_EXPECT_TRUE(f.point(id(Widget::TerrainMaterialLibrary),point) && f.point(id(Widget::TerrainLayerBase),point),"all PBR controls remain reachable through root");
+  AE_EXPECT_TRUE(f.tap(fx(0)) && f.tap(fx(100)) && f.tap(fx(104)) && f.tap(fx(114)),"open actual per-material porosity authority");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(63))) && f.session.setTerrainNumber(349,.62),"contextual porosity retains explicit layer selection");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[1].snowPorosity,.62f,"selected material receives the shared authoring value");
 }

@@ -4,6 +4,7 @@
 #include "renderer/authoring_texture.h"
 #include "resources/terrain_surface_asset.h"
 #include "resources/terrain_surface_import.h"
+#include "resources/terrain_fx_field.h"
 #include <array>
 #include <functional>
 #include <span>
@@ -75,6 +76,7 @@ struct TerrainPath {
   bool operator==(const TerrainPath &) const = default;
 };
 struct TerrainRecipe {
+  TerrainFxAsset fx;
   TerrainSurfaceAsset surface;
   TerrainMode mode = TerrainMode::Heightfield;
   u32 seed = 1337, cells = 32, verticalCells = 24, octaves = 4;
@@ -144,6 +146,8 @@ bool meshTerrainField(const TerrainRecipe &, const TerrainField &, TerrainMesh &
                       const TerrainMesh *previous = nullptr,
                       std::span<const TerrainChunkKey> dirty = {});
 struct TerrainBuild {
+  TerrainFxField fxField;
+  TerrainFxDirtyRect fxDirty;
   TerrainRecipe recipe;
   TerrainField field;
   TerrainMesh mesh;
@@ -152,6 +156,20 @@ struct TerrainBuild {
 bool updateTerrain(const TerrainRecipe &, const TerrainBuild *previous, TerrainBuild &,
                    std::string &, const std::function<bool(float)> &progress = {});
 bool validTerrainRecipe(const TerrainRecipe &, std::string &);
+// Includes geometry/collision/PBR authoring, excludes only the independent FX
+// asset. Used to retain existing compatibility when only FX painting changes.
+std::string terrainRecipeNonFxKey(const TerrainRecipe &);
+// Local-space normal -> world-space, column-major inverse-transpose. A caller
+// with rotated/nonuniform terrain must supply the matching captured transform.
+struct TerrainFxSlopeFrame {
+  std::array<double,9> normalToWorld{1,0,0,0,1,0,0,0,1};
+  std::array<double,3> upWorld{0,1,0};
+};
+bool makeTerrainFxSlopeField(const TerrainField &,const TerrainFxAsset &,const TerrainFxSlopeFrame &,
+  std::vector<float> &,std::string &);
+bool updateTerrainWithFxFrame(const TerrainRecipe &,const TerrainBuild *previous,TerrainBuild &,
+  std::string &,const TerrainFxSlopeFrame &,const std::function<bool(float)> &progress = {},
+  const TerrainFxLimits &fxLimits = {});
 std::string serializeTerrainRecipe(const TerrainRecipe &);
 bool deserializeTerrainRecipe(std::string_view, TerrainRecipe &, std::string &);
 // Cooperative cancellation and strict output budget. Failure never changes out.

@@ -650,9 +650,13 @@ enum class UiIcon : u32 {
   ZzzTerrainTextureTexture149 = 634,  // zzz-terrain-texture/texture-149
   ZzzTerrainTextureTexture150 = 635,  // zzz-terrain-texture/texture-150
   ZzzTerrainTextureTexture151 = 636,  // zzz-terrain-texture/texture-151
+  ZzzzTerrainFxLava = 637,  // zzzz-terrain-fx/lava
+  ZzzzTerrainFxPuddle = 638,  // zzzz-terrain-fx/puddle
+  ZzzzTerrainFxStream = 639,  // zzzz-terrain-fx/stream
+  ZzzzTerrainFxWetness = 640,  // zzzz-terrain-fx/wetness
 };
 
-inline constexpr u32 kUiIconCount = 636;
+inline constexpr u32 kUiIconCount = 640;
 
 // Nome de catálogo do ícone, para log e diagnóstico. Nunca para busca: procurar
 // um ícone por string em tempo de execução desfaria a garantia do enum.

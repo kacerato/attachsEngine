@@ -68,6 +68,27 @@ template<class A> void fields(A &a,TerrainSnowSettings &v){
     v.sparkleEmission,v.sparkleStrength,v.sparkleSize,v.sparkleDensity,v.sparkleNoiseDensity,
     v.sparkleNoiseAmplitude,v.sparkleViewDependency,v.sourcePropertiesJson,v.sourceKeywordsJson);
 }
+
+template<class A> void fields(A &a,TerrainFlowSimulationSettings &v){
+  a(v.enabled,v.evaporation,v.strength,v.speed,v.resistance,v.wetnessEvaporation,
+    v.burnEvaporation,v.maximumEmitters,v.maximumColliders,v.sourcePropertiesJson);
+}
+template<class A> void fields(A &a,TerrainFlowLayerSettings &v){a(v.foam);}
+template<class A> void fields(A &a,TerrainFlowSettings &v){
+  a(v.wetness,v.puddles,v.streams,v.lava,v.perTexPorosity,v.perTexFoam,
+    v.dynamicFlows,v.wetnessMaskSnow,v.heightWetness,v.rainDrops,v.globalWetness,
+    v.globalRain,v.globalStreams,v.globalPuddles,v.heightDampStreams,v.heightDampLava,
+    v.specularFade,v.distanceWetness,v.lavaStochastic,v.tracksEnabled,v.sourceRainMode,
+    v.controller,v.streamControl,v.dynamicStreamControl,v.streamNormal,v.lavaDiffuse,
+    v.rainDropTexture,v.globalPorosity,v.wetnessParams,v.puddleParams,
+    v.heightWetnessParams,v.distanceWetnessParams,v.streamFlowParams,v.streamNormalFoam,
+    v.streamBlend,v.streamMaximum,v.streamUvScales,v.streamTint,v.streamFades,
+    v.lavaParams,v.lavaParams2,v.lavaEdgeColor,v.lavaColorLow,v.lavaColorHighlight,
+    v.lavaUvScale,v.lavaFades,v.lavaDisplacementScale,v.lavaEmissiveMultiplier,
+    v.lavaStochasticContrast,v.lavaStochasticSize,v.rainIntensityScale,v.specularFades,
+    v.traxFxThresholds,v.simulation,v.sourcePropertiesJson,v.sourceKeywordsJson,v.sourceTextureEnvsJson);
+}
+
 template<class A> void fields(A &a,TerrainTextureResidency &v){a(v.mode,v.maxSide);}
 template <class A> void extensionLayer(A &a,TerrainSurfaceLayer &v){
   a(v.geoParticipation,v.geoHeightFilterEnabled,v.geoHeightThreshold,v.geoHeightStrength,v.globalMapParticipation);
@@ -181,6 +202,41 @@ bool map(const TerrainSurfaceMap &m) {
       return false;
   return true;
 }
+// Structural data validation: disabled authored fields remain serializable;
+// enabled consumer/source availability is checked separately at publication.
+bool flowSettings(const TerrainFlowSettings &v,std::string &error){
+  const auto fail=[&](const char *message){error=message;return false;};
+  if(u32(v.sourceRainMode)>2)return fail("Invalid Flow source RainMode");
+  for(const auto *m:{&v.streamControl,&v.dynamicStreamControl,&v.streamNormal,&v.lavaDiffuse,&v.rainDropTexture})
+    if(!map(*m))return fail("Invalid Flow map/channel/residency transform");
+  for(const auto *vector:{&v.wetnessParams,&v.puddleParams,&v.heightWetnessParams,&v.distanceWetnessParams,
+      &v.streamFlowParams,&v.streamNormalFoam,&v.streamUvScales,&v.streamTint,&v.streamFades,
+      &v.lavaParams,&v.lavaParams2,&v.lavaEdgeColor,&v.lavaColorLow,&v.lavaColorHighlight,
+      &v.lavaUvScale,&v.lavaFades,&v.rainIntensityScale,&v.specularFades,&v.traxFxThresholds})
+    for(float x:*vector)if(!range(x,-1e8f,1e8f))return fail("Invalid Flow vector/reserved value");
+  if(!range(v.globalPorosity,0,1)||!range(v.streamBlend,0,65536)||!range(v.streamMaximum,0,1)||
+    !range(v.lavaDisplacementScale,0,64)||!range(v.lavaEmissiveMultiplier,0,65536)||
+    !range(v.lavaStochasticContrast,0,64)||!range(v.lavaStochasticSize,.0001f,65536))return fail("Invalid Flow scalar");
+  if(v.wetness&&(!range(v.wetnessParams[0],0,1)||!range(v.wetnessParams[1],v.wetnessParams[0],1)))return fail("Invalid active wetness min/max");
+  if(v.wetness&&v.distanceWetness&&(v.distanceWetnessParams[2]<=0||!range(v.distanceWetnessParams[1],0,1)||!range(v.distanceWetnessParams[3],0,1)))return fail("Invalid active wetness distance fade");
+  if(v.puddles&&(v.puddleParams[0]<0||!range(v.puddleParams[1],0,1)))return fail("Invalid active puddle blend/maximum");
+  if(v.lava&&(v.lavaParams[0]<0||!range(v.lavaParams[1],0,1)))return fail("Invalid active lava blend/maximum");
+  const auto ordered=[](const auto &r){return r[0]<=r[1]&&r[1]<=r[2]&&r[2]<=r[3];};
+  if((v.streams&&v.heightDampStreams&&!ordered(v.streamFades))||(v.lava&&v.heightDampLava&&!ordered(v.lavaFades)))return fail("Invalid active flow height window");
+  if(v.specularFade&&v.specularFades[1]<v.specularFades[0])return fail("Invalid active specular height range");
+  if(v.rainDrops&&!range(v.rainIntensityScale[0],0,1))return fail("Invalid active rain intensity");
+  for(const auto *color:{&v.streamTint,&v.lavaEdgeColor,&v.lavaColorLow,&v.lavaColorHighlight})for(float x:*color)
+    if(!range(x,0,64))return fail("Invalid Flow color");
+  const auto &sim=v.simulation;
+  for(const auto *pair:{&sim.evaporation,&sim.strength,&sim.speed,&sim.resistance})for(float x:*pair)
+    if(!range(x,0,65536))return fail("Invalid Flow manager vector");
+  if(!range(sim.wetnessEvaporation,0,65536)||!range(sim.burnEvaporation,0,65536)||
+    sim.maximumEmitters>65536||sim.maximumColliders>65536||(sim.enabled&&(!sim.maximumEmitters||!sim.maximumColliders)))return fail("Invalid Flow simulation capacity/evaporation");
+  for(const auto *raw:{&v.sourcePropertiesJson,&v.sourceKeywordsJson,&v.sourceTextureEnvsJson,&sim.sourcePropertiesJson})
+    if(raw->size()>64*1024||raw->find('\0')!=std::string::npos)return fail("Invalid Flow provenance");
+  return true;
+}
+
 bool noise(const TerrainSurfaceNoise &n) {
   return map(n.map) && projection(n.projection) &&
          range(n.scale, .0001f, 65536) && range(n.strength, 0, 64) &&
@@ -196,6 +252,8 @@ template <class F> void refs(const TerrainSurfaceAsset &a, F f) {
   visitNoise({}, a.detailNoise, "global.detail");
   visitNoise({}, a.distanceNoise, "global.distance");
   const auto visitMap=[&](const TerrainSurfaceMap &m,const std::string &location){if(m.texture.valid())f({},m.texture,location);};
+  visitMap(a.flow.streamControl,"flow.staticControl");visitMap(a.flow.dynamicStreamControl,"flow.dynamicControl");
+  visitMap(a.flow.streamNormal,"flow.normalFoam");visitMap(a.flow.lavaDiffuse,"flow.lava");visitMap(a.flow.rainDropTexture,"flow.rain");
   visitMap(a.geo.albedo,"geo.albedo");visitMap(a.geo.normal,"geo.normal");
   visitMap(a.snow.diffuse,"snow.diffuse");visitMap(a.snow.height,"snow.height");visitMap(a.snow.normal,"snow.normal");
   visitMap(a.snow.smoothness,"snow.smoothness");visitMap(a.snow.ao,"snow.ao");visitMap(a.snow.normalNoiseMap,"snow.normalNoise");
@@ -239,6 +297,7 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
   if (a.layers.empty() || a.layers.size() > 32)
     return fail("Surface requires 1..32 layers");
   if(!validTerrainTextureResidency(a.textureResidency,true))return fail("Invalid terrain texture residency policy");
+  if(!flowSettings(a.flow,error))return false;
   const auto &snow=a.snow;
   if(u32(snow.mode)>2)return fail("Invalid Snow mode");
   bool snowMaps=true;for(const auto *m:{&snow.diffuse,&snow.height,&snow.normal,&snow.smoothness,&snow.ao,&snow.normalNoiseMap,&snow.mask,&snow.sparkleNoiseMap})snowMaps=snowMaps&&map(*m);
@@ -303,7 +362,7 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
   }
   std::set<AssetGuid> ids;
   for (auto &l : a.layers) {
-    if(!range(l.snowParticipation,0,1)||!range(l.snowPorosity,0,1))return fail("Invalid Snow layer participation/porosity");
+    if(!range(l.flow.foam,0,2)||!range(l.snowParticipation,0,1)||!range(l.snowPorosity,0,1))return fail("Invalid Snow layer participation/porosity");
     if (!l.identity.valid() || !ids.insert(l.identity).second ||
         l.name.size() > 128 || l.name.find('\0') != std::string::npos)
       return fail("Invalid or duplicate surface layer identity/name");
@@ -384,14 +443,19 @@ bool serializeTerrainSurface(const TerrainSurfaceAsset &a, std::string &out,
     return false;
   auto copy = a;
   Writer w;
-  w.s << "AETERRAINSURFACE3 ";
+  w.s << "AETERRAINSURFACE4 ";
   w.one(copy);
   u32 extensionVersion=1,count=u32(copy.layers.size());w.one(extensionVersion);w.one(copy.geo);w.one(copy.globalMaps);w.one(count);
   for(auto &layer:copy.layers){w.one(layer.identity);extensionLayer(w,layer);}
   u32 snowVersion=1;w.one(snowVersion);w.one(copy.snow);w.one(copy.textureResidency);
   for(auto &layer:copy.layers){w.one(layer.identity);w.one(layer.snowParticipation);w.one(layer.snowPorosity);}
-  u32 mapCount=0;visitTerrainSurfaceMaps(copy,[&](auto &){++mapCount;});w.one(mapCount);
-  visitTerrainSurfaceMaps(copy,[&](auto &m){w.one(m.texture);w.one(m.textureResidency);});
+  u32 mapCount=0;visitTerrainSurfaceMapsV3(copy,[&](auto &){++mapCount;});w.one(mapCount);
+  visitTerrainSurfaceMapsV3(copy,[&](auto &m){w.one(m.texture);w.one(m.textureResidency);});
+
+  u32 flowVersion=1;w.one(flowVersion);w.one(copy.flow);w.one(count);
+  for(auto &layer:copy.layers){w.one(layer.identity);w.one(layer.flow);}
+  u32 flowMapCount=0;visitTerrainFlowMaps(copy,[&](auto &){++flowMapCount;});w.one(flowMapCount);
+  visitTerrainFlowMaps(copy,[&](auto &m){w.one(m.texture);w.one(m.textureResidency);});
   auto serialized = w.s.str();
   if (serialized.size() > 1024 * 1024) {
     error = "Surface metadata exceeds 1 MiB byte budget";
@@ -409,7 +473,7 @@ bool deserializeTerrainSurface(std::string_view text, TerrainSurfaceAsset &out,
   Reader r(text);
   std::string version;
   r.s >> version;
-  if (version != "AETERRAINSURFACE1"&&version!="AETERRAINSURFACE2"&&version!="AETERRAINSURFACE3") {
+  if (version != "AETERRAINSURFACE1"&&version!="AETERRAINSURFACE2"&&version!="AETERRAINSURFACE3"&&version!="AETERRAINSURFACE4") {
     error = "Unsupported terrain surface version";
     return false;
   }
@@ -427,15 +491,28 @@ bool deserializeTerrainSurface(std::string_view text, TerrainSurfaceAsset &out,
       extensionLayer(r,*found);
     }
   }
-  if(version=="AETERRAINSURFACE3"){
+  if(version=="AETERRAINSURFACE3"||version=="AETERRAINSURFACE4"){
     u32 snowVersion=0;r.one(snowVersion);if(!r.ok||snowVersion!=1){error="Unsupported Snow extension version";return false;}
     r.one(a.snow);r.one(a.textureResidency);
     std::set<AssetGuid> visited;
     for(usize i=0;i<a.layers.size();++i){AssetGuid id;r.one(id);auto it=std::find_if(a.layers.begin(),a.layers.end(),[&](auto &l){return l.identity==id;});
       if(!r.ok||it==a.layers.end()||!visited.insert(id).second){error="Invalid Snow layer coverage";return false;}r.one(it->snowParticipation);r.one(it->snowPorosity);}
-    u32 mapCount=0,expected=0;r.one(mapCount);visitTerrainSurfaceMaps(a,[&](auto &){++expected;});
+    u32 mapCount=0,expected=0;r.one(mapCount);visitTerrainSurfaceMapsV3(a,[&](auto &){++expected;});
     if(!r.ok||mapCount!=expected){error="Invalid texture residency map coverage";return false;}
-    visitTerrainSurfaceMaps(a,[&](auto &m){AssetGuid id;r.one(id);r.one(m.textureResidency);if(id!=m.texture)r.ok=false;});
+    visitTerrainSurfaceMapsV3(a,[&](auto &m){AssetGuid id;r.one(id);r.one(m.textureResidency);if(id!=m.texture)r.ok=false;});
+  }
+
+  if(version=="AETERRAINSURFACE4"){
+    u32 flowVersion=0,flowLayers=0;r.one(flowVersion);
+    if(!r.ok||flowVersion!=1){error="Unsupported Flow extension version";return false;}
+    r.one(a.flow);r.one(flowLayers);
+    if(!r.ok||flowLayers!=a.layers.size()){error="Invalid Flow layer coverage";return false;}
+    std::set<AssetGuid> visited;
+    for(u32 i=0;i<flowLayers;++i){AssetGuid id;r.one(id);auto it=std::find_if(a.layers.begin(),a.layers.end(),[&](const auto &l){return l.identity==id;});
+      if(!r.ok||it==a.layers.end()||!visited.insert(id).second){error="Invalid Flow layer identity";return false;}r.one(it->flow);}
+    u32 flowMapCount=0,expected=0;r.one(flowMapCount);visitTerrainFlowMaps(a,[&](auto &){++expected;});
+    if(!r.ok||flowMapCount!=expected){error="Invalid Flow residency map coverage";return false;}
+    visitTerrainFlowMaps(a,[&](auto &m){AssetGuid id;r.one(id);r.one(m.textureResidency);if(id!=m.texture)r.ok=false;});
   }
   r.s >> std::ws;
   if (!r.ok || !r.s.eof()) {
@@ -470,6 +547,45 @@ bool resolveTerrainSurface(const TerrainSurfaceAsset &a,
   error.clear();
   return true;
 }
+bool diagnoseTerrainFlowPublication(const TerrainSurfaceAsset &a,
+    const std::function<bool(AssetGuid)> &exists,const TerrainFlowConsumerCapabilities &caps,
+    std::vector<TerrainSurfaceDiagnostic> &out,std::string &error){
+  if(!validTerrainSurface(a,error))return false;
+  if(!exists){error="Texture identity resolver is required";return false;}
+  std::vector<TerrainSurfaceDiagnostic> next;
+  refs(a,[&](AssetGuid layer,AssetGuid texture,const std::string &location){
+    if(!exists(texture))next.push_back({layer,texture,"missing.texture:"+location});
+  });
+  const auto &v=a.flow;
+  const auto require=[&](bool enabled,bool available,const char *name){if(enabled&&!available)next.push_back({{}, {},std::string("unavailable.consumer:flow.")+name});};
+  const bool active=v.wetness||v.puddles||v.streams||v.lava;
+  require(v.wetness,caps.wetness,"wetness");require(v.puddles,caps.puddles,"puddles");
+  require(v.streams,caps.streams,"streams");require(v.lava,caps.lava,"lava");
+  require(active&&v.dynamicFlows,caps.dynamicFlows,"dynamicFlows");
+  require(v.simulation.enabled,caps.dynamicFlows,"simulation");
+  require(v.wetness&&v.heightWetness,caps.heightWetness,"heightWetness");
+  require(v.wetness&&v.distanceWetness,caps.distanceWetness,"distanceWetness");
+  require(v.rainDrops,caps.rain,"rain");require(v.wetnessMaskSnow,caps.snowClearing,"snowClearing");
+  require(v.streams&&v.heightDampStreams,caps.streamHeightFilter,"streamHeightFilter");
+  require(v.lava&&v.heightDampLava,caps.lavaHeightFilter,"lavaHeightFilter");
+  require(v.specularFade,caps.specularFade,"specularFade");
+  require(v.lava&&v.lavaStochastic,caps.lavaStochastic,"lavaStochastic");
+  require(active&&v.tracksEnabled,caps.tracks,"tracks");
+  // Displacement is retained even without a tessellation path; only a real
+  // future geometry switch can enable it, rather than default scale=1 doing so.
+  const bool global=(v.wetness&&v.globalWetness)||(v.puddles&&v.globalPuddles)||
+    (v.streams&&v.globalStreams)||(v.rainDrops&&v.globalRain);
+  require(global,caps.globalController&&v.controller.valid(),"globalController");
+  const auto source=[&](bool enabled,const TerrainSurfaceMap &m,const char *name){if(enabled&&!m.texture.valid())next.push_back({{}, {},std::string("missing.source:flow.")+name});};
+  source(active&&!caps.staticControlProvided,v.streamControl,"staticControl");
+  source(active&&v.dynamicFlows&&!caps.dynamicControlProvided,v.dynamicStreamControl,"dynamicControl");
+  source(v.streams,v.streamNormal,"normalFoam");source(v.lava,v.lavaDiffuse,"lava");source(v.rainDrops,v.rainDropTexture,"rain");
+  if(v.streams&&v.streamNormal.channel!=TerrainSurfaceChannel::NormalRG)next.push_back({{},v.streamNormal.texture,"unsupported.packing:flow.normalFoam requires RG normal / B foam"});
+  out=std::move(next);
+  if(!out.empty()){error="Flow publication requires resolved sources and implemented consumers";return false;}
+  error.clear();return true;
+}
+
 std::vector<AssetGuid>
 activeTerrainSurfaceLayers(const TerrainSurfaceAsset &a) {
   std::vector<AssetGuid> out;

@@ -16,6 +16,7 @@ vec4 vColor;
 #define EMISSIVE_MAP textures[3]
 #ifdef TEST_PBR
 #define TERRAIN_SURFACE_CAMERA_POSITION ((test.mode==45u||test.mode==46u||test.mode==77u||test.mode==81u||test.mode==82u||test.mode==83u||test.mode==86u||test.mode==152u||test.mode==168u||test.mode==179u)?vec3(worldPosition.x,15.0,worldPosition.z):vec3(0,(test.mode==33u||test.mode==35u||test.mode==62u||test.mode==69u||test.mode==76u||test.mode==84u||test.mode==106u||test.mode==153u)?100.0:0.0,0))
+#define TERRAIN_SURFACE_TIME_SECONDS 0.0
 #define TERRAIN_SURFACE_PBR
 #define TERRAIN_SURFACE_MAP(index) textures[index]
 #endif
@@ -27,6 +28,8 @@ vec4 vColor;
 void main() {
   frame.materialFlags=uvec4(0,0,test.mode==4u?0u:2u,0);
   vUv0=uv;
+  if(test.mode==250u)vUv0=vec2(-96);
+  if(test.mode==251u)vUv0=vec2(32);
   if(test.mode==230u||test.mode==231u||test.mode==233u||test.mode==234u)vUv0=vec2(test.mode==230u||test.mode==233u?-32:32,-32);
   if(test.mode==232u)vUv0=vec2(-96,-96);
   if(test.mode==112u||test.mode==113u)vUv0=uv*4.0+vec2(test.mode==112u?-.00001:.00001,0);
@@ -45,6 +48,7 @@ void main() {
   if(test.mode==189u)position.y=uv.y;
   if(test.mode==235u)position.y=.00005;
   TerrainPBRResult pbr=terrainPBRSurface(position,normal);
+  if(test.mode==239u||test.mode==241u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}
   if(test.mode==235u){outColor=vec4(vec3((1.0-pbr.color.g)*100000.0),1);return;}
   if(test.mode==212u||test.mode==213u||test.mode==220u||test.mode==221u||test.mode==236u||test.mode==237u){outColor=vec4(pbr.normalWorld*.5+.5,1);return;}
   if(test.mode==214u||test.mode==226u||test.mode==227u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}

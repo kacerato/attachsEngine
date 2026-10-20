@@ -40,6 +40,72 @@ struct TerrainSurfaceMap {
   std::array<float, 4> colorFactor{1, 1, 1, 1};
   std::array<float, 4> colorRemapMin{0, 0, 0, 0}, colorRemapMax{1, 1, 1, 1};
 };
+enum class TerrainFlowRainMode : u32 { None, StreamsOnly, StreamsAndWetness };
+enum class TerrainFlowEmitterKind : u32 { Water, Lava };
+enum class TerrainFlowColliderKind : u32 { Water, Lava, Both };
+struct TerrainFlowLayerSettings {
+  // Shared porosity authority remains TerrainSurfaceLayer::snowPorosity (V3).
+  float foam=1;
+};
+struct TerrainFlowControllerState {
+  AssetGuid identity;
+  bool wetnessAvailable=false,puddleAvailable=false,streamAvailable=false,rainAvailable=false;
+  std::array<float,2> wetness{0,1};
+  float puddleMaximum=1,streamMaximum=1,rainIntensity=0;
+};
+struct TerrainFlowSimulationSettings {
+  bool enabled=false;
+  std::array<float,2> evaporation{.01f,.01f},strength{1,1},speed{1,1},resistance{.1f,.1f};
+  float wetnessEvaporation=.01f,burnEvaporation=.01f;
+  // Runtime topology/capacity decision must be authored; no hidden truncation.
+  u32 maximumEmitters=64,maximumColliders=64;
+  std::string sourcePropertiesJson;
+};
+struct TerrainFlowEmitterSettings {
+  TerrainFlowEmitterKind kind=TerrainFlowEmitterKind::Water;
+  bool enabled=true;float strength=1;
+  // Entity transform supplies world position and radius; source strength scales
+  // effective radius, not volumetric flow. Ownership/lifecycle is not implied.
+  AssetGuid terrain;
+};
+struct TerrainFlowColliderSettings {
+  TerrainFlowColliderKind kind=TerrainFlowColliderKind::Both;
+  bool enabled=true;AssetGuid terrain;
+};
+struct TerrainFlowSettings {
+  bool wetness=false,puddles=false,streams=false,lava=false;
+  bool perTexPorosity=false,perTexFoam=false,dynamicFlows=false,wetnessMaskSnow=false;
+  bool heightWetness=false,rainDrops=false,globalWetness=false,globalRain=false;
+  bool globalStreams=false,globalPuddles=false,heightDampStreams=false,heightDampLava=false;
+  bool specularFade=false,distanceWetness=false,lavaStochastic=false;
+  // Adjacent external tracks authority; retain thresholds even while disabled.
+  bool tracksEnabled=false;
+  TerrainFlowRainMode sourceRainMode=TerrainFlowRainMode::None;
+  AssetGuid controller;
+  TerrainSurfaceMap streamControl=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}(),
+    dynamicStreamControl=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}();
+  TerrainSurfaceMap streamNormal=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::NormalRG;return m;}();
+  TerrainSurfaceMap lavaDiffuse=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}();
+  TerrainSurfaceMap rainDropTexture=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}();
+  float globalPorosity=.4f;
+  std::array<float,4> wetnessParams{0,1,0,0},puddleParams{6,1,0,0};
+  std::array<float,4> heightWetnessParams{1,.1f,1,1},distanceWetnessParams{100,1,200,0};
+  std::array<float,4> streamFlowParams{.4f,.5f,.3f,.2f},streamNormalFoam{.35f,12,0,0};
+  float streamBlend=40,streamMaximum=1;
+  std::array<float,4> streamUvScales{70,70,70,70},streamTint{.5f,.5f,.5f,1},streamFades{0,10,1000,1500};
+  std::array<float,4> lavaParams{2.7f,1,.5f,.275f},lavaParams2{.05f,.017f,.15f,2};
+  // Source snippets omit color alpha: explicit unused alpha is preserved here;
+  // a source material import must retain its actual serialized alpha.
+  std::array<float,4> lavaEdgeColor{.05f,.015f,0,1},lavaColorLow{.83f,0,0,1},lavaColorHighlight{.66f,.66f,0,1};
+  std::array<float,4> lavaUvScale{70,70,0,0},lavaFades{0,10,1000,1500};
+  float lavaDisplacementScale=1,lavaEmissiveMultiplier=2,lavaStochasticContrast=.5f,lavaStochasticSize=1;
+  std::array<float,4> rainIntensityScale{0,150,0,0},specularFades{0,100,0,0},traxFxThresholds{0,0,0,0};
+  TerrainFlowSimulationSettings simulation;
+  // All reserved vector components remain in these vectors. Unknown source
+  // properties, keywords and TextureEnv ST stay lossless in provenance.
+  std::string sourcePropertiesJson,sourceKeywordsJson,sourceTextureEnvsJson;
+};
+
 struct TerrainSurfaceNoise {
   bool enabled = false;
   TerrainSurfaceMap map;
@@ -181,7 +247,8 @@ struct TerrainSurfaceLayer {
   bool geoHeightFilterEnabled=false;
   float geoHeightThreshold=1,geoHeightStrength=1;
   std::array<float,4> globalMapParticipation{1,1,1,1};
-  float snowParticipation=1,snowPorosity=.4f;
+  float snowParticipation=1,snowPorosity=.4f; // Shared material porosity; legacy serialized name.
+  TerrainFlowLayerSettings flow;
 };
 struct TerrainSurfaceAsset {
   // Vector order is authoring/control-map order, including inactive layers.
@@ -191,6 +258,7 @@ struct TerrainSurfaceAsset {
   TerrainAntiTileArray antiTileArray;
   TerrainTextureResidency textureResidency{TerrainTextureResidencyMode::Original,0};
   TerrainSnowSettings snow;
+  TerrainFlowSettings flow;
   TerrainGeoSettings geo;
   std::array<TerrainGlobalMap,4> globalMaps=neutralTerrainGlobalMaps();
 };
@@ -209,5 +277,20 @@ bool resolveTerrainSurface(const TerrainSurfaceAsset &,
                            const std::function<bool(AssetGuid)> &textureExists,
                            std::vector<TerrainSurfaceDiagnostic> &,
                            std::string &error);
+
+// Explicit producer capabilities; defaults diagnose every active Flow consumer
+// until publication supplies a real, validated implementation.
+struct TerrainFlowConsumerCapabilities {
+  bool wetness=false,puddles=false,streams=false,lava=false,dynamicFlows=false;
+  bool heightWetness=false,distanceWetness=false,rain=false,snowClearing=false;
+  bool streamHeightFilter=false,lavaHeightFilter=false,specularFade=false;
+  bool lavaStochastic=false,tracks=false,displacement=false,globalController=false;
+  bool staticControlProvided=false,dynamicControlProvided=false;
+};
+bool diagnoseTerrainFlowPublication(const TerrainSurfaceAsset &,
+  const std::function<bool(AssetGuid)> &textureExists,
+  const TerrainFlowConsumerCapabilities &,std::vector<TerrainSurfaceDiagnostic> &,
+  std::string &error);
+
 std::vector<AssetGuid> activeTerrainSurfaceLayers(const TerrainSurfaceAsset &);
 } // namespace ae::resources

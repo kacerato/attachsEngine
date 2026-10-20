@@ -3,10 +3,13 @@
 #include "resources/gltf_import.h"
 #include "resources/import_cache.h"
 #include "resources/terrain_textures.generated.h"
+#include "resources/terrain_surface_texture_refs.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <fstream>
+#include <iterator>
 
 using namespace ae;
 AE_TEST(terrain_global_domain_survives_glb_cache_independently_of_texture_tiling) {
@@ -123,7 +126,7 @@ AE_TEST(terrain_original_geo_pair_imports_color_and_normal_role_views) {
   }
 }
 
-AE_TEST(terrain_surface_v3_glb_requires_explicit_domain) {
+AE_TEST(terrain_surface_current_and_frozen_v3_glb_require_explicit_domain) {
   resources::TerrainRecipe recipe;
   recipe.cells=8;recipe.controlCells=8;recipe.size=120;
   recipe.height=0;recipe.textureScale=3;
@@ -132,7 +135,7 @@ AE_TEST(terrain_surface_v3_glb_requires_explicit_domain) {
   layer.name="V3 domain";recipe.surface.layers={layer};
   std::string serialized,error;
   AE_EXPECT_TRUE(resources::serializeTerrainSurface(recipe.surface,serialized,error),error.c_str());
-  AE_EXPECT_TRUE(serialized.starts_with("AETERRAINSURFACE3 "),"regression exercises V3, not only V2");
+  AE_EXPECT_TRUE(serialized.starts_with("AETERRAINSURFACE4 "),"current writer exercises V4");
   resources::TerrainBuild build;
   AE_EXPECT_TRUE(resources::updateTerrain(recipe,nullptr,build,error),error.c_str());
   const std::array<std::vector<u8>,4> legacy{{
@@ -155,6 +158,26 @@ AE_TEST(terrain_surface_v3_glb_requires_explicit_domain) {
   AE_EXPECT_TRUE(position!=bytes.end(),"explicit domain key exists");
   std::copy(unknown.begin(),unknown.end(),position);
   resources::GltfImport rejected;
-  AE_EXPECT_TRUE(!resources::importGlb(bytes,{},{},rejected),"V3 cannot silently fall back to default domain");
+  AE_EXPECT_TRUE(!resources::importGlb(bytes,{},{},rejected),"current surface cannot silently fall back to default domain");
   AE_EXPECT_TRUE(rejected.diagnostic.find("requires its full domain")!=std::string::npos,"failure is the missing-domain contract, not malformed GLB");
+  // Keep the original V3 regression using bytes produced by the frozen V3
+  // writer, rather than changing only the version label of a V4 payload.
+  std::ifstream fixture("tests/native/fixtures/terrain-surface-v3.txt",std::ios::binary);
+  const std::string historical{std::istreambuf_iterator<char>(fixture),{}};
+  AE_EXPECT_TRUE(historical.starts_with("AETERRAINSURFACE3 "),"real frozen V3 fixture loaded");
+  u32 jsonLength=0;std::memcpy(&jsonLength,bytes.data()+12,4);
+  std::string json(reinterpret_cast<const char*>(bytes.data()+20),jsonLength);
+  const auto currentHex=resources::terrainSurfaceHex(serialized),oldHex=resources::terrainSurfaceHex(historical);
+  usize replaced=0,at=0;
+  while((at=json.find(currentHex,at))!=std::string::npos){json.replace(at,currentHex.size(),oldHex);at+=oldHex.size();++replaced;}
+  AE_EXPECT_TRUE(replaced>0,"actual surface metadata replaced with frozen writer payload");
+  while(json.size()%4)json+=' ';
+  std::vector<u8> legacyBytes(bytes.begin(),bytes.begin()+20);
+  legacyBytes.insert(legacyBytes.end(),json.begin(),json.end());
+  legacyBytes.insert(legacyBytes.end(),bytes.begin()+20+jsonLength,bytes.end());
+  const u32 total=u32(legacyBytes.size()),length=u32(json.size());
+  std::memcpy(legacyBytes.data()+8,&total,4);std::memcpy(legacyBytes.data()+12,&length,4);
+  resources::GltfImport legacyRejected;
+  AE_EXPECT_TRUE(!resources::importGlb(legacyBytes,{},{},legacyRejected),"frozen V3 also requires full domain");
+  AE_EXPECT_TRUE(legacyRejected.diagnostic.find("requires its full domain")!=std::string::npos,"V3 fails specifically on missing domain before resolving its historical image table");
 }

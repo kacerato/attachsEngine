@@ -641,6 +641,10 @@ constexpr const char *kNames[] = {
     "zzz-terrain-texture/texture-149",
     "zzz-terrain-texture/texture-150",
     "zzz-terrain-texture/texture-151",
+    "zzzz-terrain-fx/lava",
+    "zzzz-terrain-fx/puddle",
+    "zzzz-terrain-fx/stream",
+    "zzzz-terrain-fx/wetness",
 };
 } // namespace
 

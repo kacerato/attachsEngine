@@ -372,6 +372,9 @@ endif()
 
 add_library(aether_assets STATIC
   resources/terrain_asset.cpp
+  resources/terrain_fx_asset.cpp
+  resources/terrain_fx_field.cpp
+  resources/terrain_static_fx_import.cpp
   resources/terrain_history_store.cpp
   resources/terrain_neighbors.cpp
   resources/terrain_surface_asset.cpp
@@ -552,6 +555,7 @@ add_library(aether_editor STATIC
   editor/editor_texture_publication.cpp
   editor/editor_model_publication.cpp
   editor/editor_terrain.cpp
+  editor/editor_terrain_fx_controller.cpp
   editor/editor_terrain_screen.cpp
   editor/editor_fbx_rig_binding.cpp
   editor/editor_model_takes.cpp
@@ -996,6 +1000,10 @@ if(NOT ANDROID)
     target_compile_options(aether_fields50_tests PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_ui_preview ../tests/native/ui_preview_main.cpp)
+  add_executable(aether_terrain_workflow_preview EXCLUDE_FROM_ALL ../tests/native/terrain_workflow_preview_main.cpp)
+  target_include_directories(aether_terrain_workflow_preview PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_terrain_workflow_preview PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_terrain_workflow_preview PRIVATE aether_core aether_ui aether_editor aether_renderer)
   aether_add_terrain_core_tests()
   aether_add_terrain_surface_preview()
   add_executable(aether_terrain_tests ../tests/native/family_base_main.cpp ../tests/native/test_terrain.cpp ../tests/native/test_terrain_import.cpp ../tests/native/test_terrain_lod.cpp
@@ -1004,7 +1012,12 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_recovery.cpp ../tests/native/test_terrain_surface_asset.cpp
     ../tests/native/test_terrain_surface_catalog.cpp ../tests/native/test_terrain_control_cache.cpp
     ../tests/native/test_terrain_material.cpp ../tests/native/test_terrain_surface_domain.cpp ../tests/native/test_terrain_surface_modules.cpp
-    ../tests/native/test_terrain_snow_next.cpp ../tests/native/test_terrain_snow_mips.cpp)
+    ../tests/native/test_terrain_snow_next.cpp ../tests/native/test_terrain_snow_mips.cpp
+    ../tests/native/test_terrain_fx_foundation.cpp ../tests/native/test_terrain_fx_encoding.cpp
+    ../tests/native/test_terrain_fx_recipe.cpp ../tests/native/test_terrain_fx_persistence.cpp
+    ../tests/native/test_terrain_surface_v4.cpp ../tests/native/test_terrain_flow_coverage.cpp
+    ../tests/native/test_terrain_fx_editor.cpp ../tests/native/test_terrain_static_fx_import.cpp
+    ../tests/native/test_terrain_static_fx_pipeline.cpp ../tests/native/test_terrain_static_fx_table.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_texture_publication_tests EXCLUDE_FROM_ALL

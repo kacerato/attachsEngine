@@ -1,4 +1,5 @@
 #include "editor/editor_screen_internal.h"
+#include "editor/editor_terrain_fx_controls.h"
 #include "runtime/scene_physics.h"
 #include "runtime/scene_timers.h"
 #include "runtime/scene_tweens.h"
@@ -1615,7 +1616,7 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
       &expandedVisual->type()==&scene::Collider::descriptor;
   if (entity != nullptr && !state.guiSelection.valid() && state.tool != EditorGizmoMode::Select &&
       state.workspace == EditorWorkspace::Scene && !state.cameraViewEntity && !colliderEditing &&
-      !state.terrainOpen && !(waterRoute(*entity).count && state.waterTab==1)) {
+      (!state.terrainOpen || (terrainFxView(state.terrainMaterialView) && state.terrainFx.mode==2)) && !(waterRoute(*entity).count && state.waterTab==1)) {
     EditorGizmoSettings settings{};
     settings.screenLengthPixels = 72.0f;
     float world[16];
@@ -11224,7 +11225,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       router.addBlocker(banner);
     }
   }
-  if (state.workspace == EditorWorkspace::Scene && !state.terrainOpen) buildToolRail(builder, layout.viewport, compact);
+  if (state.workspace == EditorWorkspace::Scene && (!state.terrainOpen || (terrainFxView(state.terrainMaterialView) && state.terrainFx.mode==2))) buildToolRail(builder, layout.viewport, compact);
   if (!layout.hierarchyPanel.isEmpty())
     layout.hierarchyRowCount =
         buildHierarchy(builder, layout.hierarchyPanel, layout.hierarchyVisibleRows);
@@ -11396,7 +11397,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     const float width=std::min(64.0f,(layout.viewport.width-(compact&&!narrowViewport?112:16))/3);
     for(u32 i=0;i<3;++i) {
       const UiRect cell{layout.viewport.x+8+i*width,layout.viewport.bottom()-(narrowViewport?88:compact?44:76),width-2,narrowViewport?40.f:36.f};
-      const bool active=static_cast<u32>(state.navigation)==i && !(state.terrainOpen&&state.terrainBrushArmed);
+      const bool active=static_cast<u32>(state.navigation)==i && !(state.terrainOpen && (state.terrainBrushArmed || (terrainFxView(state.terrainMaterialView) && state.terrainFx.mode==1)));
       list.addRect(cell,active?theme.color.accent:theme.color.raised,theme.radius.control);
       list.addImage(centred(cell,20.0f,20.0f),static_cast<UiImageId>(icons[i]),active?theme.color.accentInk:theme.color.text);
       router.addRegion(cell,widgetId(actions[i]));

@@ -28,7 +28,7 @@ def command_arguments(command):
         ctypes.windll.kernel32.LocalFree(ctypes.cast(argv, ctypes.c_void_p))
 
 targets = {
-    'terrain_asset.cpp', 'editor_terrain.cpp', 'editor_terrain_screen.cpp',
+    'terrain_asset.cpp', 'editor_terrain.cpp', 'editor_terrain_screen.cpp', 'editor_screen.cpp',
     'upload_context.cpp', 'dirt_road_resources.cpp', 'instanced_renderer.cpp',
     'terrain_history_store.cpp', 'terrain_neighbors.cpp',
     'terrain_surface_asset.cpp', 'terrain_surface_catalog.cpp',
@@ -36,6 +36,8 @@ targets = {
     'gltf_import.cpp', 'import_cache.cpp', 'editor_session.cpp', 'android_main.cpp',
     'animation_curve.cpp', 'texture_streaming.cpp', 'texture_level_reader.cpp',
     'texture_budget.cpp', 'texture_compression.cpp',
+    'terrain_fx_asset.cpp', 'terrain_fx_field.cpp', 'terrain_static_fx_import.cpp',
+    'editor_terrain_fx_controller.cpp',
 }
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('database', type=Path)
@@ -56,11 +58,18 @@ if Path(terrain['file']).resolve() != root / 'native/resources/terrain_asset.cpp
 # existing target command before Gradle regenerates its compilation database;
 # this does not stand in for linking/package validation.
 for name in sorted(targets):
-    if name.startswith('terrain_') and not any(Path(entry['file']).name == name for entry in commands):
-        args = terrain.get('arguments') or command_arguments(terrain['command'])
-        source = str(root / 'native/resources' / name)
-        args = [source if arg == terrain['file'] else arg for arg in args]
-        commands.append(dict(terrain, file=source, arguments=args))
+    if not any(Path(entry['file']).name == name for entry in commands):
+        if name.startswith('terrain_'):
+            template, directory = terrain, 'native/resources'
+        elif name == 'editor_terrain_fx_controller.cpp':
+            template = next(entry for entry in commands if Path(entry['file']).name == 'editor_terrain.cpp')
+            directory = 'native/editor'
+        else:
+            continue
+        args = template.get('arguments') or command_arguments(template['command'])
+        source = str(root / directory / name)
+        args = [source if arg == template['file'] else arg for arg in args]
+        commands.append(dict(template, file=source, arguments=args))
 seen = set()
 for entry in commands:
     name = Path(entry['file']).name

@@ -4821,6 +4821,34 @@
       "append_after_brand": true,
       "source_catalog_id": "583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422",
       "generator": "tools/generate-terrain-texture-thumbnails.py"
+    },
+    "zzzz-terrain-fx/lava": {
+      "source": "vector/zzzz-terrain-fx/lava.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainLava",
+      "label": "Lava"
+    },
+    "zzzz-terrain-fx/puddle": {
+      "source": "vector/zzzz-terrain-fx/puddle.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainPuddle",
+      "label": "Poca"
+    },
+    "zzzz-terrain-fx/stream": {
+      "source": "vector/zzzz-terrain-fx/stream.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainStream",
+      "label": "Correnteza"
+    },
+    "zzzz-terrain-fx/wetness": {
+      "source": "vector/zzzz-terrain-fx/wetness.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainWetness",
+      "label": "Umidade"
     }
   },
   "unmapped": []

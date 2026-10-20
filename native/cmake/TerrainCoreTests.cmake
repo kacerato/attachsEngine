@@ -16,7 +16,18 @@ function(aether_add_terrain_core_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_modules.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_snow_next.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_catalog.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_fx_foundation.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_fx_encoding.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_fx_recipe.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_v4.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_flow_coverage.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_static_fx_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_static_fx_table.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_field.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_static_fx_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/authoring_texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_history_store.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_neighbors.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
@@ -45,7 +56,11 @@ function(aether_add_terrain_import_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/family_base_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_domain.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_static_fx_pipeline.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_field.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_static_fx_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/import_cache.cpp
@@ -73,12 +88,17 @@ function(aether_add_terrain_surface_preview)
   add_executable(aether_terrain_surface_preview EXCLUDE_FROM_ALL
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/terrain_surface_preview_main.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/editor/editor_terrain_screen.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/editor/editor_terrain_fx_controller.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/editor/editor_view.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/scene_graph.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/input_actions.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/runtime/transform_math.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/asset_registry.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_asset.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_field.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_static_fx_import.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/renderer/authoring_texture.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_surface_catalog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/animation_curve.cpp
