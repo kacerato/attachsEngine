@@ -297,7 +297,7 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
 
 // Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
 static bool newerThanV12(std::string_view id) {
-  return id.starts_with("grading_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity";
+  return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity";
 }
 
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
@@ -357,8 +357,8 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
   // v7..v10 acrescentaram no fim: 9 de exposição + energia da neblina (v7, v8),
-  // 31 de gradação (v9) e 5 dos corpos celestes (v10).
-  fields[1]="6";fields.resize(fields.size()-46);
+  // 31 de gradação (v9), 5 dos corpos celestes (v10) e 16 das nuvens (v11).
+  fields[1]="6";fields.resize(fields.size()-62);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;

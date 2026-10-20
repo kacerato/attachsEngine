@@ -75,6 +75,12 @@ std::string EnvironmentProfile::serialize() const {
   writeGrading(out,values.grading);
   out<<' '<<values.sunGlare<<' '<<values.moonPhase<<' '<<values.moonSizeDegrees
      <<' '<<values.moonIntensity<<' '<<values.starIntensity;
+  const auto &clouds=values.clouds;
+  out<<' '<<clouds.enabled<<' '<<clouds.castShadows<<' '<<clouds.opacity<<' '<<clouds.coverage
+     <<' '<<clouds.cirrus<<' '<<clouds.altitudeMeters<<' '<<clouds.sizeMeters;
+  writeColor(out,clouds.tint);
+  out<<' '<<clouds.exposureEv<<' '<<clouds.windOrientationDegrees<<' '<<clouds.windSpeedKmh
+     <<' '<<clouds.density<<' '<<clouds.ambientDimmer<<' '<<clouds.shadowMultiplier;
   out<<'\n';
   return out.str();
 }
@@ -129,6 +135,14 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
   if(version>=10 && !(in>>candidate.values.sunGlare>>candidate.values.moonPhase>>
                       candidate.values.moonSizeDegrees>>candidate.values.moonIntensity>>
                       candidate.values.starIntensity)) return false;
+  // v11 (G4b): Cloud Layer. Perfil antigo fica sem nuvens.
+  if(version>=11) {
+    auto &clouds=candidate.values.clouds;
+    if(!(in>>clouds.enabled>>clouds.castShadows>>clouds.opacity>>clouds.coverage>>clouds.cirrus>>
+         clouds.altitudeMeters>>clouds.sizeMeters) || !readColor(in,clouds.tint) ||
+       !(in>>clouds.exposureEv>>clouds.windOrientationDegrees>>clouds.windSpeedKmh>>clouds.density>>
+         clouds.ambientDimmer>>clouds.shadowMultiplier)) return false;
+  }
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -193,6 +207,7 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       normalized.grading==expected.grading&&
       normalized.sunGlare==expected.sunGlare&&normalized.moonPhase==expected.moonPhase&&
       normalized.moonSizeDegrees==expected.moonSizeDegrees&&
-      normalized.moonIntensity==expected.moonIntensity&&normalized.starIntensity==expected.starIntensity;
+      normalized.moonIntensity==expected.moonIntensity&&normalized.starIntensity==expected.starIntensity&&
+      normalized.clouds==expected.clouds;
 }
 } // namespace ae::resources

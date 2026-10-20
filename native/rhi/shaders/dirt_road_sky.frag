@@ -28,8 +28,14 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=3488) vec4 celestialParameters;
   layout(offset=3504) vec4 celestialStars; // x estrelas, yzw tom do céu procedural
   layout(offset=3520) vec4 skyParameters;  // rgb chão do céu procedural, w espessura da atmosfera
+  // G4b, Cloud Layer: ver cloud_layer.glsl e DirtRoadFrameUniform.
+  layout(offset=3536) vec4 cloudParameters;
+  layout(offset=3552) vec4 cloudShape;
+  layout(offset=3568) vec4 cloudTint;
+  layout(offset=3584) vec4 cloudShadow;
 } environment;
 layout(set=0,binding=1) uniform sampler2D environmentMap;
+layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
 layout(location=0) in vec3 vDirection;
 layout(location=0) out vec4 outColor;
 vec2 environmentUv(vec3 direction) {
@@ -45,6 +51,8 @@ vec3 linearToSrgb(vec3 color) {
 #include "tone_mapping.glsl"
 #include "sky_celestial.glsl"
 #include "sky_procedural.glsl"
+#define CLOUD_LAYER_SKY
+#include "cloud_layer.glsl"
 
 vec2 raySphere(vec3 origin,vec3 direction,float radius) {
   // Solve in radius-normalized coordinates. At Earth scale the unnormalized
@@ -255,6 +263,31 @@ void main() {
     color+=moon*aboveHorizon;
     color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
            (1.0-moonCoverage*aboveHorizon);
+  }
+  // Nuvens por cima de tudo: escondem sol, lua e estrelas como no Cloud Layer.
+  if(environment.cloudParameters.x>0.0 && visibleDirection.y>0.0) {
+    vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
+    // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
+    // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,
+    // e o ambiente vem da irradiância integrada do céu. Procedural/HDRI: a cor
+    // do sol na proporção skyScale do céu, e o ambiente do céu atrás da nuvem.
+    float daylight=smoothstep(-0.06,0.06,toSun.y);
+    // O céu atrás da nuvem sem o disco solar: só a luz difusa entra no ambiente.
+    vec3 diffuseSky=min(color,vec3(max(environment.sceneAoDetail.z,0.05)*1.5));
+    vec3 sunRadiance;
+    vec3 skyAmbient;
+    if(environment.sceneSky.w>1.5) {
+      sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*
+          max(environment.sunDirectionIntensity.w,0.0)*environment.atmosphereScattering.x*(0.9/PI)*daylight;
+      skyAmbient=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0))*(0.9/PI)*
+          environment.atmosphereScattering.x+diffuseSky*0.35;
+    } else {
+      sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*environment.sceneAoDetail.z*daylight*
+          (environment.sunDirectionIntensity.w>0.0?1.0:0.0);
+      float skyLuminance=dot(diffuseSky,vec3(0.2126,0.7152,0.0722));
+      skyAmbient=mix(vec3(skyLuminance),diffuseSky,0.6)*1.1;
+    }
+    color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient);
   }
   if(environment.scenePost.z<0.5)
     color=astraToneMap(color*environment.parameters.x*exp2(environment.scenePost.x),environment.scenePost.y);

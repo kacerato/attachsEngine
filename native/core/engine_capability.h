@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 44> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 46> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -137,6 +137,12 @@ inline constexpr std::array<EngineCapability, 44> engineCapabilities{{
   {"render.environment.time_of_day", "Hora do dia", CapabilityState::Implemented,
    "renderer/time_of_day.cpp + runtime/scene_lights.cpp",
    "Sol por hora, data e latitude, cor por elevação, céu procedural de dia, crepúsculo e noite e fase da lua pela data; sem luz direcional da lua nem eventos de nascer e pôr do sol"},
+  {"render.environment.clouds", "Nuvens (Cloud Layer)", CapabilityState::Implemented,
+   "renderer/cloud_layer.cpp + rhi/shaders/cloud_layer.glsl",
+   "Uma camada 2D com mapa procedural, vento, autossombra em 3 passos e sombra no chão pela luz direcional principal; sem mapa de nuvens importado, sem segunda camada nem nuvens volumétricas"},
+  {"render.environment.weather", "Clima (chuva, neve, relâmpago)", CapabilityState::Planned,
+   "renderer/particles (G5)",
+   "Depende do sistema de partículas do G5, ainda fora desta base; hoje o clima é só a cobertura de nuvens"},
   {"render.environment.celestial", "Sol, lua e estrelas no céu", CapabilityState::Implemented,
    "rhi/shaders/dirt_road_sky.frag",
    "Disco solar com limbo e auréola, lua com fase iluminada pelo sol e estrelas noturnas; lua e estrelas ainda sem órbita astronômica nem cintilação por turbulência real"},

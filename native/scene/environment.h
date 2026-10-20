@@ -38,12 +38,13 @@ public:
         << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect
         << ' ' << values.physicalAtmosphereHighQuality
         << ' ' << (values.environmentMap.valid()?values.environmentMap.text():"-")
-        << ' ' << values.autoExposure << ' ' << values.autoExposureCenterWeighted;
+        << ' ' << values.autoExposure << ' ' << values.autoExposureCenterWeighted
+        << ' ' << values.clouds.enabled << ' ' << values.clouds.castShadows << ' ' << overrideClouds;
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 15) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 16) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -94,6 +95,10 @@ public:
       values.autoExposureSpeedUp=defaults.autoExposureSpeedUp;
       values.autoExposureSpeedDown=defaults.autoExposureSpeedDown;
     }
+    // v16 (G4b): Cloud Layer. Cena antiga fica sem nuvens: o mesmo céu de antes.
+    if(version>=16) {
+      if(!(in>>values.clouds.enabled>>values.clouds.castShadows>>overrideClouds)) return false;
+    } else {values.clouds={};overrideClouds=true;}
     if(version<12) values.fogLightEnergy=1.0f;
     // v13 (G2): gradação de cor. Cena antiga fica neutra: sem LUT, mesma imagem.
     if(version<13) values.grading={};
@@ -109,6 +114,7 @@ public:
       values.starIntensity=defaults.starIntensity;
     }
     for (const auto &property : descriptor.numbers) {
+      if(version<16 && property.id.starts_with("cloud_")) continue;
       if(version<14 && (property.id.starts_with("sun_glare") || property.id.starts_with("moon_") ||
                         property.id.starts_with("star_"))) continue;
       if(version<13 && property.id.starts_with("grading_")) continue;
@@ -161,6 +167,13 @@ inline bool environmentUsesProceduralSky(const ComponentValue &value) {
 inline bool environmentUsesPhysicalAtmosphere(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.sky == renderer::SkyModel::PhysicalAtmosphere;
 }
+inline bool environmentUsesClouds(const ComponentValue &value) {
+  return static_cast<const Environment &>(value).values.clouds.enabled;
+}
+inline bool environmentUsesCloudShadows(const ComponentValue &value) {
+  const auto &clouds=static_cast<const Environment &>(value).values.clouds;
+  return clouds.enabled&&clouds.castShadows;
+}
 inline bool environmentUsesFog(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.fog;
 }
@@ -204,6 +217,7 @@ inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
 #include "scene/generated/environment_environmentAutoExposureNumbers.inc"
 #include "scene/generated/environment_environmentGradingNumbers.inc"
 #include "scene/generated/environment_environmentCelestialNumbers.inc"
+#include "scene/generated/environment_environmentCloudNumbers.inc"
 
 // ComponentType recebe um span contínuo. Juntar as duas partes em um único
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
@@ -211,7 +225,7 @@ inline constexpr auto environmentAllNumbers = [] {
   std::array<ComponentNumber, environmentNumbers.size() + environmentTailNumbers.size()+
       environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+
       environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()+
-      environmentGradingNumbers.size()+environmentCelestialNumbers.size()> out{};
+      environmentGradingNumbers.size()+environmentCelestialNumbers.size()+environmentCloudNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -227,15 +241,18 @@ inline constexpr auto environmentAllNumbers = [] {
         environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+i]=environmentPhysicalAtmosphereNumbers[i];
   // Exposição, HDRI e gradação ficam no fim, nessa ordem: o arquivo grava os
   // números na ordem da tabela, e cada versão só acrescentou no fim.
-  const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size()+environmentCelestialNumbers.size();
+  // Nuvens (v16) depois dos corpos celestes (v14).
+  const usize clouds=environmentCloudNumbers.size();
+  const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size()+environmentCelestialNumbers.size()+clouds;
   for(usize i=0;i<environmentAutoExposureNumbers.size();++i)
     out[out.size()-tail-environmentAutoExposureNumbers.size()+i]=environmentAutoExposureNumbers[i];
   for(usize i=0;i<environmentHdriNumbers.size();++i)
     out[out.size()-tail+i]=environmentHdriNumbers[i];
   for(usize i=0;i<environmentGradingNumbers.size();++i)
-    out[out.size()-environmentCelestialNumbers.size()-environmentGradingNumbers.size()+i]=environmentGradingNumbers[i];
+    out[out.size()-clouds-environmentCelestialNumbers.size()-environmentGradingNumbers.size()+i]=environmentGradingNumbers[i];
   for(usize i=0;i<environmentCelestialNumbers.size();++i)
-    out[out.size()-environmentCelestialNumbers.size()+i]=environmentCelestialNumbers[i];
+    out[out.size()-clouds-environmentCelestialNumbers.size()+i]=environmentCelestialNumbers[i];
+  for(usize i=0;i<clouds;++i) out[out.size()-clouds+i]=environmentCloudNumbers[i];
   return out;
 }();
 
@@ -255,7 +272,7 @@ inline constexpr std::array<ComponentEnum, 4> environmentEnums{{
   {"volume_layer","Camada",environmentLayerOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).layer;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).layer=n;},{"Volume","","Filtro consultado pela câmera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
 }};
 
-inline constexpr std::array<ComponentTriple, 11> environmentTriples{{
+inline constexpr std::array<ComponentTriple, 12> environmentTriples{{
   {"sky_zenith","Tom do céu",{"sky_zenith.r","sky_zenith.g","sky_zenith.b"},ComponentTripleKind::LinearColor},
   {"sky_horizon","Cor do horizonte",{"sky_horizon.r","sky_horizon.g","sky_horizon.b"},ComponentTripleKind::LinearColor},
   {"ground","Cor do chão",{"ground.r","ground.g","ground.b"},ComponentTripleKind::LinearColor},
@@ -267,6 +284,7 @@ inline constexpr std::array<ComponentTriple, 11> environmentTriples{{
   {"grading_shadows_color","Sombras",{"grading_shadows_color.r","grading_shadows_color.g","grading_shadows_color.b"},ComponentTripleKind::LinearColor},
   {"grading_midtones_color","Médios",{"grading_midtones_color.r","grading_midtones_color.g","grading_midtones_color.b"},ComponentTripleKind::LinearColor},
   {"grading_highlights_color","Realces",{"grading_highlights_color.r","grading_highlights_color.g","grading_highlights_color.b"},ComponentTripleKind::LinearColor},
+  {"cloud_tint","Tom",{"cloud_tint.r","cloud_tint.g","cloud_tint.b"},ComponentTripleKind::LinearColor},
 }};
 
 inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
@@ -287,7 +305,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 15,
+  "astra.render.environment", 16,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources
