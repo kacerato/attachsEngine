@@ -2,6 +2,8 @@
 
 Continuação de 20/10: [mapas autorais, recuperação e catálogo](CONTINUACAO-2026-10-20.md). 90/90 cenários integrados host; mapas autorais com slider/entrada precisa, checkpoints/deltas da receita e reconstrução de GLB integrados; vizinhança e materiais avançaram no backend/contrato. Shader extensível, grupos no editor, geometria/GC global, vegetação e grafos continuam pendentes. ADB suspenso pelo proprietário até concluir a implementação e a conferência local; APK 110 não contém estas mudanças.
 
+Checkpoint funcional `23fe8dde` publicado. AstraDocs `f35821b` publicado e Vercel READY, com guia próprio de 20/10 e nota nova. Próxima integração necessária: consumir os mapas de controle por fragmento e os materiais extensíveis na publicação/cache/renderer, preservando canais, variantes, identidade e qualidade dos assets. Modelos isolados não encerram esses itens.
+
 Última revisão: [sliders e compartilhamento de texturas](INTERFACE-MEMORIA-2026-10-19.md), código `9fc2f719`. 64/64 cenários de terreno e 18/18 de publicação passaram no host. APK 110 instalado: criação plana, sliders, escultura ao vivo, Undo/Redo e reabertura com LOD conferidos no POCO F7. Biblioteca do projeto antigo: 127,27→43,25 MiB. D09, primeiro bloco e plano de 71 itens continuam abertos.
 
 Última continuação: [base plana, escultura suave e reinício, APK 109](ESCULTURA-2026-10-19.md).

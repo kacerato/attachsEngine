@@ -51,4 +51,10 @@ Referências: [TerrainLayer, Unity 6000.0](https://docs.unity.com/en-us/engine/6
 - Capturas da UI de produção, por executável host/rasterização: `maps-ui-1280.png`, `maps-ui-655-controls.png`, `maps-ui-655-detail.png`. Conferidos legibilidade, alvos, barras, rolagem e ação fixa em 1280×720 e 655×300. Essa captura isolada de painel não é evidência do shader nem de uma cena Android.
 - A auditoria de aceite recebeu uma coluna datada; todas as propriedades comprometidas e os 71 itens permanecem no plano. Nenhum item integral dos plugins é considerado concluído por existir somente modelo, parser ou teste de backend.
 
-Publicação das notas do site em conferência. Sem novo APK nesta etapa; ADB permanece suspenso.
+Código funcional publicado: `23fe8dde`, branch `codex/terrain-voxel-generator`. Sem novo APK nesta etapa; ADB permanece suspenso.
+
+## Publicação das notas
+
+AstraDocs `f35821b` publicado na main do site, preservando a nota de nuvens `d7a9596` publicada por outra sessão. Nova rota `/pt-br/desenvolvimento/2026-10-20/terreno-mapas-recuperacao/` e nota `2026-10-20-terreno-mapas-recuperacao-catalogo`. Build: 2435 páginas; exportação: 2434 Markdown, JSON e dez exemplos. Verificação de 594461 links sem erros. Conferência visual desktop/mobile realizada; viewport temporário restaurado e servidor local encerrado.
+
+Vercel `dpl_79SCY9gX8BAdmHpFe8fq5tYTRdvn` READY em produção. Domínio `astraengine.com.br`: HTTP 200 na aba Atualizações, no guia e no Markdown; nota, contagem 90/90, AETERRAIN7 e escopo de 71 itens confirmados no conteúdo servido. A meta completa dos plugins permanece ativa; este checkpoint não conclui o bloco 1 nem autoriza afirmar paridade visual/runtime.
