@@ -6894,6 +6894,9 @@ void EditorSession::refreshMaterialSlotView() {
     static constexpr const char *alphaSources[]{"Alfa da cor base","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
     view.alphaSourceLabel=alphaSources[pick(edited.alphaSource,sharedChannels.alphaSource)];
     view.alphaSourceOrigin=originOf(edited.alphaSource,sharedChannels.alphaSource);
+    static constexpr const char *roughnessSources[]{"Rugosidade no canal","Rugosidade no canal","Suavidade no canal (1 − canal)","Suavidade no alfa da cor base"};
+    view.roughnessSourceLabel=roughnessSources[std::min<unsigned>(pick(edited.roughnessSource,sharedChannels.roughnessSource),3u)];
+    view.roughnessSourceOrigin=originOf(edited.roughnessSource,sharedChannels.roughnessSource);
     static constexpr const char *isolates[]{"Desligado","Oclusão","Rugosidade","Metal","Alfa","Normal"};
     view.isolateLabel=isolates[std::min<unsigned>(state_.materialIsolate,5u)];
   }
@@ -7005,6 +7008,9 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
   static constexpr const char *alphaSources[]{"Como a fonte","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
   view.alphaSourceLabel=alphaSources[std::min<unsigned>(channels.alphaSource,3u)];
   view.alphaSourceOrigin=channels.alphaSource?project:each;
+  static constexpr const char *roughnessSources[]{"Como a fonte","Rugosidade no canal","Suavidade no canal (1 − canal)","Suavidade no alfa da cor base"};
+  view.roughnessSourceLabel=roughnessSources[std::min<unsigned>(channels.roughnessSource,3u)];
+  view.roughnessSourceOrigin=channels.roughnessSource?project:each;
   view.isolateLabel="Desligado";
   // Texturas e a amostragem do binding aberto no seletor.
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {

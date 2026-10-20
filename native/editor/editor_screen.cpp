@@ -2309,13 +2309,14 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   // paginada. Cada linha mostra a textura efetiva no alcance e de onde ela vem.
   static constexpr const char *bindingNames[scene::MaterialTextureCount]{"Mapa: cor","Mapa: normal","Mapa: metal/rug.","Mapa: emissão"};
   static constexpr const char *surfaceNames[]{"Alfa","Corte alfa","Faces"};
-  static constexpr const char *channelNames[]{"Oclusão","Textura de oclusão","Força da oclusão","Canais","Mapa normal","Origem do alfa","Isolar na prévia"};
+  static constexpr const char *channelNames[]{"Oclusão","Textura de oclusão","Força da oclusão","Canais","Mapa normal","Origem do alfa","Origem da rugosidade","Isolar na prévia"};
   const u32 textureRows=scene::MaterialTextureCount;
   // R4: três linhas de superfície (alfa, corte, faces) depois das texturas.
   const u32 surfaceRows=3;
-  // R4: sete linhas de oclusão, canais, normal, alfa e isolamento.
-  // Isolar na prévia vale para um slot de objeto; o recurso sozinho não tem prévia.
-  const u32 channelRows=assetMode?6:7;
+  // R4: oito linhas de oclusão, canais, normal, alfa, rugosidade (G3a) e
+  // isolamento. Isolar na prévia vale para um slot de objeto; o recurso sozinho
+  // não tem prévia.
+  const u32 channelRows=assetMode?7:8;
   const u32 count=textureRows+surfaceRows+channelRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const auto search=editorSearchKey(query);
   std::vector<u32> matches;
@@ -2399,13 +2400,14 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
       }
       static constexpr EditorWidget channelWidgets[]{EditorWidget::MaterialOcclusionSourceCycle,EditorWidget::MaterialOcclusionTexture,
           EditorWidget::MaterialOcclusionStrengthDown,EditorWidget::MaterialChannelRoughness,EditorWidget::MaterialNormalFlipCycle,
-          EditorWidget::MaterialAlphaSourceCycle,EditorWidget::MaterialIsolateCycle};
+          EditorWidget::MaterialAlphaSourceCycle,EditorWidget::MaterialRoughnessSourceCycle,EditorWidget::MaterialIsolateCycle};
       std::string value,origin;
       switch(kind) {
       case 0: value=view.occlusionLabel;origin=view.occlusionOrigin;break;
       case 1: value=view.occlusionTextureLabel;origin="vale quando a oclusão é textura própria";break;
       case 4: value=view.normalFlipLabel;origin=view.normalFlipOrigin;break;
       case 5: value=view.alphaSourceLabel;origin=view.alphaSourceOrigin;break;
+      case 6: value=view.roughnessSourceLabel;origin=view.roughnessSourceOrigin;break;
       default: value=view.isolateLabel;origin="só na prévia do editor; não é salvo";break;
       }
       const bool different=mixed("ch"+std::to_string(kind));
@@ -11054,11 +11056,48 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
       const auto body=deflate(row,UiInsets{0,3,0,3});
       const bool warn=line.rfind("Conversão",0)==0||line.rfind("Limite",0)==0||line.find("ausente")!=std::string::npos||line.find("recus")!=std::string::npos||line.find("Binding")!=std::string::npos;
       list.addRect(body,theme.color.silhouette,theme.radius.control);
-      list.addImage({body.x+8,body.y+(body.height-16)*.5f,16,16},static_cast<UiImageId>(warn?UiIcon::UiWarning:UiIcon::UiInfo),warn?theme.color.warning:theme.color.textDim);
+      const bool approximation=line.rfind("Aproximação",0)==0;
+      list.addImage({body.x+6,body.y+(body.height-20)*.5f,20,20},static_cast<UiImageId>(approximation?UiIcon::AssetsMaterialApproximate:warn?UiIcon::UiWarning:UiIcon::UiInfo),
+        approximation?theme.color.text:warn?theme.color.warning:theme.color.textDim);
       list.pushClip(body);builder.label({body.x+30,body.y,std::max(0.f,body.width-36),body.height},fitMiddle(list,line,std::max(0.f,body.width-40),theme.type.caption),theme.color.textDim,theme.type.caption);list.popClip();
     }
     list.popClip();
     if(!wide)return;
+  }
+  // G3a: auditoria dos materiais Unity do pacote. Três blocos (completos,
+  // aproximados, sem conversão) com o ícone da classe e a contagem; tocar num
+  // bloco filtra a grade por ele, e o detalhe de cada material lista o motivo.
+  const u32 auditTotal=state.libraryMaterialAudit[0]+state.libraryMaterialAudit[1]+state.libraryMaterialAudit[2];
+  if(auditTotal) {
+    auto card=takeTop(content,116);takeTop(content,8);
+    list.addRect(card,theme.color.surface,theme.radius.card);
+    auto inner=deflate(card,UiInsets::all(8));
+    auto header=takeTop(inner,30);
+    list.addImage({header.x+2,header.y+1,28,28},static_cast<UiImageId>(UiIcon::AssetsMaterialAudit),theme.color.text);
+    builder.label({header.x+34,header.y,std::max(0.f,header.width-34),header.height},
+      "Materiais Unity · "+std::to_string(auditTotal),theme.color.text,theme.type.cardName);
+    takeTop(inner,4);
+    static constexpr const char *auditNames[]{"Completos","Aproximados","Sem conversão"};
+    static constexpr UiIcon auditIcons[]{UiIcon::AssetsMaterialComplete,UiIcon::AssetsMaterialApproximate,UiIcon::AssetsMaterialUnconverted};
+    const float tileWidth=(inner.width-16)/3;
+    for(u32 kind=0;kind<3;++kind) {
+      const UiRect tile{inner.x+float(kind)*(tileWidth+8),inner.y,tileWidth,inner.height};
+      const bool chosen=state.libraryAuditFilter==kind+1,empty=!state.libraryMaterialAudit[kind];
+      // O ícone leva a cor própria (selo lima); a faixa à esquerda dá o tom da
+      // classe: acento, neutro ou aviso.
+      const auto tone=kind==0?theme.color.accent:kind==1?theme.color.textDim:theme.color.warning;
+      list.addRect(tile,chosen?withAlpha(theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+      if(chosen)list.addBorder(tile,theme.color.accent,1,theme.radius.control);
+      if(!empty)list.addRect({tile.x,tile.y+8,3,tile.height-16},tone,1.5f);
+      list.addImage({tile.x+10,tile.y+(tile.height-36)*.5f,36,36},static_cast<UiImageId>(auditIcons[kind]),empty?theme.color.textFaint:theme.color.text);
+      const UiRect text{tile.x+54,tile.y+4,std::max(0.f,tile.width-58),tile.height-8};
+      list.pushClip(tile);
+      builder.label({text.x,text.y,text.width,text.height*.6f},std::to_string(state.libraryMaterialAudit[kind]),
+        empty?theme.color.textFaint:theme.color.text,theme.type.title);
+      builder.label({text.x,text.y+text.height*.58f,text.width,text.height*.42f},auditNames[kind],theme.color.textMuted,theme.type.caption);
+      list.popClip();
+      if(!empty||chosen)router.addRegion(tile,widgetId(EditorWidget::LibraryAuditBase)+kind);
+    }
   }
   // Cartões em grade, rolando pelo dedo; só os visíveis recebem toque.
   const u32 columns=content.width>=560?2u:1u;const float gap=8,cardHeight=72;
@@ -11093,6 +11132,11 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     const UiRect badge{card.right()-34,card.y+10,24,24};
     list.addRect(badge,registered?withAlpha(theme.color.accent,.22f):refused?withAlpha(theme.color.warning,.22f):theme.color.silhouette,12);
     list.addImage({badge.x+4,badge.y+4,16,16},static_cast<UiImageId>(registered?UiIcon::UiCheck:refused?UiIcon::UiWarning:UiIcon::AssetsImport),registered?theme.color.accent:refused?theme.color.warning:theme.color.textDim);
+    // G3a: material que converte com aproximação leva o selo "≈" ao lado.
+    if(item.audit==EditorScreenState::LibraryAuditApproximated) {
+      const UiRect approx{badge.x-28,badge.y,24,24};list.addRect(approx,theme.color.silhouette,12);
+      list.addImage({approx.x+2,approx.y+2,20,20},static_cast<UiImageId>(UiIcon::AssetsMaterialApproximate),theme.color.text);
+    }
     router.addRegion(card,widgetId(EditorWidget::LibraryItemBase)+i);
     const UiRect details{card.right()-44,card.bottom()-40,40,36};
     if(item.projectAsset!=~0u) {

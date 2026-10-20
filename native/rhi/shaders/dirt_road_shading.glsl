@@ -261,6 +261,10 @@ void main() {
   mediump vec4 baseSample=impostor?
       textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
   // R4: origem do alfa do material, antes do corte (igual à cobertura e à sombra).
+  // G3a: o alfa cru da textura de cor é a suavidade quando o material diz
+  // (Standard da Unity, "Smoothness Source: Albedo Alpha"); a origem do alfa
+  // pode tê-lo trocado por 1 logo abaixo.
+  mediump float baseTexelAlpha=baseSample.a;
   if(!impostor) baseSample.a=aetherAlphaFromSource(baseSample);
   mediump vec4 vertexColor=impostor?vec4(vColor.rgb,1.0):vColor;
   mediump vec4 base=baseSample*frame.baseColorFactor*vertexColor;
@@ -312,7 +316,17 @@ void main() {
   // R4: canais do mapa escolhidos no material; sem extensão, o do glTF (G e B).
   uint roughnessChannel=materialExtension?uint(aetherMaterialRow(9u).x+0.5):1u;
   uint metallicChannel=materialExtension?uint(aetherMaterialRow(9u).y+0.5):2u;
-  mediump float rough=clamp(mr[roughnessChannel]*frame.materialFactors.x,.07,1);
+  mediump float rough=mr[roughnessChannel]*frame.materialFactors.x;
+  // G3a: suavidade (Standard da Unity) vira rugosidade = 1 - escala * canal, com
+  // o fator guardado como 1 - escala. Sem textura o canal é 1 e sobra o fator.
+  if(materialExtension) {
+    uint roughnessSource=uint(aetherMaterialRow(10u).y+0.5);
+    if(roughnessSource!=0u) {
+      mediump float smoothness=roughnessSource==2u?(impostor?1.0:baseTexelAlpha):mr[roughnessChannel];
+      rough=1.0-(1.0-frame.materialFactors.x)*smoothness;
+    }
+  }
+  rough=clamp(rough,.07,1);
   mediump float metal=clamp(mr[metallicChannel]*frame.materialFactors.y,0,1);
   // R4: oclusão empacotada no canal R do mapa metal/rugosidade (ORM do glTF),
   // só quando o importador provou mesma textura e mesmo UV. Atenua a luz

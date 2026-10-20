@@ -23,8 +23,9 @@ namespace ae::resources {
 // antigos leem sem essas trocas; gravar sempre escreve a versão atual.
 struct MaterialAsset {
   // Versão 6 (R4): canais, oclusão (origem, força, textura própria), inversão Y
-  // do normal e origem do alfa.
-  static constexpr u32 FormatVersion = 6;
+  // do normal e origem do alfa. Versão 7 (G3a): origem da rugosidade
+  // (rugosidade ou suavidade do Standard da Unity).
+  static constexpr u32 FormatVersion = 7;
   AssetGuid guid;
   u32 revision = 1;
   std::string name;

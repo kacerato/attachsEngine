@@ -1,5 +1,6 @@
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
+#include "resources/unity_material_import.h"
 #include "scene/path.h"
 #include "scene/animation.h"
 #include "editor/editor_component_impact.h"
@@ -1625,9 +1626,17 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::LibraryImport)) {state_.libraryImportRequested=true;return true;}
     if(key==widgetId(EditorWidget::LibrarySearch)) {state_.searchingLibrary=true;return true;}
     if(key==widgetId(EditorWidget::LibraryDetailsClose)) {state_.libraryDiagnostic.clear();state_.libraryDiagnosticScroll=0;state_.libraryConflict=false;state_.libraryDetailItem={};state_.libraryDetailName.clear();return true;}
-    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%12;state_.libraryScroll=0;refreshLibraryRows();return true;}
+    if(key==widgetId(EditorWidget::LibraryKinds)) {state_.libraryKind=(state_.libraryKind+1)%12;state_.libraryAuditFilter=0;state_.libraryScroll=0;refreshLibraryRows();return true;}
     if(key>=widgetId(EditorWidget::LibraryKindBase)&&key<widgetId(EditorWidget::LibraryKindBase)+12) {
-      state_.libraryKind=key-widgetId(EditorWidget::LibraryKindBase);state_.libraryScroll=0;refreshLibraryRows();return true;
+      state_.libraryKind=key-widgetId(EditorWidget::LibraryKindBase);state_.libraryAuditFilter=0;state_.libraryScroll=0;refreshLibraryRows();return true;
+    }
+    // G3a: um bloco da auditoria filtra os materiais daquela classe; o mesmo
+    // bloco de novo volta a mostrar todos.
+    if(key>=widgetId(EditorWidget::LibraryAuditBase)&&key<widgetId(EditorWidget::LibraryAuditBase)+3) {
+      const auto chosen=static_cast<u8>(key-widgetId(EditorWidget::LibraryAuditBase)+1);
+      state_.libraryAuditFilter=state_.libraryAuditFilter==chosen?0:chosen;
+      if(state_.libraryAuditFilter)state_.libraryKind=static_cast<u32>(resources::LibraryItemKind::Material)+1;
+      state_.libraryScroll=0;refreshLibraryRows();return true;
     }
     if(key==widgetId(EditorWidget::LibraryReimport)||key==widgetId(EditorWidget::LibraryKeepLocal)||key==widgetId(EditorWidget::LibraryReceiveSource)) {
       const auto id=state_.libraryDetailItem;const auto *item=library_.item(id);if(!item)return true;
@@ -1666,7 +1675,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.libraryCanAssignController=ready&&item->kind==resources::LibraryItemKind::Controller;
       state_.libraryCanReimport=item->path.ends_with(".anim")||item->path.ends_with(".prefab")||item->path.ends_with(".controller");
       state_.libraryDiagnostic=item->path+"\nOrigem: "+item->sourceIdentity+"\nSHA-256 original: "+item->sourceHash+"\n"+resolution.diagnostic;
-      for(const auto &loss:item->knownLosses)state_.libraryDiagnostic+="\nConversão: "+loss;
+      for(const auto &loss:item->knownLosses)
+        state_.libraryDiagnostic+=(loss.starts_with(resources::UnityMaterialApproximationPrefix)?"\n":"\nConversão: ")+loss;
       for(const auto dep:item->dependencies){const auto *source=library_.item(dep);state_.libraryDiagnostic+="\nDependência: "+(source?source->path:dep.text()+" (ausente)");}
       state_.libraryDiagnosticScroll=0;return true;
     }
@@ -1863,7 +1873,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::MaterialOcclusionSourceCycle) || key==widgetId(EditorWidget::MaterialOcclusionStrengthDown) ||
        key==widgetId(EditorWidget::MaterialOcclusionStrengthUp) || key==widgetId(EditorWidget::MaterialChannelRoughness) ||
        key==widgetId(EditorWidget::MaterialChannelMetallic) || key==widgetId(EditorWidget::MaterialChannelOcclusion) ||
-       key==widgetId(EditorWidget::MaterialNormalFlipCycle) || key==widgetId(EditorWidget::MaterialAlphaSourceCycle)) {
+       key==widgetId(EditorWidget::MaterialNormalFlipCycle) || key==widgetId(EditorWidget::MaterialAlphaSourceCycle) ||
+       key==widgetId(EditorWidget::MaterialRoughnessSourceCycle)) {
       const auto *entity=materialAssetMode()?nullptr:document_.find(state_.selection);
       const auto *render=entity?meshRenderer(*entity):nullptr;
       if(!render && !materialAssetMode()) return true;
@@ -1882,6 +1893,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       else if(key==widgetId(EditorWidget::MaterialChannelMetallic)) channels.metallic=cycle(channels.metallic,5);
       else if(key==widgetId(EditorWidget::MaterialChannelOcclusion)) channels.occlusion=cycle(channels.occlusion,5);
       else if(key==widgetId(EditorWidget::MaterialNormalFlipCycle)) channels.normalFlipY=cycle(channels.normalFlipY,3);
+      else if(key==widgetId(EditorWidget::MaterialRoughnessSourceCycle)) channels.roughnessSource=cycle(channels.roughnessSource,4);
       else channels.alphaSource=cycle(channels.alphaSource,4);
       std::string diagnostic;
       state_.status=setSlotChannels(state_.selection,state_.materialSlot,shared?MaterialScope::Shared:MaterialScope::Instance,channels,diagnostic,
@@ -1890,7 +1902,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           key==widgetId(EditorWidget::MaterialChannelMetallic)?"ch3.1":
           key==widgetId(EditorWidget::MaterialChannelOcclusion)?"ch3.2":
           key==widgetId(EditorWidget::MaterialNormalFlipCycle)?"ch4":
-          key==widgetId(EditorWidget::MaterialAlphaSourceCycle)?"ch5":"ch2")?
+          key==widgetId(EditorWidget::MaterialAlphaSourceCycle)?"ch5":
+          key==widgetId(EditorWidget::MaterialRoughnessSourceCycle)?"ch6":"ch2")?
           (shared?"Material compartilhado atualizado em todos os usos":"Material desta instância atualizado"):diagnostic;
       return true;
     }
