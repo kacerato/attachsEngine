@@ -1,6 +1,6 @@
 # M11–M12 — neve, qualidade autoral e busca do catálogo
 
-Revisão local de20/10/2026, posterior a03b8f10a/48233d11, na branch `codex/terrain-voxel-generator`. Implementação e conferência local aceitas para este incremento; **publicação em andamento, sem APK/ADB**. M11/M12 e o plano integral não são declarados completos: autoridades globais, produtor de poças, tracks, capacidades adjacentes e validação Android real continuam pendentes.
+Revisão local de20/10/2026, posterior a03b8f10a/48233d11, na branch `codex/terrain-voxel-generator`. Implementação e conferência local aceitas para este incremento; **publicação confirmada, sem APK/ADB**. M11/M12 e o plano integral não são declarados completos: autoridades globais, produtor de poças, tracks, capacidades adjacentes e validação Android real continuam pendentes.
 
 ## Implementado e com consumidor
 
@@ -33,8 +33,12 @@ Logs/capturas ficam em `build/terrain-evidence/terrain-snow-*`, `terrain-normal-
 
 Quatro canais pintados continuam o limite visual atual, embora32 camadas sejam autoradas. Globais/poças/tracks/tesselação, vegetação, grafos, integrações altura/voxel e demais linhas abertas continuam no plano. O consumidor Snow CPU só anuncia correspondência às entradas confirmadas; nenhum dado aritmético vira prova de cena real. Naturalidade/iluminação em uma cena grande e desempenho/toque precisam do aceite próprio.
 
-[M13–M15](PROXIMO-M13-M15-2026-10-20.md), [arquitetura](M13-M15-ARQUITETURA-2026-10-20.md) e [UI](M13-M15-INTERFACE-CONTRATO-2026-10-20.md) conservam todo o inventário de wetness, poças, Streams e Lava. Quatro originais foram preparados em staging lossless, com1 teste Python. Fundação FX independente de PBR, modelos e Recipe9 estão somente em staging, ainda não compilados/integrados; não são capacidades prontas.
+[M13–M15](PROXIMO-M13-M15-2026-10-20.md), [arquitetura](M13-M15-ARQUITETURA-2026-10-20.md) e [UI](M13-M15-INTERFACE-CONTRATO-2026-10-20.md) conservam todo o inventário de wetness, poças, Streams e Lava. Quatro originais foram preparados em staging lossless, com1 teste Python. Fundação FX independente de PBR e modelos SurfaceV4 passaram respectivamente 9/9 e4/4 cenários isolados no host, somente em staging. Recipe9/persistência e integração visual continuam pendentes; esses testes não representam capacidades prontas do editor.
 
 ## Referências versionadas
 
 Fonte fornecida MicroSplat Snow3.9.0/Unity2019.4, distribuição Terrain Collection3.9.41. Unity6000.0: [TextureImporter.maxTextureSize](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TextureImporter-maxTextureSize.html), [TextureMipmapLimitSettings](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TextureMipmapLimitSettings.html), [TerrainPaintTool](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TerrainTools.TerrainPaintTool_1.html) e [CalculateBrushTransform](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/TerrainTools.TerrainPaintUtility.CalculateBrushTransform.html). Shader Graph17.0.4: Dot Product, Sample Texture2D, Normal Blend e Fresnel, links integrais no contrato Snow. HDRP17.0.4: [transmissão/espalhamento](https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/skin-and-diffusive-surfaces-subsurface-scattering.html). Referências orientam capacidades, não equivalência de visual, BRDF ou desempenho.
+
+## Publicação confirmada
+
+Engine `a3d27687` publicada na branch de terreno; AstraDocs `4b5264a9` publicada em main. Vercel READY (`dpl_Dmy7pPfq4MNXuKDXuVNturMkGE3n`), alias `astraengine.com.br`, guia HTML/Markdown, feed e Atualizações com HTTP200 e conteúdo novo conferidos. A nota de iluminação recebida de outra sessão foi preservada. Build final:2440 páginas HTML,2439 Markdown,595629 links e zero erros. Revisão executável do site em desktop1265px e mobile390px sem overflow. Sem APK/ADB.
