@@ -1,6 +1,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
 #include "renderer/procedural_sky.h"
+#include "renderer/cloud_layer.h"
 #include "renderer/time_of_day.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
@@ -171,8 +172,15 @@ struct DirtRoadFrameUniform {
   float celestialParameters[4]{};
   float celestialStars[4]{};       // x estrelas, yzw tom do céu procedural
   float skyParameters[4]{};        // rgb chão do céu procedural, w espessura
+  // G4b, Cloud Layer: lidas pelo céu e pela sombra direcional (cloud_layer.glsl).
+  float cloudParameters[4]{};      // opacidade (0 desliga), cobertura, cirros, densidade
+  float cloudShape[4]{};           // 1/tamanho, altitude m, vento x, z (m, já no tamanho)
+  float cloudTint[4]{};            // tom*2^EV, luz do céu
+  float cloudShadow[4]{};          // força da sombra, reservados
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3536);
+static_assert(sizeof(DirtRoadFrameUniform) == 3600);
+static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
+static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
 static_assert(offsetof(DirtRoadFrameUniform, skyParameters) == 3520);
 static_assert(offsetof(DirtRoadFrameUniform, celestialParameters) == 3488);
 static_assert(offsetof(DirtRoadFrameUniform, celestialStars) == 3504);
@@ -1089,7 +1097,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[18]{};
+  VkDescriptorSetLayoutBinding bindings[19]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1128,12 +1136,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G6-B: atlas de sombra das luzes locais, com o mesmo sampler de compare.
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G4b: mapa do Cloud Layer, lido pelo céu (conjunto 0) e pela sombra do sol (conjunto 1).
+  bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 1u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 2u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
@@ -1177,7 +1187,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[18]{};
+  VkWriteDescriptorSet writes[19]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1270,6 +1280,36 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorCount = 1;
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[writeCount].pImageInfo = &localShadow;
+  ++writeCount;
+  if (!cloudMapTexture_.isReady()) {
+    // Mapa procedural do Cloud Layer: 256² RGBA8 com mips, montado uma vez.
+    std::vector<u8> cloudMap;
+    if (!renderer::buildCloudMapTexture(renderer::CloudMapSize, 1u, cloudMap)) return false;
+    rhi::ImageDesc cloudDesc{};
+    cloudDesc.width = cloudDesc.height = renderer::CloudMapSize;
+    cloudDesc.mipLevels = 9;
+    cloudDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
+    cloudDesc.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    cloudDesc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    cloudDesc.memoryClass = rhi::MemoryClass::Texture;
+    if (!memoryAllocator_->createImage(cloudDesc, &cloudMapTexture_) ||
+        !uploadContext_.uploadSampledMipChain(*memoryAllocator_, cloudMap.data(), cloudMap.size(), cloudMapTexture_))
+      return false;
+    rhi::SamplerDesc cloudSampler{};
+    cloudSampler.minFilter = cloudSampler.magFilter = VK_FILTER_LINEAR;
+    cloudSampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    cloudSampler.maxLod = 8;
+    cloudSampler.addressU = cloudSampler.addressV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    if (!cloudMapSampler_.initialize(device_, cloudSampler)) return false;
+  }
+  VkDescriptorImageInfo cloudMapInfo{cloudMapSampler_.handle(), cloudMapTexture_.view(),
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[writeCount].dstSet = environmentSet_;
+  writes[writeCount].dstBinding = 18;
+  writes[writeCount].descriptorCount = 1;
+  writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[writeCount].pImageInfo = &cloudMapInfo;
   ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
@@ -1602,7 +1642,7 @@ bool applySceneEnvironmentLook(
     const renderer::EnvironmentMapDescription &mapDescription, bool authoredMapActive,
     bool splitSumBrdf, bool fogEnabled, bool postEnabled,
     std::span<const renderer::SceneLight> lights,
-    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache) {
+    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache, double timeSeconds) {
   if(!renderer::adjustEnvironmentLighting(baseLighting,adjustment,frame.environment)) return false;
   frame.diffuseIrradianceSh={};
   if(mapDescription.hasDiffuseIrradianceSh()) {
@@ -1750,6 +1790,23 @@ bool applySceneEnvironmentLook(
     std::copy_n(frame.environment.sunColorAngularRadius,3,input.sunColor);
     input.sunIntensity=frame.environment.sunDirectionIntensity[3];
     if(!groundCache.resolve(input,frame.atmosphereGroundIrradiance)) return false;
+  }
+  // G4b: Cloud Layer. As linhas vão ao céu e à sombra do sol; o ambiente do céu
+  // perde o azul na proporção do céu coberto, como a sonda de ambiente do HDRP,
+  // que é renderizada com as nuvens.
+  const auto clouds=renderer::packCloudLayer(look.clouds,look.active,timeSeconds);
+  std::copy_n(clouds.parameters,4,frame.cloudParameters);
+  std::copy_n(clouds.shape,4,frame.cloudShape);
+  std::copy_n(clouds.tint,4,frame.cloudTint);
+  std::copy_n(clouds.shadow,4,frame.cloudShadow);
+  const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
+  if(occlusion>0.0f) {
+    const auto grey=[&](float color[3]) {
+      const float luminance=0.2126f*color[0]+0.7152f*color[1]+0.0722f*color[2];
+      for(u32 channel=0;channel<3;++channel) color[channel]+=(luminance*0.92f-color[channel])*occlusion*0.75f;
+    };
+    grey(frame.environment.ambientColorStrength);
+    grey(frame.atmosphereGroundIrradiance);
   }
   return true;
 }
@@ -4960,6 +5017,7 @@ void InstancedRenderer::shutdown() {
   baseSampler_.shutdown();
   baseTexture_.reset();
   waterDetailSampler_.shutdown();waterDetailTexture_.reset();
+  cloudMapSampler_.shutdown();cloudMapTexture_.reset();
   routeVertices_.reset();routeIndices_.reset();authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();authoredWaterTime_=-1;
   dummySampler_.shutdown();
   dummyTexture_.reset();
@@ -5661,6 +5719,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
+  cloudTimeSeconds_ = timeSeconds;
   if(!sceneEnvironmentVolumes_.empty())
     sceneEnvironment_=renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,camera.position,
                                                          sceneEnvironmentLayerMask_,&environmentBlendReport_);
@@ -5921,7 +5980,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
     if(!applySceneEnvironmentLook(*frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
           look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
-          editorFog,editorPost,lights,atmosphereGroundCache_))
+          editorFog,editorPost,lights,atmosphereGroundCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;

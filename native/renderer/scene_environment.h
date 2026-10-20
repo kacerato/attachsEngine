@@ -21,8 +21,10 @@ enum EnvironmentOverride : u32 {
   // Luz indireta (o Indirect Lighting Controller do Volume da Unity): quanto do
   // céu e do reflexo do ambiente chega às superfícies dentro do volume.
   EnvironmentOverrideIndirect = 1u << 3,
+  // Cloud Layer: override próprio, como na Unity, separado do modelo de céu.
+  EnvironmentOverrideClouds = 1u << 4,
   EnvironmentOverrideAll = EnvironmentOverrideSky | EnvironmentOverrideFog | EnvironmentOverridePost |
-                           EnvironmentOverrideIndirect,
+                           EnvironmentOverrideIndirect | EnvironmentOverrideClouds,
 };
 
 // G2: gradação de cor depois do tonemap, aplicada por uma LUT 32³ montada na
@@ -77,6 +79,45 @@ struct ColorGrading final {
     for (float value : ranges) if (!std::isfinite(value) || value < 0.0f || value > 1.0f) return false;
     return std::isfinite(temperature) && std::isfinite(tint) &&
            temperature >= -100.0f && temperature <= 100.0f && tint >= -100.0f && tint <= 100.0f;
+  }
+};
+
+// G4b: nuvens 2D, o Cloud Layer do HDRP 17 (Volume › Add Override › Sky ›
+// Cloud Layer, e Cloud Type = Cloud Layer no Visual Environment). Uma camada
+// sobre o mapa procedural de renderer/cloud_layer.h: cobertura e cirros fazem
+// o papel de Opacity R (cúmulos) e Opacity B (cirros) do DefaultCloudMap. As
+// sombras projetam o MESMO mapa no chão pela direção do sol a partir da
+// Altitude, então a sombra cai embaixo da nuvem vista. Desligado é neutro.
+struct CloudLayer final {
+  bool enabled = false;          // Cloud Type: None / Cloud Layer
+  bool castShadows = true;       // Cast Shadows (luz direcional principal)
+  float opacity = 1.0f;          // Opacity
+  float coverage = 0.45f;        // parte do céu com cúmulos (0 limpo, 1 encoberto)
+  float cirrus = 0.3f;           // véu alto de cirros
+  float altitudeMeters = 2000.0f;// Altitude
+  float sizeMeters = 6000.0f;    // lado de uma repetição do mapa no mundo
+  float tint[3]{1.0f, 1.0f, 1.0f};
+  float exposureEv = 0.0f;       // Exposure Compensation, relativa ao sol
+  float windOrientationDegrees = 0.0f; // Wind › Orientation (0 = +X do mundo)
+  float windSpeedKmh = 20.0f;    // Wind › Speed
+  float density = 0.5f;          // Raymarching › Density (mais escuro por dentro)
+  float ambientDimmer = 1.0f;    // Ambient Probe Dimmer
+  float shadowMultiplier = 0.8f; // Shadow Multiplier
+
+  bool operator==(const CloudLayer &) const = default;
+  bool valid() const noexcept {
+    const float values[]{opacity, coverage, cirrus, altitudeMeters, sizeMeters, exposureEv,
+                         windOrientationDegrees, windSpeedKmh, density, ambientDimmer, shadowMultiplier,
+                         tint[0], tint[1], tint[2]};
+    for (float value : values) if (!std::isfinite(value)) return false;
+    for (float channel : tint) if (channel < 0.0f || channel > 1.0f) return false;
+    return opacity >= 0.0f && opacity <= 1.0f && coverage >= 0.0f && coverage <= 1.0f &&
+           cirrus >= 0.0f && cirrus <= 1.0f && altitudeMeters >= 100.0f && altitudeMeters <= 20000.0f &&
+           sizeMeters >= 200.0f && sizeMeters <= 100000.0f && exposureEv >= -8.0f && exposureEv <= 8.0f &&
+           windOrientationDegrees >= 0.0f && windOrientationDegrees <= 360.0f &&
+           windSpeedKmh >= 0.0f && windSpeedKmh <= 400.0f && density >= 0.0f && density <= 1.0f &&
+           ambientDimmer >= 0.0f && ambientDimmer <= 1.0f &&
+           shadowMultiplier >= 0.0f && shadowMultiplier <= 1.0f;
   }
 };
 
@@ -166,9 +207,10 @@ struct SceneEnvironment final {
   float moonSizeDegrees = 1.2f;   // diâmetro aparente (o real é ~0,52°)
   float moonIntensity = 1.0f;
   float starIntensity = 1.0f;
+  CloudLayer clouds{};
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid()) return false;
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid() || !clouds.valid()) return false;
     const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
                           fogLightEnergy, fogDensity, fogStart, fogBaseHeight, fogHeightFalloff,
                           exposureEv, autoExposureMinEv, autoExposureMaxEv,

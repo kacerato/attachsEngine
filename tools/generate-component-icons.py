@@ -451,6 +451,16 @@ ICONS["lighting/time-of-day"] = (
     f'<path d="M108 70a13 13 0 1 1-12-18 10 10 0 0 0 12 18z" {stroke(5)}/>'
     f'<circle cx="20" cy="76" r="5" fill="{INK}" opacity=".7"/>')
 
+# G4b: nuvens (Cloud Layer). O sol atrás do cúmulo diz "iluminada pelo sol",
+# os traços à esquerda são o vento e a mancha no chão é a sombra projetada.
+ICONS["lighting/clouds"] = (
+    f'<circle cx="86" cy="34" r="14" fill="{ACCENT}"/>'
+    f'<path d="M86 10v-4M110 34h4M103 17l3-3M103 51l3 3" {stroke(4, ACCENT)}/>'
+    f'<path d="M30 78a16 16 0 0 1 4-31 22 22 0 0 1 42-6 17 17 0 0 1 22 18 10 10 0 0 1-2 19z" fill="#15191e" {stroke(6)}/>'
+    f'<path d="M8 58h14M4 70h12" {stroke(4, extra='opacity=".6"')}/>'
+    f'<ellipse cx="64" cy="108" rx="34" ry="7" fill="{INK}" opacity=".45"/>'
+    f'<path d="M20 116h88" {stroke(4, extra='opacity=".5"')}/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

@@ -103,6 +103,13 @@ inline const CreationValue timeOfDayStart[]{{"astra.render.time_of_day","hour",1
 inline const CreationValue dayNightLight[]{{light,"kind",Directional},{light,"unit",u32{0}},{light,"intensity",3.f}};
 inline const CreationComponent dayNightSun[]{{light,dayNightLight},{"astra.render.time_of_day",timeOfDayStart}};
 inline const CreationComponent point[]{{light,pointLight}};
+// G4b: como um Volume global da Unity com só o override Cloud Layer: acima do
+// Ambiente da cena (prioridade 1), não mexe no céu, na neblina nem no pós dele.
+inline constexpr std::string_view environmentType="astra.render.environment";
+inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
+  {environmentType,"priority",1.f}};
+inline const CreationComponent cloudVolume[]{{environmentType,cloudVolumeValues}};
 inline const CreationComponent spot[]{{light,spotLight}};
 
 #define AE_BODY_RECIPE(name,motion,shape,isSensor) \
@@ -245,7 +252,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,97> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,98> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -273,6 +280,8 @@ inline const std::array<EditorCreationEntry,97> editorCreationCatalog{{
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,
     runtime::ObjectKind::Light,recipe::dayNightSun,CreationPose::ViewTargetTilted,0,{},{},"TimeOfDay DayNight Ciclo dia noite Sol"},
+  {"light.clouds",EditorWidget::None,4,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
+    runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
   {"light.point",EditorWidget::None,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightPoint,
     runtime::ObjectKind::Light,recipe::point,CreationPose::ViewTarget,2,{},{},"Point Light Omni"},
   {"light.spot",EditorWidget::None,4,"Luz spot","Emite dentro de um cone orientável.",ui::UiIcon::LightSpot,

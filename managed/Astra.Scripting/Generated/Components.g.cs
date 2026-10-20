@@ -4079,6 +4079,12 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => new(Component.GetFloat("grading_highlights_color.r"), Component.GetFloat("grading_highlights_color.g"), Component.GetFloat("grading_highlights_color.b"));
         set => Component.SetVector3("grading_highlights_color", value);
     }
+    /// <summary>Tom. Cor linear RGB</summary>
+    public Vector3 CloudTint
+    {
+        get => new(Component.GetFloat("cloud_tint.r"), Component.GetFloat("cloud_tint.g"), Component.GetFloat("cloud_tint.b"));
+        set => Component.SetVector3("cloud_tint", value);
+    }
     /// <summary>Prioridade</summary>
     /// <remarks>Faixa válida: -1000 a 1000.</remarks>
     public float Priority
@@ -4513,6 +4519,83 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("star_intensity");
         set => Component.SetFloat("star_intensity", value);
     }
+    /// <summary>Opacidade. Opacity: 0 deixa a camada transparente</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudOpacity
+    {
+        get => Component.GetFloat("cloud_opacity");
+        set => Component.SetFloat("cloud_opacity", value);
+    }
+    /// <summary>Cobertura. Parte do céu com cúmulos; 1 é céu encoberto</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudCoverage
+    {
+        get => Component.GetFloat("cloud_coverage");
+        set => Component.SetFloat("cloud_coverage", value);
+    }
+    /// <summary>Cirros. Véu fino e alto, em faixas</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudCirrus
+    {
+        get => Component.GetFloat("cloud_cirrus");
+        set => Component.SetFloat("cloud_cirrus", value);
+    }
+    /// <summary>Altitude (m). Altura da camada: perspectiva no céu e onde a sombra cai</summary>
+    /// <remarks>Faixa válida: 100 a 20000.</remarks>
+    public float CloudAltitude
+    {
+        get => Component.GetFloat("cloud_altitude");
+        set => Component.SetFloat("cloud_altitude", value);
+    }
+    /// <summary>Tamanho (m). Largura de uma repetição do mapa de nuvens</summary>
+    /// <remarks>Faixa válida: 200 a 100000.</remarks>
+    public float CloudSize
+    {
+        get => Component.GetFloat("cloud_size");
+        set => Component.SetFloat("cloud_size", value);
+    }
+    /// <summary>Compensação de exposição (EV). Brilho das nuvens relativo ao sol</summary>
+    /// <remarks>Faixa válida: -8 a 8.</remarks>
+    public float CloudExposure
+    {
+        get => Component.GetFloat("cloud_exposure");
+        set => Component.SetFloat("cloud_exposure", value);
+    }
+    /// <summary>Direção do vento (°). 0° sopra para +X do mundo</summary>
+    /// <remarks>Faixa válida: 0 a 360.</remarks>
+    public float CloudWindOrientation
+    {
+        get => Component.GetFloat("cloud_wind_orientation");
+        set => Component.SetFloat("cloud_wind_orientation", value);
+    }
+    /// <summary>Velocidade do vento (km/h). Deslocamento das nuvens e das sombras</summary>
+    /// <remarks>Faixa válida: 0 a 400.</remarks>
+    public float CloudWindSpeed
+    {
+        get => Component.GetFloat("cloud_wind_speed");
+        set => Component.SetFloat("cloud_wind_speed", value);
+    }
+    /// <summary>Densidade. Autossombra: nuvens densas escurecem por dentro</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudDensity
+    {
+        get => Component.GetFloat("cloud_density");
+        set => Component.SetFloat("cloud_density", value);
+    }
+    /// <summary>Luz do céu. Ambient Probe Dimmer: quanto do céu ilumina a nuvem</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudAmbientDimmer
+    {
+        get => Component.GetFloat("cloud_ambient_dimmer");
+        set => Component.SetFloat("cloud_ambient_dimmer", value);
+    }
+    /// <summary>Força da sombra. Shadow Multiplier: escuridão da sombra no chão</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudShadowMultiplier
+    {
+        get => Component.GetFloat("cloud_shadow_multiplier");
+        set => Component.SetFloat("cloud_shadow_multiplier", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {
@@ -4591,11 +4674,29 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_indirect");
         set => Component.SetBool("override_indirect", value);
     }
+    /// <summary>Sobrescrever nuvens. Participa da mistura do Cloud Layer, separado do céu</summary>
+    public bool OverrideClouds
+    {
+        get => Component.GetBool("override_clouds");
+        set => Component.SetBool("override_clouds", value);
+    }
     /// <summary>Alta qualidade. Aumenta as amostras de vista e luz; custa mais GPU</summary>
     public bool PhysicalAtmosphereHighQuality
     {
         get => Component.GetBool("physical_atmosphere_high_quality");
         set => Component.SetBool("physical_atmosphere_high_quality", value);
+    }
+    /// <summary>Nuvens. Cloud Layer: camada 2D iluminada pelo sol, com vento e sombra</summary>
+    public bool Clouds
+    {
+        get => Component.GetBool("clouds");
+        set => Component.SetBool("clouds", value);
+    }
+    /// <summary>Projetar sombras. A luz direcional principal passa pelas nuvens antes de chegar ao chão</summary>
+    public bool CloudShadows
+    {
+        get => Component.GetBool("cloud_shadows");
+        set => Component.SetBool("cloud_shadows", value);
     }
     public enum SkyOption : uint
     {

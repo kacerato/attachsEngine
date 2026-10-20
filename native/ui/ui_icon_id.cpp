@@ -231,6 +231,7 @@ constexpr const char *kNames[] = {
     "light/spot",
     "lighting/cloud",
     "lighting/cloud-sun",
+    "lighting/clouds",
     "lighting/color-grading",
     "lighting/exposure",
     "lighting/fog",

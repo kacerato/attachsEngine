@@ -69,6 +69,34 @@ void mixGrading(ColorGrading &out,const ColorGrading &target,float amount) {
   out.vibrance=mix(out.vibrance,target.vibrance,amount);
 }
 
+// Nuvens entram e saem pela opacidade, como a neblina pela densidade: um volume
+// sem nuvens sobre um nublado deixa o céu abrir aos poucos, sem salto de forma.
+// Os demais campos mudam junto (a forma de quem chega é a que vale), e o
+// interruptor fica ligado enquanto alguém ainda contribui.
+void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
+  if(amount>=1.0f) {out=target;if(!out.enabled) out.opacity=0.0f;return;}
+  const float from=out.enabled?out.opacity:0.0f;
+  const float to=target.enabled?target.opacity:0.0f;
+  if(!out.enabled && target.enabled) {
+    // A forma vem inteira de quem chega; só a opacidade cresce.
+    const float opacity=out.opacity;out=target;out.opacity=opacity;
+  } else if(target.enabled) {
+    out.coverage=mix(out.coverage,target.coverage,amount);
+    out.cirrus=mix(out.cirrus,target.cirrus,amount);
+    out.altitudeMeters=mix(out.altitudeMeters,target.altitudeMeters,amount);
+    out.sizeMeters=mix(out.sizeMeters,target.sizeMeters,amount);
+    mixColor(out.tint,target.tint,amount);
+    out.exposureEv=mix(out.exposureEv,target.exposureEv,amount);
+    out.windSpeedKmh=mix(out.windSpeedKmh,target.windSpeedKmh,amount);
+    out.density=mix(out.density,target.density,amount);
+    out.ambientDimmer=mix(out.ambientDimmer,target.ambientDimmer,amount);
+    out.shadowMultiplier=mix(out.shadowMultiplier,target.shadowMultiplier,amount);
+    if(amount>=.5f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
+  }
+  out.opacity=mix(from,to,amount);
+  out.enabled=out.opacity>0.0f;
+}
+
 void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides,float amount) {
   if(overrides&EnvironmentOverrideSky) {
     mixColor(result.skyZenith,target.skyZenith,amount);
@@ -112,6 +140,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
     if(amount>=.5f) result.fog=target.fog;
   }
+  if(overrides&EnvironmentOverrideClouds) mixClouds(result.clouds,target.clouds,amount);
   if(overrides&EnvironmentOverrideIndirect) {
     result.indirectDiffuse=mix(result.indirectDiffuse,target.indirectDiffuse,amount);
     result.indirectSpecular=mix(result.indirectSpecular,target.indirectSpecular,amount);

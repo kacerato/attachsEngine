@@ -56,6 +56,11 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // AEEN v4 diffuse irradiance, copied at load time. Appending preserves every
   // existing UBO offset. RGB stores cosine-convolved real SH L2; W is padding.
   vec4 diffuseIrradianceSh[9];
+  // G4b, Cloud Layer (cloud_layer.glsl): fim do bloco, depois das linhas do céu.
+  layout(offset=3536) vec4 cloudParameters; // opacidade, cobertura, cirros, densidade
+  layout(offset=3552) vec4 cloudShape;      // 1/tamanho, altitude, vento x, z
+  layout(offset=3568) vec4 cloudTint;       // tom*2^EV, luz do céu
+  layout(offset=3584) vec4 cloudShadow;     // força da sombra, reservados
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -66,6 +71,9 @@ layout(set=1,binding=3) uniform sampler2D environmentSpecularMap;
 layout(set=1,binding=4) uniform sampler2D environmentBrdfLut;
 // Atlas das luzes locais, com o mesmo sampler de compare das cascatas.
 layout(set=1,binding=17) uniform sampler2DShadow localShadowAtlas;
+// Mapa de nuvens repetível (renderer/cloud_layer.cpp), o mesmo do céu.
+layout(set=1,binding=18) uniform mediump sampler2D cloudMap;
+#include "cloud_layer.glsl"
 
 highp vec3 environmentSourceDirection(highp vec3 direction) {
   // Same positive longitude offset used by the visible panorama.
@@ -246,8 +254,8 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
   return visible*(1.0/9.0);
 }
 
-mediump float directionalShadow(highp vec3 worldPosition, mediump vec3 normal,
-                                highp float viewDepth) {
+mediump float directionalCascadeShadow(highp vec3 worldPosition, mediump vec3 normal,
+                                       highp float viewDepth) {
   int cascadeCount=int(environment.shadowParameters.y+0.5);
   if(cascadeCount<=0) return 1.0;
   highp float shadowEnd=environment.shadowSplitDepths[cascadeCount-1];
@@ -276,4 +284,10 @@ mediump float directionalShadow(highp vec3 worldPosition, mediump vec3 normal,
     visibility=mix(visibility,1.0,smoothstep(start,intervalEnd,viewDepth));
   }
   return visibility;
+}
+
+// Sol que chega à superfície: sombra das cascatas vezes a das nuvens.
+mediump float directionalShadow(highp vec3 worldPosition, mediump vec3 normal,
+                                highp float viewDepth) {
+  return directionalCascadeShadow(worldPosition,normal,viewDepth)*cloudShadowVisibility(worldPosition);
 }

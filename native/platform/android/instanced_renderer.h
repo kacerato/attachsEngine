@@ -1147,6 +1147,11 @@ private:
   rhi::VulkanBuffer routeVertices_,routeIndices_;
   std::vector<std::array<float,4>> authoredWaterLayers_;
   rhi::VulkanSampler waterDetailSampler_{};
+  // G4b: mapa procedural do Cloud Layer (binding 18 do conjunto de ambiente).
+  rhi::VulkanImage cloudMapTexture_{};
+  rhi::VulkanSampler cloudMapSampler_{};
+  // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
+  double cloudTimeSeconds_ = 0.0;
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;

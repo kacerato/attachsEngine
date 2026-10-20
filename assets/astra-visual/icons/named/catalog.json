@@ -2305,6 +2305,12 @@
       "name": "material-unconverted",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/clouds": {
+      "category": "lighting",
+      "name": "clouds",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []
