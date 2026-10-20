@@ -9,6 +9,8 @@ public enum MaterialChannel : uint { Inherit, R, G, B, A }
 public enum MaterialOcclusionSource : uint { Inherit, None, Packed, Texture }
 public enum MaterialToggle : uint { Inherit, Off, On }
 public enum MaterialAlphaSource : uint { Inherit, BaseAlpha, Opaque, BaseLuminance }
+/// <summary>Rugosidade direta, ou suavidade do Standard da Unity (rugosidade = 1 - (1 - fator) * canal).</summary>
+public enum MaterialRoughnessSource : uint { Inherit, Map, SmoothnessMap, SmoothnessBaseAlpha }
 public enum MaterialUvSet : uint { Inherit, Uv0, Uv1, World }
 public enum MaterialWrap : uint { Inherit, Repeat, Clamp, Mirror }
 public enum MaterialFilter : uint { Inherit, Linear, Nearest }
@@ -72,6 +74,7 @@ public readonly struct MaterialSlot(Component component,uint slot)
     public float OcclusionStrength { get=>F("channels.occlusion_strength"); set=>F("channels.occlusion_strength",value); }
     public MaterialToggle NormalFlipY { get=>E<MaterialToggle>("channels.normal_flip_y"); set=>E("channels.normal_flip_y",value); }
     public MaterialAlphaSource AlphaSource { get=>E<MaterialAlphaSource>("channels.alpha_source"); set=>E("channels.alpha_source",value); }
+    public MaterialRoughnessSource RoughnessSource { get=>E<MaterialRoughnessSource>("channels.roughness_source"); set=>E("channels.roughness_source",value); }
     public MaterialUvSet UvSet { get=>E<MaterialUvSet>("sampling.uv_set"); set=>E("sampling.uv_set",value); }
     public MaterialWrap Wrap { get=>E<MaterialWrap>("sampling.wrap"); set=>E("sampling.wrap",value); }
     public MaterialFilter Filter { get=>E<MaterialFilter>("sampling.filter"); set=>E("sampling.filter",value); }

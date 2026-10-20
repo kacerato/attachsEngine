@@ -204,6 +204,7 @@ public:
       if(result.occlusionStrength<0) result.occlusionStrength=inherited.occlusionStrength;
       if(!result.normalFlipY) result.normalFlipY=inherited.normalFlipY;
       if(!result.alphaSource) result.alphaSource=inherited.alphaSource;
+      if(!result.roughnessSource) result.roughnessSource=inherited.roughnessSource;
     }
     return result;
   }

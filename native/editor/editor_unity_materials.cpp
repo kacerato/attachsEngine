@@ -236,6 +236,7 @@ resources::AssetGuid EditorSession::importUnityMaterial(const std::string &path,
   state_.selectedFile=nativePath;openMaterialInspector(material.guid);
   std::string publish;if(!ensureTexturesPublished(publish)) reportProblem(EditorConsoleSeverity::Warning,"Material convertido; publicação gráfica pendente: "+publish);
   diagnostic="Material convertido: "+nativePath+" · "+std::to_string(dependencies.size())+" texturas · fonte Unity preservada";
+  for(const auto &issue:converted.approximations) diagnostic+="\n"+std::string(resources::UnityMaterialApproximationPrefix)+issue;
   return material.guid;
 }
 } // namespace ae::editor

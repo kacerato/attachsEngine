@@ -131,7 +131,9 @@ PreparedLibraryPackage prepareLibraryPackage(const std::string &project,const st
     if(ext==".mat") {UnityMaterialImport converted;if(!readUnityMaterial(body,converted)||!converted.supported()) {
       item.conversion=LibraryConversionState::Unsupported;item.diagnostic=converted.diagnostic.empty()?"Shader ou propriedades não suportadas pelo conversor Standard.":converted.diagnostic;
       for(const auto &issue:converted.unsupported)if(item.knownLosses.size()<LibraryIndex::MaximumLosses)item.knownLosses.push_back(issue);
-    }}
+    } else for(const auto &issue:converted.approximations)
+      if(item.knownLosses.size()<LibraryIndex::MaximumLosses)item.knownLosses.push_back(std::string(UnityMaterialApproximationPrefix)+issue);
+    }
   }
   LibraryIndex check;if(!check.add(package))return fail("Metadados do pacote violam o contrato da biblioteca.");
   result.files=std::move(files);result.accepted=true;result.diagnostic="Pacote preservado e catalogado; conversões são ações explícitas por item.";return result;
@@ -224,7 +226,20 @@ void EditorSession::refreshLibraryRows() {
   state_.libraryRows.clear();state_.libraryPackages.clear();
   state_.libraryPackages.push_back({{},"Todos os pacotes"});
   std::fill(std::begin(state_.libraryKindCounts),std::end(state_.libraryKindCounts),0u);
+  std::fill(std::begin(state_.libraryMaterialAudit),std::end(state_.libraryMaterialAudit),0u);
   const auto query=lower(state_.libraryQuery);
+  // G3a: classe de auditoria de um material Unity catalogado. As perdas sem o
+  // prefixo de aproximação são propriedades sem conversão (ou fonte não lida).
+  const auto auditOf=[](const resources::LibraryItem &item)->u8 {
+    if(item.kind!=LibraryItemKind::Material||!lower(item.path).ends_with(".mat"))return EditorScreenState::LibraryAuditNone;
+    if(item.conversion==LibraryConversionState::Unsupported)return EditorScreenState::LibraryAuditUnsupported;
+    bool approximated=false;
+    for(const auto &loss:item.knownLosses) {
+      if(!loss.starts_with(UnityMaterialApproximationPrefix))return EditorScreenState::LibraryAuditUnsupported;
+      approximated=true;
+    }
+    return approximated?EditorScreenState::LibraryAuditApproximated:EditorScreenState::LibraryAuditComplete;
+  };
   for(const auto &package:library_.packages()) {
     state_.libraryPackages.push_back({package.id,package.name});
     if(state_.libraryPackage.valid()&&state_.libraryPackage!=package.id)continue;
@@ -232,7 +247,9 @@ void EditorSession::refreshLibraryRows() {
       if(!query.empty()&&lower(item.path+" "+package.name).find(query)==std::string::npos)continue;
       // Contagem por tipo antes do filtro de tipo: o trilho mostra o total.
       ++state_.libraryKindCounts[0];if(static_cast<u32>(item.kind)+1<11)++state_.libraryKindCounts[static_cast<u32>(item.kind)+1];
+      const u8 audit=auditOf(item);if(audit)++state_.libraryMaterialAudit[audit-1];
       if(state_.libraryKind&&state_.libraryKind!=static_cast<u32>(item.kind)+1)continue;
+      if(state_.libraryAuditFilter&&audit!=state_.libraryAuditFilter)continue;
       auto resolved=library_.resolve(item.id,assets_);const auto slash=item.path.rfind('/');
       std::filesystem::path sourcePath;std::error_code ec;
       if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(files_.rootPath()),item.path,sourcePath)||!std::filesystem::exists(sourcePath,ec)||ec) {
@@ -244,11 +261,12 @@ void EditorSession::refreshLibraryRows() {
         }
       }
       state_.libraryRows.push_back({item.id,item.path.substr(slash==item.path.npos?0:slash+1),package.name+" · "+kindName(item.kind),resolved.diagnostic,resolved.state,item.kind});
+      state_.libraryRows.back().audit=audit;
     }
   }
   // Malhas do projeto (o antigo "Recursos importados"): cartões do trilho
   // Projeto, cada um indo "Na cena" pelo mesmo caminho do arrasto.
-  const bool projectKind=state_.libraryKind==0||state_.libraryKind==11;
+  const bool projectKind=(state_.libraryKind==0||state_.libraryKind==11)&&!state_.libraryAuditFilter;
   if(!state_.libraryPackage.valid())for(u32 i=0;i<mapScene_.assetCount();++i) {
     std::string name(mapScene_.assetName(i));if(name.empty())name="Malha "+std::to_string(i+1);
     if(!query.empty()&&lower(name).find(query)==std::string::npos)continue;

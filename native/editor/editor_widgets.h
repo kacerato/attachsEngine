@@ -14,6 +14,11 @@ enum class EditorWidget : u32 {
   // Trilho de tipos da Biblioteca (+ índice do tipo, 0 = todos) e o botão
   // universal de importar da barra superior (abre o menu de contexto).
   LibraryKindBase=0xCD150000u,ImportMenu=0xCD160000u,
+  // G3a: blocos da auditoria de materiais do pacote (+ 0 completos,
+  // 1 aproximados, 2 sem conversão); filtram a grade pela classe.
+  LibraryAuditBase=0xCD170000u,
+  // G3a: origem da rugosidade no cartão Canais do material.
+  MaterialRoughnessSourceCycle=0xCD180000u,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
