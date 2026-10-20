@@ -75,7 +75,7 @@ u64 terrainCandidateBytes(const resources::GltfImport &model,
     return u64(values.capacity()) * sizeof(typename std::decay_t<decltype(values)>::value_type);
   };
   u64 bytes = 1024 + storage(model.vertices) + storage(model.indices) + storage(model.draws) +
-              storage(model.materials) + storage(model.names) + storage(model.nodes) +
+              storage(model.materials) + storage(model.terrainControls) + storage(model.names) + storage(model.nodes) +
               storage(model.drawNodes) + storage(model.materialNames) + storage(model.textures) +
               storage(model.textureImages) + storage(model.meshLods) + storage(model.drawSkins) +
               storage(model.drawMorphs) + storage(model.skinInfluences);
@@ -171,13 +171,15 @@ void EditorSession::queueTerrainPreview() {
     job->ready.store(true,std::memory_order_release);
   }).detach();
 }
-bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std::string &error) {
+bool EditorSession::publishTerrainPreview(const resources::TerrainBuild &build,std::string &error) {
+  const auto &mesh=build.mesh;
   const auto source=std::find_if(importedSources_.begin(),importedSources_.end(),
       [&](const auto &s){return s.guid==terrainSource_;});
   if(source==importedSources_.end())return false;
   ImportedSource preview;
   preview.guid=resources::assetGuidFromSeed("terrain-transient-preview");
   preview.materials=source->materials;preview.textures=source->textures;
+  preview.terrainControls.resize(preview.materials.size());
   // The draft may switch a legacy terrain to blended layers before Apply.
   // Rebind the same decoded albedos without a GLB encode/decode round trip.
   if(preview.materials.size()>=4) {
@@ -192,6 +194,14 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std
         slot==0?layers[i]:renderer::InvalidMapTexture;
       if(state_.terrainDraft.blendedSurface)material.flags|=renderer::MapMaterialTerrain;
     }
+  }
+  if(build.recipe.blendedSurface && build.recipe.controlCells && build.field.height==1 && build.field.controlWidth) {
+    renderer::SharedAuthoringTexture control;
+    if(!resources::makeTerrainControlTexture(build.field,control,error))return false;
+    const auto binding=resources::terrainControlBinding(build.recipe,build.field,u32(preview.textures.size()));
+    preview.textures.push_back(std::move(control));
+    for(usize m=0;m<preview.materials.size();++m)
+      if(preview.materials[m].flags&renderer::MapMaterialTerrain)preview.terrainControls[m]=binding;
   }
   // No file encoding, decoding, asset registry, entity or history mutation.
   struct Vertex {float p[3];i16 n[4],t[4];float uv[2],uv1[2];u8 color[4];};
@@ -225,21 +235,16 @@ bool EditorSession::publishTerrainPreview(const resources::TerrainMesh &mesh,std
     preview.names.push_back("Prévia de terreno");preview.draws.push_back(draw);
   }
   auto sources=importedSources_;
-  usize previous=0,materialBase=0,textureBase=0,sourceTextureBase=0;
+  usize previous=0,textureBase=0;
   for(const auto &s:sources) {
-    if(s.guid==terrainSource_)sourceTextureBase=textureBase;
-    previous+=s.draws.size();materialBase+=s.materials.size();textureBase+=s.textures.size();
+    previous+=s.draws.size();textureBase+=s.textures.size();
   }
   sources.push_back(std::move(preview));
   auto library=flattenSources(sources);
-  // The preview uses the committed source's exact textures and import profile.
-  // Do not consume extra residency or bindless slots for identical images on
-  // every brush update; large histories can already occupy the descriptor pool.
-  for(usize i=materialBase;i<library.materials.size();++i)
-    for(auto &texture:library.materials[i].textureIndices)
-      if(texture!=renderer::InvalidMapTexture)
-        texture=u32(sourceTextureBase)+(texture-u32(textureBase));
-  library.textures.resize(textureBase);library.textureSources.resize(textureBase);
+  // Share immutable albedos under the exact same streaming policy; only the
+  // generated control image changes during a stroke. The publication interner
+  // remaps both kinds of binding in one transaction, including the new map.
+  for(usize i=textureBase;i<library.textureSources.size();++i)library.textureSources[i]=terrainSource_;
   usize primitives=0;
   if(!publishAndAdopt(library,error,&primitives,true))return false;
   terrainPreviewFirst_=u32(primitives+previous);terrainPreviewCount_=u32(mesh.parts.size());
@@ -267,7 +272,7 @@ void EditorSession::refreshTerrainPreview() {
   if(!job->cancel && job->error.empty() && job->key==resources::serializeTerrainRecipe(current)) {
     std::string error;
     terrainPreviewCache_=job->build;state_.terrainPreviewBuild=job->build;
-    if(!job->authoringOnly && !publishTerrainPreview(job->build->mesh,error))state_.terrainMessage="Prévia: "+error;
+    if(!job->authoringOnly && !publishTerrainPreview(*job->build,error))state_.terrainMessage="Prévia: "+error;
   }
   queueTerrainPreview();
 }
@@ -369,6 +374,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
                             " operações";
   } else {
     state_.terrainDraft = {};
+    state_.terrainDraft.controlCells = 128;
     // A blank canvas with enough samples across the initial soft brush.
     // Saved recipes retain their own amplitude and resolution on reopening.
     state_.terrainDraft.height = 0;
@@ -761,7 +767,7 @@ bool EditorSession::applyTerrain(const resources::TerrainRecipe &r,
   }
   std::vector<u8> bytes;
   resources::GltfImport model;
-  if (!resources::writeTerrainGlb(r, build->mesh, textures(), bytes, error))
+  if (!resources::writeTerrainGlb(*build, textures(), bytes, error))
     return false;
   if (!resources::importGlb(bytes, {}, {}, model)) {
     error = model.diagnostic;
@@ -813,7 +819,7 @@ void EditorSession::startTerrainJob() {
     }
     if (job->build &&
         !job->cancel &&
-        resources::writeTerrainGlb(job->recipe, job->build->mesh, textures(),
+        resources::writeTerrainGlb(*job->build, textures(),
                                    job->bytes, job->error)) {
       if (!resources::importGlb(job->bytes, {}, {}, job->model))
         job->error = job->model.diagnostic;

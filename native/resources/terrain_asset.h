@@ -1,5 +1,7 @@
 #pragma once
 #include "core/base.h"
+#include "renderer/terrain_control.h"
+#include "renderer/authoring_texture.h"
 #include <array>
 #include <functional>
 #include <span>
@@ -126,6 +128,8 @@ struct TerrainField {
 std::vector<std::array<float,3>> terrainPathPolyline(const TerrainPath &, float step);
 float terrainFieldHeight(const TerrainField &, float x, float z);
 std::array<float,4> terrainFieldWeights(const TerrainField &, float x, float z);
+bool makeTerrainControlTexture(const TerrainField &, renderer::SharedAuthoringTexture &, std::string &);
+renderer::TerrainControlBinding terrainControlBinding(const TerrainRecipe &, const TerrainField &, u32 textureIndex);
 struct TerrainChunkKey {
   u32 x = 0, y = 0, z = 0;
   bool operator==(const TerrainChunkKey &) const = default;
@@ -152,6 +156,8 @@ bool generateTerrain(const TerrainRecipe &, TerrainMesh &out, std::string &,
                      const std::function<bool(float)> &progress = {});
 bool writeTerrainGlb(const TerrainRecipe &, const TerrainMesh &,
                      const std::array<std::vector<u8>, 4> &textures,
+                     std::vector<u8> &, std::string &);
+bool writeTerrainGlb(const TerrainBuild &, const std::array<std::vector<u8>, 4> &textures,
                      std::vector<u8> &, std::string &);
 bool terrainRecipeFromGlb(std::span<const u8>, TerrainRecipe &, std::string &);
 } // namespace ae::resources

@@ -3964,9 +3964,13 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
     // Cada fonte numera as próprias texturas a partir de zero; na biblioteca
     // achatada, os índices dos materiais andam junto com o bloco.
     const auto textureBase=static_cast<u32>(library.textures.size());
-    for(auto material:source.materials) {
+    for(usize m=0;m<source.materials.size();++m) {
+      auto material=source.materials[m];
       for(auto &texture:material.textureIndices) if(texture!=renderer::InvalidMapTexture) texture+=textureBase;
       library.materials.push_back(material);
+      auto control=m<source.terrainControls.size()?source.terrainControls[m]:renderer::TerrainControlBinding{};
+      if(control.textureIndex!=renderer::InvalidMapTexture)control.textureIndex+=textureBase;
+      library.terrainControls.push_back(control);
     }
     library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
     library.textureSources.insert(library.textureSources.end(),source.textures.size(),source.guid);
@@ -4116,6 +4120,14 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
     textureSlots[i]=slot;
   }
   auto materials=library.materials;
+  auto terrainControls=library.terrainControls;
+  if(terrainControls.size()!=materials.size()) {
+    diagnostic="Mapas de controle desalinhados dos materiais.";return false;
+  }
+  for(auto &control:terrainControls)if(control.textureIndex!=renderer::InvalidMapTexture) {
+    if(control.textureIndex>=textureSlots.size()){diagnostic="Mapa de terreno fora da biblioteca.";return false;}
+    control.textureIndex=textureSlots[control.textureIndex];
+  }
   for(auto &material:materials)for(auto &slot:material.textureIndices)if(slot!=renderer::InvalidMapTexture) {
     if(slot>=textureSlots.size()){diagnostic="Material referencia textura fora da biblioteca.";return false;}
     slot=textureSlots[slot];
@@ -4133,6 +4145,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
 
   skinningPublication_={library.skinInfluences,library.drawJoints,library.morphDeltas,library.drawMorphOffsets,
                         library.drawMorphTargets,library.meshLods};
+  terrainControlPublication_=terrainControls;
   const bool accepted=publishGeometry_(library.vertices,library.indices,library.draws,materials,textures,published);
   if(accepted) {
     publishedSourceTextureSlots_.assign(textureSlots.begin(),textureSlots.begin()+library.textures.size());
@@ -4140,6 +4153,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
     textureStreamingDesired_.clear();textureStreamingLoaded_.clear();
   }
   skinningPublication_={};
+  terrainControlPublication_={};
   if(!accepted) {
     diagnostic="O consumidor gráfico recusou a geometria importada.";return false;
   }
@@ -4219,7 +4233,8 @@ void EditorSession::collectSourceTextures() {
         const auto material=source.draws[d].materialIndex;
         if(material>=source.materials.size()) continue;
         const auto &indices=source.materials[material].textureIndices;
-        if(std::find(std::begin(indices),std::end(indices),t)!=std::end(indices)) entry.meshes.push_back(source.identities[d]);
+        const bool control=material<source.terrainControls.size() && source.terrainControls[material].textureIndex==t;
+        if(control || std::find(std::begin(indices),std::end(indices),t)!=std::end(indices)) entry.meshes.push_back(source.identities[d]);
       }
       sourceTextures_.push_back(std::move(entry));
     }
@@ -4902,6 +4917,7 @@ bool EditorSession::stageSource(const resources::GltfImport &model, std::string_
   block.vertices.assign(model.vertices.begin(),model.vertices.end());
   block.indices.assign(model.indices.begin(),model.indices.end());
   block.materials.assign(model.materials.begin(),model.materials.end());
+  block.terrainControls=model.terrainControls;
   block.draws.assign(model.draws.begin(),model.draws.end());
   block.nodes=model.nodes;
   block.drawNodes=model.drawNodes;

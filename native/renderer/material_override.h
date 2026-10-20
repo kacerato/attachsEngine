@@ -1,5 +1,6 @@
 #pragma once
 #include "renderer/map_package.h"
+#include "renderer/terrain_control.h"
 #include "scene/material_parameters.h"
 #include <algorithm>
 namespace ae::renderer {
@@ -40,8 +41,9 @@ inline void materialUvTransformEntry(const MaterialOverride &value,float out[Mat
 //   linha 10: dado isolado na prévia (MaterialIsolate*)
 //   linha 11: lightmap ativo, índice bindless, intensidade, reservado
 //   linha 12: lightmap escala UV1 xy e deslocamento zw
-//   linha 13: reservada
-inline constexpr u32 MaterialExtensionFloats=14*4;
+//   linha 13: controle de terreno ativo, índice bindless, escala UV0 xy
+//   linha 14: deslocamento UV0 xy, reservado zw
+inline constexpr u32 MaterialExtensionFloats=15*4;
 inline constexpr u32 MaterialExtensionNoTexture=0xFFFFFFFFu;
 inline bool needsMaterialExtension(const MaterialOverride &value) {
   return (value.lightmapTexture!=scene::MaterialTextureKeep && value.lightmapTexture!=InvalidMapTexture) || value.uvTransformMask!=0 || value.channels.overrides() || value.isolate!=scene::MaterialIsolateNone ||
@@ -50,7 +52,8 @@ inline bool needsMaterialExtension(const MaterialOverride &value) {
 // `effectiveFlags` são as flags do material depois de applyMaterialOverride;
 // `occlusionSlot` é o índice bindless da textura de oclusão, ou NoTexture.
 inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFlags,u32 occlusionSlot,
-                                   float out[MaterialExtensionFloats],u32 lightmapSlot=MaterialExtensionNoTexture) {
+                                   float out[MaterialExtensionFloats],u32 lightmapSlot=MaterialExtensionNoTexture,
+                                   const TerrainControlBinding *control=nullptr,u32 controlSlot=MaterialExtensionNoTexture) {
   materialUvTransformEntry(value,out);
   const auto &channels=value.channels;
   const auto channel=[](std::uint8_t chosen,u32 fallback) {return static_cast<float>(chosen?chosen-1u:fallback);};
@@ -76,7 +79,12 @@ inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFl
   row[2]=value.lightmapIntensity;row[3]=0;
   row+=4;
   for(unsigned i=0;i<4;++i) row[i]=value.lightmapScaleOffset[i];
-  row+=4;row[0]=row[1]=row[2]=row[3]=0;
+  row+=4;std::fill_n(row,8,0.f);
+  if(control && controlSlot!=MaterialExtensionNoTexture && (effectiveFlags&MapMaterialTerrain)) {
+    row[0]=1;row[1]=static_cast<float>(controlSlot);
+    row[2]=control->uvScale[0];row[3]=control->uvScale[1];
+    row[4]=control->uvOffset[0];row[5]=control->uvOffset[1];
+  }
 }
 inline MapMaterialRecord applyMaterialOverride(const MapMaterialRecord &source,const MaterialOverride &value,u32 textureBase=0) {
   auto result=source;

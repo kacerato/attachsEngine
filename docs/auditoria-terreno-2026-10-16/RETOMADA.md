@@ -1,5 +1,7 @@
 # Retomada — 16/10/2026
 
+Continuação atual: [pintura independente na GPU](PINTURA-GPU-2026-10-20.md). Consumidor por fragmento, GLB/cache/publicação e prévia do mapa integrados ao relevo; 128 células como padrão de criação e barra 8–512. 96/96 cenários integrados, 18/18 de texturas e oito modos gráficos na GPU do PC passaram; painel host conferido. 14/14 unidades Android passaram na compilação sintática; sem APK novo e sem ADB. Catálogo/PBR extensível é a próxima dependência real; P11, bloco 1 e os 71 itens continuam abertos.
+
 Continuação de 20/10: [mapas autorais, recuperação e catálogo](CONTINUACAO-2026-10-20.md). 90/90 cenários integrados host; mapas autorais com slider/entrada precisa, checkpoints/deltas da receita e reconstrução de GLB integrados; vizinhança e materiais avançaram no backend/contrato. Shader extensível, grupos no editor, geometria/GC global, vegetação e grafos continuam pendentes. ADB suspenso pelo proprietário até concluir a implementação e a conferência local; APK 110 não contém estas mudanças.
 
 Checkpoint funcional `23fe8dde` publicado. AstraDocs `f35821b` publicado e Vercel READY, com guia próprio de 20/10 e nota nova. Próxima integração necessária: consumir os mapas de controle por fragmento e os materiais extensíveis na publicação/cache/renderer, preservando canais, variantes, identidade e qualidade dos assets. Modelos isolados não encerram esses itens.

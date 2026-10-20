@@ -739,6 +739,28 @@ AE_TEST(terrain_control_map_brush_bins_preserve_order_and_rotated_footprints) {
   AE_EXPECT_TRUE(!generateTerrainField(r,unchanged,error),"infinite brush rejected before bins");
   AE_EXPECT_EQ(unchanged.width,444u,"invalid brush leaves output atomic");
 }
+AE_TEST(terrain_control_texture_rejects_invalid_fields_and_preserves_energy) {
+  using namespace resources;std::string error;TerrainRecipe r;r.cells=8;r.controlCells=8;
+  TerrainField field;AE_EXPECT_TRUE(generateTerrainField(r,field,error),error.c_str());
+  for(auto &weights:field.controlWeights)weights={.25f,.25f,.25f,.25f};
+  renderer::SharedAuthoringTexture texture;
+  AE_EXPECT_TRUE(makeTerrainControlTexture(field,texture,error),error.c_str());
+  renderer::SharedAuthoringTexture same;
+  AE_EXPECT_TRUE(makeTerrainControlTexture(field,same,error),error.c_str());
+  AE_EXPECT_TRUE(texture==same,"unchanged control pixels reuse immutable allocation during preview");
+  for(usize i=0;i<texture->mipChain.size();i+=4)
+    AE_EXPECT_EQ(u32(texture->mipChain[i])+texture->mipChain[i+1]+texture->mipChain[i+2]+texture->mipChain[i+3],255u,"RGBA8 weights sum to exactly 255");
+  const auto original=texture;
+  field.controlWeights[0]={0,0,0,0};
+  AE_EXPECT_TRUE(!makeTerrainControlTexture(field,texture,error),"zero energy rejected");
+  AE_EXPECT_TRUE(texture==original,"invalid field preserves texture output");
+  field.controlWeights[0]={1,0,0,std::numeric_limits<float>::quiet_NaN()};
+  AE_EXPECT_TRUE(!makeTerrainControlTexture(field,texture,error),"NaN rejected");
+  field.controlWeights[0]={1,0,0,0};field.height=9;
+  AE_EXPECT_TRUE(!makeTerrainControlTexture(field,texture,error),"volume field cannot masquerade as planar map");
+  field.height=1;field.controlWidth=8;
+  AE_EXPECT_TRUE(!makeTerrainControlTexture(field,texture,error),"insufficient control resolution rejected");
+}
 
 AE_TEST(terrain_control_map_rejects_malformed_field_before_meshing) {
   resources::TerrainRecipe recipe;recipe.cells=8;recipe.controlCells=8;

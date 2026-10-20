@@ -955,6 +955,8 @@ struct Importer {
     // Um material neutro fecha a lista: primitiva sem material é legal em glTF
     // e precisa de alguma coisa para apontar.
     out->materials.resize(count + 1);
+    out->terrainControls.resize(count + 1);
+    std::unordered_map<i64,u32> controlTextures;
     out->materialNames.assign(count + 1, std::string());
     uvTransforms.assign(count + 1, {});
     declaresTexture.assign(count + 1, 0);
@@ -994,13 +996,50 @@ struct Importer {
           target.normalScale = static_cast<float>(json->number(*normal, "scale", 1));
       assignTexture(root, source, "emissiveTexture", true, 3, target, renderer::MapMaterialEmissiveMap, i);
       if (const auto *extras=json->member(source,"extras");extras &&
-          json->number(*extras,"astraTerrainSurface",0)==1) {
+          (json->number(*extras,"astraTerrainSurface",0)==1 || json->number(*extras,"astraTerrainSurface",0)==2)) {
         const char *layers[]{"grassTexture","rockTexture","soilTexture","pathTexture"};
         for(u32 layer=0;layer<4;++layer)
           if(!assignTexture(root,*extras,layers[layer],true,layer,target,0,i))
             return fail("Camada da superfície de terreno ausente.");
         target.flags &= ~(renderer::MapMaterialNormalMap|renderer::MapMaterialMetallicRoughnessMap|renderer::MapMaterialEmissiveMap);
         target.flags |= renderer::MapMaterialTerrain;
+        if(json->number(*extras,"astraTerrainSurface",0)==2) {
+          auto &binding=out->terrainControls[i];
+          if(!readVector(*extras,"controlUvScale",binding.uvScale,2) ||
+             !readVector(*extras,"controlUvOffset",binding.uvOffset,2) ||
+             !json->member(*extras,"controlUvScale") || !json->member(*extras,"controlUvOffset"))
+            return fail("Transformação do mapa de pintura inválida.");
+          for(u32 axis=0;axis<2;++axis)
+            if(!std::isfinite(binding.uvScale[axis]) || binding.uvScale[axis]<=0 ||
+               !std::isfinite(binding.uvOffset[axis]))return fail("Transformação do mapa de pintura inválida.");
+          const auto *info=json->member(*extras,"controlTexture");
+          const auto *textureList=array(root,"textures");
+          const i64 index=info?json->index(*info,"index"):-1;
+          if(!textureList || index<0 || index>=textureList->childCount)return fail("Textura do mapa de pintura ausente.");
+          if(const auto cached=controlTextures.find(index);cached!=controlTextures.end())binding.textureIndex=cached->second;
+          else {
+          const auto &texture=*json->child(*textureList,u32(index));
+          std::span<const u8> bytes;
+          if(!imageBytes(root,textureSource(texture),bytes))return fail("Imagem do mapa de pintura inválida.");
+          if(detectImageContainer(bytes)!=ImageContainer::Png)return fail("O mapa de pintura exige PNG sem perda.");
+          u32 width=0,height=0;
+          if(!readImageDimensions(bytes,limits->image,width,height) || width!=height || width<9 || width>513 || (width-1)%8)
+            return fail("O mapa de pintura exige 8–512 células, em múltiplos de oito.");
+          const u64 required=u64(width)*height*4;
+          if(out->textureBytes>limits->maximumTextureBytes || required>limits->maximumTextureBytes-out->textureBytes)
+            return fail("O mapa de pintura excede o orçamento de memória das texturas.");
+          DecodedImage decoded;std::string diagnostic;
+          if(!decodeImageRgba8(bytes,limits->image,decoded,diagnostic))return fail(diagnostic.c_str());
+          renderer::AuthoringTexture made;made.width=width;made.height=height;made.levels=1;
+          made.srgb=false;made.format=renderer::AuthoringTextureRgba8;
+          made.samplerFlags=renderer::encodeGltfTextureSampler(9729,9729)|renderer::AuthoringTextureNoAnisotropy;
+          made.mipChain=std::move(decoded.rgba);
+          binding.textureIndex=u32(out->textures.size());out->textureBytes+=required;
+          out->textures.push_back(shareDecodedTexture(std::move(made)));
+          out->textureImages.push_back(imageLabel(root,textureSource(texture)));
+          controlTextures[index]=binding.textureIndex;
+          }
+        }
       }
       // Oclusão (R4): o quadro de material não tem um quinto slot de textura.
       // Entra só quando é a MESMA textura e o MESMO UV do metálico/rugosidade

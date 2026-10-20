@@ -76,7 +76,7 @@ u64 EditorSession::retainedModelBytes(const ImportedSource &source) {
     if(texture->file)textureBytes+=sizeof(*texture->file)+texture->file->path.capacity();
   }
   u64 bytes=textureBytes+sizeof(source)+storage(source.vertices)+storage(source.indices)+storage(source.draws)+storage(source.materials)+
-      storage(source.identities)+storage(source.names)+storage(source.nodes)+storage(source.drawNodes)+storage(source.map.nodes)+
+      storage(source.terrainControls)+storage(source.identities)+storage(source.names)+storage(source.nodes)+storage(source.drawNodes)+storage(source.map.nodes)+
       storage(source.materialNames)+storage(source.textures)+storage(source.skins)+storage(source.drawSkins)+storage(source.skinInfluences)+
       storage(source.animations)+storage(source.morphs)+storage(source.drawMorphs)+storage(source.textureImages)+storage(source.meshLods)+source.map.sourceHash.capacity();
   for(const auto &name:source.names)bytes+=name.capacity();

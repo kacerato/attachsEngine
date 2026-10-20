@@ -7,6 +7,56 @@
 #include <cstring>
 using namespace ae;
 
+AE_TEST(terrain_high_resolution_control_png_survives_real_glb_import) {
+  resources::TerrainRecipe r;r.cells=8;r.controlCells=128;r.height=0;r.solidBase=true;
+  resources::TerrainStroke stroke;stroke.tool=resources::TerrainTool::Paint;
+  stroke.x=3;stroke.z=3;stroke.radius=1;stroke.layer=3;stroke.hardness=1;r.strokes={stroke};
+  resources::TerrainField field;resources::TerrainMesh mesh;std::string error;
+  AE_EXPECT_TRUE(resources::generateTerrainField(r,field,error),error.c_str());
+  AE_EXPECT_TRUE(resources::meshTerrainField(r,field,mesh,error),error.c_str());
+  bool top=false,closed=false;float vertexPath=0;
+  for(const auto &part:mesh.parts)for(const auto &v:part.vertices) {
+    if(v.uv1[1]>=0){top=true;vertexPath=std::max(vertexPath,v.weights[3]);}
+    else {closed=true;AE_EXPECT_TRUE(std::abs(-v.uv1[1]-1-r.macroVariation)<.00001f,"closed surface macro variation preserved");}
+  }
+  AE_EXPECT_TRUE(top&&closed,"top eligibility distinguishes closed faces");
+  AE_EXPECT_TRUE(vertexPath<.001f,"narrow paint lies between coarse geometry vertices");
+  AE_EXPECT_TRUE(resources::terrainFieldWeights(field,3,3)[3]>.99f,"independent map retains narrow paint");
+  const std::array<std::vector<u8>,4> textures{{
+    {std::begin(resources::terrainTexture0),std::end(resources::terrainTexture0)},
+    {std::begin(resources::terrainTexture1),std::end(resources::terrainTexture1)},
+    {std::begin(resources::terrainTexture2),std::end(resources::terrainTexture2)},
+    {std::begin(resources::terrainTexture3),std::end(resources::terrainTexture3)}}};
+  std::vector<u8> glb;AE_EXPECT_TRUE(resources::writeTerrainGlb(r,mesh,textures,glb,error),error.c_str());
+  resources::TerrainBuild prepared;prepared.recipe=r;prepared.field=field;prepared.mesh=mesh;
+  std::vector<u8> reused;
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(prepared,textures,reused,error),error.c_str());
+  AE_EXPECT_TRUE(reused==glb,"prepared field export equals replay export byte for byte");
+  prepared.field.controlWidth=9;reused={1,2,3};
+  AE_EXPECT_TRUE(!resources::writeTerrainGlb(prepared,textures,reused,error),"incompatible prepared field rejected");
+  AE_EXPECT_TRUE(reused==std::vector<u8>({1,2,3}),"prepared export failure preserves output");
+  resources::GltfImport imported;resources::GltfImportLimits limits;
+  limits.maximumTextureDimension=32;limits.textureCompression=8;
+  AE_EXPECT_TRUE(resources::importGlb(glb,limits,{},imported),imported.diagnostic.c_str());
+  AE_EXPECT_EQ(imported.terrainControls.size(),imported.materials.size(),"bindings align materials including neutral");
+  const auto &binding=imported.terrainControls[0];
+  AE_EXPECT_TRUE(binding.textureIndex<imported.textures.size(),"dedicated control binding resolves");
+  if(binding.textureIndex>=imported.textures.size())return;
+  const auto &texture=*imported.textures[binding.textureIndex];
+  AE_EXPECT_EQ(texture.width,129u,"resident quality policy never downsizes control data");
+  AE_EXPECT_EQ(texture.levels,1u,"single level pins control resolution");
+  AE_EXPECT_TRUE(!texture.srgb&&texture.format==renderer::AuthoringTextureRgba8,"control remains linear uncompressed data");
+  const auto sampler=renderer::decodeTextureSampler(texture.samplerFlags);
+  AE_EXPECT_TRUE(sampler.minLinear&&sampler.magLinear&&!sampler.mipEnabled,"linear sampling without mip bias");
+  AE_EXPECT_TRUE(!(texture.samplerFlags&(renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV)),"control clamps at boundaries");
+  renderer::SharedAuthoringTexture expected;AE_EXPECT_TRUE(resources::makeTerrainControlTexture(field,expected,error),error.c_str());
+  AE_EXPECT_TRUE(texture.mipChain==expected->mipChain,"lossless PNG preserves every control byte");
+  const float first=(-r.size*.5f/r.textureScale)*binding.uvScale[0]+binding.uvOffset[0];
+  AE_EXPECT_TRUE(std::abs(first-.5f/texture.width)<.000001f,"first sample maps to texel center");
+  for(u32 i=1;i<4;++i)AE_EXPECT_EQ(imported.terrainControls[i].textureIndex,binding.textureIndex,"materials share one control texture");
+  AE_EXPECT_EQ(imported.terrainControls.back().textureIndex,renderer::InvalidMapTexture,"neutral material has no control");
+}
+
 AE_TEST(terrain_all_modes_export_and_import_real_parser) {
   for (u32 mode = 0; mode < 3; ++mode) {
     resources::TerrainRecipe r;

@@ -29,7 +29,8 @@ inline constexpr u32 ImportCacheSchema = 7; // 7: blend shapes e canal de pesos
 // 5: preserva minificação, magnificação e uso/interpolação de mip do sampler
 // glTF separadamente. Derivados da revisão 4 tinham só os dois bits legados e
 // não permitem reconstruir essa informação sem reler a fonte.
-inline constexpr u32 ImportCacheImporterRevision = 7;
+// 8: full-resolution terrain controls and material bindings.
+inline constexpr u32 ImportCacheImporterRevision = 8;
 
 std::string importCacheKey(std::string_view sourceContentHash, const GltfImportLimits &limits);
 // Caminho relativo à raiz do projeto.

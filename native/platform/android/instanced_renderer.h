@@ -8,6 +8,7 @@
 #include "renderer/scene_environment.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
+#include "renderer/terrain_control.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -263,7 +264,8 @@ public:
                                 std::span<const renderer::MapDrawRecord> draws,
                                 std::span<const renderer::MapMaterialRecord> materials,
                                 std::span<const renderer::SharedAuthoringTexture> textures = {},
-                                const DeformationLibrary &deformation = {});
+                                const DeformationLibrary &deformation = {},
+                                std::span<const renderer::TerrainControlBinding> terrainControls = {});
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
@@ -593,6 +595,8 @@ private:
   bool commitAuthoredScene();
   std::vector<u8> authoredVisibility_, authoredShadows_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
+  // Aligned to the complete GPU package's materials, including built-ins.
+  std::vector<renderer::TerrainControlBinding> authoredTerrainControls_;
   struct AuthoredDrawIdentity {
     u64 objectId;
     u32 sourceDrawIndex;

@@ -1,18 +1,19 @@
 // R4: extensão de material por desenho (transformação de UV por binding, canais,
 // oclusão, normal, origem do alfa e isolamento na prévia). A entrada do desenho
 // viaja nos bits 1..31 de materialFlags.z (0 = sem extensão; o bit 0 é a saída
-// sRGB). Cada entrada tem 14 linhas vec4:
+// sRGB). Cada entrada tem 15 linhas vec4:
 //   0..7  duas linhas por binding: (a b c 0) e (d e f 0), uv' = (a·u+b·v+c, d·u+e·v+f)
 //   8     força da oclusão, origem (0 nenhuma, 1 metal/rug., 2 textura), canal, índice bindless
 //   9     canal da rugosidade, canal do metal, origem do alfa (0 cor, 1 opaco, 2 luminância), inverter Y
 //   10    dado isolado na prévia
 //   11    lightmap ativo, índice bindless, intensidade, reservado
 //   12    escala UV1 xy, deslocamento zw
-//   13    reservada
+//   13    controle de terreno ativo, índice bindless, escala UV0 xy
+//   14    deslocamento UV0 xy, reservado zw
 // Precisa casar com renderer::materialExtensionEntry.
 layout(std430,set=1,binding=16) readonly buffer MaterialUvTransforms { highp vec4 materialUvTransforms[]; };
 
-const uint AETHER_MATERIAL_EXTENSION_ROWS=14u;
+const uint AETHER_MATERIAL_EXTENSION_ROWS=15u;
 
 bool aetherHasMaterialExtension() { return (frame.materialFlags.z>>1u)!=0u; }
 

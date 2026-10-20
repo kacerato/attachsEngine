@@ -1268,7 +1268,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
           const auto &skin=shell.editorSession.skinningPublication();
           if(!shell.instancedRenderer.rebuildAuthoringGeometry(vertices,indices,draws,materials,textures,
                   {skin.influences,skin.drawJoints,skin.morphDeltas,skin.drawMorphOffsets,skin.drawMorphTargets,
-                   skin.meshLods})) return false;
+                   skin.meshLods},shell.editorSession.terrainControlPublication())) return false;
           shell.editorSession.cameraPreview().invalidateTarget();
           out={shell.instancedRenderer.mapDraws(),shell.instancedRenderer.mapMaterials(),
                shell.instancedRenderer.pickingVertices(),shell.instancedRenderer.pickingIndices()};

@@ -1,5 +1,5 @@
-// Terrain surface v1. The four bindings are sRGB albedos; COLOR_0 is a
-// normalized splat vector, never vertex tint/opacity. UVs carry local XYZ so
+// Terrain surfaces v1/v2. The four bindings are sRGB albedos; COLOR_0 is the
+// normalized fallback splat vector, never vertex tint/opacity. UVs carry local XYZ so
 // moving the terrain does not make the material swim through world space.
 float terrainHash(vec2 p) {return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
 float terrainNoise(vec2 p) {
@@ -23,7 +23,21 @@ vec3 terrainLayer(sampler2D tex,vec3 p,vec3 dx,vec3 dy,vec3 axes,float variation
   return c;
 }
 vec4 terrainSurface() {
-  vec4 weights=max(vColor,vec4(0));weights/=max(dot(weights,vec4(1)),.001);
+  vec4 weights=max(vColor,vec4(0));
+  // UV0 stores local XZ / tile size. Its independent control transform maps
+  // the terrain boundaries to the centers of the outermost control texels.
+  // Closed sides/bottom carry a negative macro marker and keep vertex weights.
+  // A v1 material (or a backend without bindless data maps) keeps its fallback.
+#ifdef TERRAIN_CONTROL_MAP
+  if(vUv1.y>=0.0 && aetherHasMaterialExtension()) {
+    highp vec4 control=aetherMaterialRow(13u);
+    if(control.x>0.5) {
+      highp vec2 controlUv=vUv0*control.zw+aetherMaterialRow(14u).xy;
+      weights=max(textureLod(TERRAIN_CONTROL_MAP(uint(control.y+0.5)),controlUv,0.0),vec4(0));
+    }
+  }
+#endif
+  weights/=max(dot(weights,vec4(1)),.001);
   // Derivatives of the stored local position supply projection weights in the
   // correct space even when the terrain root is rotated or scaled.
   vec3 p=vec3(vUv0.x,vUv1.x,vUv0.y);
@@ -33,7 +47,7 @@ vec4 terrainSurface() {
   vec3 localNormal=cross(dx,dy);
   localNormal=dot(localNormal,localNormal)>1e-16?normalize(localNormal):vec3(0,1,0);
   vec3 axes=pow(abs(localNormal),vec3(4));axes/=max(dot(axes,vec3(1)),.001);
-  float variation=clamp(vUv1.y,0.0,1.0);
+  float variation=clamp(vUv1.y<0.0?-vUv1.y-1.0:vUv1.y,0.0,1.0);
   vec3 color=vec3(0);
   if(weights.x>.001)color+=weights.x*terrainLayer(BASE_MAP,p,dx,dy,axes,variation);
   if(weights.y>.001)color+=weights.y*terrainLayer(NORMAL_MAP,p,dx,dy,axes,variation);

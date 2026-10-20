@@ -1265,15 +1265,22 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
   const u32 textureBase = static_cast<u32>(dirtRoadResources_.packageTextureCount());
   for (usize draw = 0; draw < authoredMaterials_.size(); ++draw) {
     const auto &material = authoredMaterials_[draw];
-    if (!renderer::needsMaterialExtension(material)) continue;
-    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
     // O padrão da fonte (oclusão empacotada ou não) vem das flags efetivas do desenho.
     u32 flags = 0;
+    const renderer::TerrainControlBinding *control=nullptr;
     if (draw < dirtRoadResources_.draws().size()) {
       const u32 materialIndex = dirtRoadResources_.draws()[draw].materialIndex;
       if (materialIndex < dirtRoadResources_.materials().size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex], material, textureBase).flags;
+      if((flags&renderer::MapMaterialTerrain) && materialIndex<authoredTerrainControls_.size())
+        control=&authoredTerrainControls_[materialIndex];
     }
+    u32 controlSlot=renderer::MaterialExtensionNoTexture;
+    if(useBindless_ && control && control->textureIndex!=renderer::InvalidMapTexture &&
+       control->textureIndex<dirtTextureSlots_.size() && dirtTextureSlots_[control->textureIndex]!=baseTextureIndex_)
+      controlSlot=dirtTextureSlots_[control->textureIndex];
+    if (!renderer::needsMaterialExtension(material) && controlSlot==renderer::MaterialExtensionNoTexture) continue;
+    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
     // Textura de oclusão própria só existe com descritores bindless: o caminho de
     // fallback tem exatamente quatro samplers por material.
     u32 occlusionSlot = renderer::MaterialExtensionNoTexture;
@@ -1293,7 +1300,7 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
       if(texture<dirtTextureSlots_.size()) lightmapSlot=dirtTextureSlots_[texture];
     }
     renderer::materialExtensionEntry(material, flags, occlusionSlot,
-                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot);
+                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot,control,controlSlot);
     authoredUvTransformEntries_[draw] = ++used;
   }
   // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.
@@ -4806,6 +4813,7 @@ void InstancedRenderer::shutdown() {
   materialResources_.shutdown();
   dirtRoadResources_.shutdown();
   dirtTextureSlots_.clear();
+  authoredTerrainControls_.clear();
   authoringTextureSlots_.clear();
   dirtMaterialSets_.clear();
   solidDrawOrder_.clear();
@@ -5074,10 +5082,21 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
                                                 std::span<const renderer::MapDrawRecord> draws,
                                                 std::span<const renderer::MapMaterialRecord> materials,
                                                 std::span<const renderer::SharedAuthoringTexture> textures,
-                                                const DeformationLibrary &deformation) {
+                                                const DeformationLibrary &deformation,
+                                                std::span<const renderer::TerrainControlBinding> terrainControls) {
   if(!dirtRoadPreview_ || !rhiDevice_ || device_==VK_NULL_HANDLE) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Import] renderer sem contexto para absorver geometria.");
     return false;
+  }
+  if(!terrainControls.empty() && terrainControls.size()!=materials.size())return false;
+  for(usize m=0;m<terrainControls.size();++m) {
+    const auto &control=terrainControls[m];
+    if(control.textureIndex==renderer::InvalidMapTexture)continue;
+    if(!(materials[m].flags&renderer::MapMaterialTerrain) || control.textureIndex>=textures.size() ||
+       !textures[control.textureIndex] || textures[control.textureIndex]->srgb)return false;
+    for(u32 axis=0;axis<2;++axis)
+      if(!std::isfinite(control.uvScale[axis]) || control.uvScale[axis]<=0 ||
+         !std::isfinite(control.uvOffset[axis]))return false;
   }
   // Trocar buffers de vértice com um quadro em voo desenharia memória já
   // liberada. Importar é raro e explícito: esperar é a resposta certa aqui, e
@@ -5129,6 +5148,13 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // o próximo quadro a republicar tudo, em vez de casar poses novas com
   // topologia velha.
   registerAuthoringTextures();
+  const auto materialBase=dirtRoadResources_.materials().size()-materials.size();
+  authoredTerrainControls_.assign(dirtRoadResources_.materials().size(),{});
+  for(usize m=0;m<terrainControls.size();++m) {
+    auto control=terrainControls[m];
+    if(control.textureIndex!=renderer::InvalidMapTexture)control.textureIndex+=static_cast<u32>(packageTextures);
+    authoredTerrainControls_[materialBase+m]=control;
+  }
   __android_log_print(ANDROID_LOG_INFO,LogTag,
       "[Import] texturas importadas: %zu publicadas (%u reaproveitadas, %u enviadas), %zu slots bindless; geometria %s, %llu bytes em %u faixas.",
       textures.size(),dirtRoadResources_.lastReusedTextures(),dirtRoadResources_.lastUploadedTextures(),

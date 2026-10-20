@@ -383,7 +383,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     if(hf) {
       field("Células do mapa de pintura", r.controlCells, 60);
       hint(r.controlCells ? "Mapa autoral independente da malha." : "0: pintura legada · arraste para criar mapa.",
-           "Detalhe visível depende da malha.");
+           r.controlCells ? "Pincel por texel · sem aumentar triângulos." : "Mapa independente disponível ao arrastar.");
     }
     if (!hf)
       field("Resolução vertical (8–64)", r.verticalCells, 7);

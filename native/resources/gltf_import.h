@@ -2,6 +2,7 @@
 #include "core/base.h"
 #include "renderer/authoring_texture.h"
 #include "renderer/map_package.h"
+#include "renderer/terrain_control.h"
 #include "renderer/mesh_lod.h"
 #include "resources/image_decode.h"
 #include "resources/skeletal_animation.h"
@@ -212,6 +213,7 @@ struct GltfImport {
   // mesh. A pose vem do nó, não da matriz do desenho.
   std::vector<renderer::MapDrawRecord> draws;
   std::vector<renderer::MapMaterialRecord> materials;
+  std::vector<renderer::TerrainControlBinding> terrainControls;
   // Nome de cada material do arquivo, alinhado a `materials` (vazio quando o
   // arquivo não dá nome; o último é o material neutro). É o que o inspetor mostra
   // num slot que usa o material da fonte.

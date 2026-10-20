@@ -5,6 +5,7 @@
 #include "editor/editor_terrain_recovery.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
+#include "renderer/material_override.h"
 #include "scene/import_link.h"
 #include <algorithm>
 #include <chrono>
@@ -24,6 +25,7 @@ struct ReeditFixture {
   std::vector<renderer::MapMaterialRecord> materials;
   std::vector<renderer::SharedAuthoringTexture> textures;
   std::vector<renderer::MeshLodLevel> publishedLods;
+  std::vector<renderer::TerrainControlBinding> controls;
   std::filesystem::path path;
   bool ready = false;
   ReeditFixture() {
@@ -41,6 +43,8 @@ struct ReeditFixture {
                editor::EditorSession::PublishedGeometry &out) {
           const auto lods=session.skinningPublication().meshLods;
           publishedLods.assign(lods.begin(),lods.end());
+          const auto controlsIn=session.terrainControlPublication();
+          controls.assign(controlsIn.begin(),controlsIn.end());
           textures.assign(t.begin(),t.end());
           vertices.clear(); indices.clear(); draws.clear(); materials.clear();
           renderer::appendBoxAuthoringGeometry(renderer::MapVertexStride, vertices, indices, draws, materials);
@@ -995,4 +999,75 @@ AE_TEST(terrain_revisions_share_exact_texture_pixels_without_losing_history) {
   bool defaultPriority=false,highPriority=false;
   for(const auto &policy:f.session.textureStreamingParameters()) {defaultPriority|=policy.priority==0;highPriority|=policy.priority==3;}
   AE_EXPECT_TRUE(defaultPriority && highPriority,"deduplication preserves both effective streaming policies");
+}
+
+AE_TEST(terrain_control_maps_publish_preview_cancel_history_and_reload) {
+  ReeditFixture f;
+  AE_EXPECT_TRUE(f.ready,"fixture initialized");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,u32(128),"new editor terrain starts with independent paint map");
+  resources::TerrainRecipe r;r.cells=8;r.controlCells=128;r.height=0;r.base=4;
+  std::string error;
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  const auto root=f.session.screen().terrainTarget;
+  const auto original=f.textures;
+  const auto originalControls=f.controls;
+  AE_EXPECT_TRUE(f.controls.size()+1==f.materials.size(),"publication controls aligned imported materials before built-in prefix");
+  for(const auto &control:f.controls) {
+    if(control.textureIndex==renderer::InvalidMapTexture)continue;
+    AE_EXPECT_TRUE(control.textureIndex<f.textures.size(),"control resolves deduplicated texture slot");
+    const auto &texture=*f.textures[control.textureIndex];
+    AE_EXPECT_TRUE(!texture.srgb && texture.levels==1 && texture.width==129,"data texture retains full authoring map");
+  }
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainToolBase)+u32(resources::TerrainTool::Paint)));
+  f.action(editor::EditorWidget(editor::widgetId(editor::EditorWidget::TerrainLayerBase)+3));
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(9,3) && f.session.setTerrainNumber(10,1),"configure fine paint brush");
+  ui::UiPoint from,to;AE_EXPECT_TRUE(f.brushPoints(from,to),"terrain visible for brush");
+  const auto revision=f.session.document().revision();
+  f.session.handlePointer({91,ui::UiPointerPhase::Down,from,10});
+  f.session.handlePointer({91,ui::UiPointerPhase::Move,to,10.1});
+  for(u32 i=0;i<5000 && !f.session.screen().terrainLivePreview;++i) {
+    f.session.refreshTerrainJob();std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  AE_EXPECT_TRUE(f.session.screen().terrainLivePreview,f.session.screen().terrainMessage.c_str());
+  AE_EXPECT_EQ(f.session.document().revision(),revision,"live paint does not mutate document");
+  AE_EXPECT_TRUE(f.controls.size()>originalControls.size(),"preview carries its own material bindings");
+  const auto previewBinding=std::find_if(f.controls.rbegin(),f.controls.rend(),[](const auto &binding){return binding.textureIndex!=renderer::InvalidMapTexture;});
+  AE_EXPECT_TRUE(previewBinding!=f.controls.rend(),"preview has active control binding");
+  const auto &previewControl=*previewBinding;
+  renderer::SharedAuthoringTexture expected;
+  AE_EXPECT_TRUE(resources::makeTerrainControlTexture(f.session.screen().terrainPreviewBuild->field,expected,error),error.c_str());
+  AE_EXPECT_TRUE(expected->mipChain!=original[originalControls.front().textureIndex]->mipChain,"actual paint changes control pixels before release");
+  AE_EXPECT_TRUE(previewControl.textureIndex<f.textures.size(),"preview control slot remapped with texture interning");
+  AE_EXPECT_TRUE(f.textures[previewControl.textureIndex]->mipChain==expected->mipChain,"live paint publishes exact new control pixels");
+  for(const auto &texture:original)
+    AE_EXPECT_TRUE(std::find(f.textures.begin(),f.textures.end(),texture)!=f.textures.end(),"preview preserves shared committed texture allocations");
+  f.session.handlePointer({91,ui::UiPointerPhase::Cancel,from,10.2});
+  f.session.refreshTerrainJob();
+  AE_EXPECT_TRUE(f.textures==original && f.controls.size()==originalControls.size(),"cancel restores committed map transaction");
+  r.strokes.push_back({resources::TerrainTool::Paint,1,4,1,3,1,3});
+  AE_EXPECT_TRUE(f.session.applyTerrain(r,error),error.c_str());
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo paint");f.session.update();
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.strokes.empty(),"undo restores original paint recipe");
+  AE_EXPECT_TRUE(f.session.history().redo(f.session.document()),"redo paint");f.session.update();
+  const auto saved=f.path/"control-map.aescene";
+  AE_EXPECT_TRUE(f.session.save(saved.string().c_str(),0) && f.session.load(saved.string().c_str(),0),"cold scene/cache reload");
+  AE_EXPECT_TRUE(f.session.openTerrain(root),"reopen editable terrain");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.controlCells,u32(128),"control resolution persists");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.strokes.size(),usize(1),"paint persists through undo redo cache reload");
+  AE_EXPECT_TRUE(f.session.terrainControlPublication().empty(),"transaction metadata never dangles outside publisher");
+  for(const auto &control:f.controls)AE_EXPECT_TRUE(control.textureIndex==renderer::InvalidMapTexture || control.textureIndex<f.textures.size(),"reloaded control slot remains valid");
+}
+
+AE_TEST(terrain_material_extension_carries_control_without_overwriting_lightmap) {
+  renderer::MaterialOverride material;
+  renderer::TerrainControlBinding control;control.textureIndex=3;
+  control.uvScale[0]=.12f;control.uvScale[1]=.23f;control.uvOffset[0]=.5f;control.uvOffset[1]=.4f;
+  float rows[renderer::MaterialExtensionFloats]{};
+  renderer::materialExtensionEntry(material,renderer::MapMaterialTerrain,renderer::MaterialExtensionNoTexture,rows,9,&control,17);
+  AE_EXPECT_EQ(rows[44],1.f,"lightmap remains enabled");AE_EXPECT_EQ(rows[45],9.f,"lightmap slot independent");
+  AE_EXPECT_EQ(rows[52],1.f,"terrain control enabled");AE_EXPECT_EQ(rows[53],17.f,"bindless control slot");
+  AE_EXPECT_EQ(rows[54],.12f,"scale X");AE_EXPECT_EQ(rows[55],.23f,"scale Z");
+  AE_EXPECT_EQ(rows[56],.5f,"offset X");AE_EXPECT_EQ(rows[57],.4f,"offset Z");
+  renderer::materialExtensionEntry(material,0,renderer::MaterialExtensionNoTexture,rows,9,&control,17);
+  for(usize i=52;i<renderer::MaterialExtensionFloats;++i)AE_EXPECT_EQ(rows[i],0.f,"non-terrain cannot inherit stale control data");
 }

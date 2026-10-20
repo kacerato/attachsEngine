@@ -162,7 +162,7 @@ public:
   void queueTerrainPreview();
   void refreshTerrainPreview();
   void clearTerrainPreview(bool restore=true);
-  bool publishTerrainPreview(const resources::TerrainMesh &,std::string &);
+  bool publishTerrainPreview(const resources::TerrainBuild &,std::string &);
   struct TerrainPreviewJob;
   std::shared_ptr<TerrainPreviewJob> terrainPreviewJob_;
   std::shared_ptr<const resources::TerrainBuild> terrainPreviewCache_;
@@ -606,6 +606,9 @@ public:
     std::span<const renderer::MeshLodLevel> meshLods;
   };
   const SkinningPublication &skinningPublication() const noexcept { return skinningPublication_; }
+  // Material-aligned control maps for the current publication transaction.
+  // Indices refer to its deduplicated texture span, never source-local slots.
+  std::span<const renderer::TerrainControlBinding> terrainControlPublication() const noexcept { return terrainControlPublication_; }
   // Republica a geometria importada para um consumidor gráfico NOVO.
   //
   // Recriar a superfície reconstrói o renderer do zero, e a biblioteca de
@@ -1279,6 +1282,7 @@ private:
     std::vector<u32> indices;
     std::vector<renderer::MapDrawRecord> draws;
     std::vector<renderer::MapMaterialRecord> materials;
+    std::vector<renderer::TerrainControlBinding> terrainControls;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
     // A árvore do arquivo, preservada para reinstanciar e para a reimportação
@@ -1327,6 +1331,7 @@ private:
     std::vector<u32> indices;
     std::vector<renderer::MapDrawRecord> draws;
     std::vector<renderer::MapMaterialRecord> materials;
+    std::vector<renderer::TerrainControlBinding> terrainControls;
     std::vector<resources::AssetGuid> identities;
     std::vector<std::string> names;
     // Texturas de todas as fontes, com os índices dos materiais já deslocados.
@@ -1556,6 +1561,7 @@ private:
   resources::LibraryIndex library_;
   GeometryPublisher publishGeometry_;
   SkinningPublication skinningPublication_{};
+  std::span<const renderer::TerrainControlBinding> terrainControlPublication_{};
   static u64 nextSceneEpoch() noexcept;
   struct InputCapture {
     EditorSceneVersion version;

@@ -16,6 +16,54 @@ constexpr char kLodMagic[8]{'A', 'S', 'T', 'R', 'A', 'L', 'O', 'D'};
 // Bloco F: seção opcional com a imagem de origem de cada textura.
 constexpr char kImageMagic[8]{'A', 'S', 'T', 'R', 'A', 'I', 'M', 'G'};
 constexpr u32 kCounterCount = 22;
+constexpr char kTerrainControlMagic[8]{'A', 'S', 'T', 'R', 'A', 'T', 'C', '1'};
+constexpr u32 kTerrainControlVersion = 1;
+
+bool validTerrainControls(const GltfImport &model) {
+  if (model.terrainControls.empty())
+    return true; // Legacy derived data.
+  if (model.terrainControls.size() != model.materials.size())
+    return false;
+  for (usize m=0;m<model.terrainControls.size();++m) {
+    const auto &binding=model.terrainControls[m];
+    const bool neutral = binding.textureIndex == renderer::InvalidMapTexture;
+    for (unsigned axis = 0; axis < 2; ++axis) {
+      if (!std::isfinite(binding.uvScale[axis]) ||
+          !std::isfinite(binding.uvOffset[axis]))
+        return false;
+      if (neutral) {
+        if (binding.uvScale[axis] != 0 || binding.uvOffset[axis] != 0)
+          return false;
+      } else if (binding.uvScale[axis] <= 0 || binding.uvScale[axis] > 1e6f ||
+                 std::abs(binding.uvOffset[axis]) > 1e6f)
+        return false;
+    }
+    if (neutral)
+      continue;
+    if(!(model.materials[m].flags&renderer::MapMaterialTerrain))return false;
+    if (binding.textureIndex >= model.textures.size())
+      return false;
+    const auto &texture = model.textures[binding.textureIndex];
+    if (!texture || !texture->valid() ||
+        texture->format != renderer::AuthoringTextureRgba8 || texture->srgb ||
+        texture->width < 9 || texture->width > 513 ||
+        (texture->width - 1) % 8 != 0 || texture->height != texture->width ||
+        texture->levels != 1 || texture->firstLevel != 0 || texture->file)
+      return false;
+    constexpr u32 allowed =
+        renderer::AuthoringTextureLinearFilter |
+        renderer::AuthoringTextureLinearMip |
+        renderer::AuthoringTextureNoAnisotropy |
+        renderer::TextureSamplerIndependent |
+        renderer::TextureSamplerMinLinear | renderer::TextureSamplerMagLinear |
+        renderer::TextureSamplerMipEnabled | renderer::TextureSamplerMipLinear;
+    const auto sampler = renderer::decodeTextureSampler(texture->samplerFlags);
+    if ((texture->samplerFlags & ~allowed) != 0 || !sampler.minLinear ||
+        !sampler.magLinear || sampler.mipEnabled || sampler.mipLinear)
+      return false;
+  }
+  return true;
+}
 
 struct Writer {
   std::vector<u8> &out;
@@ -149,6 +197,7 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
                       std::vector<u64> *textureOffsets) {
   if (textureOffsets) textureOffsets->clear();
   out.clear();
+  if (!validTerrainControls(model)) return false;
   if (key.empty() || model.nodes.empty() || (model.draws.empty()&&model.animations.empty())) return false;
   // This is a derived glTF cache, not the editable clip resource format.
   // Refuse authoring curves rather than discarding keys, IDs and handles.
@@ -272,6 +321,16 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
     images.resize(model.textures.size());
     writer.raw(kImageMagic, sizeof kImageMagic);
     writer.texts(images);
+  }
+  if (!model.terrainControls.empty()) {
+    writer.raw(kTerrainControlMagic, sizeof kTerrainControlMagic);
+    writer.u32v(kTerrainControlVersion);
+    writer.u32v(static_cast<u32>(model.terrainControls.size()));
+    for (const auto &binding : model.terrainControls) {
+      writer.u32v(binding.textureIndex);
+      writer.raw(binding.uvScale, sizeof binding.uvScale);
+      writer.raw(binding.uvOffset, sizeof binding.uvOffset);
+    }
   }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   writer.raw(kMagic, sizeof kMagic);
@@ -468,6 +527,25 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
     // Derivado de antes da seção de imagens: sem ela o editor não liga textura
     // e arquivo. Recusado para o importador refazer e regravar no mesmo lugar.
     return refuse();
+  }
+  if (reader.ok && bytes.size() - reader.at >= sizeof kTerrainControlMagic &&
+      std::memcmp(bytes.data() + reader.at, kTerrainControlMagic,
+                  sizeof kTerrainControlMagic) == 0) {
+    reader.at += sizeof kTerrainControlMagic;
+    if (reader.u32v() != kTerrainControlVersion)
+      return refuse();
+    const u32 count = reader.u32v();
+    if (!reader.ok || count != model.materials.size() ||
+        count > (bytes.size() - reader.at) / 20)
+      return refuse();
+    model.terrainControls.resize(count);
+    for (auto &binding : model.terrainControls) {
+      binding.textureIndex = reader.u32v();
+      reader.raw(binding.uvScale, sizeof binding.uvScale);
+      reader.raw(binding.uvOffset, sizeof binding.uvOffset);
+    }
+    if (!reader.ok || !validTerrainControls(model))
+      return refuse();
   }
   char trailer[8]{};
   if (!reader.raw(trailer, sizeof trailer) || std::memcmp(trailer, kMagic, sizeof trailer) != 0 ||
