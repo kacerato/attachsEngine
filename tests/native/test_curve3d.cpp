@@ -31,7 +31,8 @@ namespace {
 struct PathInputFixture {
  editor::EditorSession session;ui::UiFont font;ui::UiIconAtlas icons;
  PathInputFixture(){
-  const auto root=std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
+  // Raiz absoluta do CMake: com ccache base_dir o __FILE__ vira relativo ao build.
+  const std::filesystem::path root=AETHER_REPOSITORY_ROOT;
   const auto read=[](const std::filesystem::path&path){std::ifstream in(path,std::ios::binary);return std::vector<u8>(std::istreambuf_iterator<char>(in),{});};
   const auto fontBytes=read(root/"assets/astra-visual/ui/astra-ui-font.aeuf"),iconBytes=read(root/"assets/astra-visual/ui/astra-ui-icons.aeui");
   AE_EXPECT_TRUE(font.load(fontBytes)&&icons.load(iconBytes),"real editor assets");session.initialize(&font,&icons);session.setSurface({0,0,1200,800},{});session.importMap({}, {},false);
