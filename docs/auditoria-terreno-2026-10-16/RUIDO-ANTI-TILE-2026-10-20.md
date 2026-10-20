@@ -54,4 +54,4 @@ O conceito gerado `terrain-noise-proposal.png` é apenas hipótese visual. Os PN
 - Nove testes Python passaram: seis contratos de materiais, três publicação de arquivos gerados. Duas execuções do gerador conservaram os18 arquivos acompanhados e os58 thumbnails originais usados pelo atlas. A integração do novo ícone foi posterior e intencional; IDs permanecem inalterados.
 - Revisão adicional de tabela/relocação/papéis/gradientes/rotas sem achados acionáveis. `git diff --check` passou.
 
-Nenhum ADB ou APK novo. APK110 permanece anterior. Publicação desta continuação ainda será confirmada na branch/site. O plano integral de71 itens e os compromissos originais permanecem abertos.
+Nenhum ADB ou APK novo. APK110 permanece anterior. Publicação confirmada: engine `2750745c` na branch `codex/terrain-voxel-generator`; AstraDocs `da8ab3e`, deployment `dpl_Th4EQGKp8Ut21NKzZUXbZ4Lt32Bi` READY e alias astraengine.com.br. HTML, Markdown, feed e Atualizações responderam HTTP200 com o novo conteúdo em20/10/2026. O plano integral de71 itens e os compromissos originais permanecem abertos.
