@@ -7044,11 +7044,11 @@ std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::
   }
   return count>3?"Misto ("+std::to_string(count)+")":names;
 }
-// Opções visíveis no seletor de máscara: camadas de objeto sem nome ficam fora,
-// a menos que já estejam marcadas (o valor nunca some da vista).
-bool componentMaskOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option,u32 value) {
+// Opções visíveis no seletor de máscara: como no LayerMask da Unity, só as
+// camadas de objeto com nome no projeto. Tudo/Nada continuam cobrindo as 32.
+bool componentMaskOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option,u32) {
   if(property.options.data()!=scene::objectLayerOptions.data()) return true;
-  return document.layers().named(option) || (value&(1u<<option))!=0;
+  return document.layers().named(option);
 }
 std::string componentMaskOptionName(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option) {
   if(property.options.data()==scene::objectLayerOptions.data() && document.layers().named(option))

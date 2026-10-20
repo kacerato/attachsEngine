@@ -29,6 +29,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Luz na ordem do Light Inspector da Unity: Geral (Tipo), Emissão, Volume
+  // (alcance e cone), Sombra e Renderização (máscaras).
+  if(&type==&scene::Light::descriptor) {
+    const auto rank=[](std::string_view group){
+      return group=="Geral"?0:group=="Emissão"?1:group=="Volume"?2:group=="Sombra"?3:group=="Renderização"?4:5;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
   if(&type==&scene::EventConnection::descriptor) {
     const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};
