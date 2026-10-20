@@ -4756,6 +4756,125 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     public void SetEnvironmentMap(AssetGuid value, uint slot = 0) => Component.SetResource("environment_map", value, slot);
 }
 
+/// <summary>Clima: Chuva, neve e tempestade: dirige as nuvens do Ambiente e as partículas. Família Renderização · Ambiente.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/create-simple-clouds-cloud-layer.html</remarks>
+public readonly struct Weather : IComponentFacade<Weather>
+{
+    public static string TypeId => "astra.environment.weather";
+    public static Weather Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Weather(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Intensidade. Quanto chove ou neva e quão fechado fica o céu</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Intensity
+    {
+        get => Component.GetFloat("intensity");
+        set => Component.SetFloat("intensity", value);
+    }
+    /// <summary>Transição (s). Em Play, tempo para chegar ao clima novo quando tipo ou intensidade mudam</summary>
+    /// <remarks>Faixa válida: 0 a 120.</remarks>
+    public float TransitionSeconds
+    {
+        get => Component.GetFloat("transition_seconds");
+        set => Component.SetFloat("transition_seconds", value);
+    }
+    /// <summary>Gotas por segundo (/s). Emissão da Chuva na intensidade máxima</summary>
+    /// <remarks>Faixa válida: 0 a 20000.</remarks>
+    public float RainRate
+    {
+        get => Component.GetFloat("rain_rate");
+        set => Component.SetFloat("rain_rate", value);
+    }
+    /// <summary>Flocos por segundo (/s). Emissão da Neve na intensidade máxima</summary>
+    /// <remarks>Faixa válida: 0 a 20000.</remarks>
+    public float SnowRate
+    {
+        get => Component.GetFloat("snow_rate");
+        set => Component.SetFloat("snow_rate", value);
+    }
+    /// <summary>Altura sobre a câmera (m). Onde ficam os emissores, acima da câmera da cena</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float HeightAboveCamera
+    {
+        get => Component.GetFloat("height_above_camera");
+        set => Component.SetFloat("height_above_camera", value);
+    }
+    /// <summary>Neblina máxima (1/m). Densidade da neblina do Ambiente com chuva ou neve no máximo; vale com Sobrescrever neblina</summary>
+    /// <remarks>Faixa válida: 0 a 0.2.</remarks>
+    public float FogDensity
+    {
+        get => Component.GetFloat("fog_density");
+        set => Component.SetFloat("fog_density", value);
+    }
+    /// <summary>Intervalo médio (s). Tempo médio entre relâmpagos em Play</summary>
+    /// <remarks>Faixa válida: 1 a 120.</remarks>
+    public float LightningInterval
+    {
+        get => Component.GetFloat("lightning_interval");
+        set => Component.SetFloat("lightning_interval", value);
+    }
+    /// <summary>Clarão (EV). Quanto o clarão acende as nuvens e a neblina</summary>
+    /// <remarks>Faixa válida: 0 a 8.</remarks>
+    public float LightningBrightness
+    {
+        get => Component.GetFloat("lightning_brightness");
+        set => Component.SetFloat("lightning_brightness", value);
+    }
+    /// <summary>Ativo. Desligado, o clima não escreve mais nada; os valores ficam como estão</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Seguir a câmera. Leva Chuva e Neve para cima da câmera da cena, como filhos da Main Camera</summary>
+    public bool FollowCamera
+    {
+        get => Component.GetBool("follow_camera");
+        set => Component.SetBool("follow_camera", value);
+    }
+    /// <summary>Relâmpagos. Clarões aleatórios nas nuvens durante a Tempestade</summary>
+    public bool Lightning
+    {
+        get => Component.GetBool("lightning");
+        set => Component.SetBool("lightning", value);
+    }
+    public enum KindOption : uint
+    {
+        Limpo = 0,
+        Nublado = 1,
+        Chuva = 2,
+        Tempestade = 3,
+        Neve = 4,
+    }
+    /// <summary>Tipo. Limpo, nublado, chuva, tempestade ou neve: muda nuvens, neblina e precipitação</summary>
+    public KindOption Kind
+    {
+        get => (KindOption)Component.GetEnum("kind");
+        set => Component.SetEnum("kind", (uint)value);
+    }
+    /// <summary>Chuva. Partículas de chuva: o clima dosa a emissão e as leva sobre a câmera</summary>
+    public ObjectReference Rain
+    {
+        get => Component.GetReference("rain");
+        set => Component.SetReference("rain", value);
+    }
+    /// <summary>Neve. Partículas de neve: o clima dosa a emissão e as leva sobre a câmera</summary>
+    public ObjectReference Snow
+    {
+        get => Component.GetReference("snow");
+        set => Component.SetReference("snow", value);
+    }
+}
+
 /// <summary>Luz: Direcional, pontual ou spot. Família Luz · Luzes.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Light.html</remarks>
 public readonly struct Light : IComponentFacade<Light>

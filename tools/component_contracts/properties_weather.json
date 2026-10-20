@@ -1,0 +1,366 @@
+{
+  "format": 1,
+  "source": "native/scene/weather.h",
+  "tables": [
+    {
+      "name": "weatherNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "intensity",
+          "label": "Intensidade",
+          "member": "intensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "default": {
+            "cpp": "0.7f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Quanto chove ou neva e quão fechado fica o céu",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "Weather"
+        },
+        {
+          "id": "transition_seconds",
+          "label": "Transição",
+          "member": "transitionSeconds",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "8.0f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "s",
+            "help": "Em Play, tempo para chegar ao clima novo quando tipo ou intensidade mudam",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "rain_rate",
+          "label": "Gotas por segundo",
+          "member": "rainRate",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "20000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "default": {
+            "cpp": "1800.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "/s",
+            "help": "Emissão da Chuva na intensidade máxima",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasRain"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "snow_rate",
+          "label": "Flocos por segundo",
+          "member": "snowRate",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "20000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "default": {
+            "cpp": "700.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "/s",
+            "help": "Emissão da Neve na intensidade máxima",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasSnow"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "height_above_camera",
+          "label": "Altura sobre a câmera",
+          "member": "heightAboveCamera",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "m",
+            "help": "Onde ficam os emissores, acima da câmera da cena",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherFollowsCamera"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "fog_density",
+          "label": "Neblina máxima",
+          "member": "fogDensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "0.2"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "default": {
+            "cpp": "0.02f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "1/m",
+            "help": "Densidade da neblina do Ambiente com chuva ou neve no máximo; vale com Sobrescrever neblina",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning_interval",
+          "label": "Intervalo médio",
+          "member": "lightningInterval",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "9.0f"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "s",
+            "help": "Tempo médio entre relâmpagos em Play",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasLightning"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning_brightness",
+          "label": "Clarão",
+          "member": "lightningBrightness",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "default": {
+            "cpp": "3.0f"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "EV",
+            "help": "Quanto o clarão acende as nuvens e a neblina",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasLightning"
+            }
+          },
+          "type": "Weather"
+        }
+      ]
+    },
+    {
+      "name": "weatherBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Desligado, o clima não escreve mais nada; os valores ficam como estão",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "follow_camera",
+          "label": "Seguir a câmera",
+          "member": "followCamera",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "",
+            "help": "Leva Chuva e Neve para cima da câmera da cena, como filhos da Main Camera",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning",
+          "label": "Relâmpagos",
+          "member": "lightning",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "",
+            "help": "Clarões aleatórios nas nuvens durante a Tempestade",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherIsStorm"
+            }
+          },
+          "type": "Weather"
+        }
+      ]
+    },
+    {
+      "name": "weatherEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "kind",
+          "label": "Tipo",
+          "type": "Weather",
+          "member": "kind",
+          "options": "weatherKinds",
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Limpo, nublado, chuva, tempestade ou neve: muda nuvens, neblina e precipitação",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "weather_Weather_fields0",
+      "type": "Weather",
+      "properties": [
+        "weatherBooleans/enabled",
+        "weatherNumbers/intensity",
+        "weatherNumbers/transition_seconds",
+        "weatherNumbers/rain_rate",
+        "weatherNumbers/snow_rate",
+        "weatherNumbers/height_above_camera",
+        "weatherNumbers/fog_density",
+        "weatherNumbers/lightning_interval",
+        "weatherNumbers/lightning_brightness",
+        "weatherBooleans/follow_camera",
+        "weatherBooleans/lightning"
+      ]
+    }
+  ]
+}

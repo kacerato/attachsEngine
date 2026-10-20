@@ -4,6 +4,7 @@
 #include "renderer/primitive_geometry.h"
 #include "renderer/water_authoring_geometry.h"
 #include "runtime/scene_time_of_day.h"
+#include "runtime/scene_weather.h"
 #include "runtime/game_world.h"
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
@@ -220,7 +221,7 @@ public:
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     navigation_.reset();
     paths_.reset();
-    particles_.reset();
+    particles_.reset();weather_.reset();
     events_.reset();
     eventConnections_.reset();
     events_.attach(runtime::ComponentEventQueue::Consumer::Connections,true);
@@ -324,7 +325,7 @@ public:
     cameraFollow_.reset();
     constraints_.reset();ik_.reset();rootMotion_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
-    particles_.reset();
+    particles_.reset();weather_.reset();
     resources_=nullptr;
     active_=false;
     paused_=false;
@@ -355,6 +356,18 @@ public:
       return world_.setLocalTransform(world_.handle(id),t)==runtime::WorldStatus::Ok;});
     return true;
   }
+  // G4c: o clima é um script de clima da Unity em Play: muda as nuvens e a
+  // neblina do próprio Ambiente, dosa Chuva e Neve e as leva sobre a câmera
+  // (pelo caminho de transform dos scripts). Antes das partículas, que leem a
+  // taxa e a pose novas no mesmo quadro.
+  bool advanceWeather(float elapsed) {
+    const auto camera=resolveSceneCamera(world_.graph());
+    weatherReport_=weather_.advance(world_.poseGraph(),world_.elapsedSeconds(),elapsed,true,camera.entity?camera.position:nullptr,
+      [&](runtime::ObjectId id,const runtime::Transform &t){return world_.setLocalTransform(world_.handle(id),t)==runtime::WorldStatus::Ok;});
+    return true;
+  }
+  const runtime::SceneWeather &weather() const noexcept {return weather_;}
+  const runtime::SceneWeather::Report &weatherReport() const noexcept {return weatherReport_;}
   bool setCharacterMove(EditorEntityId id,float right,float forward,float yaw) {
     return active_ && physics_.setCharacterMove(id,right,forward,yaw);
   }
@@ -456,7 +469,7 @@ private:
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
-           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(advanceParticles(static_cast<float>(frameElapsed)),"partículas") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(advanceWeather(static_cast<float>(frameElapsed)),"clima") && stage(advanceParticles(static_cast<float>(frameElapsed)),"partículas") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
@@ -643,6 +656,8 @@ private:
   runtime::SceneAnimator animator_;
   runtime::SceneTimers timers_;
   runtime::SceneParticles particles_;
+  runtime::SceneWeather weather_;
+  runtime::SceneWeather::Report weatherReport_;
   std::vector<runtime::SceneParticles::Finished> particleFinished_;
   runtime::ScenePhysicsConnections physicsConnections_;
   runtime::SceneCameraFollow cameraFollow_;

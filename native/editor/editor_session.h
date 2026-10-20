@@ -1607,6 +1607,7 @@ private:
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
   runtime::SceneParticles previewParticles_;
+  runtime::SceneWeather previewWeather_;
   u32 particleBudget_ = 100000;
   std::string reportedPhysicsConnectionDiagnostic_;
   std::string reportedEventConnectionDiagnostic_;

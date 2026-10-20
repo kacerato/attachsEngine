@@ -19,6 +19,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/primitive_geometry.h"
 #include "runtime/scene_time_of_day.h"
+#include "runtime/scene_weather.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
 #include "editor/editor_studio_tools.h"
@@ -6149,6 +6150,31 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
       history_.cancel(document_);return refuse("Não foi possível criar o filho visual");
     }
   }
+  // Filhos da receita (G4c: Chuva e Neve do Clima), na mesma transação; a
+  // referência do pai recebe cada filho criado.
+  if(!recipe.children.empty()) {
+    auto parentValues=*document_.find(id);
+    for(const auto &child:recipe.children) {
+      EditorEntity entity;
+      for(const auto &part:child.components) {
+        auto plan=scene::planComponentAddition(entity.components,part.type);
+        if(!plan.ready) {history_.cancel(document_);return refuse(std::string(child.name)+": "+(plan.error?plan.error:"composição inválida"));}
+        entity.components=std::move(plan.candidate);
+      }
+      for(const auto &part:child.components) for(const auto &initial:part.values)
+        if(scene::setComponentProperty(entity.components,initial.component,initial.property,initial.value)!=scene::ComponentPropertyStatus::Applied) {
+          history_.cancel(document_);return refuse(std::string(child.name)+": valor inicial recusado ("+std::string(initial.property)+")");
+        }
+      assignEntityName(entity,child.name);
+      const auto created=history_.createEntity(document_,id,runtime::ObjectKind::Folder,child.name);
+      if(!created||!history_.applyValues(document_,created,entity)) {history_.cancel(document_);return refuse("Não foi possível criar "+std::string(child.name));}
+      if(!child.component.empty() &&
+         scene::setComponentProperty(parentValues.components,child.component,child.property,scene::ObjectReference{created})!=scene::ComponentPropertyStatus::Applied) {
+        history_.cancel(document_);return refuse(std::string(recipe.name)+": referência a "+child.name+" recusada");
+      }
+    }
+    if(!history_.applyValues(document_,id,parentValues)) {history_.cancel(document_);return refuse("Não foi possível ligar os filhos");}
+  }
   // Cinemachine: a primeira câmera virtual põe um Cérebro na câmera principal.
   // Mesma transação: desfazer remove a câmera virtual e o Cérebro juntos.
   std::string brainNote;
@@ -6353,6 +6379,13 @@ void EditorSession::update() {
   // [ExecuteAlways] na Unity: mudar a hora move o gizmo e o céu reage.
   if(!isPlaying())
     runtime::applyTimeOfDay(document_,0.0,[&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
+  // G4c: o clima também roda na edição, instantâneo e sem relâmpago: mudar o
+  // tipo muda as nuvens do Ambiente e a emissão das partículas na hora.
+  if(!isPlaying()) {
+    const auto camera=resolveSceneCamera(document_);
+    previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?camera.position:nullptr,
+      [&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
+  }
   refreshAnimationClip();
   if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);
     if(!summary.empty())state_.clipDiagnostic=summary;else if(!error.empty())state_.clipDiagnostic=error;}

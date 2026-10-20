@@ -576,6 +576,7 @@ add_library(aether_runtime STATIC
   runtime/scene_lights.cpp
   runtime/scene_time_of_day.cpp
   runtime/scene_particles.cpp
+  runtime/scene_weather.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
   runtime/scene_dynamic_motor.cpp
@@ -953,6 +954,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_environment.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
+    ../tests/native/test_weather.cpp
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
@@ -1184,7 +1186,7 @@ if(NOT ANDROID)
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
     ../tests/native/test_sky_celestial.cpp
-    ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp)
+    ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp ../tests/native/test_weather.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)

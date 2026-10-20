@@ -2293,6 +2293,12 @@
       "name": "particle-system",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/weather": {
+      "category": "lighting",
+      "name": "weather",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

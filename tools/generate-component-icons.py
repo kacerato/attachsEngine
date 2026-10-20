@@ -458,6 +458,16 @@ ICONS["lighting/clouds"] = (
     f'<ellipse cx="64" cy="108" rx="34" ry="7" fill="{INK}" opacity=".45"/>'
     f'<path d="M20 116h88" {stroke(4, extra='opacity=".5"')}/>')
 
+# G4c: clima. Nuvem carregada (escura, como a de tempestade) com a chuva
+# inclinada pelo vento e o raio em lima -- o que diferencia do Volume de nuvens;
+# o floco à direita diz que o mesmo componente também neva.
+ICONS["lighting/weather"] = (
+    f'<path d="M28 66a16 16 0 0 1 4-31 22 22 0 0 1 42-6 17 17 0 0 1 22 18 10 10 0 0 1-2 19z" fill="#15191e" {stroke(6)}/>'
+    f'<path d="M30 82l-6 14M46 82l-6 14M38 102l-5 12M54 102l-5 12" {stroke(5, extra='opacity=".85"')}/>'
+    f'<path d="M72 70l-10 20h12l-8 26 22-32H76l8-14z" fill="{ACCENT}" {stroke(3, ACCENT)}/>'
+    f'<path d="M106 84v22M96 89l20 12M96 101l20-12" {stroke(4)}/>'
+    f'<circle cx="106" cy="95" r="3" fill="#15191e"/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

@@ -51,6 +51,14 @@ enum class CreationPose : u8 {
   EditorCamera,      // na pose da câmera do editor (captura o enquadramento)
   BehindSelection    // na posição do objeto selecionado + deslocamento da referência
 };
+// Filho criado junto na mesma transação. Quando `component`/`property` são
+// dados, a referência de objeto do PAI recebe o filho criado -- é o que liga
+// o Clima às partículas de Chuva e Neve que ele dosa.
+struct CreationChild {
+  const char *name;
+  std::span<const CreationComponent> components;
+  std::string_view component{},property{};
+};
 struct EditorCreationEntry {
   // Identidade persistente da receita: não muda com nome, ordem ou idioma.
   std::string_view id;
@@ -79,6 +87,7 @@ struct EditorCreationEntry {
   scene::PrimitiveType childVisual=scene::PrimitiveType::Count;
   // Põe um Cérebro na câmera da cena (ou cria uma), no mesmo comando de histórico.
   bool sceneBrain=false;
+  std::span<const CreationChild> children{};
   bool composed() const {return action==EditorWidget::None;}
 };
 
@@ -111,6 +120,35 @@ inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",f
   {environmentType,"priority",1.f}};
 inline const CreationComponent cloudVolume[]{{environmentType,cloudVolumeValues}};
 inline const CreationComponent spot[]{{light,spotLight}};
+// G4c: o clima da Unity na prática é um Volume com Cloud Layer e neblina mais
+// um script que dosa Particle Systems de chuva e neve presos à câmera. Aqui:
+// Ambiente global (prioridade 2, só nuvens e neblina) + Clima, com Chuva e
+// Neve como filhos já ligados. Caixa larga emitindo para baixo, Mundo como
+// espaço de simulação (a gota não anda com a câmera) e prewarm para já chover.
+inline constexpr std::string_view weatherType="astra.environment.weather",particleType="astra.effects.particle_system";
+inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",true},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
+  {environmentType,"fog",true},{environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
+  {environmentType,"priority",2.f}};
+inline const CreationValue weatherValues[]{{weatherType,"kind",u32{2}},{weatherType,"intensity",.7f}};
+inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{weatherType,weatherValues}};
+inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",40.f},
+  {particleType,"shape_box_y",40.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+  {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
+  {particleType,"start_speed",14.f},{particleType,"start_size",.03f},{particleType,"gravity_modifier",.3f},
+  {particleType,"max_particles",6000.f},{particleType,"emission_rate",1800.f},{particleType,"render_mode",u32{1}},
+  {particleType,"stretch_velocity_scale",.045f},{particleType,"stretch_length_scale",1.f},
+  {particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},{particleType,"start_color_b",.88f},
+  {particleType,"start_color_a",.45f}};
+inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
+  {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+  {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
+  {particleType,"start_lifetime",7.f},{particleType,"start_speed",1.2f},{particleType,"start_size",.07f},
+  {particleType,"gravity_modifier",.03f},{particleType,"max_particles",6000.f},{particleType,"emission_rate",0.f},
+  {particleType,"start_color_a",.9f}};
+inline const CreationComponent rain[]{{particleType,rainValues}};
+inline const CreationComponent snow[]{{particleType,snowValues}};
+inline const CreationChild weatherChildren[]{{"Chuva",rain,weatherType,"rain"},{"Neve",snow,weatherType,"snow"}};
 
 #define AE_BODY_RECIPE(name,motion,shape,isSensor) \
   inline const CreationValue name##Body[]{{body,"motion",motion},{body,"sensor",isSensor}}; \
@@ -258,7 +296,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
 inline constexpr unsigned kEffectsCreationCategory=10;
-inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,100> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -290,6 +328,10 @@ inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,
     runtime::ObjectKind::Light,recipe::dayNightSun,CreationPose::ViewTargetTilted,0,{},{},"TimeOfDay DayNight Ciclo dia noite Sol"},
+  {"light.weather",EditorWidget::None,4,"Clima","Chuva, neve ou tempestade sobre a câmera, com as nuvens do céu.",ui::UiIcon::LightingWeather,
+    runtime::ObjectKind::Folder,recipe::weather,CreationPose::ViewTarget,0,{},{},
+    "Weather Clima Chuva Neve Tempestade Rain Snow Storm Relampago Lightning UniStorm Tempo",scene::PrimitiveType::Count,false,{},
+    recipe::weatherType,scene::PrimitiveType::Count,false,recipe::weatherChildren},
   {"light.clouds",EditorWidget::None,4,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
     runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
   {"light.point",EditorWidget::None,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightPoint,
