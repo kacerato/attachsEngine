@@ -56,6 +56,9 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // AEEN v4 diffuse irradiance, copied at load time. Appending preserves every
   // existing UBO offset. RGB stores cosine-convolved real SH L2; W is padding.
   vec4 diffuseIrradianceSh[9];
+  // PK-3: segundo banco de luzes adicionais (vagas 8..15), no fim do bloco
+  // para nenhum offset anterior mudar. Mesmo formato de `punctualLights`.
+  layout(offset=3536) vec4 punctualLightsExtra[32];
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -275,5 +278,7 @@ mediump float directionalShadow(highp vec3 worldPosition, mediump vec3 normal,
     highp float start=intervalEnd-width;
     visibility=mix(visibility,1.0,smoothstep(start,intervalEnd,viewDepth));
   }
-  return visibility;
+  // Força da sombra da Luz principal (Strength do Light Inspector): abaixo de
+  // 1 a luz do sol vaza pelo oclusor.
+  return mix(1.0,visibility,clamp(environment.shadowParameters.z,0.0,1.0));
 }

@@ -2305,6 +2305,24 @@
       "name": "time-of-day",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/sun-source": {
+      "category": "lighting",
+      "name": "sun-source",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/shadow-caster": {
+      "category": "lighting",
+      "name": "shadow-caster",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/rendering-layers": {
+      "category": "lighting",
+      "name": "rendering-layers",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

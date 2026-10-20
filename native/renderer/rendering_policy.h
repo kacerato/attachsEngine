@@ -351,6 +351,15 @@ struct GeometrySettings final {
   WaterMeshQuality waterMesh = WaterMeshQuality::Medium;
 };
 
+// Luzes adicionais (tudo que não é o sol principal), como Additional Lights no
+// URP Asset: quantas o quadro aceita e quantas um mesmo objeto soma. O teto do
+// quadro sobe com o perfil; o do objeto é o Per Object Limit da URP (8).
+// Nunca acima de `MaximumPunctualLights`, o tamanho do bloco no shader.
+struct LightBudgetSettings final {
+  u32 additionalLights = 8;
+  u32 additionalLightsPerObject = 8;
+};
+
 struct TextureSettings final {
   // Deslocamento de mip aplicado na residência: 0 = resolução autoral.
   u32 residencyMipBias = 0;
@@ -391,6 +400,7 @@ struct ResolvedRenderingPolicy final {
   MaterialDistanceSettings materialDistance{};
   GeometrySettings geometry{};
   DynamicResolutionSettings dynamicResolution{};
+  LightBudgetSettings lights{};
   float resolutionScale = 1.0f;
 
   // Perfil efetivamente usado para derivar os padrões. Existe para o relatório de

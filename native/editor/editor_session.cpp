@@ -3201,7 +3201,12 @@ bool EditorSession::commitColorWindow() {
   float rgba[4];pickerLinear(rgba);
   if(state_.colorTarget==0) {
     auto values=*entity;const auto *component=values.components.findInstance(state_.colorInstance);
-    const float rgb[3]{rgba[0],rgba[1],rgba[2]};
+    float rgb[3]{rgba[0],rgba[1],rgba[2]};
+    // Campo sRGB (a cor da Luz, como o Color da Unity): grava o número do
+    // seletor; o motor lineariza ao iluminar.
+    if(component) for(const auto &triple:component->type().triples)
+      if(triple.id==state_.colorProperty && triple.kind==scene::ComponentTripleKind::SrgbColor)
+        for(float &channel:rgb) channel=std::clamp(scene::linearChannelToSrgb(channel),0.f,1.f);
     if(component && scene::setComponentTriple(values.components,component->type().id,state_.colorProperty,rgb,state_.colorInstance)==scene::ComponentPropertyStatus::Applied &&
        history_.applyValues(document_,entity->id,values)) {state_.colorField=0;return true;}
     state_.status="Cor recusada pelo componente";return false;
@@ -5858,14 +5863,17 @@ bool EditorSession::createSceneTemplate(u32 index) {
     if(node.light!=SceneTemplateLight::None) {
       auto *light=static_cast<scene::Light*>(values.components.add(scene::Light::descriptor));
       if(!light) {complete=false;break;}
-      light->kind=node.light==SceneTemplateLight::Directional?scene::LightKind::Directional:
-                  node.light==SceneTemplateLight::Point?scene::LightKind::Point:scene::LightKind::Spot;
+      // A tabela única de padrões primeiro (L-05); o modelo só sobrepõe o que
+      // é dele: unidade física, intensidade, alcance, cor e sombra.
+      scene::applyLightDefault(*light,node.light==SceneTemplateLight::Directional?scene::LightKind::Directional:
+                  node.light==SceneTemplateLight::Point?scene::LightKind::Point:scene::LightKind::Spot);
       // Lux para a direcional, lúmen para as locais: as unidades fotométricas
       // que o componente já consome.
       light->unit=node.light==SceneTemplateLight::Directional?scene::LightUnit::LuxCandela:scene::LightUnit::LuxLumen;
       light->intensity=node.lightIntensity;
       if(node.lightRange>0) light->range=node.lightRange;
-      std::copy(node.color,node.color+3,light->color);
+      // As cores do modelo foram calibradas em linear; a Luz guarda sRGB.
+      for(u32 channel=0;channel<3;++channel) light->color[channel]=scene::linearChannelToSrgb(node.color[channel]);
       if(node.shadows) light->shadowMode=2;
     }
     if(!history_.applyValues(document_,id,values)) {complete=false;break;}

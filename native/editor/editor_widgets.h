@@ -201,7 +201,7 @@ enum class EditorWidget : u32 {
   ColliderFit, LodGroupFit, LodGroupStatus, SkinnedMeshStatus, AnimationStatus, ComponentClipAdd, ComponentPrevious,
   ViewsOpen, ViewsClose, ViewSave, ViewUpdate, ViewRename, ViewDelete, ComponentNext, ScriptFieldsPrevious, ScriptFieldsNext,
   TransformFold, ComponentSearch, ComponentSearchClear,
-  MeshGeometryTab, MeshMaterialTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
+  MeshGeometryTab, MeshMaterialTab, MeshLightingTab, MeshChoose, MeshPickerClose, MeshClear, MeshSearch, MeshPrevious, MeshNext,
   MeshGenerateCollision, MeshCollisionQualityDown, MeshCollisionQualityUp,
   MeshCollisionErrorDown, MeshCollisionErrorUp, MaterialRestore,
   EnvironmentProfileCreate, EnvironmentProfileUpdate,
@@ -385,7 +385,7 @@ enum class EditorWidget : u32 {
   ComponentHelpBase=0xB9000000u,
   ComponentEnableBase=0xBA000000u,
   // + índice da opção na lista aberta pelo campo de enumeração.
-  ComponentEnumOptionBase=0xBB000000u,
+  ComponentEnumOptionBase=0xBB000000u, // + opção; kEnumMaskNothing/kEnumMaskEverything nas máscaras
   ComponentEnumPickerClose=0xBC000000u,
   // Lista em campo de script (Unity Manual/InspectorArray): + índice do
   // componente; elemento e alça levam também o elemento << 8.
@@ -532,6 +532,8 @@ enum class EditorWidget : u32 {
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
+// Atalhos do seletor de máscara (enum com `flags`), depois de qualquer índice de opção.
+inline constexpr u32 kEnumMaskNothing=0xFFF0u,kEnumMaskEverything=0xFFF1u;
 // Cada faixa-base (id + índice) reserva um intervalo inteiro de ids. Duas
 // faixas que se cruzam fazem um painel receber o toque do outro sem erro
 // nenhum — foi assim que o impacto engoliu o menu Adicionar objeto. Por isso a

@@ -9,8 +9,11 @@ layout(location=3) in highp vec2 vUv0;
 layout(location=4) in highp vec2 vUv1;
 layout(location=5) in mediump vec4 vColor;
 layout(location=6) in mediump float vDither;
-// Ver dirt_road_vertex.glsl: luzes aceitas cuja esfera alcanca este desenho.
-layout(location=11) flat in mediump uint vLightMask;
+// Ver dirt_road_vertex.glsl: luzes aceitas que alcancam este desenho e as
+// flags autorais (Receive Shadows, sol pelas mascaras).
+layout(location=11) flat in highp uint vLightMask;
+const uint DRAW_NO_SHADOWS=131072u; // renderer::DrawLightingNoShadows
+const uint DRAW_NO_SUN=262144u;     // renderer::DrawLightingNoSun
 layout(location=0) out vec4 outColor;
 #include "temporal_masks.glsl"
 layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
@@ -32,7 +35,8 @@ const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 // Precisa casar com renderer::MaximumPunctualLights. Os dois lados leem a mesma
 // memoria; divergir aqui leria alem do array ou apagaria luzes que couberam.
-const int PUNCTUAL_LIGHT_LIMIT=8;
+const int PUNCTUAL_LIGHT_LIMIT=16;
+const int PUNCTUAL_LIGHT_BANK=8; // renderer::PunctualLightBankSize
 #include "environment_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
 // outside an active transition, so this is a no-op discard everywhere LOD is
@@ -147,6 +151,11 @@ mediump float localShadowVisibility(highp vec4 shadow,highp vec3 position,medium
   return mix(1.0,lit,clamp(shadow.z,0.0,1.0));
 }
 
+// Uma linha do registro da vaga `slot`, nos dois bancos do bloco.
+highp vec4 punctualRecord(int slot,int row) {
+  return slot<PUNCTUAL_LIGHT_BANK?environment.punctualLights[slot*4+row]:
+      environment.punctualLightsExtra[(slot-PUNCTUAL_LIGHT_BANK)*4+row];
+}
 mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
                               mediump vec3 base,mediump vec3 f0,mediump float f90,
                               mediump float metal,mediump float rough) {
@@ -154,13 +163,20 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
   mediump vec3 sum=vec3(0.0);
   for(int i=0;i<PUNCTUAL_LIGHT_LIMIT;++i) {
     if(i>=count) break;
-    // A CPU ja provou que a esfera desta luz nao toca o desenho: nem a
-    // distancia precisa ser calculada. Uniforme por desenho, sem divergencia.
+    // A CPU ja provou que a esfera desta luz nao toca o desenho (ou que as
+    // mascaras da luz recusam o objeto): nem a distancia precisa ser
+    // calculada. Uniforme por desenho, sem divergencia.
     if(((vLightMask>>uint(i))&1u)==0u) continue;
-    highp vec4 positionRange=environment.punctualLights[i*4];
-    mediump vec4 colorIntensity=environment.punctualLights[i*4+1];
-    mediump vec4 directionOffset=environment.punctualLights[i*4+2];
-    highp vec4 shadow=environment.punctualLights[i*4+3];
+    highp vec4 positionRange=punctualRecord(i,0);
+    mediump vec4 colorIntensity=punctualRecord(i,1);
+    mediump vec4 directionOffset=punctualRecord(i,2);
+    highp vec4 shadow=punctualRecord(i,3);
+    // Direcional adicional (lua, preenchimento): alcance negativo. Sem janela,
+    // cone nem sombra -- a mesma BRDF do sol, com a direcao de emissao.
+    if(UNSHADOWED_POINT_LIGHTING==0u && positionRange.w<0.0) {
+      sum+=directLight(n,v,-directionOffset.xyz,colorIntensity.rgb,base,f0,f90,metal,rough);
+      continue;
+    }
     highp vec3 toLight=positionRange.xyz-position;
     highp float distanceSquared=dot(toLight,toLight);
     // Uma luz exatamente sobre a superficie dividiria por zero e pintaria o
@@ -182,7 +198,7 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
     // A sombra so e buscada onde a luz ainda chega: fora do cone ou do
     // alcance, o atlas nao tem o que dizer e a busca seria desperdicio.
     if(cone<=0.0) continue;
-    mediump float visible=UNSHADOWED_POINT_LIGHTING!=0u?1.0:
+    mediump float visible=UNSHADOWED_POINT_LIGHTING!=0u||(vLightMask&DRAW_NO_SHADOWS)!=0u?1.0:
         localShadowVisibility(shadow,position,n,-toLight);
     mediump vec3 radiance=colorIntensity.rgb*(window*cone*visible/safeSquared);
     sum+=directLight(n,v,l,radiance,base,f0,f90,metal,rough);
@@ -381,12 +397,16 @@ void main() {
   mediump float dielectricSpecular=clamp(frame.materialFactors.w,0.0,1.0);
   mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
   mediump float f90=mix(dielectricSpecular,1.0,metal);
-  mediump vec3 sunRadiance=environment.sunColorAngularRadius.rgb*environment.sunDirectionIntensity.w;
+  // Culling Mask/Rendering Layers do sol que recusam o objeto apagam a luz
+  // direta dele aqui; Receive Shadows desligado pula a busca nas cascatas.
+  mediump vec3 sunRadiance=(vLightMask&DRAW_NO_SUN)!=0u?vec3(0.0):
+      environment.sunColorAngularRadius.rgb*environment.sunDirectionIntensity.w;
   highp float viewDepth=max(dot(environment.worldToViewRow2.xyz,vPosition-eye),0.0);
   // A luz direta é exatamente zero no hemisfério oposto. Consultar 1/9/25
   // texels de sombra nesse caso só gasta banda; o branch remove trabalho sem
   // mudar um único valor final.
-  mediump float sunVisibility=isolation!=5u && dot(n,environment.sunDirectionIntensity.xyz)>0.0?
+  mediump float sunVisibility=isolation!=5u && (vLightMask&(DRAW_NO_SHADOWS|DRAW_NO_SUN))==0u &&
+      dot(n,environment.sunDirectionIntensity.xyz)>0.0?
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
                          base.rgb,f0,f90,metal,rough)*sunVisibility;

@@ -453,9 +453,23 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     const u32 option=widget-widgetId(EditorWidget::ComponentEnumOptionBase);
     if(!component || enumIndex>=component->type().enums.size() || history.isOpen()) return outcome;
     const auto &property=component->type().enums[enumIndex];
-    if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+    u32 next=0;
+    if(property.flags) {
+      // Máscara: o toque liga ou desliga um bit e a lista continua aberta.
+      state.enumPicker=field;
+      u32 all=0;for(const auto &entry:property.options) all|=entry.value;
+      const u32 current=property.read(*component);
+      if(option==kEnumMaskNothing) next=0;
+      else if(option==kEnumMaskEverything) next=all;
+      else if(option<property.options.size()) next=current^property.options[option].value;
+      else return outcome;
+      if(next==current) return outcome;
+    } else {
+      if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+      next=property.options[option].value;
+    }
     auto value=*entity;
-    if(scene::setComponentProperty(value.components,component->type().id,property.id,property.options[option].value,
+    if(scene::setComponentProperty(value.components,component->type().id,property.id,next,
                                    component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
       state.status="Esta opção não é aceita com os valores atuais";return outcome;
     }

@@ -40,8 +40,10 @@ AE_TEST(punctual_light_mask_keeps_only_lights_whose_sphere_reaches_the_draw) {
                  "desenho sem limites conhecidos mantém todas as luzes");
   AE_EXPECT_TRUE(renderer::punctualLightMask(center, 2.0f, {lights, 0}) == 0u, "sem luzes aceitas, máscara vazia");
   // Zero (buildNormalMatrix) é "sem máscara"; a máscara calculada vazia não pode colidir com ele.
-  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0u) == 256.0f, "máscara vazia é distinta de sem máscara");
-  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0xffu) == 511.0f, "oito bits exatos em float");
+  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0u) == 65536.0f, "máscara vazia é distinta de sem máscara");
+  AE_EXPECT_TRUE(renderer::encodePunctualLightMask(0xffffu) == 131071.0f, "dezesseis bits exatos em float");
+  AE_EXPECT_TRUE(renderer::encodeDrawLighting(0x3u, false, false) == 65536.0f + 3.0f + 131072.0f + 262144.0f,
+                 "flags de sombra e sol acima dos bits de luz, ainda exatas em float");
 }
 
 AE_TEST(time_of_day_sun_wins_the_directional_selection_even_at_night) {

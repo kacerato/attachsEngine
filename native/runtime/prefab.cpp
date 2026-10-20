@@ -1,4 +1,5 @@
 #include "runtime/prefab.h"
+#include "runtime/scene_components.h"
 #include "scene/prefab_link.h"
 #include "scene/script_behavior.h"
 #include <cmath>
@@ -70,6 +71,7 @@ bool deserializePrefabObject(std::istream &in,Prefab::Registry registry,SceneObj
   for(float &v:value.environment) if(!(in>>v)) return false;
   if(!value.components.read(in,registry,scene::UnknownComponentPolicy::Reject,true) ||
      value.components.find(scene::PrefabLink::descriptor) || !validObject(value)) return false;
+  adoptLegacyRendererShadows(value);
   // PrefabLink baselines contain a standalone object without a file header.
   // An explicit marker lets old baselines/objects migrate without guessing at
   // the next object's numeric ID. Legacy records have no memberships.

@@ -3,6 +3,7 @@
 #include "editor/editor_screen_state.h"
 #include "scene/component_properties.h"
 #include "scene/primitive.h"
+#include "scene/light_defaults.h"
 #include "resources/curve3d.h"
 #include "ui/ui_icon_id.h"
 #include <array>
@@ -91,17 +92,24 @@ inline constexpr u32 Static=0,Kinematic=1,Dynamic=2;       // scene::BodyMotion
 inline constexpr u32 Box=0,Sphere=1,Capsule=2,Cylinder=4;             // scene::ColliderShape
 inline constexpr u32 Directional=0,Point=1,Spot=2;         // scene::LightKind
 
-inline const CreationValue directionalLight[]{{light,"kind",Directional},{light,"intensity",10000.f}};
-inline const CreationValue pointLight[]{{light,"kind",Point},{light,"intensity",1000.f}};
-inline const CreationValue spotLight[]{{light,"kind",Spot},{light,"intensity",1000.f}};
+// L-05: os três tipos nascem da tabela única de padrões (scene/light_defaults.h),
+// a mesma que o modelo de cena e "Sol com dia e noite" usam.
+#define AE_LIGHT_DEFAULT(name,value) inline const CreationValue name[]{{light,"kind",static_cast<u32>(value.kind)}, \
+  {light,"unit",static_cast<u32>(value.unit)},{light,"intensity",value.intensity},{light,"range",value.range}, \
+  {light,"spot_angle",value.spotAngle},{light,"inner_spot_angle",value.innerSpotAngle},{light,"shadow_mode",value.shadowMode}};
+AE_LIGHT_DEFAULT(directionalLight,scene::kDirectionalLightDefault)
+AE_LIGHT_DEFAULT(pointLight,scene::kPointLightDefault)
+AE_LIGHT_DEFAULT(spotLight,scene::kSpotLightDefault)
+#undef AE_LIGHT_DEFAULT
 inline const CreationComponent directional[]{{light,directionalLight}};
 // G4: sol que segue a hora do dia. Começa às 10 h com o relógio parado; Duração
 // do dia faz o ciclo andar em Play.
 inline const CreationValue timeOfDayStart[]{{"astra.render.time_of_day","hour",10.f}};
-// Unidade da engine e o brilho do sol padrão da cena: os 10 000 lux da Luz
-// direcional estouram projetos que não calibraram exposição física.
-inline const CreationValue dayNightLight[]{{light,"kind",Directional},{light,"unit",u32{0}},{light,"intensity",3.f}};
-inline const CreationComponent dayNightSun[]{{light,dayNightLight},{"astra.render.time_of_day",timeOfDayStart}};
+// O mesmo sol da Luz direcional: a hora do dia só gira e tinge.
+inline const CreationComponent dayNightSun[]{{light,directionalLight},{"astra.render.time_of_day",timeOfDayStart}};
+// Configurações de iluminação da cena (janela Lighting da Unity): a Fonte do
+// sol nasce vazia, que é a regra automática.
+inline const CreationComponent lightingSettings[]{{"astra.render.lighting_settings",{}}};
 inline const CreationComponent point[]{{light,pointLight}};
 inline const CreationComponent spot[]{{light,spotLight}};
 
@@ -245,7 +253,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,97> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,98> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -273,6 +281,8 @@ inline const std::array<EditorCreationEntry,97> editorCreationCatalog{{
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,
     runtime::ObjectKind::Light,recipe::dayNightSun,CreationPose::ViewTargetTilted,0,{},{},"TimeOfDay DayNight Ciclo dia noite Sol"},
+  {"light.lighting_settings",EditorWidget::None,4,"Iluminação da cena","Escolhe qual luz direcional é o sol: a das cascatas e do céu.",ui::UiIcon::LightingSunSource,
+    runtime::ObjectKind::Folder,recipe::lightingSettings,CreationPose::ViewTarget,0,{},{},"Lighting Settings Sun Source RenderSettings Fonte do sol"},
   {"light.point",EditorWidget::None,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightPoint,
     runtime::ObjectKind::Light,recipe::point,CreationPose::ViewTarget,2,{},{},"Point Light Omni"},
   {"light.spot",EditorWidget::None,4,"Luz spot","Emite dentro de um cone orientável.",ui::UiIcon::LightSpot,

@@ -1350,7 +1350,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(!entity||index>=entity->components.size()||history_.isOpen()) return true;
       const auto *component=entity->components.at(index);
       if(field>=component->type().triples.size()) return true;
-      const auto &triple=component->type().triples[field];if(triple.kind!=scene::ComponentTripleKind::LinearColor) return true;
+      const auto &triple=component->type().triples[field];if(!scene::componentTripleIsColor(triple.kind)) return true;
       float rgb[3]{};
       for(u32 axis=0;axis<3;++axis) {
         bool found=false;
@@ -1360,6 +1360,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         }
         if(!found) return true;
       }
+      // O seletor trabalha em linear; um campo sRGB é convertido na ida e na volta.
+      if(triple.kind==scene::ComponentTripleKind::SrgbColor) for(float &channel:rgb) channel=scene::srgbChannelToLinear(channel);
       state_.colorEntity=entity->id;state_.colorInstance=component->instanceId();
       state_.colorProperty=triple.id;state_.colorTarget=0;
       openColorWindow(key,{rgb[0],rgb[1],rgb[2],1},false,false);return true;
@@ -2028,6 +2030,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     if(key==widgetId(EditorWidget::MeshGeometryTab)||key==widgetId(EditorWidget::MeshMaterialTab)) {state_.meshTab=key==widgetId(EditorWidget::MeshMaterialTab);state_.propertyPage=0;state_.meshPicker=false;return true;}
+    if(key==widgetId(EditorWidget::MeshLightingTab)) {state_.meshTab=3;state_.propertyPage=0;state_.meshPicker=false;return true;}
     if((key>=widgetId(EditorWidget::MeshChoiceBase) && key<widgetId(EditorWidget::MeshChoiceBase)+0x01000000u) || key==widgetId(EditorWidget::MeshClear) || key==widgetId(EditorWidget::MaterialRestore)) {
       EditorActionRequest request;request.version=sceneVersion();request.entity=state_.selection;
       request.property=key>=widgetId(EditorWidget::MeshChoiceBase)?key-widgetId(EditorWidget::MeshChoiceBase)+1:0;

@@ -83,11 +83,14 @@ layout(location=5) out mediump vec4 vColor;
 // the 128-byte instance struct or its vertex binding stride.
 layout(location=6) out mediump float vDither;
 layout(location=10) out highp vec3 vMotionWorldDelta;
-// Luzes pontuais que alcancam este desenho (bit i = luz aceita i). Vem de
-// normalColumns[11] (coluna 2 .w), que buildNormalMatrix deixa em zero: zero
-// significa "sem mascara, todas as luzes", entao instancias que nunca passaram
-// pelo calculo da mascara continuam corretas. Com mascara, o valor e 256+bits.
-layout(location=11) flat out mediump uint vLightMask;
+// Luzes adicionais que alcancam este desenho (bit i = luz aceita i, 16 vagas)
+// e as decisoes autorais dele. Vem de normalColumns[11] (coluna 2 .w), que
+// buildNormalMatrix deixa em zero: zero significa "sem mascara, todas as luzes,
+// recebe sombra e sol", entao instancias que nunca passaram pelo calculo
+// continuam corretas. Com mascara (renderer::encodeDrawLighting): bit 16 marca
+// a palavra, bits 0..15 as luzes, bit 17 "nao recebe sombra" e bit 18 "o sol
+// nao ilumina". highp: o mediump uint pode ter so 16 bits.
+layout(location=11) flat out highp uint vLightMask;
 #ifdef AETHER_WATER_RIPPLES
 layout(location=9) out highp vec2 vRippleGeometrySlope;
 #endif
@@ -99,8 +102,8 @@ const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
 const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 void main() {
   {
-    uint encoded=uint(max(inNormalColumn2.w,0.0)+0.5);
-    vLightMask=(encoded&256u)!=0u?(encoded&255u):255u;
+    highp uint encoded=uint(max(inNormalColumn2.w,0.0)+0.5);
+    vLightMask=((encoded&65536u)!=0u?(encoded&65535u):65535u)|(encoded&(131072u|262144u));
   }
 #ifdef AETHER_WATER_RIPPLES
   vRippleGeometrySlope=vec2(0);

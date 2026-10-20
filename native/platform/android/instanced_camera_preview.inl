@@ -276,12 +276,16 @@ bool InstancedRenderer::prepareCameraPreview() {
     return false;
   }
   renderer::LightBudgetReport previewLightBudget{};
+  renderer::PunctualLight previewLights[renderer::MaximumPunctualLights]{};
   const u32 accepted=renderer::selectPunctualLights(lights,pendingPreview_.frustum.cameraPosition,
-      frame.punctualLights,previewLightBudget);
+      std::span<renderer::PunctualLight>(previewLights,std::min(renderingPolicy_.lights.additionalLights,
+                                                               renderer::MaximumPunctualLights)),previewLightBudget);
   frame.punctualLightParameters[0]=static_cast<float>(accepted);
   for(u32 i=0;i<renderer::MaximumPunctualLights;++i) {
-    if(i>=accepted) frame.punctualLights[i]={};
-    else frame.punctualLights[i].shadow[1]=0;
+    if(i>=accepted) previewLights[i]={};
+    else previewLights[i].shadow[1]=0;
+    if(i<renderer::PunctualLightBankSize) frame.punctualLights[i]=previewLights[i];
+    else frame.punctualLightsExtra[i-renderer::PunctualLightBankSize]=previewLights[i];
   }
   // The primary camera's cascades and local atlas do not describe this view.
   frame.shadowParameters[1]=0;
