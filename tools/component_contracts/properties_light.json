@@ -24,9 +24,7 @@
           "presentation": {
             "group": "Emissão",
             "unit": "",
-            "help": {
-              "cpp": "nullptr"
-            },
+            "help": "Componente sRGB, o mesmo número do seletor de cor; o motor converte para linear",
             "visible": {
               "cpp": "nullptr"
             }
@@ -51,9 +49,7 @@
           "presentation": {
             "group": "Emissão",
             "unit": "",
-            "help": {
-              "cpp": "nullptr"
-            },
+            "help": "Componente sRGB, o mesmo número do seletor de cor; o motor converte para linear",
             "visible": {
               "cpp": "nullptr"
             }
@@ -78,9 +74,7 @@
           "presentation": {
             "group": "Emissão",
             "unit": "",
-            "help": {
-              "cpp": "nullptr"
-            },
+            "help": "Componente sRGB, o mesmo número do seletor de cor; o motor converte para linear",
             "visible": {
               "cpp": "nullptr"
             }
@@ -183,14 +177,14 @@
           }
         },
         {
-          "id": "inner_angle",
-          "label": "Meio-cone interno",
-          "member": "innerAngle",
+          "id": "spot_angle",
+          "label": "Ângulo do spot",
+          "member": "spotAngle",
           "min": {
-            "cpp": "0"
+            "cpp": "1"
           },
           "max": {
-            "cpp": "89"
+            "cpp": "179"
           },
           "step": {
             "cpp": "1"
@@ -198,29 +192,35 @@
           "presentation": {
             "group": "Volume",
             "unit": "°",
-            "help": {
-              "cpp": "nullptr"
-            },
+            "help": "Abertura total do cone (Spot Angle); a luz zera na borda",
             "visible": {
               "cpp": "lightHasCone"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.light.punctual",
+            "consumer": "renderer/punctual_lights.h → cone do fragmento",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
             }
           },
           "tweenable": {
-            "cpp": "std::string_view(\"inner_angle\")==\"intensity\"||std::string_view(\"inner_angle\")==\"color.r\"||std::string_view(\"inner_angle\")==\"color.g\"||std::string_view(\"inner_angle\")==\"color.b\""
+            "cpp": "std::string_view(\"spot_angle\")==\"intensity\"||std::string_view(\"spot_angle\")==\"color.r\"||std::string_view(\"spot_angle\")==\"color.g\"||std::string_view(\"spot_angle\")==\"color.b\""
           },
           "default": {
-            "cpp": "20"
+            "cpp": "30"
           }
         },
         {
-          "id": "outer_angle",
-          "label": "Meio-cone externo",
-          "member": "outerAngle",
+          "id": "inner_spot_angle",
+          "label": "Ângulo interno do spot",
+          "member": "innerSpotAngle",
           "min": {
             "cpp": "0"
           },
           "max": {
-            "cpp": "89"
+            "cpp": "179"
           },
           "step": {
             "cpp": "1"
@@ -228,18 +228,24 @@
           "presentation": {
             "group": "Volume",
             "unit": "°",
-            "help": {
-              "cpp": "nullptr"
-            },
+            "help": "Abertura total do miolo com intensidade plena (Inner Spot Angle)",
             "visible": {
               "cpp": "lightHasCone"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.light.punctual",
+            "consumer": "renderer/punctual_lights.h → cone do fragmento",
+            "invalidates": {
+              "cpp": "Invalidate::LightCluster"
             }
           },
           "tweenable": {
-            "cpp": "std::string_view(\"outer_angle\")==\"intensity\"||std::string_view(\"outer_angle\")==\"color.r\"||std::string_view(\"outer_angle\")==\"color.g\"||std::string_view(\"outer_angle\")==\"color.b\""
+            "cpp": "std::string_view(\"inner_spot_angle\")==\"intensity\"||std::string_view(\"inner_spot_angle\")==\"color.r\"||std::string_view(\"inner_spot_angle\")==\"color.g\"||std::string_view(\"inner_spot_angle\")==\"color.b\""
           },
           "default": {
-            "cpp": "35"
+            "cpp": "21.8f"
           }
         },
         {
@@ -260,13 +266,13 @@
             "unit": "",
             "help": "1 é sombra opaca; abaixo disso a luz vaza pelo oclusor",
             "visible": {
-              "cpp": "lightCastsLocalShadow"
+              "cpp": "lightCastsShadow"
             },
             "editable": {
               "cpp": "nullptr"
             },
             "capability": "render.shadow.punctual",
-            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "consumer": "renderer/shadow_atlas.h + cascatas do sol → visibilidade",
             "invalidates": {
               "cpp": "Invalidate::LightCluster"
             }
@@ -291,15 +297,15 @@
           "presentation": {
             "group": "Sombra",
             "unit": "texel",
-            "help": "Afasta a comparação de profundidade e some com a acne",
+            "help": "Afasta a comparação de profundidade e some com a acne; 0,05 é o desvio da política do aparelho",
             "visible": {
-              "cpp": "lightCastsLocalShadow"
+              "cpp": "lightCastsShadow"
             },
             "editable": {
               "cpp": "nullptr"
             },
             "capability": "render.shadow.punctual",
-            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "consumer": "vkCmdSetDepthBias do atlas local e das cascatas",
             "invalidates": {
               "cpp": "Invalidate::LightCluster"
             }
@@ -324,15 +330,15 @@
           "presentation": {
             "group": "Sombra",
             "unit": "texel",
-            "help": "Desloca a amostra ao longo da normal; some com o serrilhado da borda",
+            "help": "Desloca a amostra ao longo da normal; 0,4 é o deslocamento da política do aparelho",
             "visible": {
-              "cpp": "lightCastsLocalShadow"
+              "cpp": "lightCastsShadow"
             },
             "editable": {
               "cpp": "nullptr"
             },
             "capability": "render.shadow.punctual",
-            "consumer": "renderer/shadow_atlas.h → atlas local",
+            "consumer": "environment_lighting.glsl → amostra deslocada na normal",
             "invalidates": {
               "cpp": "Invalidate::LightCluster"
             }
@@ -475,8 +481,8 @@
       "name": "light_Light_fields6",
       "type": "Light",
       "properties": [
-        "lightNumbers/inner_angle",
-        "lightNumbers/outer_angle"
+        "lightNumbers/spot_angle",
+        "lightNumbers/inner_spot_angle"
       ]
     },
     {

@@ -450,6 +450,30 @@ ICONS["lighting/time-of-day"] = (
     f'<path d="M64 18v-6M64 72v-6M40 42h-6M94 42h-6M47 25l-4-4M85 25l4-4" {stroke(4, ACCENT)}/>'
     f'<path d="M108 70a13 13 0 1 1-12-18 10 10 0 0 0 12 18z" {stroke(5)}/>'
     f'<circle cx="20" cy="76" r="5" fill="{INK}" opacity=".7"/>')
+# PK-3: Fonte do sol (Sun Source da janela Lighting). O sol dentro dos cantos
+# de seleção é "esta é a luz escolhida"; os raios paralelos descendo até o chão
+# dizem que ela é direcional, a luz principal da cena.
+ICONS["lighting/sun-source"] = (
+    f'<path d="M18 34V18h16M94 18h16v16M18 66v16h16M110 66v16H94" {stroke(5, ACCENT)}/>'
+    f'<circle cx="64" cy="50" r="15" fill="{ACCENT}"/>'
+    f'<path d="M64 26v-4M64 78v-4M40 50h-4M92 50h-4M47 33l-3-3M81 33l3-3M47 67l-3 3M81 67l3 3" {stroke(4)}/>'
+    f'<path d="M34 92l-8 14M64 92v14M94 92l8 14" {stroke(5, extra='opacity=".75"')}/>'
+    f'<path d="M12 114h104" {stroke(6)}/>')
+# PK-8: Projetar sombras do Mesh Renderer — o bloco iluminado e a sombra dele
+# no chão, na mesma linguagem do ícone de luz direcional.
+ICONS["lighting/shadow-caster"] = (
+    f'<path d="M30 30l18 18M52 20l12 18M76 18l2 20" {stroke(4, ACCENT)}/>'
+    f'<path d="M46 52h34v34H46z" {stroke(6)}/>'
+    f'<path d="M46 86l18 22h48L80 86" fill="{INK}" fill-opacity=".22" {stroke(4, extra='opacity=".8"')}/>'
+    f'<path d="M10 108h108" {stroke(6)}/>')
+# PK-3/PK-8: camadas de renderização — três placas empilhadas, a de cima acesa
+# pela luz: a luz só alcança renderers que dividem uma camada com ela.
+ICONS["lighting/rendering-layers"] = (
+    f'<path d="M64 84l46-20-46-20-46 20z" {stroke(5, extra='opacity=".45"')}/>'
+    f'<path d="M64 98l46-20M64 98L18 78" {stroke(5, extra='opacity=".7"')}/>'
+    f'<path d="M64 66l46-20-46-20-46 20z" fill="{ACCENT}" fill-opacity=".18" {stroke(6, ACCENT)}/>'
+    f'<circle cx="64" cy="12" r="6" fill="{ACCENT}"/><path d="M64 22v8" {stroke(4, ACCENT)}/>'
+    f'<path d="M64 112l46-20M64 112L18 92" {stroke(5, extra='opacity=".45"')}/>')
 
 # G4b: nuvens (Cloud Layer). O sol atrás do cúmulo diz "iluminada pelo sol",
 # os traços à esquerda são o vento e a mancha no chão é a sombra projetada.

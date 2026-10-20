@@ -629,7 +629,7 @@ void EditorSession::refreshProfileInspector() {
     const auto *first=numberById(t->channels[0]);
     if(!first || !in(first->presentation.group) || !first->presentation.isVisible(proxy)) continue;
     Row row;row.kind=Row::Kind::Triple;row.id=t->id;row.label=t->name;row.editable=usable(first->presentation);
-    row.color=t->kind==scene::ComponentTripleKind::LinearColor;
+    row.color=scene::componentTripleIsColor(t->kind);
     char text[64];
     for(u32 axis=0;axis<3;++axis) if(const auto *c=numberById(t->channels[axis])) row.rgb[axis]=c->read(proxy);
     std::snprintf(text,sizeof text,"%.3g  %.3g  %.3g",static_cast<double>(row.rgb[0]),static_cast<double>(row.rgb[1]),static_cast<double>(row.rgb[2]));

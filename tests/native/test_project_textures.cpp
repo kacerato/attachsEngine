@@ -594,7 +594,7 @@ AE_TEST(r4_textures_extract_from_source_and_resolve_per_instance_and_shared_scop
   const auto *record = session.assets().find(shared);
   AE_EXPECT_TRUE(record && EditorImportTransaction::read(project.root / record->path, materialFile), "arquivo do material");
   const std::string text(materialFile.begin(), materialFile.end());
-  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 6") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
+  AE_EXPECT_TRUE(text.starts_with("ASTRA_MATERIAL 7") && text.find(texture.text()) != std::string::npos && text.find("none") != std::string::npos,
                  "material gravado na versão atual com as texturas");
   AE_EXPECT_TRUE(session.assets().dependents(texture)==std::vector<resources::AssetGuid>{shared},"shared edit keeps texture dependency");
   std::vector<u8> registryFile;
@@ -884,7 +884,7 @@ AE_TEST(r4_alpha_mode_cutoff_and_sides_persist_resolve_and_reach_renderer_flags)
                  "transparente e uma face pelo material compartilhado");
   std::vector<u8> file;
   AE_EXPECT_TRUE(EditorImportTransaction::read(project.root / session.assets().find(shared)->path, file) &&
-                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 6"), "material gravado na versão atual");
+                 std::string(file.begin(), file.end()).starts_with("ASTRA_MATERIAL 7"), "material gravado na versão atual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
   effective = effectiveMaterial(session, object);
@@ -1118,7 +1118,7 @@ AE_TEST(r4_uv_transform_per_binding_resolves_reaches_the_shader_entry_and_persis
   AE_EXPECT_TRUE((effectiveMaterial(session, object).uvTransformMask & 2u) != 0, "herdada do material compartilhado");
   const auto serialized = session.findMaterialAsset(shared)->serialize();
   resources::MaterialAsset back;
-  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 6") && resources::MaterialAsset::deserialize(serialized, back) &&
+  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 7") && resources::MaterialAsset::deserialize(serialized, back) &&
                      back.sampling[1] == tiled, "MaterialAsset v5 volta igual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");
@@ -1203,7 +1203,7 @@ AE_TEST(r4_occlusion_channels_normal_and_alpha_source_resolve_reach_the_extensio
   AE_EXPECT_TRUE(effectiveMaterial(session, object).channels == channels, "herdados do material compartilhado");
   resources::MaterialAsset back;
   const auto serialized = session.findMaterialAsset(shared)->serialize();
-  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 6") && resources::MaterialAsset::deserialize(serialized, back) &&
+  AE_EXPECT_TRUE(serialized.starts_with("ASTRA_MATERIAL 7") && resources::MaterialAsset::deserialize(serialized, back) &&
                      back.channels == channels && back.occlusionTexture == extraction.textures.front(), "MaterialAsset v6 volta igual");
 
   AE_EXPECT_TRUE(session.revertImportLink(object, ImportOverrideMaterial), "reverter material à fonte");

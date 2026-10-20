@@ -613,7 +613,13 @@ private:
   std::vector<renderer::MapDrawState> pendingScene_;
   std::vector<renderer::MapDrawRecord> sourceMapDraws_;
   bool commitAuthoredScene();
+  // Visibilidade NA CÂMERA (falsa também em "Só sombra") e modo de Projetar
+  // sombras do Mesh Renderer (0 desligado, 1 ligado, 2 dupla face, 3 só
+  // sombra), já zerado quando o objeto não renderiza. Os passes de sombra leem
+  // só `authoredShadows_`; o passe de cor, só `authoredVisibility_`.
   std::vector<u8> authoredVisibility_, authoredShadows_;
+  // Camada do objeto, Rendering Layer Mask e Receive Shadows de cada desenho.
+  std::vector<renderer::DrawLightingKey> authoredLighting_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
   struct AuthoredDrawIdentity {
     u64 objectId;
@@ -1079,6 +1085,24 @@ private:
   VkPipelineLayout shadowPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline shadowOpaquePipeline_ = VK_NULL_HANDLE;
   VkPipeline shadowMaskedPipeline_ = VK_NULL_HANDLE;
+  // "Projetar sombras: Ligado" num material de face única: o mapa de sombra
+  // descarta as faces de trás, como o passe ShadowCaster da Unity com o Cull
+  // do material. Dupla face e materiais de face dupla usam as de cima.
+  VkPipeline shadowOpaqueCullPipeline_ = VK_NULL_HANDLE;
+  VkPipeline shadowMaskedCullPipeline_ = VK_NULL_HANDLE;
+  void splitShadowDraws(const std::vector<u32> &solid,const std::vector<u32> &coverage);
+  template<class Draw> void recordShadowCasters(const Draw &draw);
+  std::vector<u32> shadowSolidNone_,shadowSolidCull_,shadowCoverageNone_,shadowCoverageCull_;
+  // Sol principal deste quadro (Luz v4): escala do desvio de profundidade em
+  // relação à política e máscaras autorais. O cache de cascatas estáticas é
+  // invalidado quando a escala muda, porque o mapa guardado usou a anterior.
+  float sunShadowBiasScale_ = 1.0f;
+  renderer::PunctualLightFilter sunFilter_{};
+  // Cópia CPU das luzes adicionais aceitas no quadro, nos dois bancos do bloco,
+  // e as máscaras autorais de cada vaga: a máscara por desenho lê daqui.
+  renderer::PunctualLight frameLights_[renderer::MaximumPunctualLights]{};
+  renderer::PunctualLightFilter frameLightFilters_[renderer::MaximumPunctualLights]{};
+  u32 frameLightCount_ = 0;
   rhi::VulkanImage shadowAtlas_{};
   // Atlas local: imagem própria em vez de dividir a das cascatas, para o cache
   // estático do sol continuar valendo quando só uma lâmpada muda. O passe é
@@ -1281,7 +1305,8 @@ private:
   struct AuthoredInstanceState {
     renderer::MaterialOverride material{};
     bool visible = true;
-    bool castShadow = true;
+    u8 castShadows = 1;
+    renderer::DrawLightingKey lighting{};
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;

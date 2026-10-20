@@ -3,6 +3,7 @@
 #include "renderer/gpu_mesh_instance.h"
 #include "renderer/material_override.h"
 #include "renderer/map_package.h"
+#include "renderer/punctual_lights.h"
 #include <cmath>
 #include <memory>
 #include <vector>
@@ -24,7 +25,12 @@ struct MapDrawState {
   u32 sourceDrawIndex = 0;
   MapDrawUpdate pose{};
   bool visible = true;
-  bool castShadow = true;
+  // Projetar sombras do Mesh Renderer: 0 desligado, 1 ligado, 2 dupla face,
+  // 3 só sombra (fora da câmera, dentro do mapa de sombra).
+  u8 castShadows = 1;
+  // Camada do objeto, Rendering Layer Mask e Receive Shadows.
+  DrawLightingKey lighting{};
+  bool castsShadow() const noexcept { return castShadows != 0; }
   MaterialOverride material{};
   // G6-B: paleta do skin deste desenho (16 floats coluna principal por junta,
   // no espaço do desenho: inversa(modelo) * mundo(junta) * bind inversa).

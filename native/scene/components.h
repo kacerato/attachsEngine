@@ -3,12 +3,14 @@
 #include "core/engine_capability.h"
 #include "resources/asset_registry.h"
 #include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 #include <span>
 #include <sstream>
 #include <iomanip>
 #include <limits>
+#include <cmath>
 #include <locale>
 #include <cmath>
 #include <algorithm>
@@ -107,7 +109,41 @@ struct ComponentEnum {
   void (*write)(ComponentValue &,u32);
   PropertyPresentation presentation{};
   bool animationSafe=false;
+  // Máscara de bits em vez de escolha única (o LayerMask/RenderingLayerMask da
+  // Unity): cada opção é um bit, o valor é a união deles. Zero é "Nada" e todas
+  // as opções juntas é "Tudo". O seletor marca vários; a escrita aceita qualquer
+  // combinação dos bits declarados e nada além deles.
+  bool flags=false;
+  bool accepts(u32 value) const noexcept {
+    if(flags) {
+      u32 known=0;
+      for(const auto &option:options) known|=option.value;
+      return (value&~known)==0;
+    }
+    for(const auto &option:options) if(option.value==value) return true;
+    return false;
+  }
 };
+// Texto de um valor de enum: o nome da opção, ou, numa máscara, "Nada",
+// "Tudo", os nomes marcados (até três) e "Misto" além disso — como o campo
+// fechado de LayerMask no Inspector da Unity.
+inline std::string componentEnumLabel(const ComponentEnum &property,u32 value) {
+  if(!property.flags) {
+    for(const auto &option:property.options) if(option.value==value) return option.name;
+    return std::to_string(value);
+  }
+  u32 all=0,count=0;std::string names;
+  for(const auto &option:property.options) {
+    all|=option.value;
+    if(option.value&&(value&option.value)==option.value) {
+      if(count<3) names+=(count?", ":"")+std::string(option.name);
+      ++count;
+    }
+  }
+  if(!value) return "Nada";
+  if((value&all)==all) return "Tudo";
+  return count>3?"Misto":names;
+}
 // Descendant: um objeto ABAIXO deste na hierarquia, nunca ele mesmo — é o que
 // um LOD Group pede para cada nível (os renderers LOD0, LOD1... são filhos).
 enum class ObjectReferenceScope { Any, SelfOrAncestor, Other, Descendant, OtherNonDescendant };
@@ -216,7 +252,23 @@ struct ComponentResourceBinding {
   }
 };
 
-enum class ComponentTripleKind { Vector, LinearColor, Vector2 };
+// SrgbColor guarda o valor que o seletor mostra (o Color da Unity num projeto
+// linear): o consumidor converte para linear antes de iluminar. LinearColor
+// guarda o número que o shader multiplica.
+enum class ComponentTripleKind { Vector, LinearColor, Vector2, SrgbColor };
+inline constexpr bool componentTripleIsColor(ComponentTripleKind kind) noexcept {
+  return kind==ComponentTripleKind::LinearColor || kind==ComponentTripleKind::SrgbColor;
+}
+inline float srgbChannelToLinear(float value) noexcept {
+  value=value<0?0:value;
+  return value<=.04045f?value/12.92f:std::pow((value+.055f)/1.055f,2.4f);
+}
+inline float linearChannelToSrgb(float value) noexcept {
+  value=value<0?0:value;
+  if(value==1.f) return 1.f; // branco continua exatamente branco
+
+  return value<=.0031308f?12.92f*value:1.055f*std::pow(value,1.f/2.4f)-.055f;
+}
 // Persistent collection structure is distinct from positional property slots.
 // Consumers can check portability without knowing concrete component classes.
 struct ComponentCollection {

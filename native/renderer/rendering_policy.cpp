@@ -709,6 +709,12 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
           settings.preset == QualityPreset::Auto
               ? presetForProfile(capabilities.profile).materialShaderVariants
               : point.materialShaderVariants);
+  // Luzes adicionais: o perfil C mantém o teto histórico de 8 por quadro; os
+  // perfis com folga de GPU aceitam o bloco inteiro (16). O laço do fragmento
+  // percorre só as luzes que alcançam o desenho, até 8 por objeto.
+  policy.lights.additionalLights = policy.effectiveProfile == rhi::DeviceProfile::C ? 8u
+                                 : policy.effectiveProfile == rhi::DeviceProfile::B ? 12u : 16u;
+  policy.lights.additionalLightsPerObject = 8u;
   policy.resolutionScale = std::clamp(resolutionScale, 0.5f, 1.0f);
   // --- cadência alta: o preset foi autorado para 60 Hz ------------------------
   //

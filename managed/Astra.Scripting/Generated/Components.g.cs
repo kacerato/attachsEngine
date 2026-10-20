@@ -3566,6 +3566,43 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
     }
+    /// <summary>Receber sombras. Sombras do sol e das luzes locais escurecem esta malha</summary>
+    public bool ReceiveShadows
+    {
+        get => Component.GetBool("receive_shadows");
+        set => Component.SetBool("receive_shadows", value);
+    }
+    public enum CastShadowsOption : uint
+    {
+        Desligado = 0,
+        Ligado = 1,
+        DuplaFace = 2,
+        SoSombra = 3,
+    }
+    /// <summary>Projetar sombras. Ligado respeita a face do material; Dupla face projeta pelas duas; Só sombra some da câmera</summary>
+    public CastShadowsOption CastShadows
+    {
+        get => (CastShadowsOption)Component.GetEnum("cast_shadows");
+        set => Component.SetEnum("cast_shadows", (uint)value);
+    }
+    [System.Flags]
+    public enum RenderingLayerMaskOption : uint
+    {
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+    }
+    /// <summary>Camadas de renderização. Só luzes com uma camada de renderização em comum iluminam esta malha</summary>
+    public RenderingLayerMaskOption RenderingLayerMask
+    {
+        get => (RenderingLayerMaskOption)Component.GetEnum("rendering_layer_mask");
+        set => Component.SetEnum("rendering_layer_mask", (uint)value);
+    }
     /// <summary>Malha. Recurso do projeto por slot</summary>
     public AssetGuid GetMesh(uint slot = 0) => Component.GetResource("mesh", slot);
     public void SetMesh(AssetGuid value, uint slot = 0) => Component.SetResource("mesh", value, slot);
@@ -4776,7 +4813,7 @@ public readonly struct Light : IComponentFacade<Light>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
-    /// <summary>Cor linear. Cor linear RGB</summary>
+    /// <summary>Cor. Cor sRGB, como o seletor; o motor converte para linear</summary>
     public Vector3 Color
     {
         get => new(Component.GetFloat("color.r"), Component.GetFloat("color.g"), Component.GetFloat("color.b"));
@@ -4803,19 +4840,19 @@ public readonly struct Light : IComponentFacade<Light>
         get => Component.GetFloat("range");
         set => Component.SetFloat("range", value);
     }
-    /// <summary>Meio-cone interno (°)</summary>
-    /// <remarks>Faixa válida: 0 a 89.</remarks>
-    public float InnerAngle
+    /// <summary>Ângulo do spot (°). Abertura total do cone (Spot Angle); a luz zera na borda</summary>
+    /// <remarks>Faixa válida: 1 a 179.</remarks>
+    public float SpotAngle
     {
-        get => Component.GetFloat("inner_angle");
-        set => Component.SetFloat("inner_angle", value);
+        get => Component.GetFloat("spot_angle");
+        set => Component.SetFloat("spot_angle", value);
     }
-    /// <summary>Meio-cone externo (°)</summary>
-    /// <remarks>Faixa válida: 0 a 89.</remarks>
-    public float OuterAngle
+    /// <summary>Ângulo interno do spot (°). Abertura total do miolo com intensidade plena (Inner Spot Angle)</summary>
+    /// <remarks>Faixa válida: 0 a 179.</remarks>
+    public float InnerSpotAngle
     {
-        get => Component.GetFloat("outer_angle");
-        set => Component.SetFloat("outer_angle", value);
+        get => Component.GetFloat("inner_spot_angle");
+        set => Component.SetFloat("inner_spot_angle", value);
     }
     /// <summary>Força da sombra. 1 é sombra opaca; abaixo disso a luz vaza pelo oclusor</summary>
     /// <remarks>Faixa válida: 0 a 1.</remarks>
@@ -4824,14 +4861,14 @@ public readonly struct Light : IComponentFacade<Light>
         get => Component.GetFloat("shadow_strength");
         set => Component.SetFloat("shadow_strength", value);
     }
-    /// <summary>Desvio (texel). Afasta a comparação de profundidade e some com a acne</summary>
+    /// <summary>Desvio (texel). Afasta a comparação de profundidade e some com a acne; 0,05 é o desvio da política do aparelho</summary>
     /// <remarks>Faixa válida: 0 a 2.</remarks>
     public float ShadowBias
     {
         get => Component.GetFloat("shadow_bias");
         set => Component.SetFloat("shadow_bias", value);
     }
-    /// <summary>Desvio na normal (texel). Desloca a amostra ao longo da normal; some com o serrilhado da borda</summary>
+    /// <summary>Desvio na normal (texel). Desloca a amostra ao longo da normal; 0,4 é o deslocamento da política do aparelho</summary>
     /// <remarks>Faixa válida: 0 a 2.</remarks>
     public float ShadowNormalBias
     {
@@ -4863,7 +4900,7 @@ public readonly struct Light : IComponentFacade<Light>
         Pontual = 1,
         Spot = 2,
     }
-    /// <summary>Modalidade. Tipo de emissão da luz</summary>
+    /// <summary>Tipo. Direcional ilumina a cena inteira numa direção; pontual e spot partem de um ponto</summary>
     public KindOption Kind
     {
         get => (KindOption)Component.GetEnum("kind");
@@ -4871,11 +4908,11 @@ public readonly struct Light : IComponentFacade<Light>
     }
     public enum UnitOption : uint
     {
-        InternaLegada = 0,
+        RelativaSemUnidade = 0,
         LuxCandela = 1,
         LuxLumen = 2,
     }
-    /// <summary>Unidade. Direcional usa lux; luz local usa candela ou lúmen</summary>
+    /// <summary>Unidade. Relativa é a intensidade da URP; lux, candela e lúmen são as unidades físicas da HDRP</summary>
     public UnitOption Unit
     {
         get => (UnitOption)Component.GetEnum("unit");
@@ -4883,11 +4920,11 @@ public readonly struct Light : IComponentFacade<Light>
     }
     public enum ShadowModeOption : uint
     {
-        Nenhuma = 0,
-        Dura = 1,
-        Suave = 2,
+        SemSombra = 0,
+        SombraDura = 1,
+        SombraSuave = 2,
     }
-    /// <summary>Sombra. Projeção de sombra desta luz no atlas local</summary>
+    /// <summary>Tipo de sombra. Dura usa uma busca; suave filtra a borda. A política do aparelho pode desligar a sombra</summary>
     public ShadowModeOption ShadowMode
     {
         get => (ShadowModeOption)Component.GetEnum("shadow_mode");
@@ -4906,6 +4943,66 @@ public readonly struct Light : IComponentFacade<Light>
     {
         get => (ShadowResolutionOption)Component.GetEnum("shadow_resolution");
         set => Component.SetEnum("shadow_resolution", (uint)value);
+    }
+    [System.Flags]
+    public enum CullingMaskOption : uint
+    {
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+        Camada8 = 256,
+        Camada9 = 512,
+        Camada10 = 1024,
+        Camada11 = 2048,
+        Camada12 = 4096,
+        Camada13 = 8192,
+        Camada14 = 16384,
+        Camada15 = 32768,
+        Camada16 = 65536,
+        Camada17 = 131072,
+        Camada18 = 262144,
+        Camada19 = 524288,
+        Camada20 = 1048576,
+        Camada21 = 2097152,
+        Camada22 = 4194304,
+        Camada23 = 8388608,
+        Camada24 = 16777216,
+        Camada25 = 33554432,
+        Camada26 = 67108864,
+        Camada27 = 134217728,
+        Camada28 = 268435456,
+        Camada29 = 536870912,
+        Camada30 = 1073741824,
+        Camada31 = 2147483648,
+    }
+    /// <summary>Máscara de culling. Camadas de objeto que esta luz ilumina</summary>
+    public CullingMaskOption CullingMask
+    {
+        get => (CullingMaskOption)Component.GetEnum("culling_mask");
+        set => Component.SetEnum("culling_mask", (uint)value);
+    }
+    [System.Flags]
+    public enum RenderingLayersOption : uint
+    {
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+    }
+    /// <summary>Camadas de renderização. Ilumina só renderers com uma camada de renderização em comum</summary>
+    public RenderingLayersOption RenderingLayers
+    {
+        get => (RenderingLayersOption)Component.GetEnum("rendering_layers");
+        set => Component.SetEnum("rendering_layers", (uint)value);
     }
 }
 
@@ -4966,6 +5063,31 @@ public readonly struct TimeOfDay : IComponentFacade<TimeOfDay>
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+}
+
+/// <summary>Iluminação da cena: Fonte do sol: qual luz direcional é o sol da cena. Família Luz · Luzes.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/lighting-window.html</remarks>
+public readonly struct LightingSettings : IComponentFacade<LightingSettings>
+{
+    public static string TypeId => "astra.render.lighting_settings";
+    public static LightingSettings Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public LightingSettings(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Fonte do sol. A luz direcional que é o sol da cena: projeta as cascatas e aparece no céu</summary>
+    public ObjectReference SunSource
+    {
+        get => Component.GetReference("sun_source");
+        set => Component.SetReference("sun_source", value);
     }
 }
 

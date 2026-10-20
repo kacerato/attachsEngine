@@ -166,9 +166,14 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
     auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Enum, property.presentation);
     row.readOnly = row.readOnly || property.write == nullptr;
     for (const auto &option : property.options) {
-      if (!row.domain.empty()) row.domain += " | ";
+      if (!row.domain.empty()) row.domain += property.flags ? " + " : " | ";
       row.domain += option.name;
-      if (probe && property.read(*probe) == option.value) row.defaultValue = option.name;
+      if (!property.flags && probe && property.read(*probe) == option.value) row.defaultValue = option.name;
+    }
+    // Máscara: o domínio é qualquer união dos bits; o padrão é o texto da união.
+    if (property.flags) {
+      row.domain = "máscara: " + row.domain;
+      if (probe) row.defaultValue = componentEnumLabel(property, property.read(*probe));
     }
     rows.push_back(std::move(row));
   }

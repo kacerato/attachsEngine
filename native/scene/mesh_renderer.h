@@ -3,6 +3,7 @@
 #include "scene/components.h"
 #include "scene/material_parameters.h"
 #include "scene/lightmap_binding.h"
+#include "scene/rendering_layers.h"
 #include <array>
 #include <vector>
 namespace ae::scene {
@@ -77,6 +78,34 @@ public:
   resources::AssetGuid asset{};
 
 #include "scene/generated/mesh_renderer_MeshRenderer_fields0.inc"
+
+  // v11 (PK-8): Iluminação e Sondas do Mesh Renderer da Unity 6. São do
+  // RENDERER, não do objeto: até a v10 a sombra vinha dos interruptores
+  // "Projeta/Recebe sombra" do objeto, e a cena antiga é migrada por
+  // `adoptLegacyObjectShadows` na leitura do documento.
+  //
+  //  - Cast Shadows: 0 Desligado, 1 Ligado (a sombra respeita a face do
+  //    material, como o passe ShadowCaster), 2 Dupla face (sem culling no mapa
+  //    de sombra), 3 Só sombra (não desenha na câmera, só no mapa).
+  //  - Receive Shadows: as sombras do sol e das locais escurecem esta malha.
+  //  - Light/Reflection Probes: declarados com os valores da Unity e GRAVADOS,
+  //    mas não são propriedade do Inspector nem da API até existir sonda
+  //    (PK-6): o registro recusa propriedade de capacidade planejada.
+  //  - Rendering Layer Mask: só luzes com uma camada em comum iluminam.
+  u32 castShadows=1;
+#include "scene/generated/mesh_renderer_MeshRenderer_fields1.inc"
+  u32 lightProbes=1;
+  u32 reflectionProbes=1;
+  u32 renderingLayerMask=kDefaultRenderingLayers;
+  // Transitório, nunca gravado: o arquivo era anterior à v11 e a sombra ainda
+  // mora nos interruptores do objeto. Quem lê o objeto inteiro adota.
+  bool legacyObjectShadows=false;
+  bool castsShadows() const noexcept {return castShadows!=0;}
+  bool shadowsOnly() const noexcept {return castShadows==3;}
+  void adoptLegacyObjectShadows(bool objectCasts,bool objectReceives) noexcept {
+    if(!legacyObjectShadows) return;
+    castShadows=objectCasts?1u:0u;receiveShadows=objectReceives;legacyObjectShadows=false;
+  }
 
   MaterialParameters material;
   resources::AssetGuid materialAsset{};
@@ -174,6 +203,7 @@ public:
       for(const auto &value:slotSampling(slot)) if(!validMaterialSampling(value)) return false;
     for(u32 slot=0;slot<slotCount();++slot) if(!validMaterialChannels(slotChannels(slot))) return false;
     for(u32 slot=0;slot<slotCount();++slot) if(!slotLightmap(slot).valid()) return false;
+    if(castShadows>3 || lightProbes>1 || reflectionProbes>3 || (renderingLayerMask&~kAllRenderingLayers)!=0) return false;
     return true;
   }
   void write(std::ostream &out) const override {
@@ -218,6 +248,8 @@ public:
     }
     // v10 (G3a): origem da rugosidade de cada slot (rugosidade ou suavidade).
     for(u32 slot=0;slot<slotCount();++slot) out<<' '<<static_cast<unsigned>(slotChannels(slot).roughnessSource);
+    // v11 (PK-8): iluminação e sondas do renderer.
+    out<<' '<<castShadows<<' '<<receiveShadows<<' '<<lightProbes<<' '<<reflectionProbes<<' '<<renderingLayerMask;
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -228,7 +260,7 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>10 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>11 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
     asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};lightmap={};submeshes.clear();
@@ -300,6 +332,10 @@ public:
       if(!(in>>source) || source>MaterialRoughnessSmoothnessBaseAlpha) return false;
       editSlotChannels(slot)->roughnessSource=static_cast<std::uint8_t>(source);
     }
+    castShadows=1;receiveShadows=true;lightProbes=1;reflectionProbes=1;renderingLayerMask=kDefaultRenderingLayers;
+    legacyObjectShadows=version<11;
+    if(version>=11 && (!(in>>castShadows>>receiveShadows>>lightProbes>>reflectionProbes>>renderingLayerMask) ||
+       castShadows>3 || lightProbes>1 || reflectionProbes>3 || (renderingLayerMask&~kAllRenderingLayers)!=0)) return false;
     return true;
   }
 };
@@ -319,6 +355,27 @@ inline constexpr std::array<ComponentNumber,11> meshRendererNumbers{{
 #undef AE_MESH_NUMBER
 }};
 #include "scene/generated/mesh_renderer_meshRendererBooleans.inc"
+// Iluminação, Sondas e Configurações adicionais do Mesh Renderer da Unity 6,
+// na mesma ordem: https://docs.unity3d.com/6000.0/Documentation/Manual/class-MeshRenderer.html
+inline constexpr std::array<ComponentEnumOption,4> meshCastShadowsOptions{{
+  {0,"Desligado"},{1,"Ligado"},{2,"Dupla face"},{3,"Só sombra"}
+}};
+inline constexpr std::array<ComponentEnumOption,2> meshLightProbeOptions{{{0,"Desligado"},{1,"Misturar sondas"}}};
+inline constexpr std::array<ComponentEnumOption,4> meshReflectionProbeOptions{{
+  {0,"Desligado"},{1,"Misturar sondas"},{2,"Misturar sondas e céu"},{3,"Simples"}
+}};
+inline constexpr std::array<ComponentEnum,2> meshRendererEnums{{
+  {"cast_shadows","Projetar sombras",meshCastShadowsOptions,
+    [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).castShadows;},
+    [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).castShadows=value;},
+    {"Iluminação","","Ligado respeita a face do material; Dupla face projeta pelas duas; Só sombra some da câmera",nullptr,nullptr,
+     "render.shadow.renderer","platform/android/instanced_renderer.cpp → passes de sombra",Invalidate::ShadowMap},true},
+  {"rendering_layer_mask","Camadas de renderização",renderingLayerOptions,
+    [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).renderingLayerMask;},
+    [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).renderingLayerMask=value;},
+    {"Configurações adicionais","","Só luzes com uma camada de renderização em comum iluminam esta malha",nullptr,nullptr,
+     "render.light.layers","renderer/punctual_lights.h → máscara por desenho",Invalidate::Draw},true,true}
+}};
 // Os recursos que este componente endereça, declarados como as demais
 // propriedades. O grafo de impacto, o reparo de referência quebrada, o preset
 // e o relatório de dependências passam a ler ESTA lista em vez de repetir, cada
@@ -603,8 +660,8 @@ inline const std::array<ComponentSlotNumber,43> meshRendererAllSlotNumbers=[]{
   return all;
 }();
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",10,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
-  meshRendererNumbers,meshRendererBooleans,{},nullptr,false,{},{},meshRendererResources,
+  "astra.render.mesh",11,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
+  meshRendererNumbers,meshRendererBooleans,meshRendererEnums,nullptr,false,{},{},meshRendererResources,
   meshRendererAllSlotNumbers,meshRendererSlotEnums
 };
 }

@@ -634,7 +634,11 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       const bool route=slot==0 && waterRoute(*entity).count;
       bool posedBounds=false;
       update.visible=inheritedVisible(document,id) && render->enabled;
-      update.castShadow=entity->castShadow;
+      // PK-8: sombra e camadas são do Mesh Renderer, como na Unity.
+      update.castShadows=static_cast<u8>(render->castShadows);
+      update.lighting.objectLayer=entity->layer;
+      update.lighting.renderingLayers=render->renderingLayerMask;
+      update.lighting.receiveShadows=render->receiveShadows;
       if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
          skinned && deformation(index)) {
         DeformedPose pose;
