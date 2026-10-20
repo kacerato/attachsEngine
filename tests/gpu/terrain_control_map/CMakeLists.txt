@@ -10,6 +10,7 @@ foreach(STAGE vert frag)
       "${CMAKE_CURRENT_SOURCE_DIR}/control.${STAGE}" -o "${CMAKE_CURRENT_BINARY_DIR}/control.${STAGE}.spv"
     DEPENDS "control.${STAGE}" "${ASTRA_ROOT}/native/rhi/shaders/terrain_surface.glsl"
       "${ASTRA_ROOT}/native/rhi/shaders/terrain_pbr.glsl"
+      "${ASTRA_ROOT}/native/rhi/shaders/terrain_snow.glsl"
       "${ASTRA_ROOT}/native/rhi/shaders/material_uv_transform.glsl")
 endforeach()
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/fallback.frag.spv"
@@ -17,12 +18,14 @@ add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/fallback.frag.spv"
     "${CMAKE_CURRENT_SOURCE_DIR}/control.frag" -o "${CMAKE_CURRENT_BINARY_DIR}/fallback.frag.spv"
   DEPENDS control.frag "${ASTRA_ROOT}/native/rhi/shaders/terrain_surface.glsl"
     "${ASTRA_ROOT}/native/rhi/shaders/terrain_pbr.glsl"
+      "${ASTRA_ROOT}/native/rhi/shaders/terrain_snow.glsl"
     "${ASTRA_ROOT}/native/rhi/shaders/material_uv_transform.glsl")
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/pbr.frag.spv"
   COMMAND "${GLSLC}" -DTEST_PBR -I "${ASTRA_ROOT}/native/rhi/shaders"
     "${CMAKE_CURRENT_SOURCE_DIR}/control.frag" -o "${CMAKE_CURRENT_BINARY_DIR}/pbr.frag.spv"
   DEPENDS control.frag "${ASTRA_ROOT}/native/rhi/shaders/terrain_surface.glsl"
     "${ASTRA_ROOT}/native/rhi/shaders/terrain_pbr.glsl"
+      "${ASTRA_ROOT}/native/rhi/shaders/terrain_snow.glsl"
     "${ASTRA_ROOT}/native/rhi/shaders/material_uv_transform.glsl")
 add_executable(astra_terrain_control_gpu main.cpp
   "${ASTRA_ROOT}/native/resources/terrain_surface_asset.cpp"

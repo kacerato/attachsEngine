@@ -4,6 +4,8 @@
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_noise_controls.h"
 #include "editor/editor_terrain_modules_controls.h"
+#include "editor/editor_terrain_catalog_search.h"
+#include "editor/editor_terrain_snow_controls.h"
 #include "ui_software_raster.h"
 #include <cstdio>
 #include <cstdlib>
@@ -42,14 +44,14 @@ int main(int argc, char **argv) {
   const std::string_view scenario = argc > 5 ? argv[5] : "lod";
   if (scenario != "lod") {
     if (scenario != "library" && scenario != "layer" && scenario != "maps" &&
-        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off")
+        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off" && scenario!="catalog-search" && scenario!="catalog-empty" && scenario!="map-source" && scenario!="noise-search" && scenario!="global-search" && !scenario.starts_with("snow-") && scenario!="quality" && scenario!="pbr-normal-source" && scenario!="geo-normal-source" && scenario!="global-normal-source" && scenario!="normal-noise-source" && scenario!="variant-normal-source" && scenario!="anti-normal-source")
       return 2;
     state.terrainTab = 2;
-    state.terrainMaterialView = scenario == "library" ? 1u
+    state.terrainMaterialView = (scenario == "library" || scenario=="catalog-search" || scenario=="catalog-empty") ? 1u
                                 : scenario == "layer" ? 2u
                                 : scenario == "maps"  ? 3u
                                                       : 0u;
-    if(scenario=="noise" || scenario=="noise-source") state.terrainMaterialView=scenario=="noise"?4u:8u;
+    if(scenario=="noise" || scenario=="noise-source" || scenario=="noise-search") state.terrainMaterialView=scenario=="noise"?4u:8u;
     state.terrainMapRole = argc > 6 ? u32(std::atoi(argv[6])) : 0;
     if (state.terrainMapRole > 6)
       return 2;
@@ -62,12 +64,12 @@ int main(int argc, char **argv) {
     state.terrainCatalog = catalog;
     for (u32 i = 0; i < 4; ++i)
       state.terrainDraft.surface.layers.push_back(catalog->materials[i].layer);
-    if(scenario=="noise" || scenario=="noise-source") {
+    if(scenario=="noise" || scenario=="noise-source" || scenario=="noise-search") {
       auto &noise=state.terrainDraft.surface.detailNoise;
       noise.enabled=true;noise.map=state.terrainDraft.surface.layers[0].maps[0];
       noise.map.channel=state.terrainMapRole==4?resources::TerrainSurfaceChannel::RGB:resources::TerrainSurfaceChannel::R;
     }
-    if(scenario=="normal" || scenario=="anti-tile") {
+    if(scenario=="normal" || scenario=="anti-tile" || scenario=="normal-noise-source" || scenario=="anti-normal-source") {
       state.terrainMaterialView=scenario=="normal"?12u:30u;
       auto &noise=state.terrainDraft.surface.normalNoise[0];
       noise.enabled=true;noise.map=state.terrainDraft.surface.layers[0].maps[1];
@@ -84,7 +86,7 @@ int main(int argc, char **argv) {
       layer.resampleScale=4;layer.resampleBlend=resources::TerrainDistanceBlend::Noise;
       layer.resampleNoise.enabled=true;layer.resampleNoise.map=layer.maps[0];
     }
-    if(scenario=="cluster" || scenario=="variant" || scenario=="variant-maps" || scenario=="cluster-source" || scenario=="variant-picker") {
+    if(scenario=="cluster" || scenario=="variant" || scenario=="variant-maps" || scenario=="cluster-source" || scenario=="variant-picker" || scenario=="variant-normal-source") {
       for(const auto &material:catalog->materials)if(material.layer.cluster.enabled) {
         state.terrainDraft.surface.layers[0]=material.layer;break;
       }
@@ -121,6 +123,37 @@ int main(int argc, char **argv) {
         scenario=="global"?159:scenario=="global-tint"?160:scenario=="global-normal"?161:scenario=="global-saom"?162:scenario=="global-emission"?163:
         scenario=="global-saom-maps"?172:scenario=="global-normal-map"?171:180;
     }
+    if(scenario.starts_with("snow-")) {
+      if(scenario!="snow-off" && scenario!="snow-simple" && scenario!="snow-rich" && scenario!="snow-plane" && scenario!="snow-sources" && scenario!="snow-source-empty" && scenario!="snow-normal-map" && scenario!="snow-normal-rgb-map" && scenario!="snow-normal-rg-map" && scenario!="snow-mask" && scenario!="snow-noise" && scenario!="snow-distance" && scenario!="snow-lighting" && scenario!="snow-sss" && scenario!="snow-rim" && scenario!="snow-sparkle" && scenario!="snow-layer" && scenario!="snow-mapping" && scenario!="snow-height" && scenario!="snow-source" && scenario!="snow-normal-noise-source")return 2;
+      auto &snow=state.terrainDraft.surface.snow;state.terrainDraft.height=0;
+      if(scenario!="snow-off" && scenario!="snow-source-empty") {
+        resources::AssetGuid diffuse,normal,noise,sparkle;
+        resources::AssetGuid::parse("b822881b9ef3441f29c88bb6e0ef60cd",diffuse);resources::AssetGuid::parse("cc22f06eaf78d43f782ee617776c1640",normal);
+        resources::AssetGuid::parse("3364d9aca19e4401dbdb0a9bcfcd70bc",noise);resources::AssetGuid::parse("fb84fc5f3e7e14ae7be5bd45efc3d3c4",sparkle);
+        for(u32 role=0;role<5;++role)editor::terrainSnowMap(snow,role).texture=role<2?diffuse:normal;
+        snow.normalNoiseMap.texture=noise;snow.sparkleNoiseMap.texture=sparkle;snow.mask.texture=sparkle;
+        snow.mode=scenario=="snow-simple"?resources::TerrainSnowMode::Simple:resources::TerrainSnowMode::Rich;
+        snow.normalNoiseEnabled=snow.distanceResampleEnabled=snow.maskEnabled=snow.sssEnabled=snow.rimEnabled=snow.sparkleEnabled=snow.perLayerEnabled=true;
+      }
+      if(scenario=="snow-normal-rgb-map" || scenario=="snow-normal-rg-map"){snow.normal=state.terrainDraft.surface.layers[0].maps[1];snow.normal.channel=scenario=="snow-normal-rgb-map"?resources::TerrainSurfaceChannel::NormalRGB:resources::TerrainSurfaceChannel::NormalRG;}
+      if(scenario=="snow-plane"){snow.heightAngleRange[0]=state.terrainDraft.base-1;snow.heightAngleRange[1]=state.terrainDraft.base+1;}
+      state.terrainMaterialView=(scenario=="snow-sources" || scenario=="snow-source-empty")?201:(scenario=="snow-normal-map" || scenario=="snow-normal-rgb-map" || scenario=="snow-normal-rg-map")?212:scenario=="snow-mask"?216:scenario=="snow-noise"?207:scenario=="snow-distance"?208:scenario=="snow-lighting"?203:scenario=="snow-sss"?245:scenario=="snow-rim"?246:scenario=="snow-sparkle"?209:scenario=="snow-layer"?204:scenario=="snow-mapping"?205:scenario=="snow-height"?206:scenario=="snow-source"?222:200;
+    }
+    if(scenario=="pbr-normal-source"){state.terrainMaterialView=190;state.terrainMapRole=1;}
+    if(scenario=="geo-normal-source")state.terrainMaterialView=151;
+    if(scenario=="global-normal-source")state.terrainMaterialView=181;
+    if(scenario=="normal-noise-source")state.terrainMaterialView=20;
+    if(scenario=="anti-normal-source")state.terrainMaterialView=39;
+    if(scenario=="variant-normal-source"){state.terrainMaterialView=90;state.terrainMapRole=1;}
+    if(scenario=="snow-normal-noise-source")state.terrainMaterialView=225;
+    if(scenario=="quality"){state.terrainMaterialView=240;state.terrainDraft.surface.textureResidency={resources::TerrainTextureResidencyMode::Cap,1024};}
+    if(scenario=="map-source")state.terrainMaterialView=190;
+    if(scenario=="catalog-search")state.terrainCatalogQuery=catalog->materials.back().id;
+    if(scenario=="catalog-empty")state.terrainCatalogQuery="sem_resultado_903714";
+    if(scenario=="noise-search" || scenario=="global-search")state.terrainCatalogQuery=catalog->textures.back().identity.text();
+    // Preview fixtures construct the state directly. Mirror a fresh picker
+    // entry, while routed tests separately verify saved-context overrides.
+    if(editor::terrainCatalogSearchView(state.terrainMaterialView))state.terrainCatalogRoleFilter=editor::terrainCatalogDefaultRole(state.terrainMaterialView,state.terrainMapRole);
     state.terrainMessage = "Materiais originais · confira a prévia e aplique";
   }
 
@@ -180,6 +213,41 @@ int main(int argc, char **argv) {
     if (scenario == "maps" && !reachable.contains(base + 96))
       return 4;
   }
+  if(scenario=="catalog-search" || scenario=="catalog-empty" || scenario=="map-source" || scenario=="noise-search" || scenario=="global-search") {
+    for(u32 action:{0u,2u,3u})if(!reachable.contains(editor::widgetId(editor::terrainCatalogAction(action)))) {
+      std::fprintf(stderr,"search action %u unreachable in %s\n",action,std::string(scenario).c_str());return 4;
+    }
+    if(scenario=="catalog-empty" && reachable.contains(editor::widgetId(editor::EditorWidget::TerrainCatalogItemBase)))return 4;
+  }
+  if(scenario=="pbr-normal-source" || scenario=="geo-normal-source" || scenario=="global-normal-source" || scenario=="normal-noise-source" || scenario=="variant-normal-source" || scenario=="anti-normal-source" || scenario=="snow-normal-noise-source" || scenario=="snow-source") {
+    if(state.terrainCatalogRoleFilter!=2)return 4;
+    const u32 sourceAction=scenario=="pbr-normal-source"?editor::widgetId(editor::terrainCatalogAction(8)):
+      (scenario=="geo-normal-source" || scenario=="global-normal-source")?editor::widgetId(editor::terrainModuleAction(32)):
+      scenario=="variant-normal-source"?editor::widgetId(editor::terrainClusterAction(32)):
+      (scenario=="snow-source" || scenario=="snow-normal-noise-source")?editor::widgetId(editor::terrainSnowAction(80)):editor::widgetId(editor::terrainNoiseAction(16));
+    if(!reachable.contains(sourceAction)){std::fprintf(stderr,"normal picker first source unreachable in %s\n",std::string(scenario).c_str());return 4;}
+  }
+  const auto requireSnowField=[&](u32 field){const auto id=editor::terrainSnowNumberBase+field-256;if(!reachable.contains(id)){std::fprintf(stderr,"Snow field %u unreachable in %s\n",field,std::string(scenario).c_str());return false;}return true;};
+  if(scenario=="snow-off" || scenario=="snow-simple" || scenario=="snow-rich" || scenario=="snow-plane")for(u32 field:{256u,257u,258u,259u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-height")for(u32 field:{260u,261u,262u,265u,266u,267u,268u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-mapping")for(u32 field:{263u,264u,279u,280u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-noise")for(u32 field:{273u,274u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-distance")for(u32 field:{275u,276u,277u,278u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-layer")for(u32 field:{281u,282u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-sss")for(u32 field:{283u,284u,285u,286u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-rim")for(u32 field:{287u,288u,289u,290u})if(!requireSnowField(field))return 4;
+  if(scenario=="snow-sparkle")for(u32 field=291;field<=300;++field)if(!requireSnowField(field))return 4;
+  if(scenario=="snow-normal-map" || scenario=="snow-mask"){
+    for(u32 field:{304u,307u,308u,311u,312u,315u,316u})if(!requireSnowField(field))return 4;
+    for(u32 field:{305u,306u,309u,310u,313u,314u,317u,318u})if(reachable.contains(editor::terrainSnowNumberBase+field-256))return 4;
+  }
+  if(scenario=="snow-normal-rgb-map" || scenario=="snow-normal-rg-map"){
+    for(u32 field:{304u,307u,308u,311u,312u,315u,316u})if(!requireSnowField(field))return 4;
+    if(!reachable.contains(editor::widgetId(editor::terrainSnowAction(52))))return 4;
+    for(u32 field:{309u,313u,317u})if(scenario=="snow-normal-rgb-map"?!requireSnowField(field):reachable.contains(editor::terrainSnowNumberBase+field-256))return 4;
+  }
+  if(scenario=="snow-source" && !reachable.contains(editor::widgetId(editor::terrainSnowAction(80))))return 4;
+  if(scenario=="quality")for(u32 action:{101u,106u,107u,108u,109u,110u})if(!reachable.contains(editor::widgetId(editor::terrainSnowAction(action))))return 4;
   const auto requireField=[&](u32 field){
     const auto id=editor::widgetId(editor::EditorWidget::TerrainNumberBase)+field;
     if(!reachable.contains(id)){std::fprintf(stderr,"unreachable field %u in %s\n",field,std::string(scenario).c_str());return false;}return true;

@@ -3,6 +3,7 @@
 #include "resources/terrain_png_integrity.h"
 #include "resources/image_decode.h"
 #include "resources/shared_decoded_texture.h"
+#include "resources/terrain_normal_mips.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -21,9 +22,6 @@ bool importTerrainSurface(const TerrainSurfaceAsset &surface,std::span<const Ter
   std::vector<renderer::SharedAuthoringTexture> textures;renderer::TerrainSurfaceBinding next;next.surface=surface;next.localMetersPerUv=meters;next.terrainDomain=domain;
   u64 used=0;
   for(const auto &ref:terrainSurfaceTextureRefs(surface)) {
-    for(const auto &prior:next.textures)if(prior.identity==ref.identity && prior.linear==ref.linear && prior.normal==ref.normal) {
-      error="One normal image cannot use incompatible RGB and RG packing in one surface.";return false;
-    }
     const auto found=sources.find(ref.identity);
     if(found==sources.end() || !validTerrainPng(found->second->bytes())) {
       error="Terrain surface requires original PNG for every texture reference.";return false;
@@ -41,11 +39,13 @@ bool importTerrainSurface(const TerrainSurfaceAsset &surface,std::span<const Ter
       decoded.rgba[i+2]=u8(std::lround((std::sqrt(std::max(0.f,1-x*x-y*y))*.5f+.5f)*255));
     }
     renderer::AuthoringTexture made;made.width=width;made.height=height;made.srgb=!ref.linear;
-    made.samplerFlags=renderer::encodeGltfTextureSampler()|renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV;
-    const bool built=ref.normal?buildNormalMipChain(decoded,made.mipChain,made.levels):buildMipChain(decoded,made.srgb,made.mipChain,made.levels);
+    made.samplerFlags=renderer::encodeGltfTextureSampler()|(ref.clampSampling?0u:renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV);
+    const bool built=ref.normalChannel==7?buildTerrainGaNormalMipChain(decoded,made.mipChain,made.levels):ref.normal?buildNormalMipChain(decoded,made.mipChain,made.levels):buildMipChain(decoded,made.srgb,made.mipChain,made.levels);
     if(!built){error="Terrain surface mip generation failed.";return false;}
     if(ref.normalRG)std::copy(original.begin(),original.end(),made.mipChain.begin());
-    used+=made.mipChain.size();next.textures.push_back({ref.identity,ref.linear,ref.normal,u32(textures.size())});
+    TerrainTextureResidency choice{ref.residencyCap?TerrainTextureResidencyMode::Cap:TerrainTextureResidencyMode::Original,ref.residencyCap};
+    if(!terrainTextureFirstAllowedMip(width,height,made.levels,choice,{},made.minimumResidentMip)){error="Invalid resolved terrain texture ceiling.";return false;}
+    used+=made.mipChain.size();next.textures.push_back({ref.identity,ref.linear,ref.normal,u32(textures.size()),ref.normalChannel,ref.residencyCap,ref.clampSampling});
     textures.push_back(shareDecodedTexture(std::move(made)));
   }
   out=std::move(textures);binding=std::move(next);error.clear();return true;

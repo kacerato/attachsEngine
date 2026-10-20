@@ -42,6 +42,7 @@ bool compressTexture(const renderer::AuthoringTexture &rgba, TextureCompression 
   made.width = rgba.width;
   made.height = rgba.height;
   made.levels = rgba.levels;
+  made.minimumResidentMip = rgba.minimumResidentMip;
   made.srgb = rgba.srgb;
   made.samplerFlags = rgba.samplerFlags;
   made.format = authoringFormatFor(compression);
@@ -91,6 +92,7 @@ bool previewTexture(const renderer::AuthoringTexture &texture, u32 maximumDimens
   }
   renderer::AuthoringTexture made;
   made.width = width;made.height = height;made.levels = texture.levels - first;
+  made.minimumResidentMip=texture.minimumResidentMip>first?texture.minimumResidentMip-first:0;
   made.srgb = texture.srgb;made.samplerFlags = texture.samplerFlags;made.format = renderer::AuthoringTextureRgba8;
   if (texture.format == renderer::AuthoringTextureRgba8) {
     made.mipChain.assign(levels.begin(), levels.end());

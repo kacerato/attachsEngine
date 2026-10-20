@@ -35,11 +35,15 @@ bool validTerrainSurfaces(const GltfImport &model) {
     if(!binding.surface.layers.empty() && !(model.materials[m].flags&renderer::MapMaterialTerrain))return false;
     for(usize i=0;i<refs.size();++i) {
       const auto &ref=refs[i];const auto &entry=binding.textures[i];
-      if(entry.identity!=ref.identity || entry.linear!=ref.linear || entry.normal!=ref.normal || entry.textureIndex>=model.textures.size())return false;
+      if(entry.identity!=ref.identity || entry.linear!=ref.linear || entry.normal!=ref.normal || entry.normalChannel!=ref.normalChannel || entry.residencyCap!=ref.residencyCap || entry.clampSampling!=ref.clampSampling || entry.textureIndex>=model.textures.size())return false;
       const auto &texture=model.textures[entry.textureIndex];
       if(!texture || !texture->valid() || texture->format!=renderer::AuthoringTextureRgba8 || texture->srgb==entry.linear)return false;
       u32 levels=1;for(u32 w=texture->width,h=texture->height;w>1||h>1;w=std::max(1u,w/2),h=std::max(1u,h/2))++levels;
       if(texture->levels!=levels)return false;
+      const u32 wrap=texture->samplerFlags&(renderer::AuthoringTextureRepeatU|renderer::AuthoringTextureRepeatV|renderer::AuthoringTextureMirrorU|renderer::AuthoringTextureMirrorV);
+      if(entry.clampSampling&&wrap)return false;
+      u32 minimum=0;TerrainTextureResidency policy{ref.residencyCap?TerrainTextureResidencyMode::Cap:TerrainTextureResidencyMode::Original,ref.residencyCap};
+      if(!terrainTextureFirstAllowedMip(texture->width,texture->height,levels,policy,{},minimum)||texture->minimumResidentMip!=minimum)return false;
       if(std::none_of(model.terrainSurfaceImages.begin(),model.terrainSurfaceImages.end(),[&](const auto &image){return image.identity==entry.identity;}))return false;
     }
   }
@@ -368,12 +372,13 @@ bool writeImportCache(const GltfImport &model, std::string_view key, std::vector
   }
   // Terminador: um arquivo cortado no meio da escrita nunca passa por inteiro.
   if(!model.terrainSurfaces.empty()) {
-    writer.raw(kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic);writer.u32v(2);writer.u32v(u32(model.terrainSurfaces.size()));
+    writer.raw(kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic);writer.u32v(3);writer.u32v(u32(model.terrainSurfaces.size()));
     for(const auto &binding:model.terrainSurfaces) {
       std::string text,error;if(!binding.surface.layers.empty() && !serializeTerrainSurface(binding.surface,text,error))return false;
       writer.text(text);writer.raw(&binding.localMetersPerUv,sizeof(float));writer.raw(binding.terrainDomain.data(),sizeof(float)*4);writer.u32v(u32(binding.textures.size()));
       for(const auto &entry:binding.textures) {
         writer.raw(&entry.identity,sizeof entry.identity);writer.u32v(entry.linear);writer.u32v(entry.normal);writer.u32v(entry.textureIndex);
+        writer.u32v(entry.normalChannel);writer.u32v(entry.residencyCap);writer.u32v(entry.clampSampling);
       }
     }
     writer.u32v(u32(model.terrainSurfaceImages.size()));
@@ -596,7 +601,7 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
   if(reader.ok && bytes.size()-reader.at>=sizeof kTerrainSurfaceMagic &&
       std::memcmp(bytes.data()+reader.at,kTerrainSurfaceMagic,sizeof kTerrainSurfaceMagic)==0) {
     reader.at+=sizeof kTerrainSurfaceMagic;
-    const u32 surfaceVersion=reader.u32v();if(surfaceVersion!=1 && surfaceVersion!=2)return refuse();const u32 count=reader.u32v();
+    const u32 surfaceVersion=reader.u32v();if(surfaceVersion<1 || surfaceVersion>3)return refuse();const u32 count=reader.u32v();
     if(!reader.ok || count!=model.materials.size() || count>(bytes.size()-reader.at)/12)return refuse();
     model.terrainSurfaces.resize(count);
     for(auto &binding:model.terrainSurfaces) {
@@ -610,6 +615,16 @@ bool readImportCache(std::span<const u8> bytes, std::string_view key, GltfImport
       for(auto &entry:binding.textures) {
         reader.raw(&entry.identity,sizeof entry.identity);const u32 linear=reader.u32v(),normal=reader.u32v();
         if(linear>1 || normal>1)return refuse();entry.linear=linear!=0;entry.normal=normal!=0;entry.textureIndex=reader.u32v();
+        if(surfaceVersion>=3){entry.normalChannel=reader.u32v();entry.residencyCap=reader.u32v();const u32 clamp=reader.u32v();if(clamp>1)return refuse();entry.clampSampling=clamp!=0;}
+      }
+      const auto expected=terrainSurfaceTextureRefs(binding.surface);
+      if(expected.size()!=binding.textures.size())return refuse();
+      for(usize i=0;i<expected.size();++i){auto &entry=binding.textures[i];if(surfaceVersion<3){entry.normalChannel=expected[i].normalChannel;entry.residencyCap=expected[i].residencyCap;}
+        if(entry.textureIndex>=model.textures.size()||!model.textures[entry.textureIndex])return refuse();
+        const auto &source=*model.textures[entry.textureIndex];u32 minimum=0;
+        TerrainTextureResidency policy{entry.residencyCap?TerrainTextureResidencyMode::Cap:TerrainTextureResidencyMode::Original,entry.residencyCap};
+        if(!terrainTextureFirstAllowedMip(source.width,source.height,source.levels,policy,{},minimum))return refuse();
+        if(source.minimumResidentMip!=minimum){auto copy=std::make_shared<renderer::AuthoringTexture>(source);copy->minimumResidentMip=minimum;model.textures[entry.textureIndex]=std::move(copy);}
       }
     }
     const u32 images=reader.u32v();

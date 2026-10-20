@@ -1,6 +1,7 @@
 #pragma once
 #include "resources/asset_registry.h"
 #include "resources/animation_curve.h"
+#include "resources/terrain_texture_policy.h"
 #include <array>
 #include <functional>
 
@@ -24,11 +25,12 @@ enum class TerrainSurfaceRole : u32 {
   Metallic,
   Emission
 };
-enum class TerrainSurfaceChannel : u32 { R, G, B, A, RGB, NormalRGB, NormalRG };
+enum class TerrainSurfaceChannel : u32 { R, G, B, A, RGB, NormalRGB, NormalRG, NormalGA };
 enum class TerrainSurfaceQuality : u32 { Low, Medium, High };
 enum class TerrainProjection : u32 { UV, LocalTriplanar, WorldTriplanar };
 enum class TerrainDistanceBlend : u32 { Constant, Noise, Crossfade };
 struct TerrainSurfaceMap {
+  TerrainTextureResidency textureResidency; // serialized in v3 extension, never the legacy visitor
   AssetGuid texture;
   TerrainSurfaceChannel channel = TerrainSurfaceChannel::R;
   bool linear = true, invert = false;
@@ -110,6 +112,38 @@ inline std::array<TerrainGlobalMap,4> neutralTerrainGlobalMaps(){
   std::array<TerrainGlobalMap,4> maps;
   maps[0].map=maps[3].map=neutralTerrainSurfaceMaps()[0];maps[1].map=neutralTerrainSurfaceMaps()[1];return maps;
 }
+// M11/M12 proposed complete contract. Staging only until all consumers exist.
+enum class TerrainSnowMode : u32 { Off, Simple, Rich };
+struct TerrainSnowSettings {
+  TerrainSnowMode mode=TerrainSnowMode::Off;
+  TerrainSurfaceMap diffuse=neutralTerrainSurfaceMaps()[0];
+  TerrainSurfaceMap height=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::A;return m;}();
+  TerrainSurfaceMap normal=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::NormalGA;return m;}();
+  TerrainSurfaceMap smoothness;
+  TerrainSurfaceMap ao=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::B;return m;}();
+  TerrainSurfaceMap normalNoiseMap=neutralTerrainSurfaceMaps()[1],mask=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}(),
+    sparkleNoiseMap=[](){TerrainSurfaceMap m;m.channel=TerrainSurfaceChannel::RGB;return m;}();
+  std::array<float,4> upVector{0,1,0,0},tint{1,1,1,1},uvScales{50,50,0,0};
+  float amount=.5f;
+  // Source height Y and distance W are lengths; these saved values are ends.
+  std::array<float,4> heightAngleRange{50,140,0,1},parameters{0,0,.3f,.1f};
+  std::array<float,4> normalNoiseParams{.1f,.5f,0,0},distanceResample{.1f,.5f,50,150};
+  float stochasticScale=1,stochasticContrast=.3f;
+  bool normalNoiseEnabled=false,distanceResampleEnabled=false,perLayerEnabled=false,maskEnabled=false,
+    worldSpaceUV=false,stochasticEnabled=false,triplanarEnabled=false,useGlobalLevel=false,useGlobalHeight=false;
+  bool sssEnabled=false,rimEnabled=false,sparkleEnabled=false;
+  std::array<float,4> sssTint{1,1,1,.5f},rimColor{.5f,.5f,1,1},sparkleTint{1,1,1,1};
+  float rimPower=8,sparkleEmission=.25f,sparkleStrength=1,sparkleSize=3,sparkleDensity=5,
+    sparkleNoiseDensity=1,sparkleNoiseAmplitude=10,sparkleViewDependency=.3f;
+  // Complete source provenance, including reserved vector components and
+  // adjacent tracks/tessellation properties with no supported consumer yet.
+  std::string sourcePropertiesJson,sourceKeywordsJson;
+};
+struct TerrainSnowControllerState {
+  bool available=false;
+  float level=.5f,heightStart=50,heightEnd=140;
+  std::array<float,2> sourceAngleZW{0,1}; // preserved; shader angles remain local
+};
 struct TerrainSurfaceLayer {
   AssetGuid identity;
   std::string name;
@@ -147,6 +181,7 @@ struct TerrainSurfaceLayer {
   bool geoHeightFilterEnabled=false;
   float geoHeightThreshold=1,geoHeightStrength=1;
   std::array<float,4> globalMapParticipation{1,1,1,1};
+  float snowParticipation=1,snowPorosity=.4f;
 };
 struct TerrainSurfaceAsset {
   // Vector order is authoring/control-map order, including inactive layers.
@@ -154,6 +189,8 @@ struct TerrainSurfaceAsset {
   TerrainSurfaceNoise detailNoise, distanceNoise;
   std::array<TerrainSurfaceNoise, 3> normalNoise;
   TerrainAntiTileArray antiTileArray;
+  TerrainTextureResidency textureResidency{TerrainTextureResidencyMode::Original,0};
+  TerrainSnowSettings snow;
   TerrainGeoSettings geo;
   std::array<TerrainGlobalMap,4> globalMaps=neutralTerrainGlobalMaps();
 };

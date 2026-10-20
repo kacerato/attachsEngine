@@ -60,7 +60,8 @@ void TextureLevelReader::run() {
     }
     std::vector<u8> scratch;
     std::span<const u8> levels;
-    const bool read = readAuthoringTextureLevels(*job.texture, job.from, scratch, levels);
+    const bool read = job.from >= job.texture->minimumResidentMip &&
+                      readAuthoringTextureLevels(*job.texture, job.from, scratch, levels);
     std::vector<u8> bytes;
     if (read && levels.data() == scratch.data() && levels.size() == scratch.size()) bytes = std::move(scratch);
     else if (read) bytes.assign(levels.begin(), levels.end());

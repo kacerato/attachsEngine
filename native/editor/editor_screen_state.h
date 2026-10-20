@@ -1157,6 +1157,20 @@ struct EditorScreenState final {
   resources::TerrainRecipe terrainDraft;
   std::shared_ptr<const resources::TerrainSurfaceCatalog> terrainCatalog;
   u32 terrainMaterialView=0,terrainCatalogPage=0,terrainMapRole=0;
+  std::string terrainCatalogQuery,terrainCatalogPackageFilter;
+  u32 terrainCatalogRoleFilter=0; // 0 all; 1..7 authored PBR roles.
+  bool editingTerrainCatalogSearch=false;
+  struct TerrainCatalogSearchContext {u32 view=0,key=0,page=0,role=0;std::string query,package;};
+  std::vector<TerrainCatalogSearchContext> terrainCatalogSearchContexts;
+
+  mutable std::array<std::string,6> terrainCatalogVisibleIds{};
+  mutable u32 terrainCatalogVisibleView=~0u,terrainCatalogVisiblePage=0;
+  mutable std::string terrainCatalogVisibleSignature;
+  mutable std::shared_ptr<const resources::TerrainSurfaceCatalog> terrainCatalogFilterSource;
+  mutable std::string terrainCatalogFilterSignature;
+  mutable std::vector<u32> terrainCatalogMaterialIndices,terrainCatalogTextureIndices;
+
+
   resources::TerrainStroke terrainBrush=[] {
     resources::TerrainStroke brush;
     brush.radius=8;

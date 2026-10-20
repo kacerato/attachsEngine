@@ -4922,13 +4922,14 @@ void InstancedRenderer::updateTextureStreaming(const platform::FreeCameraState &
     auto &entry=streamingTextures_[t];
     const auto &source=sources[t];
     entry={};
-    if(source) {entry.width=source->width;entry.height=source->height;entry.levels=source->levels;entry.format=source->format;}
+    if(source) {entry.width=source->width;entry.height=source->height;entry.levels=source->levels;entry.format=source->format;entry.minimumResidentMip=source->minimumResidentMip;}
     // Cadeia gerada na publicação (perfil sem mip) tem um nível só na GPU.
     entry.streamable=!residency[t].generated && entry.levels>1;
     if(streamingParameters_.size()==count) {
       entry.streamable=entry.streamable && streamingParameters_[t].streamable;
       entry.priority=streamingParameters_[t].priority;
       entry.requestedMip=streamingParameters_[t].requestedMip;
+      entry.minimumResidentMip=std::max(entry.minimumResidentMip,streamingParameters_[t].minimumResidentMip);
     }
     if(residency[t].generated) entry.levels=1;
     streamingLoaded_[t]=residency[t].generated?0u:residency[t].baseMip;

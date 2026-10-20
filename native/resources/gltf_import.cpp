@@ -1066,7 +1066,7 @@ struct Importer {
               if(!std::isfinite(binding.terrainDomain[d]))return fail("Invalid terrain surface domain.");
             }
             if(binding.terrainDomain[2]<=0 || binding.terrainDomain[3]<=0)return fail("Invalid terrain surface extent.");
-          } else if(serialized.starts_with("AETERRAINSURFACE2")) {
+          } else if(serialized.starts_with("AETERRAINSURFACE2")||serialized.starts_with("AETERRAINSURFACE3")) {
             return fail("Terrain surface v2 requires its full domain.");
           }
           const auto *images=array(*extras,"surfaceImages");

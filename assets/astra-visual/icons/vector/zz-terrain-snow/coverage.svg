@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Snow coverage</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="48,10 48,86"/>
+    <polyline points="15,29 81,67"/>
+    <polyline points="15,67 81,29"/>
+    <polyline points="36,18 48,30 60,18"/>
+    <polyline points="36,78 48,66 60,78"/>
+    <polyline points="17,43 32,39 28,24"/>
+    <polyline points="68,72 64,57 79,53"/>
+    <polyline points="17,53 32,57 28,72"/>
+    <polyline points="68,24 64,39 79,43"/>
+  </g>
+</svg>

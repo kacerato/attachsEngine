@@ -57,7 +57,7 @@ bool terrainModuleNumberAvailable(const State &s,u32 field) {
     const bool normal=terrainModuleNormal(view);
     const bool alpha=field==228 || field==232 || field==236;
     if((normal || view==173) && alpha) return false;
-    if(normal && terrainModuleMap(s.terrainDraft.surface,view,s.terrainMapRole).channel==resources::TerrainSurfaceChannel::NormalRG &&
+    if(normal && terrainPackedNormal(terrainModuleMap(s.terrainDraft.surface,view,s.terrainMapRole).channel) &&
       (field==227 || field==231 || field==235)) return false;
     return true;
   }

@@ -148,7 +148,7 @@ mediump float localShadowVisibility(highp vec4 shadow,highp vec3 position,medium
 
 mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
                               mediump vec3 base,mediump vec3 f0,mediump float f90,
-                              mediump float metal,mediump float rough) {
+                              mediump float metal,mediump float rough,mediump vec3 transmission) {
   int count=int(environment.punctualLightParameters.x+0.5);
   mediump vec3 sum=vec3(0.0);
   for(int i=0;i<PUNCTUAL_LIGHT_LIMIT;++i) {
@@ -181,7 +181,8 @@ mediump vec3 punctualLighting(highp vec3 position,mediump vec3 n,mediump vec3 v,
     mediump float visible=UNSHADOWED_POINT_LIGHTING!=0u?1.0:
         localShadowVisibility(shadow,position,n,-toLight);
     mediump vec3 radiance=colorIntensity.rgb*(window*cone*visible/safeSquared);
-    sum+=directLight(n,v,l,radiance,base,f0,f90,metal,rough);
+    sum+=directLight(n,v,l,radiance,base*(vec3(1)-clamp(transmission,vec3(0),vec3(1))),f0,f90,metal,rough);
+    sum+=radiance*transmission*max(dot(-n,l),0.0)*0.31830988618;
   }
   return sum;
 }
@@ -381,15 +382,20 @@ void main() {
   mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
   mediump float f90=mix(dielectricSpecular,1.0,metal);
   mediump vec3 sunRadiance=environment.sunColorAngularRadius.rgb*environment.sunDirectionIntensity.w;
+  mediump vec3 terrainTransmission=vec3(0);
+#if defined(TERRAIN_SURFACE_PBR) && defined(TERRAIN_SURFACE_MAP)
+  if(terrainPbr.valid)terrainTransmission=terrainPbr.transmission;
+#endif
   highp float viewDepth=max(dot(environment.worldToViewRow2.xyz,vPosition-eye),0.0);
   // A luz direta é exatamente zero no hemisfério oposto. Consultar 1/9/25
   // texels de sombra nesse caso só gasta banda; o branch remove trabalho sem
   // mudar um único valor final.
-  mediump float sunVisibility=isolation!=5u && dot(n,environment.sunDirectionIntensity.xyz)>0.0?
+  mediump float sunVisibility=isolation!=5u && (dot(n,environment.sunDirectionIntensity.xyz)>0.0||dot(terrainTransmission,terrainTransmission)>0.0)?
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
-                         base.rgb,f0,f90,metal,rough)*sunVisibility;
-  if(isolation!=4u) color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
+                         base.rgb*(vec3(1)-clamp(terrainTransmission,vec3(0),vec3(1))),f0,f90,metal,rough)*sunVisibility;
+  color+=sunRadiance*terrainTransmission*max(dot(-n,environment.sunDirectionIntensity.xyz),0.0)*sunVisibility*0.31830988618;
+  if(isolation!=4u) color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough,terrainTransmission);
   mediump float nv=max(dot(n,v),0.0);
   mediump vec3 diffuseIrradiance=environmentAmbientDiffuse(n)*occlusion;
 #ifdef OCCLUSION_MAP
@@ -401,7 +407,8 @@ void main() {
     diffuseIrradiance=max(texture(OCCLUSION_MAP(uint(lm.y+0.5)),vUv1*uv.xy+uv.zw).rgb,vec3(0))*lm.z*0.31830988618;
   }
 #endif
-  color+=(1-metal)*base.rgb*diffuseIrradiance;
+  color+=(1-metal)*base.rgb*(vec3(1)-clamp(terrainTransmission,vec3(0),vec3(1)))*diffuseIrradiance;
+  color+=environmentAmbientDiffuse(-n)*terrainTransmission*occlusion;
   // Rough dielectrics carry almost no readable high-frequency reflection.
   // Skip that fetch coherently per material while retaining HDR reflections
   // on wet, polished and metallic surfaces.

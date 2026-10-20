@@ -4,6 +4,7 @@ This is a compile check, not an APK build or device/runtime validation.
 Usage: python tools/check-terrain-android-sources.py <compile_commands.json>
 """
 import json
+import argparse
 import os
 import shlex
 import subprocess
@@ -33,9 +34,20 @@ targets = {
     'terrain_surface_asset.cpp', 'terrain_surface_catalog.cpp',
     'terrain_surface_import.cpp', 'editor_model_publication.cpp',
     'gltf_import.cpp', 'import_cache.cpp', 'editor_session.cpp', 'android_main.cpp',
-    'animation_curve.cpp',
+    'animation_curve.cpp', 'texture_streaming.cpp', 'texture_level_reader.cpp',
+    'texture_budget.cpp', 'texture_compression.cpp',
 }
-commands = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('database', type=Path)
+parser.add_argument('--only', nargs='+', help='Recheck an explicit subset after the complete baseline check')
+options = parser.parse_args()
+if options.only:
+    requested = set(options.only)
+    unknown = requested - targets
+    if unknown:
+        raise SystemExit(f'Unknown terrain translation units: {sorted(unknown)}')
+    targets = requested
+commands = json.loads(options.database.read_text(encoding='utf-8'))
 root = Path(__file__).resolve().parents[1]
 terrain = next(entry for entry in commands if Path(entry['file']).name == 'terrain_asset.cpp')
 if Path(terrain['file']).resolve() != root / 'native/resources/terrain_asset.cpp':

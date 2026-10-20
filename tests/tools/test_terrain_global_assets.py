@@ -17,9 +17,9 @@ class TerrainGlobalAssets(unittest.TestCase):
         from PIL import Image
         library = ROOT / "assets/terrain/library"
         current = json.loads((library / "catalog.json").read_text(encoding="utf-8"))
-        pair = current["textures"][-2:]
+        pair = [next(t for t in current["textures"] if t["guid"] == guid) for guid in ("863f19b183b2443859f959a96f7dce32", "192aaea3237044f608d663c9884e0c70")]
         self.assertEqual([t["guid"] for t in pair], ["863f19b183b2443859f959a96f7dce32", "192aaea3237044f608d663c9884e0c70"])
-        initial = dict(current, textures=current["textures"][:-2])
+        initial = dict(current, textures=current["textures"][:146])
         self.assertEqual(len(initial["textures"]), 146)
         self.assertEqual(len(initial["materials"]), 82)
         with tempfile.TemporaryDirectory() as folder:
@@ -38,7 +38,7 @@ class TerrainGlobalAssets(unittest.TestCase):
             command = [sys.executable, str(ROOT / "tools/prepare-terrain-global-textures.py"), "--package", str(package), "--output", str(output)]
             subprocess.run(command, check=True, capture_output=True)
             after = json.loads((output / "catalog.json").read_text(encoding="utf-8"))
-            self.assertEqual(after, current)
+            self.assertEqual(after, dict(current, textures=current["textures"][:146] + pair))
             before = {p.relative_to(output): (p.read_bytes(), p.stat().st_mtime_ns) for p in output.rglob("*") if p.is_file()}
             subprocess.run(command, check=True, capture_output=True)
             self.assertEqual(before, {p.relative_to(output): (p.read_bytes(), p.stat().st_mtime_ns) for p in output.rglob("*") if p.is_file()})
@@ -52,12 +52,12 @@ class TerrainGlobalAssets(unittest.TestCase):
     def test_second_original_conflict_does_not_publish_first_pair_member(self):
         library = ROOT / "assets/terrain/library"
         current = json.loads((library / "catalog.json").read_text(encoding="utf-8"))
-        pair = current["textures"][-2:]
+        pair = [next(t for t in current["textures"] if t["guid"] == guid) for guid in ("863f19b183b2443859f959a96f7dce32", "192aaea3237044f608d663c9884e0c70")]
         with tempfile.TemporaryDirectory() as folder:
             folder = Path(folder)
             package, output = folder / "package", folder / "library"
             output.mkdir()
-            (output / "catalog.json").write_text(json.dumps(dict(current, textures=current["textures"][:-2])), encoding="utf-8")
+            (output / "catalog.json").write_text(json.dumps(dict(current, textures=current["textures"][:146])), encoding="utf-8")
             entries = []
             for texture in pair:
                 raw = (library / texture["source"]).read_bytes()
@@ -88,7 +88,7 @@ class TerrainGlobalAssets(unittest.TestCase):
         self.assertEqual([ids[k] for k in ("BrandWordmark", "BrandMark", "ZzTerrainModuleGlobalMaps", "ZzTerrainModuleStrata")], [478, 479, 480, 481])
         binary = (ROOT / "assets/astra-visual/ui/astra-ui-icons.aeui").read_bytes()
         magic, version, width, height, count = struct.unpack_from("<5I", binary)
-        self.assertEqual((magic, version, count), (0x49554541, 1, 481))
+        self.assertEqual((magic, version, count), (0x49554541, 1, len(catalog) + 2))
         self.assertEqual(len(binary), 20 + count * 8 + width * height * 4)
         for physical, name in enumerate(sorted(catalog)):
             rect = struct.unpack_from("<4H", binary, 20 + (named[name] - 1) * 8)
@@ -100,7 +100,28 @@ class TerrainGlobalAssets(unittest.TestCase):
             self.assertGreater(h, 0)
             self.assertLessEqual(x + w, width)
             self.assertLessEqual(y + h, height)
-        self.assertEqual({name for name, meta in catalog.items() if meta.get("append_after_brand")}, {"zz-terrain-module/global-maps", "zz-terrain-module/strata"})
+        texture_count = len(json.loads((ROOT / "assets/terrain/library/catalog.json").read_text(encoding="utf-8"))["textures"])
+        expected_appended = {"zz-terrain-module/global-maps", "zz-terrain-module/strata", "zz-terrain-snow/coverage", "zz-terrain-snow/lighting", "zz-terrain-snow/residency"}
+        expected_appended.update(f"zzz-terrain-texture/texture-{i:03}" for i in range(texture_count))
+        self.assertEqual({name for name, meta in catalog.items() if meta.get("append_after_brand")}, expected_appended)
+
+
+    def test_real_texture_previews_map_every_catalog_identity_and_do_not_rewrite_outputs(self):
+        library = json.loads((ROOT / "assets/terrain/library/catalog.json").read_text(encoding="utf-8"))
+        icons = json.loads((ROOT / "assets/astra-visual/icons/named/catalog.json").read_text(encoding="utf-8"))["icons"]
+        header = (ROOT / "native/editor/terrain_texture_icons.h").read_text(encoding="utf-8")
+        for index, texture in enumerate(library["textures"]):
+            metadata = icons[f"zzz-terrain-texture/texture-{index:03}"]
+            self.assertEqual(metadata["source_catalog_id"], texture["id"])
+            self.assertIn(texture["id"], header)
+            raster = (ROOT / "assets/astra-visual/icons/named" / metadata["raster"]).resolve()
+            self.assertEqual(raster, (ROOT / "assets/terrain/library" / texture["thumbnail"]).resolve())
+            self.assertTrue(metadata["force_opaque"] and metadata["dark_ui_ready"])
+        outputs = [ROOT / name for name in ("assets/astra-visual/icons/named/catalog.json", "assets/astra-visual/ui/astra-ui-icons.aeui", "assets/astra-visual/ui/astra-ui-icons.png", "native/ui/ui_icon_id.h", "native/ui/ui_icon_id.cpp", "native/editor/terrain_texture_icons.h")]
+        snapshot = lambda: [(path.stat().st_mtime_ns, hashlib.sha256(path.read_bytes()).hexdigest()) for path in outputs]
+        before = snapshot()
+        subprocess.run([sys.executable, str(ROOT / "tools/generate-terrain-texture-thumbnails.py")], cwd=ROOT, check=True, capture_output=True)
+        self.assertEqual(snapshot(), before)
 
 
 if __name__ == "__main__":

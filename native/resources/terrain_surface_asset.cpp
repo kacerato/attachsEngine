@@ -1,5 +1,6 @@
 #include "resources/terrain_surface_asset.h"
 #include "resources/animation_curve_domain.h"
+#include "resources/terrain_surface_map_visitor.h"
 #include <algorithm>
 #include <cmath>
 #include <iomanip>
@@ -58,6 +59,16 @@ template <class A> void fields(A &a, TerrainGlobalMap &v){
   a(v.enabled,v.map,v.intensity,v.fadeStart,v.fadeEnd,v.nearStrength,v.farStrength,v.scaleX,v.scaleY,v.offsetX,v.offsetY,
     v.blend,v.normalBlend,v.smoothness,v.ao,v.metallic,v.mask);
 }
+template<class A> void fields(A &a,TerrainSnowSettings &v){
+  a(v.mode,v.diffuse,v.height,v.normal,v.smoothness,v.ao,v.normalNoiseMap,v.mask,v.sparkleNoiseMap,
+    v.upVector,v.tint,v.uvScales,v.amount,v.heightAngleRange,v.parameters,v.normalNoiseParams,v.distanceResample,
+    v.stochasticScale,v.stochasticContrast,v.normalNoiseEnabled,v.distanceResampleEnabled,v.perLayerEnabled,
+    v.maskEnabled,v.worldSpaceUV,v.stochasticEnabled,v.triplanarEnabled,v.useGlobalLevel,v.useGlobalHeight,
+    v.sssEnabled,v.rimEnabled,v.sparkleEnabled,v.sssTint,v.rimColor,v.sparkleTint,v.rimPower,
+    v.sparkleEmission,v.sparkleStrength,v.sparkleSize,v.sparkleDensity,v.sparkleNoiseDensity,
+    v.sparkleNoiseAmplitude,v.sparkleViewDependency,v.sourcePropertiesJson,v.sourceKeywordsJson);
+}
+template<class A> void fields(A &a,TerrainTextureResidency &v){a(v.mode,v.maxSide);}
 template <class A> void extensionLayer(A &a,TerrainSurfaceLayer &v){
   a(v.geoParticipation,v.geoHeightFilterEnabled,v.geoHeightThreshold,v.geoHeightStrength,v.globalMapParticipation);
 }
@@ -158,7 +169,7 @@ bool range(float v, float low, float high) {
 bool projection(TerrainProjection p) { return u32(p) <= 2; }
 bool quality(TerrainSurfaceQuality q) { return u32(q) <= 2; }
 bool map(const TerrainSurfaceMap &m) {
-  if (!(u32(m.channel) <= 6 && range(m.factor, 0, 64) &&
+  if (!(u32(m.channel) <= 7 && validTerrainTextureResidency(m.textureResidency) && range(m.factor, 0, 64) &&
         range(m.remapMin, -65536, 65536) && range(m.remapMax, -65536, 65536) &&
         m.remapMin <= m.remapMax))
     return false;
@@ -186,6 +197,9 @@ template <class F> void refs(const TerrainSurfaceAsset &a, F f) {
   visitNoise({}, a.distanceNoise, "global.distance");
   const auto visitMap=[&](const TerrainSurfaceMap &m,const std::string &location){if(m.texture.valid())f({},m.texture,location);};
   visitMap(a.geo.albedo,"geo.albedo");visitMap(a.geo.normal,"geo.normal");
+  visitMap(a.snow.diffuse,"snow.diffuse");visitMap(a.snow.height,"snow.height");visitMap(a.snow.normal,"snow.normal");
+  visitMap(a.snow.smoothness,"snow.smoothness");visitMap(a.snow.ao,"snow.ao");visitMap(a.snow.normalNoiseMap,"snow.normalNoise");
+  visitMap(a.snow.mask,"snow.mask");visitMap(a.snow.sparkleNoiseMap,"snow.sparkleNoise");
   for(usize i=0;i<a.globalMaps.size();++i){
     const auto &g=a.globalMaps[i];const auto location="globalMap."+std::to_string(i);
     visitMap(g.map,location);visitMap(g.smoothness,location+".smoothness");visitMap(g.ao,location+".ao");visitMap(g.metallic,location+".metallic");visitMap(g.mask,location+".mask");
@@ -224,6 +238,30 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
   };
   if (a.layers.empty() || a.layers.size() > 32)
     return fail("Surface requires 1..32 layers");
+  if(!validTerrainTextureResidency(a.textureResidency,true))return fail("Invalid terrain texture residency policy");
+  const auto &snow=a.snow;
+  if(u32(snow.mode)>2)return fail("Invalid Snow mode");
+  bool snowMaps=true;for(const auto *m:{&snow.diffuse,&snow.height,&snow.normal,&snow.smoothness,&snow.ao,&snow.normalNoiseMap,&snow.mask,&snow.sparkleNoiseMap})snowMaps=snowMaps&&map(*m);
+  if(!snowMaps)return fail("Invalid Snow channel mapping");
+  for(const auto *v:{&snow.upVector,&snow.tint,&snow.uvScales,&snow.heightAngleRange,&snow.parameters,&snow.normalNoiseParams,&snow.distanceResample,&snow.sssTint,&snow.rimColor,&snow.sparkleTint})
+    for(float x:*v)if(!range(x,-1e8f,1e8f))return fail("Invalid Snow vector");
+  const float upLength=snow.upVector[0]*snow.upVector[0]+snow.upVector[1]*snow.upVector[1]+snow.upVector[2]*snow.upVector[2];
+  if(upLength<1e-12f||!std::isfinite(upLength)||!range(snow.amount,0,1)||snow.heightAngleRange[1]<=snow.heightAngleRange[0]||
+    snow.heightAngleRange[3]<snow.heightAngleRange[2]||snow.distanceResample[3]<=snow.distanceResample[2]||
+    !range(snow.stochasticScale,.0001f,65536)||!range(snow.stochasticContrast,0,64)||!range(snow.rimPower,0,128))return fail("Invalid Snow direction/transition");
+  for(float x:snow.parameters)if(!range(x,0,1))return fail("Snow clearing/age/melt must be in [0,1]");
+  for(const auto *color:{&snow.tint,&snow.sssTint,&snow.rimColor,&snow.sparkleTint})for(float x:*color)if(!range(x,0,64))return fail("Snow colors must be nonnegative and bounded");
+  if(!range(snow.normalNoiseParams[0],-65536,65536)||!range(snow.normalNoiseParams[1],0,64)||
+     !range(snow.distanceResample[0],-65536,65536)||!range(snow.distanceResample[1],0,1)||!range(snow.distanceResample[2],0,1e8f)||
+     !range(snow.heightAngleRange[2],-1,1)||!range(snow.heightAngleRange[3],-1,1))return fail("Invalid Snow noise/resampling or angle range");
+  for(float x:{snow.sparkleEmission,snow.sparkleStrength,snow.sparkleSize,snow.sparkleDensity,snow.sparkleNoiseDensity,snow.sparkleNoiseAmplitude,snow.sparkleViewDependency})
+    if(!range(x,0,65536))return fail("Invalid Snow sparkle parameter");
+  for(const auto *raw:{&snow.sourcePropertiesJson,&snow.sourceKeywordsJson})if(raw->size()>64*1024||raw->find('\0')!=std::string::npos)return fail("Invalid Snow source provenance");
+  if(snow.mode!=TerrainSnowMode::Off){
+    for(const auto *m:{&snow.diffuse,&snow.height,&snow.normal,&snow.smoothness,&snow.ao})if(!m->texture.valid())return fail("Snow requires diffuse/height/normal/smoothness/AO sources");
+    if(snow.normal.channel!=TerrainSurfaceChannel::NormalRGB&&snow.normal.channel!=TerrainSurfaceChannel::NormalRG&&snow.normal.channel!=TerrainSurfaceChannel::NormalGA)return fail("Snow requires explicit RGB/RG/GA normal packing");
+    if((snow.normalNoiseEnabled&&!snow.normalNoiseMap.texture.valid())||(snow.maskEnabled&&!snow.mask.texture.valid())||(snow.sparkleEnabled&&!snow.sparkleNoiseMap.texture.valid()))return fail("Enabled Snow detail requires source");
+  }
   const auto &geo=a.geo;
   if(u32(geo.mode)>2||!map(geo.albedo)||!map(geo.normal)||
     (geo.blend!=TerrainColorBlend::Multiply2x&&geo.blend!=TerrainColorBlend::LighterColor)||
@@ -231,7 +269,7 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
     !range(geo.curveScaleMeters,.0001f,1e8f)||!range(geo.curveOffsetMeters,-1e8f,1e8f)||!range(geo.curveRotationDegrees,-36000,36000)||!range(geo.heightContrast,0,65536))return fail("Invalid Geo parameters");
   if(geo.mode!=TerrainGeoMode::Off&&!geo.albedo.texture.valid())return fail("Geo requires albedo source");
   if(geo.mode==TerrainGeoMode::AlbedoNormal&&(!geo.normal.texture.valid()||
-    (geo.normal.channel!=TerrainSurfaceChannel::NormalRGB&&geo.normal.channel!=TerrainSurfaceChannel::NormalRG)))return fail("Geo requires RGB/RG normal source");
+    (geo.normal.channel!=TerrainSurfaceChannel::NormalRGB&&geo.normal.channel!=TerrainSurfaceChannel::NormalRG&&geo.normal.channel!=TerrainSurfaceChannel::NormalGA)))return fail("Geo requires RGB/RG/GA normal source");
   for(usize i=0;i<geo.range.size();++i)if(!range(geo.range[i],-1e8f,1e8f)||(i&&geo.range[i]<geo.range[i-1]))return fail("Invalid Geo height range");
   if(!geo.curve.keys.empty()&&!validAnimationCurveDomain(geo.curve,AnimationCurveDomain::Signed))return fail("Invalid signed Geo curve");
   std::set<u64> curveIds;
@@ -244,7 +282,7 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
       !range(g.offsetX,-1e8f,1e8f)||!range(g.offsetY,-1e8f,1e8f))return fail("Invalid global map parameters");
     if(g.enabled&&role!=2&&!g.map.texture.valid())return fail("Enabled global map requires source");
     if(g.enabled&&role==2&&!g.smoothness.texture.valid()&&!g.ao.texture.valid()&&!g.metallic.texture.valid())return fail("Enabled global SAOM requires source");
-    if(g.enabled&&role==1&&g.map.channel!=TerrainSurfaceChannel::NormalRGB&&g.map.channel!=TerrainSurfaceChannel::NormalRG)return fail("Global normal requires RGB/RG packing");
+    if(g.enabled&&role==1&&g.map.channel!=TerrainSurfaceChannel::NormalRGB&&g.map.channel!=TerrainSurfaceChannel::NormalRG&&g.map.channel!=TerrainSurfaceChannel::NormalGA)return fail("Global normal requires RGB/RG/GA packing");
   }
   if (!noise(a.detailNoise) || !noise(a.distanceNoise))
     return fail("Invalid global noise texture or transition");
@@ -265,6 +303,7 @@ bool validTerrainSurface(const TerrainSurfaceAsset &a, std::string &error) {
   }
   std::set<AssetGuid> ids;
   for (auto &l : a.layers) {
+    if(!range(l.snowParticipation,0,1)||!range(l.snowPorosity,0,1))return fail("Invalid Snow layer participation/porosity");
     if (!l.identity.valid() || !ids.insert(l.identity).second ||
         l.name.size() > 128 || l.name.find('\0') != std::string::npos)
       return fail("Invalid or duplicate surface layer identity/name");
@@ -345,10 +384,14 @@ bool serializeTerrainSurface(const TerrainSurfaceAsset &a, std::string &out,
     return false;
   auto copy = a;
   Writer w;
-  w.s << "AETERRAINSURFACE2 ";
+  w.s << "AETERRAINSURFACE3 ";
   w.one(copy);
   u32 extensionVersion=1,count=u32(copy.layers.size());w.one(extensionVersion);w.one(copy.geo);w.one(copy.globalMaps);w.one(count);
   for(auto &layer:copy.layers){w.one(layer.identity);extensionLayer(w,layer);}
+  u32 snowVersion=1;w.one(snowVersion);w.one(copy.snow);w.one(copy.textureResidency);
+  for(auto &layer:copy.layers){w.one(layer.identity);w.one(layer.snowParticipation);w.one(layer.snowPorosity);}
+  u32 mapCount=0;visitTerrainSurfaceMaps(copy,[&](auto &){++mapCount;});w.one(mapCount);
+  visitTerrainSurfaceMaps(copy,[&](auto &m){w.one(m.texture);w.one(m.textureResidency);});
   auto serialized = w.s.str();
   if (serialized.size() > 1024 * 1024) {
     error = "Surface metadata exceeds 1 MiB byte budget";
@@ -366,13 +409,13 @@ bool deserializeTerrainSurface(std::string_view text, TerrainSurfaceAsset &out,
   Reader r(text);
   std::string version;
   r.s >> version;
-  if (version != "AETERRAINSURFACE1"&&version!="AETERRAINSURFACE2") {
+  if (version != "AETERRAINSURFACE1"&&version!="AETERRAINSURFACE2"&&version!="AETERRAINSURFACE3") {
     error = "Unsupported terrain surface version";
     return false;
   }
   TerrainSurfaceAsset a;
   r.one(a);
-  if(version=="AETERRAINSURFACE2"){
+  if(version!="AETERRAINSURFACE1"){
     u32 extensionVersion=0,count=0;r.one(extensionVersion);
     if(!r.ok||extensionVersion!=1){error="Unsupported terrain surface extension version";return false;}
     r.one(a.geo);r.one(a.globalMaps);r.one(count);
@@ -383,6 +426,16 @@ bool deserializeTerrainSurface(std::string_view text, TerrainSurfaceAsset &out,
       if(!r.ok||!visited.insert(id).second||found==a.layers.end()){error="Invalid terrain extension layer identity";return false;}
       extensionLayer(r,*found);
     }
+  }
+  if(version=="AETERRAINSURFACE3"){
+    u32 snowVersion=0;r.one(snowVersion);if(!r.ok||snowVersion!=1){error="Unsupported Snow extension version";return false;}
+    r.one(a.snow);r.one(a.textureResidency);
+    std::set<AssetGuid> visited;
+    for(usize i=0;i<a.layers.size();++i){AssetGuid id;r.one(id);auto it=std::find_if(a.layers.begin(),a.layers.end(),[&](auto &l){return l.identity==id;});
+      if(!r.ok||it==a.layers.end()||!visited.insert(id).second){error="Invalid Snow layer coverage";return false;}r.one(it->snowParticipation);r.one(it->snowPorosity);}
+    u32 mapCount=0,expected=0;r.one(mapCount);visitTerrainSurfaceMaps(a,[&](auto &){++expected;});
+    if(!r.ok||mapCount!=expected){error="Invalid texture residency map coverage";return false;}
+    visitTerrainSurfaceMaps(a,[&](auto &m){AssetGuid id;r.one(id);r.one(m.textureResidency);if(id!=m.texture)r.ok=false;});
   }
   r.s >> std::ws;
   if (!r.ok || !r.s.eof()) {

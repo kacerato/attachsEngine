@@ -2,7 +2,7 @@
 #extension GL_GOOGLE_include_directive : require
 precision highp float;
 precision highp int;
-layout(set=0,binding=0) uniform sampler2D textures[11];
+layout(set=0,binding=0) uniform sampler2D textures[14];
 layout(push_constant) uniform Test { uint mode; } test;
 layout(location=0) in vec2 uv;
 layout(location=0) out vec4 outColor;
@@ -27,6 +27,8 @@ vec4 vColor;
 void main() {
   frame.materialFlags=uvec4(0,0,test.mode==4u?0u:2u,0);
   vUv0=uv;
+  if(test.mode==230u||test.mode==231u||test.mode==233u||test.mode==234u)vUv0=vec2(test.mode==230u||test.mode==233u?-32:32,-32);
+  if(test.mode==232u)vUv0=vec2(-96,-96);
   if(test.mode==112u||test.mode==113u)vUv0=uv*4.0+vec2(test.mode==112u?-.00001:.00001,0);
   if(test.mode==1u)vUv0.x=0.0;
   if(test.mode==2u)vUv0.x=1.0;
@@ -41,7 +43,13 @@ void main() {
   if(test.mode==135u||test.mode==136u)position.y=.5;
   if(test.mode==145u)position.y=-.5;
   if(test.mode==189u)position.y=uv.y;
+  if(test.mode==235u)position.y=.00005;
   TerrainPBRResult pbr=terrainPBRSurface(position,normal);
+  if(test.mode==235u){outColor=vec4(vec3((1.0-pbr.color.g)*100000.0),1);return;}
+  if(test.mode==212u||test.mode==213u||test.mode==220u||test.mode==221u||test.mode==236u||test.mode==237u){outColor=vec4(pbr.normalWorld*.5+.5,1);return;}
+  if(test.mode==214u||test.mode==226u||test.mode==227u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}
+  if(test.mode==215u){outColor=vec4(pbr.transmission,1);return;}
+  if(test.mode==216u){outColor=vec4(pbr.emission,1);return;}
   if(test.mode==9u||test.mode==14u||test.mode==16u||test.mode==17u||test.mode==22u||test.mode==29u||((test.mode>=50u&&test.mode<74u&&test.mode!=68u&&test.mode!=69u)||test.mode==79u||test.mode==94u||test.mode==115u||test.mode>=128u&&test.mode<=132u||test.mode>=162u&&test.mode<=169u||test.mode==192u))outColor=vec4(pbr.normalWorld*.5+.5,1);
   else if(test.mode==10u||test.mode==23u||test.mode==26u||test.mode==95u||test.mode>=170u&&test.mode<=175u||test.mode==181u)outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);
   else if(test.mode==11u||test.mode==25u||test.mode==27u||test.mode==80u||test.mode==86u||test.mode==96u||test.mode>=176u&&test.mode<=180u)outColor=vec4(pbr.emission,pbr.height);

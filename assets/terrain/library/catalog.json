@@ -2795,7 +2795,10 @@
       "source_mode": "RGB",
       "runtime_mode": "RGB",
       "thumbnail": "thumbnails/a3b69d0594c9e95b2cfc2f9b844d2ca6903a112e0856293de4d66c84e527851a.png",
-      "profiles": {}
+      "profiles": {},
+      "source_roles": {
+        "albedo": "RGB/sRGB"
+      }
     },
     {
       "id": "ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62",
@@ -2814,7 +2817,113 @@
       "source_mode": "RGB",
       "runtime_mode": "RGB",
       "thumbnail": "thumbnails/ff742cdcd52c1c87bd361d821dc6d46b4061f52007f5f6e169628730f2a0fe62.png",
-      "profiles": {}
+      "profiles": {},
+      "source_roles": {
+        "normal": "RGB/linear/normal-filtered"
+      }
+    },
+    {
+      "id": "92ba1d388c6fb997b8c95891f3fb0f7c51e60c43ce1860b7d60b91fe96c99a7c",
+      "guid": "b822881b9ef3441f29c88bb6e0ef60cd",
+      "source": "sources/92ba1d388c6fb997b8c95891f3fb0f7c51e60c43ce1860b7d60b91fe96c99a7c.tga",
+      "source_path": "Packages/com.jbooth.microsplat.snow/Textures/microsplat_def_snow_diff.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "92ba1d388c6fb997b8c95891f3fb0f7c51e60c43ce1860b7d60b91fe96c99a7c",
+      "runtime": "textures/92ba1d388c6fb997b8c95891f3fb0f7c51e60c43ce1860b7d60b91fe96c99a7c.png",
+      "runtime_sha256": "7580dcacf33adc07781d1bf63368e4138d3b81cedb15893ede50005732d076c0",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/92ba1d388c6fb997b8c95891f3fb0f7c51e60c43ce1860b7d60b91fe96c99a7c.png",
+      "profiles": {},
+      "runtime_id": "7580dcacf33adc07781d1bf63368e4138d3b81cedb15893ede50005732d076c0",
+      "source_roles": {
+        "albedo": "RGB/sRGB",
+        "height": "A/linear"
+      },
+      "packing": "channels-preserved",
+      "normal_ga_raw_preserved": false
+    },
+    {
+      "id": "d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4",
+      "guid": "cc22f06eaf78d43f782ee617776c1640",
+      "source": "sources/d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4.tga",
+      "source_path": "Packages/com.jbooth.microsplat.snow/Textures/microsplat_def_snow_normsao.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4",
+      "runtime": "textures/d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4.png",
+      "runtime_sha256": "08fea4d8465e466f4983c29eda4dd70eca9569c6046e87a153cccc9089972841",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4.png",
+      "profiles": {},
+      "runtime_id": "08fea4d8465e466f4983c29eda4dd70eca9569c6046e87a153cccc9089972841",
+      "source_roles": {
+        "normal": "GA/linear/normal-filtered",
+        "smoothness": "R/linear",
+        "ao": "B/linear"
+      },
+      "packing": "normal=GA;smoothness=R;ao=B",
+      "normal_ga_raw_preserved": true
+    },
+    {
+      "id": "d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725",
+      "guid": "3364d9aca19e4401dbdb0a9bcfcd70bc",
+      "source": "sources/d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725.tga",
+      "source_path": "Packages/com.jbooth.microsplat.snow/Textures/microsplat_def_snow_normalnoise.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725",
+      "runtime": "textures/d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725.png",
+      "runtime_sha256": "66f710b6f36d34e83e39c8f713f3a9b4a43aea8ec71e09da0f70cbc7d5c7b038",
+      "dimensions": [
+        512,
+        512
+      ],
+      "source_mode": "RGB",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725.png",
+      "profiles": {},
+      "runtime_id": "66f710b6f36d34e83e39c8f713f3a9b4a43aea8ec71e09da0f70cbc7d5c7b038",
+      "source_roles": {
+        "normal": "RGB/linear/normal-filtered"
+      },
+      "packing": "channels-preserved",
+      "normal_ga_raw_preserved": false
+    },
+    {
+      "id": "583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422",
+      "guid": "fb84fc5f3e7e14ae7be5bd45efc3d3c4",
+      "source": "sources/583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422.tga",
+      "source_path": "Packages/com.jbooth.microsplat.core/Textures/microsplat_def_perlin4.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422",
+      "runtime": "textures/583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422.png",
+      "runtime_sha256": "ddb47a8f94c9f87367824784eb83604bc2e348f3d4dc3c4730df97decae1d401",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422.png",
+      "profiles": {},
+      "runtime_id": "ddb47a8f94c9f87367824784eb83604bc2e348f3d4dc3c4730df97decae1d401",
+      "source_roles": {
+        "sparkle_noise": "RGB/linear"
+      },
+      "packing": "channels-preserved",
+      "normal_ga_raw_preserved": false
     }
   ],
   "materials": [

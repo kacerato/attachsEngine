@@ -21,6 +21,7 @@ struct TerrainPBRResult {
   vec3 normalWorld;
   float roughness,metallic,occlusion;
   vec3 emission;
+  vec3 transmission;
   bool valid;
   float height;
 };
@@ -145,7 +146,7 @@ void terrainPbrNoiseNormal(inout vec3 accumulated,uint row,float participation,v
     if(noise.y<.5&&axis!=1u)continue;
     vec2 projected=axis==0u?p.zy:axis==1u?p.xz:p.xy;
     vec2 uv=projected*noise.z;
-    vec3 encoded=terrainPbrFetch(row+2u,uv,1.0).xyz;
+    vec4 rawNormal=terrainPbrFetch(row+2u,uv,1.0);vec3 encoded=map.y>6.5?vec3(rawNormal.ag,1):rawNormal.xyz;
     vec3 decoded=mix(terrainSurfaceRows[row+5u].xyz,terrainSurfaceRows[row+6u].xyz,encoded)*terrainSurfaceRows[row+4u].xyz;
     if(map.z>.5)decoded=vec3(1)-decoded;
     decoded=decoded*2.0-1.0;
@@ -198,6 +199,7 @@ vec3 terrainPbrMappedNormalGrad(uint normalRow,vec2 uv,vec2 dx,vec2 dy,vec3 px,v
     vec3 normal=n;
     if(normalBinding.x>=0.0){
       vec4 encoded=terrainPbrFetchGrad(normalRow,uv,dx,dy,1.0);
+      if(normalBinding.y>6.5)encoded.xyz=vec3(encoded.ag,1);
       vec3 decoded=mix(terrainSurfaceRows[normalRow+3u].xyz,terrainSurfaceRows[normalRow+4u].xyz,encoded.xyz)*terrainSurfaceRows[normalRow+2u].xyz;
       if(normalBinding.z>.5)decoded=vec3(1)-decoded;
       decoded=decoded*2.0-1.0;
@@ -212,7 +214,7 @@ vec3 terrainPbrMappedNormal(uint normalRow,vec2 uv,vec3 worldPosition,vec3 n){
   return terrainPbrMappedNormalGrad(normalRow,uv,dFdx(uv),dFdy(uv),dFdx(worldPosition),dFdy(worldPosition),n);
 }
 TerrainPBRResult terrainPbrLayer(uint row,vec3 localPosition,vec3 worldPosition,vec3 worldNormal) {
-  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.emission=vec3(0);result.height=0;result.valid=true;
+  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.emission=vec3(0);result.transmission=vec3(0);result.height=0;result.valid=true;
   vec4 options=terrainSurfaceRows[row],transform=terrainSurfaceRows[row+1u],blend=terrainSurfaceRows[row+2u],height=terrainSurfaceRows[row+3u];
   vec3 p,n,axes;terrainPbrProjection(options,localPosition,worldPosition,worldNormal,p,n,axes);
   // All projections and derivatives are evaluated before weight branches.
@@ -352,7 +354,7 @@ TerrainPBRResult terrainPbrCluster(uint layerRow,uint clusterRow,uint resampleRo
     if(distanceOptions.z>.5&&distanceOptions.z<1.5){vec3 modulation=terrainPbrNoiseModulation(resampleRow+terrainResampleHeaderRows,false,1.0,localPosition,worldPosition,projection.z);farAmount=clamp(farAmount+dot(modulation-vec3(1),vec3(.2126,.7152,.0722))*farAmount*(1.0-farAmount),0.0,1.0);}
   }
   bool sampleFar=resampleRow!=0u&&resample.w!=1.0&&(resample.x>.5||resample.y>.5||resample.z>.5);
-  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.emission=vec3(0);result.height=0;result.valid=true;
+  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.emission=vec3(0);result.transmission=vec3(0);result.height=0;result.valid=true;
   vec4 farColor=vec4(0);vec3 farNormal=vec3(0);float farHeight=0.0;
   for(uint axis=0u;axis<3u;++axis){
     if(projection.y<.5&&axis!=1u)continue;
@@ -461,6 +463,7 @@ vec3 terrainPbrColorBlend(vec3 base,vec3 value,uint mode){
   return value;
 }
 vec3 terrainPbrDecodedNormal(uint map,vec4 sampleValue,float strength){
+  if(terrainSurfaceRows[map].y>6.5)sampleValue.xyz=vec3(sampleValue.ag,1);
   vec3 decoded=mix(terrainSurfaceRows[map+3u].xyz,terrainSurfaceRows[map+4u].xyz,sampleValue.xyz)*terrainSurfaceRows[map+2u].xyz;
   if(terrainSurfaceRows[map].z>.5)decoded=vec3(1)-decoded;
   decoded=decoded*2.0-1.0;if(terrainSurfaceRows[map].y>5.5)decoded.z=sqrt(max(1.0-dot(decoded.xy,decoded.xy),0.0));
@@ -505,8 +508,9 @@ void terrainPbrApplyModules(inout TerrainPBRResult layer,uint root,uint index,Te
     }
   }
 }
+#include "terrain_snow.glsl"
 TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
-  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=worldNormal;result.roughness=1;result.metallic=0;result.occlusion=1;result.emission=vec3(0);result.height=0;result.valid=false;
+  TerrainPBRResult result;result.color=vec4(0);result.normalWorld=worldNormal;result.roughness=1;result.metallic=0;result.occlusion=1;result.emission=vec3(0);result.transmission=vec3(0);result.height=0;result.valid=false;
   if(!aetherHasMaterialExtension()||aetherMaterialRow(14u).z<.5)return result;
   uint offset=uint(aetherMaterialRow(14u).z+.5)-1u;
   vec4 header=terrainSurfaceRows[offset];uint count=min(uint(header.x+.5),32u);
@@ -542,6 +546,12 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
   if(sum<1e-8){result.valid=true;result.color=vec4(0,0,0,1);return result;}
   result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.valid=true;
   for(uint i=0u;i<supported;++i){if(terrainSurfaceRows[offset+2u+i*40u].x<.5)continue;float w=amounts[i]/sum;result.color+=layers[i].color*w;result.normalWorld+=layers[i].normalWorld*w;result.roughness+=layers[i].roughness*w;result.metallic+=layers[i].metallic*w;result.occlusion+=layers[i].occlusion*w;result.emission+=layers[i].emission*w;result.height+=layers[i].height*w;}
+  if(moduleRoot!=0u&&terrainSurfaceRows[moduleRoot+1u].w>.5){
+    uint snow=uint(terrainSurfaceRows[moduleRoot+1u].w+.5)-1u,controls=uint(terrainSurfaceRows[snow+13u].w+.5);float participation=0.0,porosity=0.0;
+    for(uint i=0u;i<supported;++i){float w=amounts[i]/sum;participation+=terrainSurfaceRows[controls+i].x*w;porosity+=terrainSurfaceRows[controls+i].y*w;}
+    result.normalWorld=terrainPbrSafeNormal(result.normalWorld,worldNormal);
+    terrainPbrApplySnow(result,snow,terrainSurfaceRows[moduleRoot+2u],localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),participation,porosity);
+  }
   float variation=clamp(vUv1.y<0.0?-vUv1.y-1.0:vUv1.y,0.0,1.0);
   result.color.rgb*=1.0+variation*(terrainNoise(vUv0*.11)-.5)*.6;
   result.normalWorld=terrainPbrSafeNormal(result.normalWorld,worldNormal);result.roughness=clamp(result.roughness,.07,1.0);result.metallic=clamp(result.metallic,0.0,1.0);result.occlusion=clamp(result.occlusion,0.0,1.0);return result;

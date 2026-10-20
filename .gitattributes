@@ -20,3 +20,4 @@ games/realism-collection/projects/*/Assets/world.glb filter=lfs diff=lfs merge=l
 
 # Byte-exact legacy writer output deliberately ends with a separator space.
 tests/native/fixtures/terrain-surface-v1.txt -text whitespace=-blank-at-eol
+tests/native/fixtures/terrain-surface-v2.txt -text whitespace=-blank-at-eol

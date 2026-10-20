@@ -122,3 +122,39 @@ AE_TEST(terrain_original_geo_pair_imports_color_and_normal_role_views) {
     AE_EXPECT_EQ(textures[ref.textureIndex]->srgb,!normal,"actual decoded role view");
   }
 }
+
+AE_TEST(terrain_surface_v3_glb_requires_explicit_domain) {
+  resources::TerrainRecipe recipe;
+  recipe.cells=8;recipe.controlCells=8;recipe.size=120;
+  recipe.height=0;recipe.textureScale=3;
+  resources::TerrainSurfaceLayer layer;
+  layer.identity=resources::assetGuidFromSeed("v3-missing-domain-regression");
+  layer.name="V3 domain";recipe.surface.layers={layer};
+  std::string serialized,error;
+  AE_EXPECT_TRUE(resources::serializeTerrainSurface(recipe.surface,serialized,error),error.c_str());
+  AE_EXPECT_TRUE(serialized.starts_with("AETERRAINSURFACE3 "),"regression exercises V3, not only V2");
+  resources::TerrainBuild build;
+  AE_EXPECT_TRUE(resources::updateTerrain(recipe,nullptr,build,error),error.c_str());
+  const std::array<std::vector<u8>,4> legacy{{
+    {std::begin(resources::terrainTexture0),std::end(resources::terrainTexture0)},
+    {std::begin(resources::terrainTexture1),std::end(resources::terrainTexture1)},
+    {std::begin(resources::terrainTexture2),std::end(resources::terrainTexture2)},
+    {std::begin(resources::terrainTexture3),std::end(resources::terrainTexture3)}}};
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(resources::writeTerrainGlb(build,legacy,{},bytes,error),error.c_str());
+  resources::GltfImport baseline;
+  AE_EXPECT_TRUE(resources::importGlb(bytes,{},{},baseline),baseline.diagnostic.c_str());
+  AE_EXPECT_TRUE(!baseline.terrainSurfaces.empty(),"baseline has an actual surface consumer");
+  const std::array<float,4> expected{-60,-60,120,120};
+  AE_EXPECT_TRUE(baseline.terrainSurfaces[0].terrainDomain==expected,"baseline retains nondefault domain");
+  // Rename only the metadata key with equal-length valid JSON. No GLB framing,
+  // offsets, binary payload, schema or image references are changed.
+  const std::string key="\"terrainDomain\"",unknown="\"missingDomain\"";
+  AE_EXPECT_EQ(key.size(),unknown.size(),"same-length JSON mutation");
+  const auto position=std::search(bytes.begin(),bytes.end(),key.begin(),key.end());
+  AE_EXPECT_TRUE(position!=bytes.end(),"explicit domain key exists");
+  std::copy(unknown.begin(),unknown.end(),position);
+  resources::GltfImport rejected;
+  AE_EXPECT_TRUE(!resources::importGlb(bytes,{},{},rejected),"V3 cannot silently fall back to default domain");
+  AE_EXPECT_TRUE(rejected.diagnostic.find("requires its full domain")!=std::string::npos,"failure is the missing-domain contract, not malformed GLB");
+}

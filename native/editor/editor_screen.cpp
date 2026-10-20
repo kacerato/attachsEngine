@@ -236,7 +236,7 @@ struct ScreenBuilder final {
 
 void buildNameWindow(ScreenBuilder &builder) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
-  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingTagName || state.editingTagSearch || state.editingPhysicsLayerName || state.editingAnimatorName)) {
+  if (!state.platformTextInput && (state.renameEntity != kInvalidEntity || state.editingHierarchySearch || state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch || state.editingReferenceSearch || state.editingGlobalSearch || state.editingTerrainCatalogSearch || state.namingLayout || state.presetNaming || state.viewNaming || state.editingInputActionName || state.editingInputContext || state.editingTagName || state.editingTagSearch || state.editingPhysicsLayerName || state.editingAnimatorName)) {
     router.addBlocker(state.surface);
     list.addRect(state.surface,withAlpha(theme.color.voidBlack,0.8f));
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
@@ -9370,7 +9370,7 @@ bool platformFieldActive(const EditorScreenState &state) {
   if (!state.platformTextInput || state.editingCode) return false;
   return state.renameEntity != kInvalidEntity || state.editingHierarchySearch ||
          state.editingCreationSearch || state.editingComponentSearch || state.editingPropertySearch || state.editingMeshSearch ||
-         state.editingReferenceSearch || state.editingGlobalSearch || state.namingLayout || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
+         state.editingReferenceSearch || state.editingGlobalSearch || state.editingTerrainCatalogSearch || state.namingLayout || state.numericField != 0 || (state.colorField != 0 && state.colorText != 0) ||
          (state.gradientField != 0 && state.gradientText != 0) || (state.curveField != 0 && state.curveText != 0) ||
          state.editingScriptInstance != 0 || state.creatingScript || state.searchingCode || state.searchingLibrary ||
          state.renamingResource || state.goingToLine || state.creatingCodeFolder || state.searchingConsole || state.searchingTextures || state.presetNaming || state.viewNaming ||
@@ -9392,6 +9392,7 @@ const char *platformFieldTitle(const EditorScreenState &state) {
   if (state.renamingResource) return "Arquivo";
   if (state.editingScriptInstance != 0) return "Campo";
   if (state.creatingScript) return state.scriptTemplate==EditorCodeWorkspace::HelperTemplate?"Auxiliar C#":"Componente C#";
+  if (state.editingTerrainCatalogSearch) return "Buscar no acervo de terreno";
   if (state.searchingLibrary) return "Buscar na biblioteca";
   if (state.searchingTextures) return "Buscar textura";
   if (state.searchingCode) return "Localizar";

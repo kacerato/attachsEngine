@@ -1,20 +1,25 @@
 #pragma once
 #include "resources/terrain_surface_asset.h"
 namespace ae::resources {
-struct TerrainSurfaceTextureRef {AssetGuid identity;bool linear=true,normal=false,normalRG=false;};
+struct TerrainSurfaceTextureRef {AssetGuid identity;bool linear=true,normal=false,normalRG=false;u32 normalChannel=0,residencyCap=0;bool clampSampling=false;};
 inline std::vector<TerrainSurfaceTextureRef> terrainSurfaceTextureRefs(const TerrainSurfaceAsset &surface) {
   std::vector<TerrainSurfaceTextureRef> refs;
-  const auto add=[&](const TerrainSurfaceMap &map,bool normal=false) {
+  const auto add=[&](const TerrainSurfaceMap &map,bool normal=false,bool clampSampling=false) {
     if(!map.texture.valid())return;
-    normal=normal || map.channel==TerrainSurfaceChannel::NormalRGB || map.channel==TerrainSurfaceChannel::NormalRG;
+    normal=normal || map.channel==TerrainSurfaceChannel::NormalRGB || map.channel==TerrainSurfaceChannel::NormalRG || map.channel==TerrainSurfaceChannel::NormalGA;
     const bool linear=normal || map.linear;
     const bool rg=normal && map.channel==TerrainSurfaceChannel::NormalRG;
-    for(const auto &ref:refs)if(ref.identity==map.texture && ref.linear==linear && ref.normal==normal && ref.normalRG==rg)return;
-    refs.push_back({map.texture,linear,normal,rg});
+    const u32 packing=normal?(rg?6u:map.channel==TerrainSurfaceChannel::NormalGA?7u:5u):0u;
+    const auto policy=map.textureResidency.mode==TerrainTextureResidencyMode::InheritTerrain?surface.textureResidency:map.textureResidency;
+    const u32 cap=policy.mode==TerrainTextureResidencyMode::Cap?policy.maxSide:0;
+    for(const auto &ref:refs)if(ref.identity==map.texture && ref.linear==linear && ref.normal==normal && ref.normalChannel==packing && ref.residencyCap==cap && ref.clampSampling==clampSampling)return;
+    refs.push_back({map.texture,linear,normal,rg,packing,cap,clampSampling});
   };
   const auto noise=[&](const TerrainSurfaceNoise &n,bool normal=false){add(n.map,normal);};
   noise(surface.detailNoise);noise(surface.distanceNoise);
   add(surface.geo.albedo);add(surface.geo.normal,true);
+  add(surface.snow.diffuse);add(surface.snow.height);add(surface.snow.normal,true);add(surface.snow.smoothness);add(surface.snow.ao);
+  add(surface.snow.normalNoiseMap,true);add(surface.snow.mask,false,true);add(surface.snow.sparkleNoiseMap);
   for(u32 role=0;role<surface.globalMaps.size();++role){
     const auto &global=surface.globalMaps[role];add(global.map,role==1);
     add(global.smoothness);add(global.ao);add(global.metallic);add(global.mask);

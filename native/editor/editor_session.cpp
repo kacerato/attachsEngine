@@ -1,4 +1,5 @@
 #include "editor/editor_session_internal.h"
+#include "editor/editor_terrain_snow_controls.h"
 #include "editor/editor_humanoid_bones.h"
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
@@ -406,7 +407,8 @@ bool EditorSession::setProjectDirectory(const char *path) {
   closeImportPreview();state_.importAccept=false;state_.importCancel=false;
   state_.modelImportRequested=false;state_.environmentImportRequested=false;state_.textureImportRequested=false;
   state_.folderImportRequested=false;state_.waveImportRequested=false;
-  state_.libraryImportRequested=false;state_.searchingLibrary=false;state_.libraryQuery.clear();state_.libraryPackage={};state_.libraryScroll=0;
+  state_.libraryImportRequested=false;state_.searchingLibrary=false;state_.editingTerrainCatalogSearch=false;state_.libraryQuery.clear();state_.libraryPackage={};state_.libraryScroll=0;
+  state_.terrainCatalogQuery.clear();state_.terrainCatalogPackageFilter.clear();state_.terrainCatalogRoleFilter=0;state_.terrainCatalogSearchContexts.clear();
   reimportPath_.clear();environmentReimportPath_.clear();textureReimportPath_.clear();
   runtime::ObjectTags tags;std::string tagError;
   if(!path || !loadProjectTags(path,tags,tagError)) {state_.status=tagError;return false;}
@@ -1299,6 +1301,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
   if(state_.searchingLibrary) {edit.purpose=EditorTextPurpose::LibrarySearch;edit.text=state_.libraryQuery;return edit;}
+  if(state_.editingTerrainCatalogSearch) {edit.purpose=EditorTextPurpose::TerrainCatalogSearch;edit.text=state_.renameText;return edit;}
   if(state_.searchingConsole) {edit.purpose=EditorTextPurpose::ConsoleSearch;edit.text=state_.consoleQuery;return edit;}
   if(state_.searchingTextures) {edit.purpose=EditorTextPurpose::TextureSearch;edit.text=state_.textureQuery;return edit;}
   if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
@@ -1591,7 +1594,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.editingGroupName=false;state_.editingAnimatorName=false;
     state_.editingInputActionName=false;state_.editingInputContext=false;state_.inputEditField=0;
     code_.endTypingRun();
-    state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;state_.searchingLibrary=false;
+    state_.editingCode=false;state_.creatingScript=false;state_.searchingCode=false;state_.searchingLibrary=false;state_.editingTerrainCatalogSearch=false;
     state_.goingToLine=false;state_.creatingCodeFolder=false;state_.codeComposing=false;
     state_.searchingConsole=false;
     state_.searchingTextures=false;
@@ -1903,6 +1906,11 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     }
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
   }
+  if(edit.purpose==EditorTextPurpose::TerrainCatalogSearch) {
+    if(text.size()>63 || text.find('\0')!=text.npos)return false;
+    state_.terrainCatalogQuery=text;state_.terrainCatalogPage=0;state_.terrainScroll=0;
+    close();return true;
+  }
   if(edit.purpose==EditorTextPurpose::LibrarySearch) {
     if(text.size()>128||text.find('\0')!=text.npos)return false;
     state_.libraryQuery=text;state_.libraryScroll=0;refreshLibraryRows();close();return true;
@@ -1927,6 +1935,13 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
+    if(edit.field>=terrainSnowNumberBase && edit.field<terrainSnowNumberBase+64) {
+      NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
+      if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(256+edit.field-terrainSnowNumberBase,number)) {
+        state_.numericError=true;state_.status=reason.empty()?"Valor de neve fora do limite":reason;return false;
+      }
+      close();return true;
+    }
     const auto terrainBase=widgetId(EditorWidget::TerrainNumberBase);
     if(edit.field>=terrainBase&&(edit.field<terrainBase+52 || edit.field==terrainBase+60 ||
        (edit.field>=terrainBase+64 && edit.field<=terrainBase+110) ||
@@ -4089,6 +4104,8 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   // S2: o que cada textura publicada pede ao streaming, pela mesma origem que
   // decidiu os bytes: o perfil de importação da fonte ou o perfil da textura.
   std::vector<renderer::TextureStreamingParameters> streaming(textures.size());
+  for(usize i=0;i<textures.size();++i)
+    if(textures[i]) streaming[i].minimumResidentMip=textures[i]->minimumResidentMip;
   {
     resources::AssetGuid lastSource{};resources::ImportProfile sourceProfile{};bool haveSource=false;
     for(usize i=0;i<library.textureSources.size() && i<streaming.size();++i) {
@@ -4108,7 +4125,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   for(const auto &surface:library.terrainSurfaces)for(const auto &map:surface.textures)
     if(map.textureIndex<streaming.size()) {
       streaming[map.textureIndex].streamable=false;
-      streaming[map.textureIndex].requestedMip=0;
+      streaming[map.textureIndex].requestedMip=streaming[map.textureIndex].minimumResidentMip;
     }
   // A source revision is a separate asset, but identical immutable pixels with
   // identical streaming policy need only one GPU image and bindless descriptor.
@@ -4122,7 +4139,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
     u32 slot=static_cast<u32>(uniqueTextures.size());
     for(const auto candidate:matches) {
       const auto &a=streaming[i],&b=uniqueStreaming[candidate];
-      if(a.streamable==b.streamable && a.priority==b.priority && a.requestedMip==b.requestedMip) {slot=candidate;break;}
+      if(a.streamable==b.streamable && a.priority==b.priority && a.requestedMip==b.requestedMip && a.minimumResidentMip==b.minimumResidentMip) {slot=candidate;break;}
     }
     if(slot==uniqueTextures.size()) {
       // Different residency policies represent two independent GPU allocations;
@@ -4157,10 +4174,17 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   std::vector<std::pair<u32,renderer::SharedAuthoringTexture>> originalTerrainMaps;
   for(const auto &surface:terrainSurfaces)for(const auto &map:surface.textures)
     originalTerrainMaps.emplace_back(map.textureIndex,textures[map.textureIndex]);
-  const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension);
+  std::vector<renderer::SharedAuthoringTexture> preservedTerrainMaps;
+  preservedTerrainMaps.reserve(originalTerrainMaps.size());
+  for(const auto &[index,original]:originalTerrainMaps) { (void)index;preservedTerrainMaps.push_back(original); }
+  const auto residency=resources::applyTextureBudget(textures,importTextureBudget_,importLimits_.minimumTextureDimension,preservedTerrainMaps);
+  if(!originalTerrainMaps.empty() && !residency.withinBudget()) {
+    diagnostic="Materiais excedem o orçamento de residência. Escolha um limite explícito de textura; resolução autorada preservada.";
+    return false;
+  }
   for(const auto &[index,original]:originalTerrainMaps)if(original &&
       (!textures[index] || textures[index]->width!=original->width || textures[index]->height!=original->height ||
-       textures[index]->levels!=original->levels)) {
+       textures[index]->levels!=original->levels || textures[index]->minimumResidentMip!=original->minimumResidentMip)) {
     diagnostic="Material do terreno excede o orçamento atual de texturas. Resolução original preservada; publicação cancelada.";
     return false;
   }

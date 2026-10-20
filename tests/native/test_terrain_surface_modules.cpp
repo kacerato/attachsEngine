@@ -33,7 +33,7 @@ ae::renderer::TerrainSurfaceBinding moduleBinding(const TerrainSurfaceAsset &a){
 AE_TEST(terrain_modules_v2_weighted_curve_and_full_layer_roundtrip){
   auto a=moduleSurface();std::string text,error;
   AE_EXPECT_TRUE(serializeTerrainSurface(a,text,error),error.c_str());
-  AE_EXPECT_TRUE(text.starts_with("AETERRAINSURFACE2 "),"new writer declares version two");
+  AE_EXPECT_TRUE(text.starts_with("AETERRAINSURFACE3 "),"new writer declares Snow-capable version three");
   TerrainSurfaceAsset b;AE_EXPECT_TRUE(deserializeTerrainSurface(text,b,error),error.c_str());
   AE_EXPECT_EQ(b.geo.curve.keys.size(),size_t(40),"curve authoring exceeds legacy vector limit without truncation");
   AE_EXPECT_EQ(b.geo.curve.keys[31].outWeight,a.geo.curve.keys[31].outWeight,"weighted handles survive persistence");
@@ -124,7 +124,7 @@ AE_TEST(terrain_modules_historical_v1_fixture_migrates_without_loss){
   AE_EXPECT_EQ(a.layers[0].offsetX,-2.f,"old offset retained");AE_EXPECT_EQ(a.layers[0].rotation,17.f,"old rotation retained");
   AE_EXPECT_EQ(a.layers[0].detailNoise.scale,2.f,"old M05 noise parameters retained");AE_EXPECT_EQ(a.layers[0].globalDetailParticipation,.3f,"old participation retained");
   AE_EXPECT_EQ(a.layers[0].globalMapParticipation,(std::array<float,4>{1,1,1,1}),"new layer influences initialize neutrally");
-  std::string v2,again;AE_EXPECT_TRUE(serializeTerrainSurface(a,v2,error),error.c_str());AE_EXPECT_TRUE(v2.starts_with("AETERRAINSURFACE2 "),"migration writes the new declared version");
+  std::string v2,again;AE_EXPECT_TRUE(serializeTerrainSurface(a,v2,error),error.c_str());AE_EXPECT_TRUE(v2.starts_with("AETERRAINSURFACE3 "),"migration writes the new declared version");
   TerrainSurfaceAsset b;AE_EXPECT_TRUE(deserializeTerrainSurface(v2,b,error),error.c_str());AE_EXPECT_TRUE(serializeTerrainSurface(b,again,error),error.c_str());
   AE_EXPECT_EQ(v2,again,"v1 to v2 cold roundtrip is canonical without dropped old fields");
 }

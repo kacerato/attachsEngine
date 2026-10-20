@@ -4,6 +4,13 @@
 namespace ae::editor {
 // Private M05–M08 routing. Existing M05 views stay stable; advanced contexts
 // are encoded in views rather than shared editor state/public headers.
+template<class Channel> Channel terrainNextNormalChannel(Channel channel){return Channel(u32(channel)==5?6:u32(channel)==6?7:5);}
+template<class Channel> bool terrainPackedNormal(Channel channel){return u32(channel)==6 || u32(channel)==7;}
+template<class Channel> bool terrainNormalMapNumberAvailable(Channel channel,u32 field,u32 factor,u32 scalar,u32 colors){
+  if(field==factor)return true;if(field==scalar || field==scalar+1)return false;
+  if(field<colors || field>=colors+12)return false;const auto component=(field-colors)%4;
+  return component!=3 && !(component==2 && terrainPackedNormal(channel));
+}
 inline constexpr u32 terrainNoiseActionBase = 0xEC000C00u;
 inline EditorWidget terrainNoiseAction(u32 offset) {
   return static_cast<EditorWidget>(terrainNoiseActionBase + offset);

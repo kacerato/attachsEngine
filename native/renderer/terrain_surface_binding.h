@@ -9,6 +9,9 @@ struct TerrainSurfaceTextureBinding {
   resources::AssetGuid identity;
   bool linear=true, normal=false;
   u32 textureIndex=InvalidMapTexture;
+  u32 normalChannel=0; // 0 scalar; TerrainSurfaceChannel RGB/RG/GA for normals
+  u32 residencyCap=0; // resolved max side; 0 Original
+  bool clampSampling=false; // fixed Snow mask role, independent of authored map
 };
 struct TerrainSurfaceBinding {
   resources::TerrainSurfaceAsset surface;

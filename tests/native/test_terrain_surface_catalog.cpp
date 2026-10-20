@@ -30,7 +30,7 @@ AE_TEST(terrain_surface_catalog_committed_inventory_and_all_materials) {
   AE_EXPECT_TRUE(loadTerrainSurfaceCatalog(text, c, e), e.c_str());
   AE_EXPECT_EQ(c.materials.size(), size_t(82),
                "actual committed material inventory");
-  AE_EXPECT_EQ(c.textures.size(), size_t(148),
+  AE_EXPECT_EQ(c.textures.size(), size_t(152),
                "actual committed texture inventory");
   std::set<AssetGuid> identities;
   for (auto &t : c.textures) {

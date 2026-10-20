@@ -31,6 +31,8 @@ struct TextureStreamingTexture {
   i32 priority = 0;
   // Nível forçado por script; `TextureStreamingNoRequest` segue a câmera.
   u32 requestedMip = TextureStreamingNoRequest;
+  // Authoring ceiling, independent of camera, budget and manual mip requests.
+  u32 minimumResidentMip = 0;
 };
 
 // Escolhas autorais por textura publicada (Texture Importer da Unity): vêm do
@@ -39,6 +41,8 @@ struct TextureStreamingParameters {
   bool streamable = true;
   i32 priority = 0;
   u32 requestedMip = TextureStreamingNoRequest;
+  // Authoring ceiling, independent of camera, budget and manual mip requests.
+  u32 minimumResidentMip = 0;
 };
 
 // Um desenho que amostra a textura: esfera no mundo e a escala da UV nele.

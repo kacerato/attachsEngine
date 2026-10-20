@@ -1,6 +1,7 @@
 #pragma once
 #include "editor/editor_terrain_noise_controls.h"
 #include "editor/editor_terrain_modules_controls.h"
+#include "editor/editor_terrain_snow_controls.h"
 #include <algorithm>
 #include <cmath>
 
@@ -27,6 +28,28 @@ template <class State>
 TerrainControlRange terrainControlRange(const State &s, unsigned field) {
   const auto &r = s.terrainDraft;
   TerrainControlRange range{0, 1, 0, true, false};
+  if(terrainSnowField(field)) {
+    if(!terrainSnowNumberAvailable(s,field))return {0,1,0,false};
+    const auto &snow=r.surface.snow;
+    if(field>=260 && field<=262)return {-1,1,0,true};
+    if(field==263 || field==264)return {-128,128,0,true};
+    if(field==265){const float high=std::min(2048.f,std::nextafter(snow.heightAngleRange[1],-INFINITY));return {std::min(-2048.f,high),high,0,true};}
+    if(field==266){const float low=std::nextafter(snow.heightAngleRange[0],INFINITY);return {low,std::max(2048.f,low),0,true};}
+    if(field==267)return {-1,snow.heightAngleRange[3],0,true};
+    if(field==268)return {snow.heightAngleRange[2],1,0,true};
+    if(field==273 || field==275)return {-8,8,0,true};
+    if(field==274 || field==304)return {0,8,0,true};
+    if(field==277)return {0,std::min(2048.f,std::nextafter(snow.distanceResample[3],0.f)),0,true,true};
+    if(field==278){const float low=std::nextafter(snow.distanceResample[2],INFINITY);return {low,std::max(2048.f,low),0,true,true};}
+    if(field==279)return {.5f,1.5f,0,true};
+    if(field==280)return {.01f,.99f,0,true};
+    if(field==290)return {.1f,10,0,true};
+    if(field==294 || field==295)return {0,2,0,true};
+    if(field>=296 && field<=298)return {0,10,0,true};
+    if(field==299)return {0,64,0,true};
+    return range;
+  }
+
   if ((field >= 64 && field <= 76) || (field >= 96 && field <= 110)) {
     range.enabled = s.terrainBrush.layer < r.surface.layers.size();
     if (field == 64 || field == 65)

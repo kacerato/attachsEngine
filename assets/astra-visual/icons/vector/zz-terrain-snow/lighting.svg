@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+  <title>Snow lighting and sparkle</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="35,30 35,84"/>
+    <polyline points="12,44 58,70"/>
+    <polyline points="12,70 58,44"/>
+    <polyline points="25,34 35,44 45,34"/>
+    <polyline points="25,80 35,70 45,80"/>
+    <polyline points="70,10 74,24 88,28 74,32 70,46 66,32 52,28 66,24 70,10"/>
+  </g>
+</svg>

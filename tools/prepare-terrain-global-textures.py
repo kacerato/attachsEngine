@@ -46,7 +46,8 @@ def main() -> None:
                 source_path=entry["path"], package=manifest["package"], archive_sha256=manifest["sha256"],
                 source_sha256=digest, runtime=f"sources/{digest}.png", runtime_sha256=digest,
                 dimensions=list(image.size), source_mode=image.mode, runtime_mode=image.mode,
-                thumbnail=f"thumbnails/{digest}.png", profiles={})
+                thumbnail=f"thumbnails/{digest}.png", profiles={},
+                source_roles={"normal": "RGB/linear/normal-filtered"} if "norm" in name else {"albedo": "RGB/sRGB"})
             encoded = io.BytesIO()
             thumbnail.save(encoded, format="PNG")
             records.append((record, raw, encoded.getvalue()))

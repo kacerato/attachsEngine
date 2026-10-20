@@ -80,6 +80,7 @@ struct Image {
   VkDeviceMemory memory{};
   VkImageView view{};
   uint32_t width = 1;
+  uint32_t levels = 1;
 };
 struct Fixture {
   VkInstance instance{};
@@ -200,14 +201,15 @@ struct Fixture {
     buffers.push_back(b);
     return b;
   }
-  Image image(uint32_t width, uint32_t height, VkImageUsageFlags usage) {
+  Image image(uint32_t width, uint32_t height, VkImageUsageFlags usage,uint32_t levels=1) {
     Image im;
     im.width = width;
+    im.levels = levels;
     VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     ci.imageType = VK_IMAGE_TYPE_2D;
     ci.format = VK_FORMAT_R8G8B8A8_UNORM;
     ci.extent = {width, height, 1};
-    ci.mipLevels = ci.arrayLayers = 1;
+    ci.mipLevels = levels;ci.arrayLayers = 1;
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
     ci.tiling = VK_IMAGE_TILING_OPTIMAL;
     ci.usage = usage;
@@ -224,7 +226,7 @@ struct Fixture {
     vi.image = im.handle;
     vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
     vi.format = ci.format;
-    vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, levels, 0, 1};
     check(vkCreateImageView(device, &vi, nullptr, &im.view),
           "create image view");
     images.push_back(im);
@@ -260,7 +262,7 @@ struct Fixture {
     b.dstAccessMask = dst;
     b.srcQueueFamilyIndex = b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     b.image = im.handle;
-    b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    b.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, im.levels, 0, 1};
     vkCmdPipelineBarrier(cmd, from, to, 0, 0, nullptr, 0, nullptr, 1, &b);
   }
   ~Fixture() {
@@ -369,6 +371,14 @@ int main(int argc, char **argv) {
                  VK_PIPELINE_STAGE_TRANSFER_BIT,
                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
   }
+  auto clampMipImage=f.image(4,1,VK_IMAGE_USAGE_SAMPLED_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT,2);
+  const uint8_t maskMips[]{0,0,0,255,85,0,0,255,170,0,0,255,255,0,0,255, 0,0,0,255,255,0,0,255};
+  auto clampMipUpload=f.buffer(sizeof maskMips,VK_BUFFER_USAGE_TRANSFER_SRC_BIT);std::memcpy(clampMipUpload.mapped,maskMips,sizeof maskMips);
+  f.transition(upload,clampMipImage,VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0,VK_ACCESS_TRANSFER_WRITE_BIT,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+  std::array<VkBufferImageCopy,2> mipCopies{};
+  for(uint32_t i=0;i<2;++i){mipCopies[i].bufferOffset=i?16:0;mipCopies[i].imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,i,0,1};mipCopies[i].imageExtent={4u>>i,1,1};}
+  vkCmdCopyBufferToImage(upload,clampMipUpload.handle,clampMipImage.handle,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,2,mipCopies.data());
+  f.transition(upload,clampMipImage,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,VK_ACCESS_TRANSFER_WRITE_BIT,VK_ACCESS_SHADER_READ_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
   f.submit(upload);
   constexpr size_t materialBytes =
       ae::renderer::MaterialExtensionFloats * sizeof(float);
@@ -392,8 +402,11 @@ int main(int argc, char **argv) {
   VkSampler sampler;
   check(vkCreateSampler(f.device, &sci, nullptr, &sampler),
         "create production-repeat sampler");
+  sci.addressModeU=sci.addressModeV=sci.addressModeW=VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  VkSampler clampSampler;check(vkCreateSampler(f.device,&sci,nullptr,&clampSampler),"create Snow mask clamp sampler");
+  sci.minLod=sci.maxLod=1;VkSampler clampMipSampler;check(vkCreateSampler(f.device,&sci,nullptr,&clampMipSampler),"force Snow mask actual mip1 clamp sampling");
   VkDescriptorSetLayoutBinding textureBinding{
-      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 11,
+      0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 14,
       VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
   VkDescriptorSetLayoutBinding rowBindings[]{
       {16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1, VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -411,7 +424,7 @@ int main(int argc, char **argv) {
   li.pBindings = rowBindings;
   check(vkCreateDescriptorSetLayout(f.device, &li, nullptr, &layouts[1]),
         "material row layout");
-  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 11},
+  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 14},
                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 2}};
   VkDescriptorPoolCreateInfo dpi{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
   dpi.maxSets = 2;
@@ -428,10 +441,13 @@ int main(int argc, char **argv) {
   std::array<VkDescriptorSet, 2> sets;
   check(vkAllocateDescriptorSets(f.device, &dai, sets.data()),
         "descriptor sets");
-  std::array<VkDescriptorImageInfo, 11> infos;
+  std::array<VkDescriptorImageInfo, 14> infos;
   for (size_t i = 0; i < 11; ++i)
     infos[i] = {sampler, textures[i].view,
                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  infos[11]={clampSampler,textures[8].view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  infos[12]={clampSampler,textures[7].view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  infos[13]={clampMipSampler,clampMipImage.view,VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   VkDescriptorBufferInfo rinfo{rows.handle, 0, materialBytes};
   VkDescriptorBufferInfo sinfo{surfaceRows.handle, 0, 16384};
   std::array<VkWriteDescriptorSet, 3> writes{};
@@ -439,7 +455,7 @@ int main(int argc, char **argv) {
     w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
   writes[0].dstSet = sets[0];
   writes[0].dstBinding = 0;
-  writes[0].descriptorCount = 11;
+  writes[0].descriptorCount = 14;
   writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[0].pImageInfo = infos.data();
   writes[1].dstSet = sets[1];
@@ -560,6 +576,7 @@ int main(int argc, char **argv) {
       if (std::abs(int(p[c]) - int(expected[c])) > 3) {
         std::fprintf(stderr, "%s at x=%u got RGBA %u,%u,%u,%u\n", label, x,
                      p[0], p[1], p[2], p[3]);
+        std::fflush(stderr);
         require(false, label);
       }
   };
@@ -569,8 +586,8 @@ int main(int argc, char **argv) {
     qi.queryType=VK_QUERY_TYPE_TIMESTAMP;qi.queryCount=2;
     check(vkCreateQueryPool(f.device,&qi,nullptr,&timestamps),"create GPU timestamp queries");
   }
-  std::array<std::vector<uint8_t>,199> modePixels;
-  for (uint32_t mode = 0; mode < 199; ++mode) {
+  std::array<std::vector<uint8_t>,238> modePixels;
+  for (uint32_t mode = 0; mode < 238; ++mode) {
     if(mode==189&&argc!=3)continue;
     if (mode == 29 || mode==50) {
       auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -796,7 +813,7 @@ int main(int argc, char **argv) {
         if(mode==107||mode==108||mode==109){layer.resampleAlbedo=true;layer.resampleNormal=mode==108;layer.resampleHeightBlend=mode==108;layer.resampleScale=2;layer.resampleBlend=TerrainDistanceBlend::Constant;}
         if(mode==109)mapSlot(c.variants[1].maps[0],8,TerrainSurfaceChannel::RGB);
       }
-      if(mode>=116){
+      if(mode>=116&&mode<199){
         mapSlot(layer.maps[0],9,TerrainSurfaceChannel::RGB);
         auto &geo=binding.surface.geo;
         auto setupGeo=[&](){geo.mode=TerrainGeoMode::Albedo;mapSlot(geo.albedo,7,TerrainSurfaceChannel::RGB);};
@@ -857,6 +874,39 @@ int main(int argc, char **argv) {
         }
         if(mode==188){geo.rangeEnabled=true;geo.range={0,0,1,1};}
       }
+      if(mode>=199){
+        binding.surface.geo.mode=TerrainGeoMode::Off;
+        mapSlot(layer.maps[0],3,TerrainSurfaceChannel::RGB);mapSlot(layer.maps[1],5,TerrainSurfaceChannel::NormalRGB);
+        layer.maps[4].factor=0;layer.maps[5].factor=0;layer.maps[6].factor=0;mapSlot(layer.maps[2],3,TerrainSurfaceChannel::R);layer.maps[2].factor=0;
+        auto &s=binding.surface.snow;s.mode=mode==199?TerrainSnowMode::Off:TerrainSnowMode::Simple;s.amount=.5f;s.parameters={0,0,1,0};s.heightAngleRange={-100,-50,0,1};
+        mapSlot(s.diffuse,0,TerrainSurfaceChannel::RGB);mapSlot(s.height,3,TerrainSurfaceChannel::A);s.height.factor=0;mapSlot(s.normal,7,TerrainSurfaceChannel::NormalGA);s.normal.factor=0;
+        mapSlot(s.smoothness,3,TerrainSurfaceChannel::R);s.smoothness.factor=0;mapSlot(s.ao,3,TerrainSurfaceChannel::R);
+        if(mode==200)s.amount=.25f;
+        if(mode==202||mode==203||mode==204||mode==205)s.mode=TerrainSnowMode::Rich;
+        if(mode==203){mapSlot(layer.maps[2],3,TerrainSurfaceChannel::R);s.parameters[0]=1;}
+        if(mode==204||mode==205){s.perLayerEnabled=true;layer.snowParticipation=mode==204?0:.5f;}
+        if(mode==206)s.heightAngleRange={0,100,0,1};
+        if(mode==207)s.heightAngleRange={-100,100,0,1};
+        if(mode==208){s.maskEnabled=true;mapSlot(s.mask,7,TerrainSurfaceChannel::RGB);}
+        if(mode==209)s.tint={0,1,0,1};
+        if(mode==210)s.diffuse.invert=true;
+        if(mode==211)s.diffuse.factor=.5f;
+        if(mode==212)s.normal.factor=1;
+        if(mode==215){s.sssEnabled=true;s.sssTint={.2f,.4f,.6f,.5f};mapSlot(s.height,7,TerrainSurfaceChannel::A);}
+        if(mode==216){s.rimEnabled=true;s.rimPower=0;}
+        if(mode==217)s.amount=0;
+        if(mode==219){s.worldSpaceUV=true;s.triplanarEnabled=true;s.uvScales={-2,0,.25f,.5f};}
+        if(mode==220||mode==221){s.normalNoiseEnabled=true;mapSlot(s.normalNoiseMap,6,TerrainSurfaceChannel::NormalRGB);s.normalNoiseParams[1]=mode==220?0:.5f;}
+        if(mode>=222&&mode<=225){s.distanceResampleEnabled=true;s.distanceResample={0,1,0,1};mapSlot(s.diffuse,8,TerrainSurfaceChannel::RGB);s.uvScales={0,0,.25f,.25f};
+          if(mode==223)s.distanceResample[1]=0;if(mode==224)s.distanceResample[2]=1e6f,s.distanceResample[3]=2e6f;if(mode==225)s.distanceResample[0]=1;}
+        if(mode==226){s.parameters[2]=0;}
+        if(mode==227){mapSlot(s.smoothness,7,TerrainSurfaceChannel::R);mapSlot(s.ao,7,TerrainSurfaceChannel::B);}
+        if(mode==228){s.stochasticEnabled=true;s.stochasticScale=3;s.stochasticContrast=.8f;}
+        if(mode==229){s.sparkleEnabled=true;mapSlot(s.sparkleNoiseMap,7,TerrainSurfaceChannel::RGB);s.sparkleSize=65536;s.sparkleStrength=.5f;s.sparkleDensity=0;}
+        if(mode>=230&&mode<=234){s.mode=TerrainSnowMode::Rich;s.amount=.6f;s.parameters[0]=1;mapSlot(layer.maps[2],7,TerrainSurfaceChannel::R);s.maskEnabled=true;mapSlot(s.mask,8,TerrainSurfaceChannel::RGB);}
+        if(mode==235){s.amount=.1f;s.heightAngleRange={0,.0001f,0,1};}
+        if(mode==236||mode==237){mapSlot(s.normal,6,mode==236?TerrainSurfaceChannel::NormalRGB:TerrainSurfaceChannel::NormalRG);s.normal.factor=1;}
+      }
       binding.surface.layers.push_back(layer);
       if (mode == 13 || mode == 15) {
         auto second = layer;
@@ -883,9 +933,9 @@ int main(int argc, char **argv) {
         }
       if(mode>=30){
         for(const auto &ref:terrainSurfaceTextureRefs(binding.surface))
-          binding.textures.push_back({ref.identity,ref.linear,ref.normal,uint32_t(ref.identity.low-1)});
+          binding.textures.push_back({ref.identity,ref.linear,ref.normal,ref.clampSampling?(ref.identity.low==9?11u:12u):uint32_t(ref.identity.low-1),ref.normalChannel,ref.residencyCap,ref.clampSampling});
       }
-      std::array<ae::u32, 11> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10};
+      std::array<ae::u32, 13> slots{0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,mode>=233?13u:11u,12};
       std::vector<float> published;
       ae::u32 offset = 0;
       std::string error;
@@ -898,7 +948,7 @@ int main(int argc, char **argv) {
       require(
           appendTerrainSurfaceTable(binding, slots, published, offset, error),
           error.c_str());
-      if(mode==48||mode==110||mode==181){
+      if(mode==48||mode==110||mode==181||mode==218){
         require(relocateTerrainSurfaceTable(published,3,error),error.c_str());
         published.insert(published.begin(),12,0.f);offset+=3;
       }
@@ -966,7 +1016,37 @@ int main(int argc, char **argv) {
     for (size_t p = 0; p < width * height; ++p)
       evidence.write(reinterpret_cast<const char *>(rgba + p * 4), 3);
     require(bool(evidence), "write real GPU evidence PPM");
+    evidence.flush();
     modePixels[mode].assign(rgba,rgba+width*height*4);
+    if(mode>=199){
+      if(mode==199||mode==203||mode==204||mode==206||mode==217)expectPixel(16,{255,255,255,255},"Snow off/clearing/participation/height or zero level preserves base");
+      else if(mode==200||mode==205||mode==207)expectPixel(16,{255,223,223,255},"Snow source cubic coverage is one eighth");
+      else if(mode==208)expectPixel(16,{255,124,124,255},"Snow mask minimum G wins and yields coverage .512");
+      else if(mode==209)expectPixel(16,{0,0,0,255},"Snow tint applies to actual diffuse");
+      else if(mode==210)expectPixel(16,{0,255,255,255},"Snow diffuse inversion selects complementary channels");
+      else if(mode==211)expectPixel(16,{128,0,0,255},"Snow diffuse factor scales material");
+      else if(mode==212)expectPixel(16,{204,226,102,255},"Snow packed GA produces actual world normal");
+      else if(mode==213)expectPixel(16,{128,255,128,255},"Snow normal factor zero is exactly flat");
+      else if(mode==214)expectPixel(16,{89,3,255,255},"Snow sequential smoothness lerps and scalar AO roles");
+      else if(mode==215)expectPixel(16,{23,46,69,255},"Snow thickness tint produces explicit thin transmission");
+      else if(mode==216)expectPixel(16,{128,128,255,255},"Snow rim reaches actual emission with power zero");
+      else if(mode==220)expectPixel(16,{128,255,128,255},"enabled Snow normal noise strength zero is flat");
+      else if(mode==221)expectPixel(16,{160,251,128,255},"Snow normal noise strength produces reoriented world normal");
+      else if(mode==222)expectPixel(16,{128,128,0,255},"far Snow resampling UV multiplier zero samples repeat boundary");
+      else if(mode>=223&&mode<=225)expectPixel(16,{62,62,0,255},"Snow resampling strength/start/end/identity selects near UV consistently");
+      else if(mode==226)expectPixel(16,{255,3,255,255},"Snow age zero removes both smoothness contributions");
+      else if(mode==227)expectPixel(16,{140,3,153,255},"Snow smoothness R and AO B remain independent scalar roles");
+      else if(mode==230||mode==232||mode==233)expectPixel(16,{255,255,255,255},"Snow mask Clamp UV zero, outside or actual mip1 never reads opposite border");
+      // Rich H=.2, level=.6: coverage=(.6-.2)^3*(1-.2/2)*8=.4608.
+      // Remaining white G/B=.5392 -> 137.496 in UNORM8, observed137 on GPU.
+      else if(mode==231||mode==234)expectPixel(16,{255,137,137,255},"Snow mask Clamp UV one retains authored maximum at far edge, including actual mip1");
+      // Coverage1e-6 is below one UNORM step. The fixture amplifies its
+      // observable white-to-red delta by100000; float32 subtraction gives26.
+      else if(mode==235)expectPixel(16,{26,26,26,255},"Snow short height denominator floor agrees with CPU source coverage");
+      else if(mode==236||mode==237){const auto byte=[](double v){return uint8_t(std::lround(std::clamp(v,0.0,1.0)*255));};double x=191.0/127.5-1,y=128.0/127.5-1,z=mode==237?std::sqrt(1-x*x-y*y):238.0/127.5-1;double length=std::sqrt(x*x+y*y+z*z);expectPixel(16,{byte(x/length*.5+.5),byte(z/length*.5+.5),byte(y/length*.5+.5),255},"Snow explicitly authored RGB/RG normal interpretation reaches actual world normal");}
+      else expectPixel(16,{255,0,0,255},"Snow source material survives reload, mode, projection or relocation");
+      continue;
+    }
     if(mode>=116){
       const auto byte=[](double value){return uint8_t(std::lround(std::clamp(value,0.0,1.0)*255));};
       const auto gradientChannel=[](double coordinate){double pixel=coordinate*65-.5;int first=int(std::floor(pixel));double t=pixel-first;auto texel=[](int i){i=(i%65+65)%65;return double(i*255/64)/255.0;};return texel(first)*(1-t)+texel(first+1)*t;};
@@ -1188,5 +1268,7 @@ int main(int argc, char **argv) {
   for (auto l : layouts)
     vkDestroyDescriptorSetLayout(f.device, l, nullptr);
   vkDestroySampler(f.device, sampler, nullptr);
+  vkDestroySampler(f.device, clampSampler, nullptr);
+  vkDestroySampler(f.device, clampMipSampler, nullptr);
   return 0;
 }

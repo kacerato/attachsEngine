@@ -212,6 +212,22 @@ bool loadTerrainSurfaceCatalog(std::string_view text,
     t.sourceHash = d.string(n, "source_sha256");
     t.runtimeHash = d.string(n, "runtime_sha256");
     t.archiveHash = d.string(n, "archive_sha256");
+    if(const auto *package=d.member(n,"package")){
+      if(package->kind!=Kind::String)return fail("Invalid terrain texture package provenance");
+      t.package=d.string(n,"package");
+      if(t.package.size()>1024 || t.package.find('\0')!=std::string::npos)return fail("Invalid terrain texture package provenance");
+    }
+    if(const auto *roles=d.member(n,"source_roles")){
+      if(roles->kind!=Kind::Object)return fail("Invalid terrain texture source roles");
+      for(u32 roleIndex=0;roleIndex<roles->childCount;++roleIndex){
+        const auto &sourceRole=*d.child(*roles,roleIndex);const auto key=d.keyOf(sourceRole);
+        if(sourceRole.kind!=Kind::String)return fail("Invalid terrain texture source role description");
+        const auto role=key=="albedo"?0:key=="normal"?1:key=="height"?2:key=="ao"?3:
+          (key=="smoothness" || key=="roughness")?4:key=="metallic"?5:key=="emission"?6:7;
+        if(role<7)t.roleMask|=1u<<role;
+      }
+    }
+
     auto *dimensions = d.member(n, "dimensions");
     if (t.id.empty() || t.id.size() > 256 || !textureIds.insert(t.id).second ||
         !AssetGuid::parse(d.string(n, "guid"), t.identity) ||

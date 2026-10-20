@@ -500,7 +500,7 @@ bool DirtRoadResources::rebuildAuthoringLibrary(rhi::VulkanDevice &device, rhi::
       // o sampler novo precisa saber quantos níveis ela tem de verdade.
       nextResidency[t]=authoringResidency_[plan.reuse[t]];
     } else {
-      u32 requiredBias=(image.width==1 && image.height==1)?0:textureResidencyMipBias_;
+      u32 requiredBias=std::max(texture->minimumResidentMip,(image.width==1 && image.height==1)?0:textureResidencyMipBias_);
       // S2: com streaming, a textura nova entra pelo fim da faixa (pequena) e o
       // streaming sobe os níveis que a tela pedir; a publicação fica rápida.
       if(!generated && textureStreamingInitialMip_>requiredBias && image.mipLevels>1)
@@ -606,7 +606,7 @@ bool DirtRoadResources::restreamAuthoringTexture(rhi::VulkanDevice &device,rhi::
      authoringTextureSources_.size()!=authoringImages_.size()) return false;
   const auto &texture=authoringTextureSources_[index];
   auto &current=authoringResidency_[index];
-  if(!texture || !texture->valid() || current.generated || baseMip>=texture->levels) return false;
+  if(!texture || !texture->valid() || current.generated || baseMip<texture->minimumResidentMip || baseMip>=texture->levels) return false;
   if(current.baseMip==baseMip) return true;
   rhi::ImageDesc image{};
   image.width=texture->width;image.height=texture->height;image.mipLevels=texture->levels;

@@ -4,6 +4,9 @@
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_noise_controls.h"
 #include "editor/editor_terrain_modules_controls.h"
+#include "editor/editor_terrain_catalog_search.h"
+#include "editor/editor_terrain_snow_controls.h"
+#include "editor/terrain_texture_icons.h"
 #include "harness.h"
 #include "renderer/authoring_geometry.h"
 #include "scene/import_link.h"
@@ -138,7 +141,7 @@ struct TerrainUiFixture {
     return true;
   }
   bool slide(u32 field,float fraction,u32 column=0) {
-    const auto widget=id(Widget::TerrainSliderBase,field+column*0x100);
+    const auto widget=field>=256?editor::terrainSnowSliderBase+field-256+column*0x100:id(Widget::TerrainSliderBase,field+column*0x100);
     scroll(-10000);
     ui::UiPoint p;
     for(u32 attempt=0;attempt<96;++attempt) {
@@ -162,6 +165,22 @@ struct TerrainUiFixture {
           list.textOf(command).find(part) != std::string_view::npos)
         return true;
     return false;
+  }
+  bool textureThumbnail(std::string_view catalogId) {
+    render();std::string sourceId(catalogId);
+    if(session.screen().terrainCatalog)for(const auto &source:session.screen().terrainCatalog->textures)
+      if(source.identity.text()==catalogId){sourceId=source.id;break;}
+    const auto expected=static_cast<ui::UiImageId>(editor::terrainTextureIcon(sourceId));
+    for(const auto &command:list.commands())if(command.kind==ui::UiPrimitive::Image && command.image==expected &&
+      command.bounds.width==32 && command.bounds.height==32 && command.clip.height>0 && command.clip.width>0)return true;
+    return false;
+  }
+  bool snowMode(u32 action) {
+    return tap(id(editor::terrainSnowAction(21))) && tap(id(editor::terrainSnowAction(action))) && tap(id(editor::terrainSnowAction(20)));
+  }
+  bool catalogQuery(std::string_view query) {
+    return tap(id(editor::terrainCatalogAction(0))) &&
+      session.completeTextEdit(session.pendingTextEdit(),query,true);
   }
   bool finish() {
     for (u32 i = 0; i < 5000 && session.screen().terrainBusy; ++i) {
@@ -1246,4 +1265,372 @@ AE_TEST(terrain_compact_legacy_noise_and_pbr_maps_keep_real_controls_visible_at_
   AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].channel!=channel,"map source interpretation changes in real model");
   AE_EXPECT_TRUE(f.tap(moduleId(61),false),"legacy map context returns to painting root");
   f.render();AE_EXPECT_TRUE(f.point(id(Widget::TerrainTabBase,2),point),"unchanged root tabs are restored");
+}
+
+
+AE_TEST(terrain_catalog_search_routes_material_identity_and_isolates_other_queries) {
+  TerrainUiFixture f;
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"open material catalog");
+  const auto catalog=f.session.screen().terrainCatalog;
+  AE_EXPECT_TRUE(catalog && catalog->materials.size()>6,"real paginated source catalog");
+  const auto target=catalog->materials.back().id;
+  const auto library=f.session.screen().libraryQuery,texture=f.session.screen().textureQuery,
+    reference=f.session.screen().referenceQuery,global=f.session.screen().globalQuery;
+  const auto recipeJson=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogNext)),"visit another original page before search");
+  AE_EXPECT_TRUE(f.catalogQuery(target),"search uses real platform text edit purpose");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,0u,"query resets filtered pagination");
+  AE_EXPECT_TRUE(resources::serializeTerrainRecipe(f.session.screen().terrainDraft)==recipeJson,"query never mutates authored terrain");
+  AE_EXPECT_EQ(f.session.screen().libraryQuery,library,"Asset Browser query isolated");
+  AE_EXPECT_EQ(f.session.screen().textureQuery,texture,"texture inspector query isolated");
+  AE_EXPECT_EQ(f.session.screen().referenceQuery,reference,"reference picker query isolated");
+  AE_EXPECT_EQ(f.session.screen().globalQuery,global,"global search query isolated");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogItemBase)),"tap first filtered cell");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].sourceCatalogId,target,"filtered identity selects original catalog row, not page slot zero");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61))) && f.tap(id(Widget::TerrainMaterialLibrary)),"reopen saved material search context");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogQuery,target,"context retains its query");
+  AE_EXPECT_TRUE(f.catalogQuery("no_such_terrain_source_903714"),"query empty result");
+  AE_EXPECT_TRUE(f.text("Sem resultados"),"empty results explained");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(!f.point(id(Widget::TerrainCatalogItemBase),point),"no fake selectable cell");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(1))),"clear actual query");
+  AE_EXPECT_TRUE(f.session.screen().terrainCatalogQuery.empty(),"clear resets only terrain query");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogItemBase)),"original results restored");
+}
+
+AE_TEST(terrain_catalog_search_filtered_texture_selection_reaches_pbr_noise_geo_and_global) {
+  TerrainUiFixture f;
+  const auto module=[](u32 a){return id(editor::terrainModuleAction(a));};
+  const auto noise=[](u32 a){return id(editor::terrainNoiseAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"load actual sources");
+  const auto catalog=f.session.screen().terrainCatalog;
+  AE_EXPECT_TRUE(catalog && !catalog->textures.empty(),"transported source textures exist");
+  const auto target=catalog->textures.back().identity;
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(id(Widget::TerrainMaterialMaps)) && f.tap(id(editor::terrainCatalogAction(4))),"PBR opens real texture picker");
+  AE_EXPECT_TRUE(f.catalogQuery(target.text()) && f.textureThumbnail(catalog->textures.back().id) && f.tap(id(editor::terrainCatalogAction(8))),"choose filtered PBR source with actual32px thumbnail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].texture==target,"PBR resolves filtered GUID");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(noise(0)) && f.tap(noise(10)),"open independent noise source context");
+  AE_EXPECT_TRUE(f.session.screen().terrainCatalogQuery.empty(),"new picker does not inherit PBR query");
+  AE_EXPECT_TRUE(f.catalogQuery(target.text()) && f.textureThumbnail(catalog->textures.back().id) && f.tap(noise(16)),"choose filtered noise source with actual thumbnail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.detailNoise.map.texture==target,"noise resolves filtered GUID");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(module(0)) && f.tap(module(60)) && f.tap(module(10)) && f.tap(module(23)),"open Geo albedo source");
+  AE_EXPECT_TRUE(f.catalogQuery(target.text()) && f.textureThumbnail(catalog->textures.back().id) && f.tap(module(32)),"choose filtered Geo source with actual thumbnail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.geo.albedo.texture==target,"Geo resolves filtered GUID");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(module(13)) && f.tap(module(21)) && f.tap(module(23)),"open global tint source");
+  AE_EXPECT_TRUE(f.catalogQuery(target.text()) && f.textureThumbnail(catalog->textures.back().id) && f.tap(module(32)),"choose filtered global source with actual thumbnail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.globalMaps[0].map.texture==target,"Global resolves filtered GUID");
+}
+
+AE_TEST(terrain_catalog_search_filters_and_stale_identity_guard_cover_every_picker_scope) {
+  TerrainUiFixture f;
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"load real catalog");
+  editor::EditorScreenState state;state.terrainCatalog=f.session.screen().terrainCatalog;
+  for(u32 view:{1u,8u,9u,10u,11u,20u,21u,22u,23u,24u,25u,39u,40u,41u,59u,69u,80u,81u,82u,90u,91u,92u,150u,151u,180u,181u,182u,183u,190u}) {
+    state.terrainMaterialView=view;state.terrainCatalogPage=0;state.terrainCatalogQuery.clear();
+    AE_EXPECT_TRUE(editor::terrainCatalogSearchView(view),"all actual catalog picker routes share search helper");
+    editor::terrainCatalogRecordVisible(state);
+    const bool material=editor::terrainCatalogMaterialScope(view);
+    AE_EXPECT_EQ(editor::terrainCatalogResolve(state,0,material),0u,"unfiltered first result retains original index");
+    state.terrainCatalogQuery="definitely_missing_source";
+    AE_EXPECT_EQ(editor::terrainCatalogResolve(state,0,material),~0u,"stale drawn result rejected after query change");
+  }
+  state.terrainCatalogQuery.clear();state.terrainCatalogRoleFilter=2;
+  const auto normals=editor::terrainCatalogIndices(state,false);
+  AE_EXPECT_TRUE(!normals.empty(),"role filter finds actual authored normal references");
+  for(auto index:normals) {
+    bool referenced=(state.terrainCatalog->textures[index].roleMask&(1u<<1))!=0;const auto guid=state.terrainCatalog->textures[index].identity;
+    for(const auto &m:state.terrainCatalog->materials) {
+      referenced=referenced || m.layer.maps[1].texture==guid;
+      for(const auto &v:m.layer.cluster.variants)referenced=referenced || v.maps[1].texture==guid;
+    }
+    AE_EXPECT_TRUE(referenced,"normal role derives from authored map role rather than filename");
+  }
+  state.terrainCatalogRoleFilter=0;
+  const auto packages=editor::terrainCatalogPackages(state);
+  AE_EXPECT_TRUE(!packages.empty(),"real package provenance available");
+  state.terrainCatalogPackageFilter=packages.front();
+  for(auto index:editor::terrainCatalogIndices(state,true))AE_EXPECT_EQ(state.terrainCatalog->materials[index].package,packages.front(),"package filter uses real provenance");
+}
+
+
+AE_TEST(terrain_catalog_search_cluster_material_and_texture_pickers_preserve_full_variant) {
+  TerrainUiFixture f;
+  const auto cluster=[](u32 a){return id(editor::terrainClusterAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(editor::terrainNoiseAction(0))) && f.tap(cluster(0)) && f.tap(cluster(5)),"open actual new variant material picker");
+  const auto catalog=f.session.screen().terrainCatalog;
+  const auto &material=catalog->materials.back();
+  AE_EXPECT_TRUE(f.catalogQuery(material.id) && f.tap(cluster(20)),"filtered material creates real complete variant");
+  const auto &variant=f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0];
+  AE_EXPECT_TRUE(variant.identity==material.layer.identity,"stable material identity selected through filtered list");
+  for(u32 role=0;role<7;++role)AE_EXPECT_TRUE(variant.maps[role].texture==material.layer.maps[role].texture,"all seven map sources copied");
+  const auto target=catalog->textures.back().identity;
+  AE_EXPECT_TRUE(f.tap(cluster(7)) && f.tap(cluster(9)),"open variant texture picker");
+  AE_EXPECT_TRUE(f.catalogQuery(target.text()) && f.textureThumbnail(catalog->textures.back().id) && f.tap(cluster(32)),"filtered texture thumbnail targets variant map");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0].maps[0].texture==target,"variant texture selects filtered original GUID");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0].identity==material.layer.identity,"map replacement preserves variant identity");
+}
+
+
+AE_TEST(terrain_catalog_search_filter_buttons_reset_pages_and_keep_zero_scroll_entry) {
+  TerrainUiFixture f;
+  const auto search=[](u32 a){return id(editor::terrainCatalogAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"open compact catalog");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(search(0),point) && f.point(search(2),point) && f.point(search(3),point),"search and real filters visible immediately");
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogNext)) && f.tap(search(2)),"change authored role after paging");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,0u,"role filter resets page");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,1u,"actual color source filter");
+  AE_EXPECT_TRUE(f.tap(search(3)),"choose first actual source package");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogPage,0u,"package filter resets page");
+  const auto expected=editor::terrainCatalogIndices(f.session.screen(),true);
+  AE_EXPECT_TRUE(!expected.empty(),"real package and color role yield selectable materials");
+  const auto material=f.session.screen().terrainCatalog->materials[expected[0]].id;
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainCatalogItemBase)),"select filtered package result through touch");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].sourceCatalogId,material,"filter controls and selection share the same index vector");
+}
+
+
+AE_TEST(terrain_snow_modes_real_sources_exact_amount_and_explicit_measured_height_range) {
+  TerrainUiFixture f;
+  const auto snow=[](u32 a){return id(editor::terrainSnowAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(snow(0)),"Snow opens through real root navigation");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"compact Snow opens at zero scroll");
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase,point),"first effectful amount slider visible immediately");
+  AE_EXPECT_TRUE(f.text("Neve · desligada"),"Off state is explicit in sticky context");
+  AE_EXPECT_TRUE(f.tap(snow(21)) && f.tap(snow(32)) && f.tap(snow(20)),"explicit preset button transports original sources without activating Snow");
+  AE_EXPECT_TRUE(f.snowMode(2),"Simple seeds real original mandatory source views");
+  auto settings=f.session.screen().terrainDraft.surface.snow;
+  AE_EXPECT_TRUE(settings.mode==resources::TerrainSnowMode::Simple,"Simple selects actual runtime mode");
+  AE_EXPECT_TRUE(settings.diffuse.texture.valid() && settings.diffuse.texture==settings.height.texture,"diffuse RGB and height A share original GUID, separate authored maps");
+  AE_EXPECT_TRUE(settings.normal.texture==settings.smoothness.texture && settings.normal.texture==settings.ao.texture,"packed normal and scalar views share exact original");
+  AE_EXPECT_TRUE(settings.normal.channel==resources::TerrainSurfaceChannel::NormalGA,"Snow packing explicitly GA");
+  for(const auto guid:{settings.diffuse.texture,settings.normal.texture}) {
+    const auto &sources=f.session.screen().terrainCatalog->textures;
+    const auto source=std::find_if(sources.begin(),sources.end(),[&](const auto &entry){return entry.identity==guid;});
+    AE_EXPECT_TRUE(source!=sources.end() && source->width==1024 && source->height==1024,"preset resolves actual full1024 catalog originals, never thumbnails");
+  }
+
+  AE_EXPECT_EQ(settings.heightAngleRange[0],50.f,"source height start preserved during mode selection");
+  AE_EXPECT_EQ(settings.heightAngleRange[1],140.f,"source height end preserved during mode selection");
+  AE_EXPECT_TRUE(f.text("Acima do plano"),"default range outside known plane is explained");
+  f.render();AE_EXPECT_EQ(f.session.screen().terrainScroll,0.f,"mode returns to amount and range at zero scroll");
+  AE_EXPECT_TRUE(f.point(snow(72),point),"actual range state/action is visible immediately below amount");
+  AE_EXPECT_TRUE(f.tap(snow(72),false),"zero-scroll authoring action fits actual flat draft with documented one metre margin");
+  settings=f.session.screen().terrainDraft.surface.snow;
+  AE_EXPECT_EQ(settings.heightAngleRange[0],f.session.screen().terrainDraft.base-1,"measured lower bound with explicit margin");
+  AE_EXPECT_EQ(settings.heightAngleRange[1],f.session.screen().terrainDraft.base+1,"measured upper bound with explicit margin");
+  AE_EXPECT_TRUE(f.tap(snow(20)) && f.tap(editor::terrainSnowNumberBase),"exact amount entry from actual numeric chip");
+  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.75",true),"Snow numeric expression routes to separate namespace");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.snow.amount,.75f,"precise amount persists");
+  AE_EXPECT_TRUE(f.snowMode(3),"switch to Rich without dropping prepared values");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.snow.amount,.75f,"Rich preserves amount");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61))) && f.tap(snow(100)) && f.tap(snow(109)),"return to root and choose explicit512 authoring ceiling before publication");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.textureResidency.mode==resources::TerrainTextureResidencyMode::Cap && f.session.screen().terrainDraft.surface.textureResidency.maxSide==512,"actual terrain authoring policy is512 before publication");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"actual Apply publishes Snow original views with chosen mip policy");
+  AE_EXPECT_EQ(f.session.screen().terrainAppliedRecipe,expected,"published recipe includes exact Snow and residency fields");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root!=0 && f.session.openTerrain(root),"reopen actual published terrain");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"GLB reopen retains GA, source GUIDs, height range and quality choice");
+  const auto scenePath=f.path/"snow-ui.aescene";
+  AE_EXPECT_TRUE(f.session.save(scenePath.string().c_str(),0) && f.session.load(scenePath.string().c_str(),0) && f.session.openTerrain(root),"scene round trip restores imported Snow terrain");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"saved scene preserves complete authored Snow state");
+
+}
+
+AE_TEST(terrain_snow_signed_mapping_ordered_fades_and_nonzero_direction_use_real_sliders) {
+  TerrainUiFixture f;const auto snow=[](u32 a){return id(editor::terrainSnowAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(snow(0)) && f.snowMode(2) && f.tap(snow(26)),"open Snow height and direction");
+  AE_EXPECT_TRUE(f.slide(265,1) && f.slide(266,0),"height edges stay ordered while dragging both boundaries");
+  const auto &first=f.session.screen().terrainDraft.surface.snow;
+  AE_EXPECT_TRUE(first.heightAngleRange[1]>first.heightAngleRange[0],"height range never crosses");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(261,0),"all-zero direction rejected atomically");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.snow.upVector[1],1.f,"rejected direction does not modify draft");
+  AE_EXPECT_TRUE(f.tap(snow(20)) && f.tap(snow(25)),"open actual mapping");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(263,-32) && f.session.setTerrainNumber(264,0),"signed and zero frequency preserved");
+  AE_EXPECT_TRUE(f.tap(snow(63)) && f.tap(snow(65)) && f.tap(snow(64)),"WorldSpace, triplanar and stochastic are independent flags");
+  AE_EXPECT_TRUE(f.slide(279,.5f) && f.slide(280,.5f),"stochastic source controls are sliders");
+  AE_EXPECT_TRUE(f.tap(snow(22)) && f.tap(snow(28)) && f.tap(snow(61)),"distance resample real enable path");
+  AE_EXPECT_TRUE(f.slide(277,1) && f.slide(278,0),"distance endpoints remain usable at boundary");
+  const auto &settings=f.session.screen().terrainDraft.surface.snow;
+  AE_EXPECT_TRUE(settings.distanceResample[3]>settings.distanceResample[2],"distance fade cannot cross");
+  AE_EXPECT_EQ(settings.uvScales[0],-32.f,"mirroring retains signed authoring value");
+  AE_EXPECT_EQ(settings.uvScales[1],0.f,"fixed coordinate retains zero");
+}
+
+AE_TEST(terrain_snow_map_ga_mask_and_m12_lighting_have_precise_effectful_fields) {
+  TerrainUiFixture f;const auto snow=[](u32 a){return id(editor::terrainSnowAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(snow(0)) && f.snowMode(3) && f.tap(snow(21)) && f.tap(snow(42)),"open original GA normal editor");
+  const auto original=f.session.screen().terrainDraft.surface.snow.normal.texture;
+  AE_EXPECT_TRUE(f.tap(snow(52)),"Snow normal cycles GA to RGB");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.channel==resources::TerrainSurfaceChannel::NormalRGB,"RGB is authored explicitly");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(309,.6),"RGB exposes consumed Z factor");
+  AE_EXPECT_TRUE(f.tap(snow(52)),"Snow normal cycles RGB to RG");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.channel==resources::TerrainSurfaceChannel::NormalRG,"RG reconstructs Z");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(309,.2),"RG hides reconstructed Z");
+  AE_EXPECT_TRUE(f.tap(snow(52)),"Snow normal cycles RG to GA");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.channel==resources::TerrainSurfaceChannel::NormalGA,"GA retains distinct A/G packing");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.texture==original,"packing cycle never replaces actual source");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.snow.normal.colorFactor[2],.6f,"hidden Z preparation survives packed modes");
+  for(u32 field:{305u,306u,309u,310u,313u,314u,317u,318u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"hidden scalar/Z/alpha controls cannot mutate GA map");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(307,.25) && f.session.setTerrainNumber(308,.75),"logical GA X/Y factors editable");
+  AE_EXPECT_TRUE(f.tap(snow(48)),"open real Snow source picker");
+  AE_EXPECT_TRUE(f.catalogQuery("cc22f06eaf78d43f782ee617776c1640") && f.textureThumbnail("cc22f06eaf78d43f782ee617776c1640") && f.tap(snow(80)),"search selects exact packed original GUID with its real32px thumbnail");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.channel==resources::TerrainSurfaceChannel::NormalGA,"source replacement retains explicit GA packing");
+  AE_EXPECT_TRUE(f.tap(snow(21)) && f.tap(snow(46)) && f.tap(snow(48)),"open real mask source");
+  AE_EXPECT_TRUE(f.catalogQuery("b822881b9ef3441f29c88bb6e0ef60cd") && f.tap(snow(80)),"mask gets explicitly chosen actual source");
+  for(u32 field:{309u,310u,313u,314u,317u,318u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"mask exposes only consumed R/G remaps");
+  AE_EXPECT_TRUE(f.tap(snow(22)) && f.tap(snow(62)),"source-backed R/G mask can activate");
+  AE_EXPECT_TRUE(f.tap(snow(23)) && f.tap(snow(67)) && f.tap(snow(30)),"real SSS lighting path");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(286,.8),"SSS alpha is actual thickness multiplier");
+  AE_EXPECT_TRUE(f.tap(snow(23)) && f.tap(snow(68)) && f.tap(snow(31)) && f.slide(290,.5f),"rim light power slider");
+  AE_EXPECT_TRUE(f.tap(snow(23)) && f.tap(snow(29)) && f.tap(snow(69)),"sparkle has transported Perlin source");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(296,4) && f.session.setTerrainNumber(297,6) && f.session.setTerrainNumber(298,2) && f.session.setTerrainNumber(299,12) && f.session.setTerrainNumber(300,.6),"all distinct sparkle parameters authorable");
+  AE_EXPECT_TRUE(f.tap(snow(24)) && f.tap(snow(66)) && f.slide(281,.25f) && f.slide(282,.75f),"Rich per-layer coverage and porosity");
+  const auto &surface=f.session.screen().terrainDraft.surface;
+  AE_EXPECT_TRUE(surface.snow.sssEnabled && surface.snow.rimEnabled && surface.snow.sparkleEnabled && surface.snow.maskEnabled,"all authored effects reach real flags");
+  AE_EXPECT_EQ(surface.layers[0].snowParticipation,.25f,"participation belongs to selected layer");
+  AE_EXPECT_EQ(surface.layers[1].snowParticipation,1.f,"another layer remains independent");
+}
+
+AE_TEST(terrain_texture_residency_terrain_caps_preserve_map_original_override_and_geometry) {
+  TerrainUiFixture f;const auto snow=[](u32 a){return id(editor::terrainSnowAction(a));};
+  const auto back=id(editor::terrainModuleAction(61));
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialMaps)),"open authored PBR map");
+  const auto texture=f.session.screen().terrainDraft.surface.layers[0].maps[0].texture;
+  const auto size=f.session.screen().terrainDraft.size;
+  AE_EXPECT_TRUE(f.tap(snow(104)),"explicit Original override on authored map");
+  AE_EXPECT_TRUE(f.tap(snow(100)) && f.tap(snow(108)),"choose terrain1024 ceiling explicitly");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.textureResidency.maxSide,1024u,"terrain ceiling saved");
+  AE_EXPECT_TRUE(f.tap(back) && f.tap(id(Widget::TerrainMaterialMaps)),"return to same authored map");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].textureResidency.mode==resources::TerrainTextureResidencyMode::Original,"map override survives terrain policy change");
+  AE_EXPECT_TRUE(f.tap(snow(103)),"map can explicitly inherit terrain again");
+  AE_EXPECT_TRUE(f.tap(snow(105)),"map can choose its own cap");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].maps[0].textureResidency.maxSide,4096u,"first explicit map cap4096");
+  AE_EXPECT_TRUE(f.tap(snow(105)),"next supported authored cap");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].maps[0].textureResidency.maxSide,2048u,"map cap independent of terrain cap");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[0].texture==texture,"policy never swaps original texture identity");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.size,size,"residency never changes world units/domain");
+}
+
+
+AE_TEST(terrain_generic_normal_pages_offer_rgb_rg_ga_and_reject_hidden_ga_components) {
+  TerrainUiFixture f;const auto module=[](u32 a){return id(editor::terrainModuleAction(a));};
+  const auto noise=[](u32 a){return id(editor::terrainNoiseAction(a));};
+  const auto cluster=[](u32 a){return id(editor::terrainClusterAction(a));};
+  const std::string packed="cc22f06eaf78d43f782ee617776c1640";
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialMaps)) && f.tap(id(Widget::TerrainMapNext)),"open PBR normal role");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(4))) && f.catalogQuery(packed) && f.tap(id(editor::terrainCatalogAction(8))),"choose actual GA source");
+  for(u32 i=0;i<3 && f.session.screen().terrainDraft.surface.layers[0].maps[1].channel!=resources::TerrainSurfaceChannel::NormalGA;++i)AE_EXPECT_TRUE(f.tap(id(Widget::TerrainMapChannel)),"cycle real normal packing");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].maps[1].channel==resources::TerrainSurfaceChannel::NormalGA,"PBR exposes distinct GA");
+  for(u32 field:{97u,98u,101u,102u,105u,106u,109u,110u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"PBR GA hides scalar/Z/alpha");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(noise(0)) && f.tap(noise(23)) && f.tap(noise(10)) && f.catalogQuery(packed) && f.tap(noise(16)),"normal-noise actual GA source");
+  for(u32 i=0;i<3 && f.session.screen().terrainDraft.surface.normalNoise[0].map.channel!=resources::TerrainSurfaceChannel::NormalGA;++i)AE_EXPECT_TRUE(f.tap(noise(7)),"noise cycles RGB/RG/GA");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.normalNoise[0].map.channel==resources::TerrainSurfaceChannel::NormalGA,"noise GA preserved");
+  for(u32 field:{134u,135u,138u,139u,142u,143u,146u,147u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"noise GA hides scalar/Z/alpha");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(module(0)) && f.tap(module(60)) && f.tap(module(11)),"open Geo normal");
+  AE_EXPECT_TRUE(f.tap(module(23)) && f.catalogQuery(packed) && f.tap(module(32)),"Geo selects actual GA source");
+  for(u32 i=0;i<3 && f.session.screen().terrainDraft.surface.geo.normal.channel!=resources::TerrainSurfaceChannel::NormalGA;++i)AE_EXPECT_TRUE(f.tap(module(25)),"Geo cycles RGB/RG/GA");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.geo.normal.channel==resources::TerrainSurfaceChannel::NormalGA,"Geo GA accepted by model");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(227,.5),"Geo GA Z exact gate");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(module(13)) && f.tap(module(15)) && f.tap(module(21)) && f.tap(module(23)) && f.catalogQuery(packed) && f.tap(module(32)),"Global normal chooses GA source");
+  for(u32 i=0;i<3 && f.session.screen().terrainDraft.surface.globalMaps[1].map.channel!=resources::TerrainSurfaceChannel::NormalGA;++i)AE_EXPECT_TRUE(f.tap(module(25)),"Global cycles RGB/RG/GA");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.globalMaps[1].map.channel==resources::TerrainSurfaceChannel::NormalGA,"Global GA persisted");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(227,.5),"Global GA Z exact gate");
+  AE_EXPECT_TRUE(f.tap(module(61)) && f.tap(noise(0)) && f.tap(cluster(0)) && f.tap(cluster(5)) && f.tap(cluster(20)) && f.tap(cluster(7)),"create real variant for normal map");
+  for(u32 i=0;i<7 && f.session.screen().terrainMapRole!=1;++i)AE_EXPECT_TRUE(f.tap(cluster(12)),"select variant normal role");
+  AE_EXPECT_TRUE(f.tap(cluster(9)) && f.catalogQuery(packed) && f.tap(cluster(32)),"variant chooses packed original source");
+  for(u32 i=0;i<3 && f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0].maps[1].channel!=resources::TerrainSurfaceChannel::NormalGA;++i)AE_EXPECT_TRUE(f.tap(cluster(13)),"variant cycles RGB/RG/GA");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.layers[0].cluster.variants[0].maps[1].channel==resources::TerrainSurfaceChannel::NormalGA,"variant GA persisted");
+  for(u32 field:{177u,178u,181u,182u,185u,186u,189u,190u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"variant GA hidden-component exact gate");
+}
+
+
+AE_TEST(terrain_catalog_texture_filters_use_explicit_snow_geo_roles_and_texture_package_origin) {
+  TerrainUiFixture f;
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"load actual152-texture catalog");
+  editor::EditorScreenState state;state.terrainCatalog=f.session.screen().terrainCatalog;
+  state.terrainMaterialView=190;state.terrainCatalogRoleFilter=2;
+  const auto materialsBefore=editor::terrainCatalogIndices(state,true);
+  for(const char *guidText:{"cc22f06eaf78d43f782ee617776c1640","192aaea3237044f608d663c9884e0c70"}){
+    const auto &textures=state.terrainCatalog->textures;
+    const auto found=std::find_if(textures.begin(),textures.end(),[&](const auto &texture){return texture.identity.text()==guidText;});
+    AE_EXPECT_TRUE(found!=textures.end(),"real standalone SnowGA/Geo normal source exists");
+    AE_EXPECT_TRUE((found->roleMask&(1u<<1))!=0,"explicit JSON source_roles supplies Normal role");
+    AE_EXPECT_TRUE(!found->package.empty(),"actual texture package is retained");
+    const auto packages=editor::terrainCatalogPackages(state);
+    AE_EXPECT_TRUE(std::find(packages.begin(),packages.end(),found->package)!=packages.end(),"texture provenance is a discoverable package");
+    state.terrainCatalogPackageFilter=found->package;state.terrainCatalogQuery=guidText;
+    const auto filtered=editor::terrainCatalogIndices(state,false);
+    AE_EXPECT_EQ(filtered.size(),usize(1),"standalone source survives Normal plus its real package filter");
+    AE_EXPECT_TRUE(textures[filtered[0]].identity==found->identity,"filtered row retains exact original GUID");
+    if(std::string_view(guidText)=="cc22f06eaf78d43f782ee617776c1640")AE_EXPECT_TRUE((found->roleMask&(1u<<3)) && (found->roleMask&(1u<<4)),"packed Snow metadata also exposes AO and smoothness in roughness role");
+    state.terrainCatalogPackageFilter="different_texture_origin";
+    AE_EXPECT_TRUE(editor::terrainCatalogIndices(state,false).empty(),"wrong origin cannot be inferred from materials or filenames");
+    state.terrainCatalogPackageFilter.clear();state.terrainCatalogQuery.clear();
+  }
+  AE_EXPECT_TRUE(editor::terrainCatalogIndices(state,true)==materialsBefore,"texture metadata does not alter material-query behavior");
+}
+
+
+AE_TEST(terrain_new_normal_pickers_default_to_real_normal_role_but_saved_all_wins) {
+  TerrainUiFixture f;
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialMaps)) && f.tap(id(Widget::TerrainMapNext)) && f.tap(id(editor::terrainCatalogAction(4))),"open new PBR normal source context");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,2u,"new unambiguous normal picker starts Normal");
+  AE_EXPECT_TRUE(f.text("Papel: Normal"),"default purpose is visible");
+  for(u32 i=0;i<6;++i)AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(2))),"author can cycle to All");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"All remains a real explicit choice");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(5))) && f.tap(id(editor::terrainCatalogAction(4))),"back and reopen same normal picker");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"saved All is not reset to purpose default");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(5))) && f.tap(id(Widget::TerrainMapNext)) && f.tap(id(editor::terrainCatalogAction(4))),"open different Height source context");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"other roles retain existing All default");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(5))) && f.tap(id(Widget::TerrainMapPrevious)) && f.tap(id(editor::terrainCatalogAction(4))),"return to Normal source context");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"role-scoped saved override survives purpose switching");
+}
+
+AE_TEST(terrain_normal_purpose_defaults_cover_every_normal_consumer_and_keep_snow_ga_selectable) {
+  TerrainUiFixture f;
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(id(Widget::TerrainMaterialLibrary)),"load catalog with standalone source roles");
+  editor::EditorScreenState state;state.terrainCatalog=f.session.screen().terrainCatalog;
+  for(const auto route:std::array<std::array<u32,2>,17>{{{190,1},{90,1},{91,1},{92,1},{151,0},{181,0},{222,0},{225,0},{20,0},{21,0},{22,0},{23,0},{24,0},{25,0},{39,0},{190,0},{90,0}}}){
+    state.terrainMaterialView=0;state.terrainMapRole=route[1];state.terrainCatalogSearchContexts.clear();state.terrainCatalogRoleFilter=0;
+    {editor::TerrainCatalogContextGuard context(state);state.terrainMaterialView=route[0];}
+    const bool normal=!(route[0]==190 && route[1]==0) && !(route[0]==90 && route[1]==0);
+    AE_EXPECT_EQ(state.terrainCatalogRoleFilter,normal?2u:0u,"new context uses only unequivocal normal purpose");
+    state.terrainCatalogRoleFilter=0;
+    {editor::TerrainCatalogContextGuard context(state);state.terrainMaterialView=0;}
+    {editor::TerrainCatalogContextGuard context(state);state.terrainMaterialView=route[0];}
+    AE_EXPECT_EQ(state.terrainCatalogRoleFilter,0u,"all context overrides survive leaving and reopening");
+  }
+  const auto snow=[](u32 action){return id(editor::terrainSnowAction(action));};
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61))) && f.tap(snow(0)) && f.tap(snow(21)) && f.tap(snow(42)) && f.tap(snow(48)),"open new SnowGA normal picker through real editor");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,2u,"SnowGA source picker begins Normal");
+  AE_EXPECT_TRUE(f.catalogQuery("cc22f06eaf78d43f782ee617776c1640") && f.textureThumbnail("cc22f06eaf78d43f782ee617776c1640") && f.tap(snow(80)),"explicit source_roles keeps actual SnowGA original selectable under Normal");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.snow.normal.channel==resources::TerrainSurfaceChannel::NormalGA,"GA packing preserved");
+}
+
+AE_TEST(terrain_snow_normal_rgb_rg_source_replacement_apply_and_reopen_preserve_packing) {
+  for(const auto packing:{resources::TerrainSurfaceChannel::NormalRGB,resources::TerrainSurfaceChannel::NormalRG}) {
+    TerrainUiFixture f;const auto snow=[](u32 a){return id(editor::terrainSnowAction(a));};
+    AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(snow(0)) && f.snowMode(2) && f.tap(snow(72)),"prepare source-backed Snow with measured range");
+    AE_EXPECT_TRUE(f.tap(snow(21)) && f.tap(snow(42)) && f.tap(snow(52)),"open normal and choose RGB");
+    if(packing==resources::TerrainSurfaceChannel::NormalRG)AE_EXPECT_TRUE(f.tap(snow(52)),"choose RG explicitly");
+    AE_EXPECT_TRUE(f.session.setTerrainNumber(307,.35) && f.session.setTerrainNumber(308,.65),"prepare logical XY factors");
+    const auto replacement=f.session.screen().terrainCatalog->materials[0].layer.maps[1].texture;
+    AE_EXPECT_TRUE(replacement.valid() && replacement!=f.session.screen().terrainDraft.surface.snow.normal.texture,"replacement is a different actual normal source");
+    AE_EXPECT_TRUE(f.tap(snow(48)) && f.catalogQuery(replacement.text()) && f.tap(snow(80)),"replace source through actual filtered picker");
+    const auto &normal=f.session.screen().terrainDraft.surface.snow.normal;
+    AE_EXPECT_TRUE(normal.channel==packing && normal.linear,"source selection preserves authored packing and normal linear space");
+    AE_EXPECT_EQ(normal.colorFactor[0],.35f,"source selection preserves logical X");
+    AE_EXPECT_EQ(normal.colorFactor[1],.65f,"source selection preserves logical Y");
+    for(u32 field:{305u,306u,310u,314u,318u})AE_EXPECT_TRUE(!f.session.setTerrainNumber(field,.5),"scalar and alpha controls remain unavailable");
+    AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(61))) && f.tap(snow(100)) && f.tap(snow(109)),"choose explicit512 publication budget");
+    const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+    AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply publishes explicitly authored normal packing");
+    AE_EXPECT_EQ(f.session.screen().terrainAppliedRecipe,expected,"publication retains exact Snow recipe");
+    const auto target=f.session.screen().terrainTarget;
+    AE_EXPECT_TRUE(target!=0 && f.session.openTerrain(target),"reopen actual terrain");
+    AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"reopen retains RGB/RG source and logical factors");
+  }
 }

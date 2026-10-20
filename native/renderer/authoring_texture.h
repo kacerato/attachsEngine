@@ -63,6 +63,10 @@ struct AuthoringTexture {
   u32 samplerFlags = AuthoringTextureLinearFilter | AuthoringTextureLinearMip | AuthoringTextureRepeatU | AuthoringTextureRepeatV;
   u32 format = AuthoringTextureRgba8;
   std::vector<u8> mipChain;
+  // Explicit author ceiling: GPU uploads/streaming cannot load a finer mip.
+  // Original dimensions and recoverable bytes stay intact for reauthoring.
+  // Unity 6000.0 TextureMipmapLimitSettings / Texture2D.activeMipmapLimit.
+  u32 minimumResidentMip = 0;
   // Bytes dos níveis [from, levels) — a cadeia inteira com `from` 0.
   u64 chainBytesFrom(u32 from) const {
     if (!authoringTextureBlock(format)) return 0;
@@ -74,7 +78,7 @@ struct AuthoringTexture {
   u64 expectedBytes() const { return chainBytesFrom(0); }
   bool partial() const { return firstLevel != 0; }
   bool valid() const {
-    return width && height && levels && firstLevel < levels && (!firstLevel || file) &&
+    return width && height && levels && minimumResidentMip < levels && firstLevel < levels && (!firstLevel || file) &&
            mipChain.size() == chainBytesFrom(firstLevel);
   }
 };

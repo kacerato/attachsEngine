@@ -18,7 +18,7 @@ namespace ae::resources {
 // uma vez na lista (mesmo ponteiro) conta uma vez e é reduzida uma vez.
 struct TextureBudgetReport {
   u64 budgetBytes = 0;
-  u64 requestedBytes = 0; // soma das cadeias recebidas, compartilhadas contadas uma vez
+  u64 requestedBytes = 0; // soma das cadeias autorizadas por ceiling, compartilhadas uma vez
   u64 residentBytes = 0;  // soma depois das reduções
   u32 textures = 0;       // texturas distintas
   u32 reducedTextures = 0;
@@ -29,6 +29,9 @@ struct TextureBudgetReport {
 // Troca, em `textures`, as entradas reduzidas por cópias com menos níveis.
 // Nunca reduz uma textura abaixo de `minimumDimension` no menor lado, nem a que
 // tem um único nível. Entradas nulas ou inválidas ficam como estão e não contam.
+// Explicit author ceilings and preserveResolution sources are never reduced.
+// Their full bytes remain available; the GPU budget counts permitted mip tails.
 TextureBudgetReport applyTextureBudget(std::vector<renderer::SharedAuthoringTexture> &textures, u64 budgetBytes,
-                                       u32 minimumDimension);
+                                       u32 minimumDimension,
+                                       std::span<const renderer::SharedAuthoringTexture> preserveResolution = {});
 } // namespace ae::resources

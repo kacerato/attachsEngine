@@ -14,6 +14,7 @@ function(aether_add_terrain_core_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_recovery.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_modules.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_snow_next.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_catalog.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_history_store.cpp

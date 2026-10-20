@@ -5,8 +5,12 @@ namespace ae::resources {
 struct TerrainCatalogTexture {
   std::string id, sourcePath, runtimePath, thumbnailPath, originalAssetPath;
   std::string sourceHash, runtimeHash, archiveHash;
+
   AssetGuid identity;
   u32 width = 0, height = 0;
+  std::string package; // Actual texture origin; independent of material usage.
+  u32 roleMask=0; // PBR role bits from explicit source_roles; zero permits legacy map-reference fallback.
+
 };
 struct TerrainCatalogMaterial {
   std::string id, package, sourcePath;

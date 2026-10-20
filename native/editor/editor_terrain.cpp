@@ -6,6 +6,7 @@
 #include "editor/editor_terrain_recovery.h"
 #include "editor/terrain_controls.h"
 #include "editor/editor_terrain_noise_controls.h"
+#include "editor/editor_terrain_catalog_search.h"
 #include "renderer/authoring_texture.h"
 #include "resources/terrain_textures.generated.h"
 #include "resources/terrain_vertex_index.h"
@@ -34,6 +35,7 @@ std::array<std::vector<u8>, 4> textures() {
 double number(const EditorScreenState &s, u32 i) {
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
+  if(terrainSnowNumberAvailable(s,i))return *terrainSnowNumber(r.surface,b.layer,s.terrainMaterialView,i);
   if(i>=128 && i<=154 && (terrainNoiseAvailable(r.surface,b.layer,s.terrainMaterialView) || (i>=149 && i<=151 && s.terrainMaterialView==30 && b.layer<r.surface.layers.size()) || (i>=152 && s.terrainMaterialView==50 && b.layer<r.surface.layers.size())))
     return *terrainNoiseNumber(r.surface,b.layer,s.terrainMaterialView,i);
   if(terrainClusterNumberAvailable(r.surface,b.layer,s.terrainMaterialView,i))
@@ -295,7 +297,8 @@ std::shared_ptr<const TerrainMaterialCache> prepareTerrainMaterial(
     const auto previousRefs=resources::terrainSurfaceTextureRefs(previous->binding.surface);
     const bool same=currentRefs.size()==previousRefs.size() && std::equal(
       currentRefs.begin(),currentRefs.end(),previousRefs.begin(),[](const auto &a,const auto &b){
-        return a.identity==b.identity && a.linear==b.linear && a.normal==b.normal && a.normalRG==b.normalRG;
+        return a.identity==b.identity && a.linear==b.linear && a.normal==b.normal && a.normalRG==b.normalRG &&
+               a.normalChannel==b.normalChannel && a.residencyCap==b.residencyCap && a.clampSampling==b.clampSampling;
       });
     if(same) {
       result->images=previous->images;result->textures=previous->textures;result->binding=previous->binding;
@@ -903,7 +906,7 @@ bool EditorSession::openTerrain(EditorEntityId target) {
 bool EditorSession::setTerrainNumber(u32 field, double value) {
   if (!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) ||
       (field >= 52 && field != 60 && !(field >= 64 && field <= 76) &&
-       !(field >= 96 && field <= 110) && !(field >= 128 && field <= 154) && !terrainClusterField(field) && !terrainModuleField(field)))
+       !(field >= 96 && field <= 110) && !(field >= 128 && field <= 154) && !terrainClusterField(field) && !terrainModuleField(field) && !terrainSnowField(field)))
     return false;
   if ((field == 0 || field == 2 || field == 6 || field == 7 || field == 28 ||
        field == 60) &&
@@ -911,6 +914,13 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
     return false;
   auto r = state_.terrainDraft;
   auto b = state_.terrainBrush;
+  if(terrainSnowField(field)) {
+    if(!terrainSnowNumberAvailable(state_,field))return false;
+    auto *target=terrainSnowNumber(r.surface,b.layer,state_.terrainMaterialView,field);
+    if(!target)return false;*target=float(value);
+    std::string error;if(!resources::validTerrainRecipe(r,error)){state_.terrainMessage=error;return false;}
+    state_.terrainDraft=std::move(r);state_.terrainMessage="Neve ajustada · prévia antes de aplicar";return true;
+  }
   if(terrainModuleField(field)) {
     if(!terrainModuleNumberAvailable(state_,field)) return false;
     if(field==255) {
@@ -929,6 +939,7 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   }
   if(terrainClusterField(field)) {
     if(!terrainClusterNumberAvailable(r.surface,b.layer,state_.terrainMaterialView,field)) return false;
+    if(field>=176 && state_.terrainMapRole==1){const auto &map=r.surface.layers[b.layer].cluster.variants[terrainClusterVariant(state_.terrainMaterialView)].maps[1];if(!terrainNormalMapNumberAvailable(map.channel,field,176,177,179))return false;}
     *terrainClusterNumber(r.surface,b.layer,state_.terrainMaterialView,field,state_.terrainMapRole)=float(value);
     std::string error;
     if(!resources::validTerrainRecipe(r,error)) {state_.terrainMessage=error;return false;}
@@ -936,6 +947,9 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
   }
   if(field>=128 && field<=154) {
     if(!(terrainNoiseAvailable(r.surface,b.layer,state_.terrainMaterialView) || (field>=149 && field<=151 && state_.terrainMaterialView==30 && b.layer<r.surface.layers.size()) || (field>=152 && state_.terrainMaterialView==50 && b.layer<r.surface.layers.size()))) return false;
+    if(field>=133 && field<=147 && terrainNoiseAvailable(r.surface,b.layer,state_.terrainMaterialView) && terrainNoiseNormal(state_.terrainMaterialView)){
+      const auto &map=terrainSelectedNoise(r.surface,b.layer,state_.terrainMaterialView).map;if(!terrainNormalMapNumberAvailable(map.channel,field,133,134,136))return false;
+    }
     *terrainNoiseNumber(r.surface,b.layer,state_.terrainMaterialView,field)=float(value);
     std::string error;
     if(!resources::validTerrainRecipe(r,error)) { state_.terrainMessage=error; return false; }
@@ -958,6 +972,7 @@ bool EditorSession::setTerrainNumber(u32 field, double value) {
       *values[field - 64] = v;
     } else {
       auto &map = layer.maps[std::min(state_.terrainMapRole, 6u)];
+      if(state_.terrainMapRole==1 && !terrainNormalMapNumberAvailable(map.channel,field,96,97,99))return false;
       if (field == 96)
         map.factor = v;
       else if (field == 97)
@@ -1689,6 +1704,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (!state_.terrainOpen)
     return false;
+  TerrainCatalogContextGuard catalogContext(state_);
   if (routing.tapped && (id == widgetId(EditorWidget::NavigationOrbit) ||
                          id == widgetId(EditorWidget::NavigationPan) ||
                          id == widgetId(EditorWidget::NavigationZoom))) {
@@ -2078,7 +2094,18 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
                             " selecionado · arraste ou ajuste XYZ";
     return true;
   }
-  const bool terrainControl = id >= base && id < base + 0x1000;
+  const bool terrainControl = id >= base && id < base + 0x2000;
+  if(id>=terrainSnowSliderBase && id<terrainSnowSliderBase+0x300 && !state_.terrainBusy) {
+    const auto encoded=id-terrainSnowSliderBase,field=256+encoded%0x100,column=encoded/0x100;
+    const auto range=terrainControlRange(state_,field);if(!range.enabled)return true;
+    if(routing.dragging && std::abs(routing.totalDelta.y)>std::abs(routing.totalDelta.x)) {
+      if(event.phase==ui::UiPointerPhase::Move)state_.terrainScroll=std::clamp(state_.terrainScroll-routing.stepDelta.y,0.f,terrainScrollLimit(state_,terrainPanelRect(state_)));
+    } else if(routing.tapped || (routing.dragging && event.phase==ui::UiPointerPhase::Move)) {
+      auto area=terrainContentRect(state_,terrainPanelRect(state_));if(column){area.width*=.5f;if(column==2)area.x+=area.width;}
+      setTerrainNumber(field,range.value((event.position.x-area.x-10)/std::max(1.f,area.width-20)));
+    }
+    return true;
+  }
   if (id >= widgetId(EditorWidget::TerrainSliderBase) &&
       id < widgetId(EditorWidget::TerrainSliderBase) + 0x300 &&
       !state_.terrainBusy) {
@@ -2139,6 +2166,137 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (state_.terrainBusy)
     return true;
+  if(id>=terrainSnowActionBase && id<terrainSnowActionBase+0x100) {
+    const auto action=id-terrainSnowActionBase;
+    const auto open=[&](u32 view){state_.terrainMaterialView=view;state_.terrainScroll=0;};
+    if(action==0 || action==100) {
+      if(!loadTerrainCatalog())return true;initializeTerrainSurface(state_.terrainDraft);state_.terrainDraft.blendedSurface=true;
+      open(action==0?200:240);return true;
+    }
+    auto recipe=state_.terrainDraft;auto &snow=recipe.surface.snow;
+    const auto view=state_.terrainMaterialView;
+    if(action>=20 && action<=29){open(200+action-20);return true;}
+    if(action==30 || action==31){open(action==30?245:246);return true;}
+    if(action>=40 && action<=47){open(210+action-40);return true;}
+    if(action==48 && terrainSnowMapView(view)){open(view+10);state_.terrainCatalogPage=0;return true;}
+    if(action==49 && terrainSnowPicker(view)){open(view-10);return true;}
+    if((action==50 || action==51) && terrainSnowMapView(view)){open(210+(terrainSnowMapRole(view)+(action==50?1:7))%8);return true;}
+    const auto findSource=[&](const char *text,resources::AssetGuid &guid){
+      if(!resources::AssetGuid::parse(text,guid)||!state_.terrainCatalog)return false;
+      return std::any_of(state_.terrainCatalog->textures.begin(),state_.terrainCatalog->textures.end(),[&](const auto &t){return t.identity==guid;});
+    };
+    const auto seed=[&](bool replace){
+      resources::AssetGuid diffuse,normal,noise,sparkle;
+      if(!findSource("b822881b9ef3441f29c88bb6e0ef60cd",diffuse)||!findSource("cc22f06eaf78d43f782ee617776c1640",normal))return false;
+      for(u32 role=0;role<5;++role){auto &map=terrainSnowMap(snow,role);if(replace || !map.texture.valid()){
+        map.texture=role<2?diffuse:normal;
+        map.channel=role==0?resources::TerrainSurfaceChannel::RGB:role==1?resources::TerrainSurfaceChannel::A:role==2?resources::TerrainSurfaceChannel::NormalGA:role==3?resources::TerrainSurfaceChannel::R:resources::TerrainSurfaceChannel::B;
+        map.linear=role!=0;
+      }}
+      if(findSource("3364d9aca19e4401dbdb0a9bcfcd70bc",noise) && (replace || !snow.normalNoiseMap.texture.valid())){
+        snow.normalNoiseMap.texture=noise;snow.normalNoiseMap.channel=resources::TerrainSurfaceChannel::NormalRGB;snow.normalNoiseMap.linear=true;}
+      if(findSource("fb84fc5f3e7e14ae7be5bd45efc3d3c4",sparkle) && (replace || !snow.sparkleNoiseMap.texture.valid())){
+        snow.sparkleNoiseMap.texture=sparkle;snow.sparkleNoiseMap.channel=resources::TerrainSurfaceChannel::RGB;snow.sparkleNoiseMap.linear=true;}
+      return true;
+    };
+    if(action>=1 && action<=3){
+      if(action>1 && (!snow.diffuse.texture.valid() || !snow.height.texture.valid() || !snow.normal.texture.valid() || !snow.smoothness.texture.valid() || !snow.ao.texture.valid()) && !seed(false)){
+        state_.terrainMessage="Fontes originais de neve indisponíveis · selecione cinco mapas reais";open(201);return true;}
+      snow.mode=resources::TerrainSnowMode(action-1);
+    } else if(action==32){if(!seed(true)){state_.terrainMessage="Fontes originais de neve não estão no catálogo";return true;}}
+    else if(action>=52 && action<=54 && terrainSnowMapView(view)){
+      const auto role=terrainSnowMapRole(view);auto &map=terrainSnowMap(snow,role);
+      if(action==52){if(role==2 || role==5)map.channel=terrainNextNormalChannel(map.channel);else map.channel=resources::TerrainSurfaceChannel((u32(map.channel)+1)%((role==1 || role==3 || role==4)?4:5));}
+      if(action==53)map.invert=!map.invert;if(action==54 && role!=2 && role!=5)map.linear=!map.linear;
+    } else if(action>=60 && action<=71){
+      if(action==60){if(!snow.normalNoiseMap.texture.valid()){state_.terrainMessage="Selecione uma fonte de ruído normal";return true;}snow.normalNoiseEnabled=!snow.normalNoiseEnabled;}
+      if(action==61)snow.distanceResampleEnabled=!snow.distanceResampleEnabled;
+      if(action==62){if(!snow.mask.texture.valid()){state_.terrainMessage="Selecione máscara real: R máximo, G mínimo";return true;}snow.maskEnabled=!snow.maskEnabled;}
+      if(action==63)snow.worldSpaceUV=!snow.worldSpaceUV;if(action==64)snow.stochasticEnabled=!snow.stochasticEnabled;
+      if(action==65)snow.triplanarEnabled=!snow.triplanarEnabled;
+      if(action==66){if(snow.mode!=resources::TerrainSnowMode::Rich){state_.terrainMessage="Participação por camada usa o modo Rich";return true;}snow.perLayerEnabled=!snow.perLayerEnabled;}
+      if(action==67)snow.sssEnabled=!snow.sssEnabled;if(action==68)snow.rimEnabled=!snow.rimEnabled;
+      if(action==69){if(!snow.sparkleNoiseMap.texture.valid()){state_.terrainMessage="Selecione fonte real do brilho";return true;}snow.sparkleEnabled=!snow.sparkleEnabled;}
+      if(action==70)snow.useGlobalLevel=false;if(action==71)snow.useGlobalHeight=false;
+    } else if(action==72){
+      float minimum=INFINITY,maximum=-INFINITY;
+      if(terrainSnowFlatDraft(state_))minimum=maximum=recipe.base;
+      else if(terrainSnowMeasuredPreview(state_)){
+        float world[16]{};world[0]=world[5]=world[10]=world[15]=1;
+        if(state_.terrainTarget && !editorWorldMatrix(document_,state_.terrainTarget,world)){state_.terrainMessage="Transformação mundial indisponível";return true;}
+        for(const auto &part:state_.terrainPreviewBuild->mesh.parts)for(const auto &v:part.vertices){
+          const float y=world[1]*v.position[0]+world[5]*v.position[1]+world[9]*v.position[2]+world[13];
+          if(std::isfinite(y)){minimum=std::min(minimum,y);maximum=std::max(maximum,y);}
+        }
+      }
+      if(!std::isfinite(minimum)||!std::isfinite(maximum)){state_.terrainMessage="Gere uma prévia correspondente para medir alturas reais";return true;}
+      snow.heightAngleRange[0]=minimum-1;snow.heightAngleRange[1]=maximum+1;
+    } else if(action>=80 && action<=85 && terrainSnowPicker(view)){
+      const auto source=terrainCatalogResolve(state_,action-80,false);
+      if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()){state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
+      const auto role=terrainSnowMapRole(view);auto &map=terrainSnowMap(snow,role);map.texture=state_.terrainCatalog->textures[source].identity;
+      if(role==2 || role==5)map.linear=true;
+    } else if(action>=101 && action<=115){
+      if(action==101)recipe.surface.textureResidency={resources::TerrainTextureResidencyMode::Original,0};
+      else if(action==102)recipe.surface.textureResidency=terrainResidencyNextCap(recipe.surface.textureResidency);
+      else if(action>=106 && action<=110){constexpr u32 caps[]{4096,2048,1024,512,256};recipe.surface.textureResidency={resources::TerrainTextureResidencyMode::Cap,caps[action-106]};}
+      else {auto *map=terrainCurrentAuthoredMap(recipe.surface,state_.terrainBrush.layer,view,state_.terrainMapRole);if(!map)return true;
+        if(action>=111){constexpr u32 caps[]{4096,2048,1024,512,256};map->textureResidency={resources::TerrainTextureResidencyMode::Cap,caps[action-111]};}
+        else map->textureResidency=action==103?resources::TerrainTextureResidency{resources::TerrainTextureResidencyMode::InheritTerrain,0}:action==104?resources::TerrainTextureResidency{resources::TerrainTextureResidencyMode::Original,0}:terrainResidencyNextCap(map->textureResidency);
+      }
+    } else return true;
+    std::string error;if(resources::validTerrainRecipe(recipe,error)){
+      state_.terrainDraft=std::move(recipe);if(action>=80 && action<=85)open(view-10);
+      state_.terrainMessage=action==72?"Faixa da prévia medida · margem explícita de 1 m":"Neve e qualidade ajustadas · prévia antes de aplicar";
+    } else state_.terrainMessage=error;
+    return true;
+  }
+  if(id>=terrainSnowNumberBase && id<terrainSnowNumberBase+64) {
+    const auto field=256+id-terrainSnowNumberBase;
+    if(!terrainSnowNumberAvailable(state_,field))return true;
+    state_.numericField=id;state_.numericEntity=state_.terrainTarget;state_.numericInstance=0;state_.numericProperty.clear();
+    state_.numericCurrent=number(state_,field);std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",state_.numericCurrent);
+    state_.numericReplace=true;state_.numericError=false;return true;
+  }
+  if(id>=terrainCatalogActionBase && id<terrainCatalogActionBase+0x100) {
+    const auto action=id-terrainCatalogActionBase;
+    if(action==4) {
+      if(!loadTerrainCatalog())return true;
+      state_.terrainMaterialView=190;state_.terrainCatalogPage=0;state_.terrainScroll=0;return true;
+    }
+    if(action==5) {state_.terrainMaterialView=3;state_.terrainScroll=0;return true;}
+    if(!terrainCatalogSearchView(state_.terrainMaterialView))return true;
+    if(action==0) {
+      state_.editingTerrainCatalogSearch=true;
+      std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.terrainCatalogQuery.c_str());return true;
+    }
+    if(action==1)state_.terrainCatalogQuery.clear();
+    else if(action==2)state_.terrainCatalogRoleFilter=(state_.terrainCatalogRoleFilter+1)%8;
+    else if(action==3) {
+      const auto packages=terrainCatalogPackages(state_);
+      const auto found=std::find(packages.begin(),packages.end(),state_.terrainCatalogPackageFilter);
+      state_.terrainCatalogPackageFilter=found==packages.end()? (packages.empty()?std::string{}:packages.front()):
+        std::next(found)==packages.end()?std::string{}:*std::next(found);
+    } else if(action==6 || action==7) {
+      const auto count=terrainCatalogCount(state_,false);
+      if(action==6 && state_.terrainCatalogPage)--state_.terrainCatalogPage;
+      if(action==7 && (state_.terrainCatalogPage+1)*6<count)++state_.terrainCatalogPage;
+      state_.terrainScroll=0;return true;
+    } else if(action>=8 && action<14 && state_.terrainMaterialView==190) {
+      const auto source=terrainCatalogResolve(state_,action-8,false);
+      if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()) {
+        state_.terrainMessage="Resultado mudou · selecione novamente";return true;
+      }
+      auto recipe=state_.terrainDraft;
+      if(state_.terrainBrush.layer>=recipe.surface.layers.size())return true;
+      recipe.surface.layers[state_.terrainBrush.layer].maps[std::min(state_.terrainMapRole,6u)].texture=state_.terrainCatalog->textures[source].identity;
+      std::string error;
+      if(resources::validTerrainRecipe(recipe,error)) {state_.terrainDraft=std::move(recipe);state_.terrainMaterialView=3;state_.terrainScroll=0;}
+      else state_.terrainMessage=error;
+      return true;
+    } else return true;
+    state_.terrainCatalogPage=0;state_.terrainScroll=0;return true;
+  }
   if(id>=terrainModuleActionBase && id<terrainModuleActionBase+0x100) {
     const auto action=id-terrainModuleActionBase;
     const auto open=[&](u32 view) {state_.terrainMaterialView=view;state_.terrainScroll=0;};
@@ -2173,7 +2331,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     if(action==28 || action==29) {state_.terrainMapRole=(state_.terrainMapRole+(action==29?1:3))%4;state_.terrainScroll=0;return true;}
     if(action==30 || action==31) {
       if(action==30 && state_.terrainCatalogPage) --state_.terrainCatalogPage;
-      if(action==31 && state_.terrainCatalog && (state_.terrainCatalogPage+1)*6<state_.terrainCatalog->textures.size()) ++state_.terrainCatalogPage;
+      if(action==31 && state_.terrainCatalog && (state_.terrainCatalogPage+1)*6<terrainCatalogCount(state_,false)) ++state_.terrainCatalogPage;
       state_.terrainScroll=0;return true;
     }
     if((action>=40 && action<=48) || action==54) {
@@ -2266,13 +2424,13 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     } else if(action==25 || action==26 || action==27 || (action>=32 && action<=37)) {
       auto &map=terrainModuleMap(recipe.surface,view,state_.terrainMapRole);
       if(action==25) map.channel=terrainModuleNormal(view)?
-        (map.channel==resources::TerrainSurfaceChannel::NormalRG?resources::TerrainSurfaceChannel::NormalRGB:resources::TerrainSurfaceChannel::NormalRG):
+        terrainNextNormalChannel(map.channel):
         resources::TerrainSurfaceChannel((u32(map.channel)+1)%((view==172 || view==182)?4:5));
       if(action==26) map.invert=!map.invert;
       if(action==27 && !terrainModuleNormal(view)) map.linear=!map.linear;
       if(action>=32 && action<=37) {
-        const auto source=state_.terrainCatalogPage*6+action-32;
-        if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()) return true;
+        const auto source=terrainCatalogResolve(state_,action-32,false);
+        if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()) {state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
         map.texture=state_.terrainCatalog->textures[source].identity;
         if(terrainModuleNormal(view)) {map.linear=true;if(u32(map.channel)<5) map.channel=resources::TerrainSurfaceChannel::NormalRGB;}
       }
@@ -2316,7 +2474,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     }
     if(action==16 || action==17) {
       const bool material=state_.terrainMaterialView>=80 && state_.terrainMaterialView<=82;
-      const auto size=state_.terrainCatalog?(material?state_.terrainCatalog->materials.size():state_.terrainCatalog->textures.size()):0;
+      const auto size=terrainCatalogCount(state_,material);
       if(action==16 && state_.terrainCatalogPage) --state_.terrainCatalogPage;
       if(action==17 && (state_.terrainCatalogPage+1)*6<size) ++state_.terrainCatalogPage;
       state_.terrainScroll=0;return true;
@@ -2333,8 +2491,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       if(cluster.variants.size()<2) cluster.enabled=false;
       nextView=60;
     } else if(action>=20 && action<=25 && state_.terrainCatalog) {
-      const auto source=state_.terrainCatalogPage*6+action-20;
-      if(source>=state_.terrainCatalog->materials.size() || index>cluster.variants.size() || index>=3) return true;
+      const auto source=terrainCatalogResolve(state_,action-20,true);
+      if(source>=state_.terrainCatalog->materials.size()) {state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
+      if(index>cluster.variants.size() || index>=3)return true;
       const auto &material=state_.terrainCatalog->materials[source];
       for(u32 i=0;i<cluster.variants.size();++i)
         if(i!=index && (cluster.variants[i].identity==material.layer.identity || cluster.variants[i].maps[0].texture==material.layer.maps[0].texture)) {
@@ -2346,8 +2505,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       if(index==cluster.variants.size()) cluster.variants.push_back(std::move(variant));else cluster.variants[index]=std::move(variant);
       nextView=70+index;
     } else if(action>=32 && action<=37 && state_.terrainCatalog) {
-      const auto source=state_.terrainCatalogPage*6+action-32;
-      if(source>=state_.terrainCatalog->textures.size() || index>=cluster.variants.size()) return true;
+      const auto source=terrainCatalogResolve(state_,action-32,false);
+      if(source>=state_.terrainCatalog->textures.size()) {state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
+      if(index>=cluster.variants.size())return true;
       auto &map=cluster.variants[index].maps[std::min(state_.terrainMapRole,6u)];
       map.texture=state_.terrainCatalog->textures[source].identity;
       nextView=100+index;
@@ -2355,7 +2515,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       auto &map=cluster.variants[index].maps[std::min(state_.terrainMapRole,6u)];
       if(action==11 || action==12) {state_.terrainMapRole=(state_.terrainMapRole+(action==12?1:6))%7;state_.terrainScroll=0;return true;}
       if(action==13) map.channel=state_.terrainMapRole==1?
-        (map.channel==resources::TerrainSurfaceChannel::NormalRG?resources::TerrainSurfaceChannel::NormalRGB:resources::TerrainSurfaceChannel::NormalRG):resources::TerrainSurfaceChannel((u32(map.channel)+1)%5);
+        terrainNextNormalChannel(map.channel):resources::TerrainSurfaceChannel((u32(map.channel)+1)%5);
       else if(action==14) map.invert=!map.invert;
       else if(action==15 && state_.terrainMapRole!=1) map.linear=!map.linear;
       else return true;
@@ -2460,7 +2620,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     }
     if(action==12 || action==13) {
       if(action==12 && state_.terrainCatalogPage) --state_.terrainCatalogPage;
-      if(action==13 && state_.terrainCatalog && (state_.terrainCatalogPage+1)*6<state_.terrainCatalog->textures.size()) ++state_.terrainCatalogPage;
+      if(action==13 && state_.terrainCatalog && (state_.terrainCatalogPage+1)*6<terrainCatalogCount(state_,false)) ++state_.terrainCatalogPage;
       state_.terrainScroll=0; return true;
     }
     auto recipe=state_.terrainDraft;
@@ -2468,13 +2628,13 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     if(action==5) noise.enabled=!noise.enabled;
     else if(action==6) noise.projection=resources::TerrainProjection((u32(noise.projection)+1)%3);
     else if(action==7) noise.map.channel=terrainNoiseNormal(view)?
-      (noise.map.channel==resources::TerrainSurfaceChannel::NormalRG?resources::TerrainSurfaceChannel::NormalRGB:resources::TerrainSurfaceChannel::NormalRG):
+      terrainNextNormalChannel(noise.map.channel):
       resources::TerrainSurfaceChannel((u32(noise.map.channel)+1)%5);
     else if(action==8) noise.map.linear=!noise.map.linear;
     else if(action==9) noise.map.invert=!noise.map.invert;
     else if(action>=16 && action<22 && state_.terrainCatalog) {
-      const auto index=state_.terrainCatalogPage*6+action-16;
-      if(index>=state_.terrainCatalog->textures.size()) return true;
+      const auto index=terrainCatalogResolve(state_,action-16,false);
+      if(index>=state_.terrainCatalog->textures.size()) {state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
       noise.map.texture=state_.terrainCatalog->textures[index].identity;
       if(terrainNoiseNormal(view)) {
         if(u32(noise.map.channel)<5) noise.map.channel=resources::TerrainSurfaceChannel::NormalRGB;
@@ -2491,9 +2651,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (id >= widgetId(EditorWidget::TerrainCatalogItemBase) &&
       id < widgetId(EditorWidget::TerrainCatalogItemBase) + 6) {
-    selectTerrainCatalogMaterial(
-        state_.terrainCatalogPage * 6 + id -
-        widgetId(EditorWidget::TerrainCatalogItemBase));
+    const auto source=terrainCatalogResolve(state_,id-widgetId(EditorWidget::TerrainCatalogItemBase),true);
+    if(state_.terrainCatalog && source<state_.terrainCatalog->materials.size())selectTerrainCatalogMaterial(source);
+    else state_.terrainMessage="Resultado mudou · selecione novamente";
     return true;
   }
   if (id >= widgetId(EditorWidget::TerrainMaterialLibrary) &&
@@ -2520,8 +2680,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
       if (state_.terrainCatalogPage)
         --state_.terrainCatalogPage;
     } else if (state_.terrainCatalog &&
-               (state_.terrainCatalogPage + 1) * 6 <
-                   state_.terrainCatalog->materials.size())
+               (state_.terrainCatalogPage + 1) * 6 < terrainCatalogCount(state_,true))
       ++state_.terrainCatalogPage;
     state_.terrainScroll = 0;
     return true;
@@ -2563,9 +2722,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     case EditorWidget::TerrainMapChannel:
       map.channel =
           state_.terrainMapRole == 1
-              ? (map.channel == resources::TerrainSurfaceChannel::NormalRG
-                     ? resources::TerrainSurfaceChannel::NormalRGB
-                     : resources::TerrainSurfaceChannel::NormalRG)
+              ? terrainNextNormalChannel(map.channel)
               : resources::TerrainSurfaceChannel((u32(map.channel) + 1) % 5);
       break;
     case EditorWidget::TerrainMapInvert:

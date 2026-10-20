@@ -19,7 +19,7 @@ u64 textureStreamingChainBytes(const TextureStreamingTexture &texture, u32 baseM
 }
 
 u32 textureStreamingFirstMip(const TextureStreamingTexture &texture, const TextureStreamingSettings &settings) {
-  return texture.levels ? std::min(settings.minimumMip, texture.levels - 1) : 0;
+  return texture.levels ? std::min(std::max(settings.minimumMip, texture.minimumResidentMip), texture.levels - 1) : 0;
 }
 
 u32 textureStreamingLastMip(const TextureStreamingTexture &texture, const TextureStreamingSettings &settings) {
@@ -52,6 +52,8 @@ bool planTextureStreaming(std::span<const TextureStreamingTexture> textures, std
                           std::span<const TextureStreamingView> views, const TextureStreamingSettings &settings,
                           std::span<const u32> loadedMip, TextureStreamingPlan &out) {
   if (loadedMip.size() != textures.size()) return false;
+  for (const auto &texture : textures)
+    if (texture.minimumResidentMip && texture.minimumResidentMip >= texture.levels) return false;
   for (const auto &use : uses)
     if (use.texture >= textures.size()) return false;
   TextureStreamingPlan plan;
