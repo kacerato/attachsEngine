@@ -70,6 +70,7 @@ namespace {
 
 using namespace ae::ui;
 
+
 // Medidas em DP, e a distinção importa. Os masters foram desenhados numa tela de
 // 1672×941; um telefone real em paisagem tem cerca de 853×394 dp, porque a
 // densidade é 3× e não 1,66×. Copiar os números do master daria uma barra
@@ -1523,7 +1524,8 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
 
   if(!state.motorBakeSourcesOpen&&!state.motorBakeSettingsOpen&&(state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
-    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative);
+    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative,
+        state.probeView&&state.probeView->editing?state.probeView->selectedPoint:0);
     const auto *inspectedObject=state.document->find(state.selection);
     const auto *inspected=inspectedObject?inspectedObject->components.findInstance(state.expandedNative):nullptr;
     const bool colliderInspection=inspected && (&inspected->type()==&scene::Collider::descriptor || &inspected->type()==&scene::PhysicsBody::descriptor) &&
@@ -1713,13 +1715,16 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   if(entity && state.showComponentVisuals && !state.cameraViewEntity &&
      state.workspace==EditorWorkspace::Scene && expandedVisual &&
      (&expandedVisual->type()==&scene::Light::descriptor ||
-      &expandedVisual->type()==&scene::Environment::descriptor)) {
+      &expandedVisual->type()==&scene::Environment::descriptor ||
+      &expandedVisual->type()==&scene::ReflectionProbe::descriptor ||
+      &expandedVisual->type()==&scene::LightProbeGroup::descriptor)) {
     constexpr const char *labels[]{"Alcance","Cone interno","Cone externo",
-        "Tamanho X","Tamanho Y","Tamanho Z","Raio","Mistura"};
+        "Tamanho X","Tamanho Y","Tamanho Z","Raio","Mistura","X","Y","Z"};
+    const u64 probePoint=state.probeView&&state.probeView->editing?state.probeView->selectedPoint:0;
     for(u32 index=0;index<static_cast<u32>(EditorComponentHandleKind::Count);++index) {
       EditorComponentHandle handle;
       const auto kind=static_cast<EditorComponentHandleKind>(index);
-      if(!componentHandleGeometry(*state.document,entity->id,expandedVisual->instanceId(),kind,handle)) continue;
+      if(!componentHandleGeometry(*state.document,entity->id,expandedVisual->instanceId(),kind,handle,probePoint)) continue;
       const auto point=projectWorldToScreen(*state.view,handle.point);float parameter;
       if(!point.valid || !viewport.contains(point.screen) ||
          !cameraHandleRayParameter(*state.view,handle,point.screen,parameter)) continue;
@@ -4442,6 +4447,34 @@ bool buildEnvironmentLooks(ScreenBuilder &builder,UiRect &content,const scene::E
 
 // Na coluna rolável `content` chega alto e volta consumido: o que os campos
 // tomaram por cima é a altura do cartão. Fora dela, a página de sempre.
+// Override do Volume da Unity: a caixa "override_*" de um grupo vai para o
+// cabeçalho da subseção, como a caixa de cada override no Volume Profile.
+// Marcada, o volume decide o grupo; desmarcada, o grupo herda dos volumes de
+// prioridade menor e, por fim, dos padrões do mundo.
+u32 componentGroupOverride(const scene::ComponentType &type,std::string_view group) {
+  if(group=="Volume") return ~0u;
+  for(u32 i=0;i<type.booleans.size();++i)
+    if(type.booleans[i].presentation.group==group&&std::string_view(type.booleans[i].id).starts_with("override_")) return i;
+  return ~0u;
+}
+
+// PK-6: botão de ação das sondas — ícone e rótulo; o primário é cheio (Assar),
+// os secundários são contornos, como os da Superfície de navegação.
+void probeActionButton(ScreenBuilder &builder,UiRect rect,UiIcon icon,std::string_view label,u32 widget,
+                       bool primary,bool enabled,bool active=false) {
+  const auto &theme=builder.theme;
+  rect=deflate(rect,UiInsets{2,0,2,4});
+  const UiColor fill=primary?(enabled?theme.color.accent:theme.color.raised):active?withAlpha(theme.color.accent,.18f):theme.color.raised;
+  const UiColor ink=primary&&enabled?theme.color.accentInk:enabled?(active?theme.color.text:theme.color.textMuted):theme.color.textFaint;
+  builder.list.addRect(rect,fill,theme.radius.control);
+  if(!primary) builder.list.addBorder(rect,active?theme.color.accent:theme.color.lineSoft,1,theme.radius.control);
+  auto inner=rect;
+  const auto glyph=takeLeft(inner,30);
+  builder.list.addImage(centred(glyph,18,18),static_cast<UiImageId>(icon),ink);
+  builder.label(inner,fitMiddle(builder.list,std::string(label),inner.width-4,theme.type.caption),ink,
+                primary?theme.type.body:theme.type.caption);
+  if(enabled) builder.router.addRegion(rect,widget);
+}
 void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
@@ -4668,6 +4701,83 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         builder.list.addRect(row,theme.color.raised,theme.radius.control);
         builder.label(row,"Desvincular",theme.color.textMuted,theme.type.caption,UiAlign::Center);
         builder.router.addRegion(row,nw::id(nw::Clear));
+      }
+    }
+  }
+  // PK-6: Sonda de reflexo e Grupo de sondas de luz — estado do bake, botões
+  // e, no grupo, o editor de pontos (Edit Light Probes da Unity).
+  if((entry.type==&scene::ReflectionProbe::descriptor||entry.type==&scene::LightProbeGroup::descriptor)&&!searching) {
+    namespace pw=probe_widget;
+    const auto *probe=state.probeView&&state.probeView->entity==entity.id&&state.probeView->instance==component->instanceId()?
+        state.probeView:nullptr;
+    const bool authoring=state.workspace!=EditorWorkspace::Play;
+    if(probe) {
+      const bool light=probe->lightGroup;
+      const UiColor tone=probe->baking?theme.color.accent:(probe->stale||probe->missing)?theme.color.warning:
+                         probe->hasBake?theme.color.accent:theme.color.textDim;
+      std::string detail=probe->detail;
+      if(probe->stats.valid&&!probe->baking) {
+        char text[96];
+        if(light) std::snprintf(text,sizeof text," · %u objetos usam",probe->stats.drawsWithLightProbes);
+        else std::snprintf(text,sizeof text," · %u/%u sondas prontas",probe->stats.readyProbes,probe->stats.sceneProbes);
+        detail+=text;
+      }
+      inspectorStatusCard(builder,content,light?UiIcon::LightingLightProbeGroup:UiIcon::LightingReflectionProbe,
+                          probe->title,detail,tone,probe->baking?probe->progress:-1);
+      const bool realtime=!light&&static_cast<const scene::ReflectionProbe&>(*component).realtime();
+      if(authoring&&!realtime) {
+        auto row=takeTop(content,44);
+        const float primaryWidth=std::max(130.f,row.width*.46f);
+        const auto primary=takeLeft(row,primaryWidth);
+        const char *bakeLabel=probe->baking?"Assando…":light?(probe->hasBake?"Assar de novo":"Assar sondas"):
+                              (probe->hasBake?"Assar de novo":"Assar");
+        probeActionButton(builder,primary,light?UiIcon::LightingLightProbeGroup:UiIcon::LightingReflectionProbe,bakeLabel,
+                          pw::id(light?pw::BakeLight:pw::BakeReflection),true,!probe->baking);
+        if(light) {
+          const auto edit=takeLeft(row,probe->hasBake?row.width*.55f:row.width);
+          probeActionButton(builder,edit,UiIcon::EditorAuthorMove,probe->editing?"Editando":"Editar sondas",
+                            pw::id(pw::EditPoints),false,true,probe->editing);
+        }
+        if(probe->hasBake&&!probe->baking)
+          probeActionButton(builder,row,UiIcon::UiClose,"Desvincular",pw::id(pw::Clear),false,true);
+      }
+      if(light&&probe->editing&&authoring) {
+        const auto &group=static_cast<const scene::LightProbeGroup&>(*component);
+        // Seleção: anterior / sonda N de M / próxima.
+        auto nav=takeTop(content,40);
+        const bool any=!group.points.empty();
+        builder.iconButton(takeLeft(nav,36),UiIcon::UiChevronLeft,pw::id(pw::PreviousPoint),false,theme.color.textDim,
+                           any&&probe->selectedIndex>0);
+        builder.iconButton(takeRight(nav,36),UiIcon::UiChevronRight,pw::id(pw::NextPoint),false,theme.color.textDim,
+                           any&&probe->selectedIndex+1<group.points.size());
+        builder.list.addImage(centred(takeLeft(nav,22),16,16),static_cast<UiImageId>(UiIcon::LightingLightProbeGroup),theme.color.accent);
+        char title[64];
+        if(any) std::snprintf(title,sizeof title,"Sonda %u de %u",probe->selectedIndex+1,static_cast<u32>(group.points.size()));
+        else std::snprintf(title,sizeof title,"Grupo vazio");
+        builder.label(nav,title,theme.color.text,theme.type.caption,UiAlign::Center);
+        // Adicionar, duplicar e apagar (Add Probe, Duplicate Selected, Delete Selected).
+        auto actions=takeTop(content,44);
+        const float third=actions.width/3;
+        probeActionButton(builder,takeLeft(actions,third),UiIcon::ComponentAdd,"Adicionar",pw::id(pw::AddPoint),false,
+                          group.points.size()<scene::LightProbeGroup::MaximumPoints);
+        probeActionButton(builder,takeLeft(actions,third),UiIcon::SceneDuplicate,"Duplicar",pw::id(pw::DuplicatePoint),false,any);
+        probeActionButton(builder,actions,UiIcon::UiRemove,"Apagar",pw::id(pw::RemovePoint),false,any);
+        // Posição local da sonda selecionada; arrastar as alças no viewport faz o mesmo.
+        if(any) {
+          auto row=takeTop(content,40);
+          builder.label(takeLeft(row,48),"Local",theme.color.textDim,theme.type.caption);
+          const float cellWidth=row.width/3;const UiColor colors[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+          const u32 slot=probe->selectedIndex;
+          for(u32 axis=0;axis<3;++axis) {
+            const auto hit=takeLeft(row,cellWidth);auto cell=deflate(hit,UiInsets::all(2));
+            builder.list.addRect(cell,theme.color.silhouette,4);
+            builder.label(takeLeft(cell,12),axis==0?"X":axis==1?"Y":"Z",colors[axis],theme.type.caption,UiAlign::Center);
+            char number[24];
+            std::snprintf(number,sizeof number,"%.3g",static_cast<double>(group.points[slot].position[axis]));
+            builder.label(cell,number,theme.color.text,theme.type.caption,UiAlign::Center);
+            builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(axis<<8)+(slot<<16));
+          }
+        }
       }
     }
   }
@@ -5002,8 +5112,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     // Lightmap é uma rota própria. Propriedades sem grupo do material e da
     // geometria não podem inflar essa rota nem esconder o binding principal.
     if(mesh&&builder.state.meshTab==2&&!searching) return p.group=="Lightmap";
+    // PK-6: a posição por sonda é o editor de pontos do grupo, não 3×N linhas.
+    if(p.group=="Sonda selecionada") return false;
     if(mesh&&builder.state.meshTab==3&&!searching)
-      return p.group=="Iluminação"||p.group=="Configurações adicionais";
+      return p.group=="Iluminação"||p.group=="Sondas"||p.group=="Configurações adicionais";
     if(constantForce&&!searching) return group=="Força mundo"?(p.group=="Força mundo"||p.group=="Torque mundo"):
       (p.group=="Força local"||p.group=="Torque local");
     return searching||p.group.empty()||p.group==group;
@@ -5014,6 +5126,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   if(!searching && entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
   if(!mesh || builder.state.meshTab!=1 || searching) {
     for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)&&
+      !(stacked&&!searching&&componentGroupOverride(*entry.type,entry.type->booleans[i].presentation.group)==i)&&
       !((constantForce||tween||audio||entry.type==&scene::PathFollow::descriptor||std::string_view(entry.type->id).starts_with("astra.physics2d."))&&!searching&&entry.type->booleans[i].id=="enabled")) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
       if(!show(entry.type->enums[i].presentation)) continue;
@@ -5121,9 +5234,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     }
     }
   }
-  if(std::string_view(entry.type->id).starts_with("astra.physics2d.")&&!searching) {
+  // Viewport Rect da Câmera em duas linhas (posição e tamanho), como na Unity.
+  if((std::string_view(entry.type->id).starts_with("astra.physics2d.")||entry.type==&scene::Camera::descriptor)&&!searching) {
     constexpr std::string_view pairs[][2]{{"velocity_x","velocity_y"},{"half_x","half_y"},{"offset_x","offset_y"},
-      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"}};
+      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"},
+      {"viewport_x","viewport_y"},{"viewport_width","viewport_height"}};
     for(const auto &names:pairs) {
       u32 channels[2]{~u32{0},~u32{0}};
       for(const auto &field:fields) if(field.kind==2)
@@ -5249,12 +5364,13 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const auto order=[&](const Field &field)->int{
       const std::string_view id=field.kind==1?entry.type->enums[field.index].id:
                                 field.kind==0?entry.type->booleans[field.index].id:std::string_view{};
-      return id=="cast_shadows"?0:id=="receive_shadows"?1:id=="rendering_layer_mask"?6:7;
+      return id=="cast_shadows"?0:id=="receive_shadows"?1:id=="light_probes"?2:id=="reflection_probes"?3:
+             id=="rendering_layer_mask"?6:7;
     };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return order(a)<order(b);});
     std::vector<Field> sectioned;int last=-1;
     for(const auto &field:fields) {
-      const int position=order(field),section=position<2?0:2;
+      const int position=order(field),section=position<2?0:position<6?1:2;
       if(section!=last) {sectioned.push_back({41,static_cast<u32>(section)});last=section;}
       sectioned.push_back(field);
     }
@@ -5360,7 +5476,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     if(f.kind==41) {
       // Cabeçalho de seção da aba Iluminação do Mesh Renderer.
       const char *titles[]{"Iluminação","Sondas","Configurações adicionais"};
-      const UiIcon icons[]{UiIcon::LightingShadowCaster,UiIcon::LightingLightmap,UiIcon::LightingRenderingLayers};
+      const UiIcon icons[]{UiIcon::LightingShadowCaster,UiIcon::LightingLightProbeGroup,UiIcon::LightingRenderingLayers};
       const u32 section=std::min<u32>(f.index,2);
       auto line=deflate(slot,UiInsets{2,10,2,4});
       builder.list.addImage(centred(takeLeft(line,22),18,18),static_cast<UiImageId>(icons[section]),theme.color.accent);
@@ -5463,7 +5579,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         const auto enumHit=slot;auto box=deflate(slot,UiInsets::all(2));
         builder.list.addRect(box,theme.color.raised,theme.radius.control);
         builder.list.addImage(centred(takeRight(box,16),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
-        const char *label="Inválido";for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+        std::string label=property.flags?componentMaskLabel(*builder.state.document,property,property.read(*component)):"Inválido";
+        if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
         if(builder.mixed(multiKey(component->instanceId(),property.id))) label="—";
         builder.label(box,label,theme.color.text,theme.type.caption,UiAlign::Center);
         if(property.presentation.isEditable(*component)) builder.router.addRegion(enumHit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.second<<8));
@@ -5477,10 +5594,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     } else if(f.kind==16) {
       const auto id=entry.type->numbers[f.index].id;
       const char *title=id=="velocity_x"?"Vel. (m/s)":id=="half_x"?"Meia dim. (m)":id=="force_x"?"Mundo (N)":
-        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":"Centro (m)";
+        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":
+        id=="viewport_x"?"Viewport":id=="viewport_width"?"Tamanho":"Centro (m)";
       builder.label(takeLeft(slot,std::min(72.f,slot.width*.34f)),title,theme.color.textDim,theme.type.caption);
       const float width=slot.width*.5f;
-      const u32 channels[]{f.index,f.second};const char *names[]{"X","Y"};
+      const bool size=id=="viewport_width";
+      const u32 channels[]{f.index,f.second};const char *names[]{size?"L":"X",size?"A":"Y"};
       for(u32 axis=0;axis<2;++axis) {
         auto cell=takeLeft(slot,width);const auto field=channels[axis];const auto &property=entry.type->numbers[field];
         builder.label(takeLeft(cell,13),names[axis],axis?theme.color.axisY:theme.color.axisX,theme.type.caption);
@@ -5876,12 +5995,25 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   for(u32 g=0;g<groups.size();++g) {
     const auto key=typeKey+"/"+std::string(groups[g]);
     const bool open=!EditorScreenState::listed(state.inspectorSections,key);
-    auto row=takeTop(content,36);const auto hit=row;
+    auto row=takeTop(content,36);
     builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
+    const u32 overrideField=componentGroupOverride(*entry.type,groups[g]);
+    bool overridden=true;
+    if(overrideField!=~0u&&index<256&&overrideField<256) {
+      // A caixa fica fora da área que dobra a subseção: tocar nela só alterna o override.
+      const auto &property=entry.type->booleans[overrideField];
+      overridden=property.read(*component);
+      auto check=takeRight(row,40);
+      builder.checkbox(centred(check,32,32),overridden,widgetId(EditorWidget::ComponentBooleanBase)+index+(overrideField<<8),
+                       property.presentation.isEditable(*component)&&state.workspace!=EditorWorkspace::Play,
+                       builder.mixed(multiKey(component->instanceId(),property.id)));
+      if(!overridden) builder.label(takeRight(row,64),"Herdado",theme.color.textFaint,theme.type.caption,UiAlign::End);
+    }
+    const auto hit=row;
     builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
                           open?theme.color.accent:theme.color.textDim);
     const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
-    builder.label(row,spring?std::string_view{"Mola"}:groups[g],open?theme.color.text:theme.color.textDim,theme.type.body);
+    builder.label(row,spring?std::string_view{"Mola"}:groups[g],open&&overridden?theme.color.text:theme.color.textDim,theme.type.body);
     if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
     if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
   }
@@ -8038,7 +8170,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   }
   builder.label(title,assigning?"Atribuir tag":"Tags do projeto",theme.color.text,theme.type.cardName);
   std::string detail=assigning?(state.multi.count>1?std::to_string(state.multi.count)+" objetos selecionados":object?object->name:""):
-                               std::to_string(names.size()-1)+" tags · uma por objeto";
+                               std::to_string(names.size()-runtime::ObjectTags::BuiltinCount)+" tags · uma por objeto";
   builder.label(takeTop(content,26),detail.c_str(),theme.color.textDim,theme.type.caption);
   auto tools=takeTop(content,44),create=takeRight(tools,78);
   builder.list.addRect(deflate(tools,UiInsets::all(3)),theme.color.raised,theme.radius.control);
@@ -8080,7 +8212,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TagNext));
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(!assigning) {
-    const bool removable=authoring && state.tagSelected!="Untagged" && state.document->tags().contains(state.tagSelected);
+    const bool removable=authoring && !runtime::ObjectTags::builtin(state.tagSelected) && state.document->tags().contains(state.tagSelected);
     builder.label(removal,"Excluir tag sem uso",removable?theme.color.text:theme.color.textFaint,theme.type.caption);
     if(removable) builder.router.addRegion(removal,widgetId(EditorWidget::TagDelete));
   }
@@ -11329,7 +11461,7 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   std::vector<Section> sections{
     {EditorProjectSection::Layers,UiIcon::SceneLayers,"Camadas e colisão",std::to_string(layers)+" camada(s)"},
     {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"},
-    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-1)+" no projeto"}};
+    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-runtime::ObjectTags::BuiltinCount)+" no projeto"}};
   if(waterCreationAvailable(state)) sections.push_back({EditorProjectSection::Water,UiIcon::NatureWater,"Água da cena","Superfícies e ondas"});
   if(wide) builder.label(takeTop(rail,30),"PROJETO",theme.color.textMuted,theme.type.label);
   for(const auto &section:sections) {
@@ -11543,6 +11675,10 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
 
 void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layout,bool debug) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+    // Segunda câmera do Play (Viewport Rect): a imagem dela cobre a principal
+    // no próprio retângulo, abaixo dos controles e da GUI do jogo.
+    if(state.playStackReady && !state.playStackRect.isEmpty())
+      list.addImage(state.playStackRect,kUiCameraPreviewImage,0xffffffff,0);
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
     const bool hasSecondary=!state.playSecondaryActionLabel.empty();
     const bool showJump=hasSecondary||state.playHasCharacter?state.playHasCharacter:

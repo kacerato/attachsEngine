@@ -9,6 +9,8 @@
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_ik.h"
+#include "runtime/scene_probes.h"
+#include "scene/reflection_probe.h"
 #include "runtime/scene_physics.h"
 #include "scene/character.h"
 #include "scene/ik_effects.h"
@@ -106,7 +108,7 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,85> bindings{{
+const std::array<ComponentMethodBinding,86> bindings{{
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
@@ -139,6 +141,11 @@ const std::array<ComponentMethodBinding,85> bindings{{
   {&scene::ShapeCast::descriptor,"distance",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"distance",r);}},
   {&scene::ShapeCast::descriptor,"update",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"update",r);}},
   {&scene::SpringArm::descriptor,"hit_length",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return queryOperation(s,h,"hit_length",r);}},
+  // PK-6: RenderProbe() da Reflection Probe; o renderer captura no próximo quadro.
+  {&scene::ReflectionProbe::descriptor,"render_probe",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){
+    if(!s.reflectionProbes||!s.world) return WorldStatus::NotRunning;
+    const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+    s.reflectionProbes->request(h.object.id,h.instance);return WorldStatus::Ok;}},
   {&scene::TweenSequence::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,1,nullptr);}},
   {&scene::TweenSequence::descriptor,"cancel",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,2,nullptr);}},
   {&scene::TweenSequence::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return sequenceOperation(s,h,3,nullptr);}},

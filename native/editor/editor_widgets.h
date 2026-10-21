@@ -372,6 +372,8 @@ enum class EditorWidget : u32 {
   HierarchyActiveBase=0xE7000000u,
   // Menu de contexto: + código de context_menu_widget.
   ContextMenuBase=0xE8000000u,
+  // PK-6: Sonda de reflexo e Grupo de sondas de luz no Inspector: + código de probe_widget.
+  ProbeBase=0xE9000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -601,6 +603,13 @@ enum Code : u32 {Bake=1,Cancel=2,Clear=3,ShowMesh=4};
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::NavigationBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::NavigationBase);}
 } // namespace navigation_widget
+namespace probe_widget {
+enum Code : u32 {BakeReflection=1,BakeLight=2,Clear=3,EditPoints=4,AddPoint=5,DuplicatePoint=6,RemovePoint=7,
+                 PreviousPoint=8,NextPoint=9};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ProbeBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ProbeBase);}
+inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
+} // namespace probe_widget
 namespace context_menu_widget {
 // Fundo (fecha), voltar, abrir Criar, objeto vazio, a folha com todas as
 // receitas e as categorias de criação (+ índice). As ações em si usam os

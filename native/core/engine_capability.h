@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 58> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -99,10 +99,12 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "renderer/environment_map.cpp", ""},
   {"render.gi.lightmap", "Lightmap indireto externo por submalha", CapabilityState::DeviceLimited,
    "scene/lightmap_binding.h + rhi/shaders/dirt_road_shading.glsl", "RGB linear de irradiância; UV1 autoral; exige bindless. Sem bake, unwrap ou probes"},
-  {"render.probe.irradiance", "Sonda de irradiância por objeto", CapabilityState::Planned,
-   "renderer/ (volume de sondas)", "Sem recurso de sonda nem amostragem por instância"},
-  {"render.probe.reflection", "Sonda de reflexão local", CapabilityState::Planned,
-   "renderer/environment_map.cpp", "Sem captura local, atlas nem blend por volume"},
+  {"render.probe.irradiance", "Sondas de luz (Light Probe Group, SH L2 por objeto)", CapabilityState::Implemented,
+   "renderer/light_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "Bake por captura no aparelho: sol, céu e um rebate; luzes de tempo real não entram no SH, como na Unity. Sem Anchor Override nem LPPV"},
+  {"render.probe.reflection", "Sonda de reflexo local (Baked/Realtime, box projection, 2 por objeto)", CapabilityState::Implemented,
+   "renderer/reflection_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "8 sondas por quadro, 256 px por face; sem tipo Custom, Shadow Distance nem oclusão própria da captura"},
 
   // --- Material ------------------------------------------------------------
   {"render.material.pbr", "Shader do Material: Lit (metálico/especular), Simple Lit, Unlit, Particles", CapabilityState::Implemented,
@@ -165,6 +167,25 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
+
+  // --- Câmera (PK-7) -------------------------------------------------------
+  {"render.camera.background", "Fundo da câmera: céu, cor sólida ou sem limpeza", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", ""},
+  {"render.camera.culling_mask", "Culling Mask por camada de objeto", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp",
+   "Esconde o desenho e a sombra do objeto nesta câmera; luzes ainda não filtram por camada"},
+  {"render.camera.viewport", "Viewport Rect e várias câmeras na tela por prioridade", CapabilityState::Implemented,
+   "editor/editor_scene_camera.h + platform/android/android_main.cpp",
+   "Até duas câmeras visíveis ao mesmo tempo; a de cima sai sem sombras e sem TAA"},
+  {"render.camera.post", "Pós, sombras, HDR e antisserrilhado por câmera", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", "TAA por câmera só quando o projeto já aloca o histórico"},
+  {"render.camera.physical", "Câmera física: focal, sensor e Gate Fit", CapabilityState::Implemented,
+   "scene/camera.h", "Sem deslocamento de lente, abertura, ISO ou obturador"},
+  {"render.camera.stack", "Camera Stack (Overlay) e Target Texture", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp",
+   "Exige composição com alfa sobre a câmera Base e um recurso Render Texture amostrável por material"},
+  {"render.camera.msaa", "MSAA por câmera", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp", "O renderer não tem passe multiamostrado; AA é FXAA ou TAA"},
 
   // --- Pós-processamento ---------------------------------------------------
   {"render.post.tonemap", "Exposição e mapeamento de tom", CapabilityState::Implemented,

@@ -527,7 +527,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
        viewportPointers_.empty() && !history_.isOpen()) {
       const auto *entity=document_.find(state_.selection);
       const auto kind=static_cast<EditorComponentHandleKind>(routing.widgetId-componentHandleBase);
-      if(entity && componentHandleGeometry(document_,entity->id,state_.expandedNative,kind,componentDragHandle_) &&
+      if(entity && componentHandleGeometry(document_,entity->id,state_.expandedNative,kind,componentDragHandle_,
+                                           probeView_.editing?probeView_.selectedPoint:0) &&
          cameraHandleRayParameter(view_,componentDragHandle_,event.position,componentDragStart_) &&
          history_.begin("Ajustar componente")) {
         componentDragOpen_=true;componentDragPointer_=event.pointerId;
@@ -562,6 +563,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
      handleMaterialFieldPointer(event,routing)) return true;
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
+  if(routing.tapped&&probe_widget::owns(routing.widgetId)) {handleProbeWidget(routing.widgetId);return true;}
   if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
     // Animar: abre o primeiro clipe do próprio objeto (componente Animação);
     // sem clipe, cria um e já o toca nele.

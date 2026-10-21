@@ -1385,6 +1385,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         RecuoDisparar = 32,
         ImpactoGolpearDeFrente = 33,
         PersonagemSubirDescer = 34,
+        SondaDeReflexoCapturarAgora = 35,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
@@ -3585,6 +3586,30 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
         get => (CastShadowsOption)Component.GetEnum("cast_shadows");
         set => Component.SetEnum("cast_shadows", (uint)value);
     }
+    public enum LightProbesOption : uint
+    {
+        Desligado = 0,
+        MisturarSondas = 1,
+    }
+    /// <summary>Sondas de luz. Misturar sondas troca o ambiente do céu pela luz das sondas de luz em volta do objeto</summary>
+    public LightProbesOption LightProbes
+    {
+        get => (LightProbesOption)Component.GetEnum("light_probes");
+        set => Component.SetEnum("light_probes", (uint)value);
+    }
+    public enum ReflectionProbesOption : uint
+    {
+        Desligado = 0,
+        MisturarSondas = 1,
+        MisturarSondasECeu = 2,
+        Simples = 3,
+    }
+    /// <summary>Sondas de reflexo. Misturar usa as duas sondas mais importantes em volta; "e céu" mistura também o céu; Simples usa só a principal</summary>
+    public ReflectionProbesOption ReflectionProbes
+    {
+        get => (ReflectionProbesOption)Component.GetEnum("reflection_probes");
+        set => Component.SetEnum("reflection_probes", (uint)value);
+    }
     [System.Flags]
     public enum RenderingLayerMaskOption : uint
     {
@@ -4050,6 +4075,18 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
+    /// <summary>Filtro de cor. Cor linear RGB</summary>
+    public Vector3 ColorFilter
+    {
+        get => new(Component.GetFloat("color_filter.r"), Component.GetFloat("color_filter.g"), Component.GetFloat("color_filter.b"));
+        set => Component.SetVector3("color_filter", value);
+    }
+    /// <summary>Tom do bloom. Cor linear RGB</summary>
+    public Vector3 BloomTint
+    {
+        get => new(Component.GetFloat("bloom_tint.r"), Component.GetFloat("bloom_tint.g"), Component.GetFloat("bloom_tint.b"));
+        set => Component.SetVector3("bloom_tint", value);
+    }
     /// <summary>Tom do céu. Cor linear RGB</summary>
     public Vector3 SkyZenith
     {
@@ -4185,12 +4222,12 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("fog_height_falloff");
         set => Component.SetFloat("fog_height_falloff", value);
     }
-    /// <summary>Compensação (EV)</summary>
+    /// <summary>Compensação (EV). Soma à exposição medida ou fixa: positivo clareia</summary>
     /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float ExposureEv
+    public float ExposureCompensation
     {
-        get => Component.GetFloat("exposure_ev");
-        set => Component.SetFloat("exposure_ev", value);
+        get => Component.GetFloat("exposure_compensation");
+        set => Component.SetFloat("exposure_compensation", value);
     }
     /// <summary>Limiar do bloom</summary>
     /// <remarks>Faixa válida: 0 a 64.</remarks>
@@ -4367,54 +4404,61 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("ground_albedo");
         set => Component.SetFloat("ground_albedo", value);
     }
-    /// <summary>EV mínimo (EV)</summary>
-    /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float AutoExposureMinEv
+    /// <summary>Limite mínimo (EV). EV100 mais baixo que a medição pode atingir: a noite não vira dia</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureLimitMin
     {
-        get => Component.GetFloat("auto_exposure_min_ev");
-        set => Component.SetFloat("auto_exposure_min_ev", value);
+        get => Component.GetFloat("exposure_limit_min");
+        set => Component.SetFloat("exposure_limit_min", value);
     }
-    /// <summary>EV máximo (EV)</summary>
-    /// <remarks>Faixa válida: -16 a 16.</remarks>
-    public float AutoExposureMaxEv
+    /// <summary>Limite máximo (EV). EV100 mais alto: limita o escurecimento de cenas muito claras</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureLimitMax
     {
-        get => Component.GetFloat("auto_exposure_max_ev");
-        set => Component.SetFloat("auto_exposure_max_ev", value);
+        get => Component.GetFloat("exposure_limit_max");
+        set => Component.SetFloat("exposure_limit_max", value);
     }
-    /// <summary>Corte baixo</summary>
-    /// <remarks>Faixa válida: 0 a 1.</remarks>
-    public float AutoExposureLowPercent
+    /// <summary>Percentual baixo (%). Descarta os pixels mais escuros do histograma</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float ExposureHistogramLow
     {
-        get => Component.GetFloat("auto_exposure_low_percent");
-        set => Component.SetFloat("auto_exposure_low_percent", value);
+        get => Component.GetFloat("exposure_histogram_low");
+        set => Component.SetFloat("exposure_histogram_low", value);
     }
-    /// <summary>Corte alto</summary>
-    /// <remarks>Faixa válida: 0 a 1.</remarks>
-    public float AutoExposureHighPercent
+    /// <summary>Percentual alto (%). Descarta os pixels mais claros do histograma</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float ExposureHistogramHigh
     {
-        get => Component.GetFloat("auto_exposure_high_percent");
-        set => Component.SetFloat("auto_exposure_high_percent", value);
+        get => Component.GetFloat("exposure_histogram_high");
+        set => Component.SetFloat("exposure_histogram_high", value);
     }
-    /// <summary>Cinza alvo</summary>
-    /// <remarks>Faixa válida: 0.01 a 1.</remarks>
-    public float AutoExposureTargetGrey
+    /// <summary>Cinza médio alvo. Cinza para o qual a média medida é mapeada (12,5%, 14% ou 18%)</summary>
+    /// <remarks>Faixa válida: 0.05 a 0.5.</remarks>
+    public float ExposureTargetMidGrey
     {
-        get => Component.GetFloat("auto_exposure_target_grey");
-        set => Component.SetFloat("auto_exposure_target_grey", value);
+        get => Component.GetFloat("exposure_target_mid_grey");
+        set => Component.SetFloat("exposure_target_mid_grey", value);
     }
-    /// <summary>Velocidade ao escurecer (EV/s)</summary>
-    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
-    public float AutoExposureSpeedUp
+    /// <summary>Escuro para claro. Velocidade da adaptação ao sair do escuro para o claro</summary>
+    /// <remarks>Faixa válida: 0.001 a 100.</remarks>
+    public float ExposureSpeedDarkToLight
     {
-        get => Component.GetFloat("auto_exposure_speed_up");
-        set => Component.SetFloat("auto_exposure_speed_up", value);
+        get => Component.GetFloat("exposure_speed_dark_to_light");
+        set => Component.SetFloat("exposure_speed_dark_to_light", value);
     }
-    /// <summary>Velocidade ao clarear (EV/s)</summary>
-    /// <remarks>Faixa válida: 0.01 a 20.</remarks>
-    public float AutoExposureSpeedDown
+    /// <summary>Claro para escuro. Velocidade da adaptação ao entrar no escuro</summary>
+    /// <remarks>Faixa válida: 0.001 a 100.</remarks>
+    public float ExposureSpeedLightToDark
     {
-        get => Component.GetFloat("auto_exposure_speed_down");
-        set => Component.SetFloat("auto_exposure_speed_down", value);
+        get => Component.GetFloat("exposure_speed_light_to_dark");
+        set => Component.SetFloat("exposure_speed_light_to_dark", value);
+    }
+    /// <summary>Exposição fixa (EV). EV100 da câmera: maior escurece</summary>
+    /// <remarks>Faixa válida: -16 a 24.</remarks>
+    public float ExposureFixed
+    {
+        get => Component.GetFloat("exposure_fixed");
+        set => Component.SetFloat("exposure_fixed", value);
     }
     /// <summary>Rotação HDRI (°)</summary>
     /// <remarks>Faixa válida: -360 a 360.</remarks>
@@ -4633,6 +4677,34 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("cloud_shadow_multiplier");
         set => Component.SetFloat("cloud_shadow_multiplier", value);
     }
+    /// <summary>Pós-exposição (EV). Clareia ou escurece depois da exposição e antes do tonemap</summary>
+    /// <remarks>Faixa válida: -16 a 16.</remarks>
+    public float PostExposure
+    {
+        get => Component.GetFloat("post_exposure");
+        set => Component.SetFloat("post_exposure", value);
+    }
+    /// <summary>Giro de matiz (°). Gira todas as cores no círculo de matiz</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float HueShift
+    {
+        get => Component.GetFloat("hue_shift");
+        set => Component.SetFloat("hue_shift", value);
+    }
+    /// <summary>Espalhamento. Quanto o brilho se espalha em volta das luzes</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float BloomScatter
+    {
+        get => Component.GetFloat("bloom_scatter");
+        set => Component.SetFloat("bloom_scatter", value);
+    }
+    /// <summary>Brilho máximo. Corta pixels mais claros que isto antes do bloom</summary>
+    /// <remarks>Faixa válida: 0 a 65472.</remarks>
+    public float BloomClamp
+    {
+        get => Component.GetFloat("bloom_clamp");
+        set => Component.SetFloat("bloom_clamp", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {
@@ -4645,43 +4717,31 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("fog");
         set => Component.SetBool("fog", value);
     }
-    /// <summary>Pós-processamento. Ativa os overrides autorais desta cena</summary>
+    /// <summary>Pós-processamento ativo. Liga o pós desta vista; a curva vem logo abaixo</summary>
     public bool Post
     {
         get => Component.GetBool("post");
         set => Component.SetBool("post", value);
     }
-    /// <summary>Exposição automática. Mede luminância HDR e adapta a exposição por câmera</summary>
-    public bool AutoExposure
-    {
-        get => Component.GetBool("auto_exposure");
-        set => Component.SetBool("auto_exposure", value);
-    }
-    /// <summary>Peso central. Prioriza o centro da imagem na medição</summary>
-    public bool AutoExposureCenterWeighted
-    {
-        get => Component.GetBool("auto_exposure_center_weighted");
-        set => Component.SetBool("auto_exposure_center_weighted", value);
-    }
-    /// <summary>Bloom. Espalha altas luzes antes do tonemap</summary>
+    /// <summary>Ativo. Espalha altas luzes antes do tonemap</summary>
     public bool Bloom
     {
         get => Component.GetBool("bloom");
         set => Component.SetBool("bloom", value);
     }
-    /// <summary>Vinheta. Escurece gradualmente as bordas</summary>
+    /// <summary>Ativo. Escurece gradualmente as bordas</summary>
     public bool Vignette
     {
         get => Component.GetBool("vignette");
         set => Component.SetBool("vignette", value);
     }
-    /// <summary>Grão de filme. Adiciona grão sensível à luminância depois da resolução temporal</summary>
+    /// <summary>Ativo. Adiciona grão sensível à luminância depois da resolução temporal</summary>
     public bool FilmGrain
     {
         get => Component.GetBool("film_grain");
         set => Component.SetBool("film_grain", value);
     }
-    /// <summary>Oclusão ambiente. Escurece contatos e concavidades a partir da profundidade da câmera</summary>
+    /// <summary>Ativo. Escurece contatos e concavidades a partir da profundidade da câmera</summary>
     public bool AmbientOcclusion
     {
         get => Component.GetBool("ambient_occlusion");
@@ -4699,7 +4759,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_fog");
         set => Component.SetBool("override_fog", value);
     }
-    /// <summary>Sobrescrever pós. Participa da mistura de exposição e pós</summary>
+    /// <summary>Sobrescrever Tonemapping. Este volume decide a curva de Tonemapping e a chave geral do pós</summary>
     public bool OverridePost
     {
         get => Component.GetBool("override_post");
@@ -4711,7 +4771,49 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_indirect");
         set => Component.SetBool("override_indirect", value);
     }
-    /// <summary>Sobrescrever nuvens. Participa da mistura do Cloud Layer, separado do céu</summary>
+    /// <summary>Sobrescrever exposição. Marcado: este volume decide exposição. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideExposure
+    {
+        get => Component.GetBool("override_exposure");
+        set => Component.SetBool("override_exposure", value);
+    }
+    /// <summary>Sobrescrever bloom. Marcado: este volume decide bloom. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideBloom
+    {
+        get => Component.GetBool("override_bloom");
+        set => Component.SetBool("override_bloom", value);
+    }
+    /// <summary>Sobrescrever vinheta. Marcado: este volume decide vinheta. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideVignette
+    {
+        get => Component.GetBool("override_vignette");
+        set => Component.SetBool("override_vignette", value);
+    }
+    /// <summary>Sobrescrever ajustes de cor. Marcado: este volume decide ajustes de cor. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideColorAdjustments
+    {
+        get => Component.GetBool("override_color_adjustments");
+        set => Component.SetBool("override_color_adjustments", value);
+    }
+    /// <summary>Sobrescrever cor. Marcado: este volume decide cor. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideColorGrading
+    {
+        get => Component.GetBool("override_color_grading");
+        set => Component.SetBool("override_color_grading", value);
+    }
+    /// <summary>Sobrescrever grão de filme. Marcado: este volume decide grão de filme. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideFilmGrain
+    {
+        get => Component.GetBool("override_film_grain");
+        set => Component.SetBool("override_film_grain", value);
+    }
+    /// <summary>Sobrescrever oclusão ambiente. Marcado: este volume decide oclusão ambiente. Desmarcado: herda do volume de prioridade menor</summary>
+    public bool OverrideAmbientOcclusion
+    {
+        get => Component.GetBool("override_ambient_occlusion");
+        set => Component.SetBool("override_ambient_occlusion", value);
+    }
+    /// <summary>Sobrescrever nuvens. Marcado: este volume decide as nuvens. Desmarcado: herda do volume de prioridade menor</summary>
     public bool OverrideClouds
     {
         get => Component.GetBool("override_clouds");
@@ -4749,7 +4851,8 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     }
     public enum ToneMapperOption : uint
     {
-        Reinhard = 0,
+        Nenhum = 3,
+        Neutro = 4,
         ACES = 1,
         AgX = 2,
     }
@@ -4770,6 +4873,53 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     {
         get => (VolumeShapeOption)Component.GetEnum("volume_shape");
         set => Component.SetEnum("volume_shape", (uint)value);
+    }
+    public enum ExposureModeOption : uint
+    {
+        Fixa = 0,
+        Automatica = 1,
+        AutomaticaPorHistograma = 2,
+    }
+    /// <summary>Modo. Fixa usa o EV100 informado; as automáticas medem a luminância da câmera a cada quadro</summary>
+    public ExposureModeOption ExposureMode
+    {
+        get => (ExposureModeOption)Component.GetEnum("exposure_mode");
+        set => Component.SetEnum("exposure_mode", (uint)value);
+    }
+    public enum ExposureMeteringOption : uint
+    {
+        Media = 0,
+        Pontual = 1,
+        PesoNoCentro = 2,
+    }
+    /// <summary>Medição. Quais pixels pesam na média: a imagem toda, um círculo no centro ou peso que cai até a borda</summary>
+    public ExposureMeteringOption ExposureMetering
+    {
+        get => (ExposureMeteringOption)Component.GetEnum("exposure_metering");
+        set => Component.SetEnum("exposure_metering", (uint)value);
+    }
+    public enum ExposureAdaptationOption : uint
+    {
+        Imediata = 0,
+        Progressiva = 1,
+    }
+    /// <summary>Adaptação. Imediata salta para a medição; progressiva acompanha como o olho</summary>
+    public ExposureAdaptationOption ExposureAdaptation
+    {
+        get => (ExposureAdaptationOption)Component.GetEnum("exposure_adaptation");
+        set => Component.SetEnum("exposure_adaptation", (uint)value);
+    }
+    public enum ExposureTargetMidGreyChoiceOption : uint
+    {
+        Cinza125 = 0,
+        Cinza14 = 1,
+        Cinza18 = 2,
+    }
+    /// <summary>Cinza médio alvo. Tom para o qual a média medida é levada</summary>
+    public ExposureTargetMidGreyChoiceOption ExposureTargetMidGreyChoice
+    {
+        get => (ExposureTargetMidGreyChoiceOption)Component.GetEnum("exposure_target_mid_grey_choice");
+        set => Component.SetEnum("exposure_target_mid_grey_choice", (uint)value);
     }
     public enum VolumeLayerOption : uint
     {
@@ -5091,6 +5241,253 @@ public readonly struct LightingSettings : IComponentFacade<LightingSettings>
     }
 }
 
+/// <summary>Sonda de reflexo: Captura a cena num cubemap: metal e vidro refletem o cômodo em vez do céu. Família Luz · Sondas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ReflectionProbe.html</remarks>
+public readonly struct ReflectionProbe : IComponentFacade<ReflectionProbe>
+{
+    public static string TypeId => "astra.render.reflection_probe";
+    public static ReflectionProbe Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public ReflectionProbe(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Tamanho da caixa</summary>
+    public Vector3 BoxSize
+    {
+        get => new(Component.GetFloat("box_size.x"), Component.GetFloat("box_size.y"), Component.GetFloat("box_size.z"));
+        set => Component.SetVector3("box_size", value);
+    }
+    /// <summary>Deslocamento da caixa</summary>
+    public Vector3 BoxOffset
+    {
+        get => new(Component.GetFloat("box_offset.x"), Component.GetFloat("box_offset.y"), Component.GetFloat("box_offset.z"));
+        set => Component.SetVector3("box_offset", value);
+    }
+    /// <summary>Cor de fundo. Cor sRGB, como o seletor; o motor converte para linear</summary>
+    public Vector3 Background
+    {
+        get => new(Component.GetFloat("background.r"), Component.GetFloat("background.g"), Component.GetFloat("background.b"));
+        set => Component.SetVector3("background", value);
+    }
+    /// <summary>Importância. Entre sondas sobrepostas, o objeto mistura as duas de maior importância</summary>
+    /// <remarks>Faixa válida: 0 a 32767.</remarks>
+    public float Importance
+    {
+        get => Component.GetFloat("importance");
+        set => Component.SetFloat("importance", value);
+    }
+    /// <summary>Intensidade. Multiplica o reflexo desta sonda nos materiais</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float Intensity
+    {
+        get => Component.GetFloat("intensity");
+        set => Component.SetFloat("intensity", value);
+    }
+    /// <summary>Distância de mistura (m). Faixa dentro da caixa em que o reflexo passa desta sonda para a vizinha ou para o céu</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float BlendDistance
+    {
+        get => Component.GetFloat("blend_distance");
+        set => Component.SetFloat("blend_distance", value);
+    }
+    /// <summary>Plano próximo (m). Nada mais perto da sonda que isto entra no reflexo</summary>
+    /// <remarks>Faixa válida: 0.01 a 1000.</remarks>
+    public float NearClip
+    {
+        get => Component.GetFloat("near_clip");
+        set => Component.SetFloat("near_clip", value);
+    }
+    /// <summary>Plano distante (m). Nada mais longe que isto entra no reflexo; além dele aparece o fundo</summary>
+    /// <remarks>Faixa válida: 0.1 a 100000.</remarks>
+    public float FarClip
+    {
+        get => Component.GetFloat("far_clip");
+        set => Component.SetFloat("far_clip", value);
+    }
+    /// <summary>Ativa</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Projeção na caixa. Paredes a distância finita: o reflexo muda com a posição na sala, em vez de ficar no infinito</summary>
+    public bool BoxProjection
+    {
+        get => Component.GetBool("box_projection");
+        set => Component.SetBool("box_projection", value);
+    }
+    /// <summary>HDR. Guarda brilho acima de 1 (sol, lâmpadas); desligado, a captura é cortada em 0..1 e o recurso ocupa metade</summary>
+    public bool Hdr
+    {
+        get => Component.GetBool("hdr");
+        set => Component.SetBool("hdr", value);
+    }
+    public enum TypeOption : uint
+    {
+        Assada = 0,
+        TempoReal = 1,
+    }
+    /// <summary>Tipo. Assada é capturada no editor e guardada no projeto; Tempo real recaptura no aparelho</summary>
+    public TypeOption Type
+    {
+        get => (TypeOption)Component.GetEnum("type");
+        set => Component.SetEnum("type", (uint)value);
+    }
+    public enum RefreshModeOption : uint
+    {
+        AoAcordar = 0,
+        TodoQuadro = 1,
+        PorScript = 2,
+    }
+    /// <summary>Atualização. Ao acordar captura uma vez no início do Play; Todo quadro recaptura sem parar; Por script espera RenderProbe()</summary>
+    public RefreshModeOption RefreshMode
+    {
+        get => (RefreshModeOption)Component.GetEnum("refresh_mode");
+        set => Component.SetEnum("refresh_mode", (uint)value);
+    }
+    public enum TimeSlicingOption : uint
+    {
+        TodasAsFacesDeUmaVez = 0,
+        UmaFacePorQuadro = 1,
+        SemFatiamento = 2,
+    }
+    /// <summary>Fatiamento no tempo. Espalha a captura e o filtro por vários quadros para não pesar num quadro só</summary>
+    public TimeSlicingOption TimeSlicing
+    {
+        get => (TimeSlicingOption)Component.GetEnum("time_slicing");
+        set => Component.SetEnum("time_slicing", (uint)value);
+    }
+    public enum ResolutionOption : uint
+    {
+        V16 = 16,
+        V32 = 32,
+        V64 = 64,
+        V128 = 128,
+        V256 = 256,
+    }
+    /// <summary>Resolução. Lado de cada face capturada; mais nitidez em metal liso, mais custo de captura</summary>
+    public ResolutionOption Resolution
+    {
+        get => (ResolutionOption)Component.GetEnum("resolution");
+        set => Component.SetEnum("resolution", (uint)value);
+    }
+    public enum ClearFlagsOption : uint
+    {
+        Ceu = 0,
+        CorSolida = 1,
+    }
+    /// <summary>Fundo. O que aparece onde não há objeto: o céu da cena ou uma cor</summary>
+    public ClearFlagsOption ClearFlags
+    {
+        get => (ClearFlagsOption)Component.GetEnum("clear_flags");
+        set => Component.SetEnum("clear_flags", (uint)value);
+    }
+    [System.Flags]
+    public enum CullingMaskOption : uint
+    {
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+        Camada8 = 256,
+        Camada9 = 512,
+        Camada10 = 1024,
+        Camada11 = 2048,
+        Camada12 = 4096,
+        Camada13 = 8192,
+        Camada14 = 16384,
+        Camada15 = 32768,
+        Camada16 = 65536,
+        Camada17 = 131072,
+        Camada18 = 262144,
+        Camada19 = 524288,
+        Camada20 = 1048576,
+        Camada21 = 2097152,
+        Camada22 = 4194304,
+        Camada23 = 8388608,
+        Camada24 = 16777216,
+        Camada25 = 33554432,
+        Camada26 = 67108864,
+        Camada27 = 134217728,
+        Camada28 = 268435456,
+        Camada29 = 536870912,
+        Camada30 = 1073741824,
+        Camada31 = 2147483648,
+    }
+    /// <summary>Máscara de culling. Só objetos destas camadas entram no reflexo</summary>
+    public CullingMaskOption CullingMask
+    {
+        get => (CullingMaskOption)Component.GetEnum("culling_mask");
+        set => Component.SetEnum("culling_mask", (uint)value);
+    }
+    /// <summary>Cubemap assado. Recurso do projeto por slot</summary>
+    public AssetGuid GetBakedTexture(uint slot = 0) => Component.GetResource("baked_texture", slot);
+    public void SetBakedTexture(AssetGuid value, uint slot = 0) => Component.SetResource("baked_texture", value, slot);
+    /// <summary>Capturar agora. Recaptura a sonda de tempo real no próximo quadro (RenderProbe da Unity)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void RenderProbe() => Component.Invoke("render_probe");
+}
+
+/// <summary>Grupo de sondas de luz: Pontos que guardam a luz da cena para iluminar objetos que se movem. Família Luz · Sondas.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-LightProbeGroup.html</remarks>
+public readonly struct LightProbeGroup : IComponentFacade<LightProbeGroup>
+{
+    public static string TypeId => "astra.render.light_probe_group";
+    public static LightProbeGroup Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public LightProbeGroup(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativo</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Remover anéis. Tira os halos escuros atrás de uma luz forte; a luz das sondas fica mais suave</summary>
+    public bool RemoveRinging
+    {
+        get => Component.GetBool("remove_ringing");
+        set => Component.SetBool("remove_ringing", value);
+    }
+    /// <summary>Mostrar arestas. Desenha no viewport os tetraedros que ligam as sondas</summary>
+    public bool ShowWireframe
+    {
+        get => Component.GetBool("show_wireframe");
+        set => Component.SetBool("show_wireframe", value);
+    }
+    /// <summary>Sondas assadas. Recurso do projeto por slot</summary>
+    public AssetGuid GetBakedData(uint slot = 0) => Component.GetResource("baked_data", slot);
+    public void SetBakedData(AssetGuid value, uint slot = 0) => Component.SetResource("baked_data", value, slot);
+    /// <summary>Posição X (m). Valor por slot</summary>
+    public float GetProbePositionX(uint slot) => Component.GetSlotFloat("probe_position_x", slot);
+    public void SetProbePositionX(uint slot, float value) => Component.SetSlotFloat("probe_position_x", value, slot);
+    /// <summary>Posição Y (m). Valor por slot</summary>
+    public float GetProbePositionY(uint slot) => Component.GetSlotFloat("probe_position_y", slot);
+    public void SetProbePositionY(uint slot, float value) => Component.SetSlotFloat("probe_position_y", value, slot);
+    /// <summary>Posição Z (m). Valor por slot</summary>
+    public float GetProbePositionZ(uint slot) => Component.GetSlotFloat("probe_position_z", slot);
+    public void SetProbePositionZ(uint slot, float value) => Component.SetSlotFloat("probe_position_z", value, slot);
+}
+
 /// <summary>Câmera: Projeção e enquadramento. Família Câmera · Projeção.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html</remarks>
 public readonly struct Camera : IComponentFacade<Camera>
@@ -5108,6 +5505,12 @@ public readonly struct Camera : IComponentFacade<Camera>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
+    /// <summary>Cor de fundo. Cor linear RGB</summary>
+    public Vector3 BackgroundColor
+    {
+        get => new(Component.GetFloat("background_color.r"), Component.GetFloat("background_color.g"), Component.GetFloat("background_color.b"));
+        set => Component.SetVector3("background_color", value);
+    }
     /// <summary>Campo vertical (°)</summary>
     /// <remarks>Faixa válida: 1 a 170.</remarks>
     public float VerticalFov
@@ -5129,7 +5532,7 @@ public readonly struct Camera : IComponentFacade<Camera>
         get => Component.GetFloat("far_plane");
         set => Component.SetFloat("far_plane", value);
     }
-    /// <summary>Prioridade</summary>
+    /// <summary>Prioridade. Ordem de desenho (Depth): a maior fica por cima; empate pelo objeto mais novo</summary>
     /// <remarks>Faixa válida: -10000 a 10000.</remarks>
     public float Priority
     {
@@ -5143,11 +5546,84 @@ public readonly struct Camera : IComponentFacade<Camera>
         get => Component.GetFloat("orthographic_half_height");
         set => Component.SetFloat("orthographic_half_height", value);
     }
+    /// <summary>Distância focal (mm). Com o sensor, define o campo de visão (Physical Camera)</summary>
+    /// <remarks>Faixa válida: 0.1 a 1000.</remarks>
+    public float FocalLength
+    {
+        get => Component.GetFloat("focal_length");
+        set => Component.SetFloat("focal_length", value);
+    }
+    /// <summary>Sensor · largura (mm). Padrão 36 × 24 mm (full frame)</summary>
+    /// <remarks>Faixa válida: 0.1 a 100.</remarks>
+    public float SensorWidth
+    {
+        get => Component.GetFloat("sensor_width");
+        set => Component.SetFloat("sensor_width", value);
+    }
+    /// <summary>Sensor · altura (mm)</summary>
+    /// <remarks>Faixa válida: 0.1 a 100.</remarks>
+    public float SensorHeight
+    {
+        get => Component.GetFloat("sensor_height");
+        set => Component.SetFloat("sensor_height", value);
+    }
+    /// <summary>Viewport X. Fração da tela a partir da esquerda</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ViewportX
+    {
+        get => Component.GetFloat("viewport_x");
+        set => Component.SetFloat("viewport_x", value);
+    }
+    /// <summary>Viewport Y. Fração da tela a partir de baixo</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ViewportY
+    {
+        get => Component.GetFloat("viewport_y");
+        set => Component.SetFloat("viewport_y", value);
+    }
+    /// <summary>Viewport L. Largura em fração da tela</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ViewportWidth
+    {
+        get => Component.GetFloat("viewport_width");
+        set => Component.SetFloat("viewport_width", value);
+    }
+    /// <summary>Viewport A. Altura em fração da tela</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ViewportHeight
+    {
+        get => Component.GetFloat("viewport_height");
+        set => Component.SetFloat("viewport_height", value);
+    }
     /// <summary>Usar no Play</summary>
     public bool Enabled
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
+    }
+    /// <summary>Câmera física. Lente por distância focal e sensor, como uma câmera real</summary>
+    public bool PhysicalCamera
+    {
+        get => Component.GetBool("physical_camera");
+        set => Component.SetBool("physical_camera", value);
+    }
+    /// <summary>Pós-processamento. Bloom, gradação, vinheta e exposição automática dos volumes</summary>
+    public bool PostProcessing
+    {
+        get => Component.GetBool("post_processing");
+        set => Component.SetBool("post_processing", value);
+    }
+    /// <summary>Renderizar sombras. Sombras do sol e das luzes locais nesta câmera</summary>
+    public bool RenderShadows
+    {
+        get => Component.GetBool("render_shadows");
+        set => Component.SetBool("render_shadows", value);
+    }
+    /// <summary>HDR. Desligado, a cena é tonalizada no próprio shader e nada passa de 1 antes do pós</summary>
+    public bool Hdr
+    {
+        get => Component.GetBool("hdr");
+        set => Component.SetBool("hdr", value);
     }
     public enum ProjectionOption : uint
     {
@@ -5172,11 +5648,91 @@ public readonly struct Camera : IComponentFacade<Camera>
         Ambiente6 = 64,
         Ambiente7 = 128,
     }
-    /// <summary>Ambientes. Volumes que esta câmera consulta</summary>
+    /// <summary>Volumes. Volumes que esta câmera consulta</summary>
     public EnvironmentMaskOption EnvironmentMask
     {
         get => (EnvironmentMaskOption)Component.GetEnum("environment_mask");
         set => Component.SetEnum("environment_mask", (uint)value);
+    }
+    public enum BackgroundTypeOption : uint
+    {
+        CeuSkybox = 0,
+        CorSolida = 1,
+        NaoInicializado = 2,
+    }
+    /// <summary>Fundo. O que preenche a tela antes da cena (Background Type)</summary>
+    public BackgroundTypeOption BackgroundType
+    {
+        get => (BackgroundTypeOption)Component.GetEnum("background_type");
+        set => Component.SetEnum("background_type", (uint)value);
+    }
+    [System.Flags]
+    public enum CullingMaskOption : uint
+    {
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+        Camada8 = 256,
+        Camada9 = 512,
+        Camada10 = 1024,
+        Camada11 = 2048,
+        Camada12 = 4096,
+        Camada13 = 8192,
+        Camada14 = 16384,
+        Camada15 = 32768,
+        Camada16 = 65536,
+        Camada17 = 131072,
+        Camada18 = 262144,
+        Camada19 = 524288,
+        Camada20 = 1048576,
+        Camada21 = 2097152,
+        Camada22 = 4194304,
+        Camada23 = 8388608,
+        Camada24 = 16777216,
+        Camada25 = 33554432,
+        Camada26 = 67108864,
+        Camada27 = 134217728,
+        Camada28 = 268435456,
+        Camada29 = 536870912,
+        Camada30 = 1073741824,
+        Camada31 = 2147483648,
+    }
+    /// <summary>Camadas visíveis. Culling Mask: só objetos destas camadas aparecem nesta câmera</summary>
+    public CullingMaskOption CullingMask
+    {
+        get => (CullingMaskOption)Component.GetEnum("culling_mask");
+        set => Component.SetEnum("culling_mask", (uint)value);
+    }
+    public enum AntialiasingOption : uint
+    {
+        DoProjeto = 0,
+        Nenhum = 1,
+        FXAA = 2,
+    }
+    /// <summary>Antisserrilhado. Do projeto usa a política de qualidade; TAA só quando o projeto já usa TAA</summary>
+    public AntialiasingOption Antialiasing
+    {
+        get => (AntialiasingOption)Component.GetEnum("antialiasing");
+        set => Component.SetEnum("antialiasing", (uint)value);
+    }
+    public enum GateFitOption : uint
+    {
+        Vertical = 0,
+        Horizontal = 1,
+        Preencher = 2,
+        Sobrevarredura = 3,
+        NenhumEsticar = 4,
+    }
+    /// <summary>Ajuste do sensor. Como o sensor encaixa na proporção da tela (Gate Fit)</summary>
+    public GateFitOption GateFit
+    {
+        get => (GateFitOption)Component.GetEnum("gate_fit");
+        set => Component.SetEnum("gate_fit", (uint)value);
     }
 }
 

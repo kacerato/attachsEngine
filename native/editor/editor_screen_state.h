@@ -8,6 +8,7 @@ namespace ae::ui { class UiDrawList; }
 #include "resources/library_index.h"
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
+#include "editor/editor_probes.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_selection.h"
 #include "resources/animation_clip_clipboard.h"
@@ -290,6 +291,8 @@ struct EditorScreenState final {
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const EditorNavigationView *navigationView=nullptr;
+  // PK-6: a sonda (de reflexo ou grupo de luz) selecionada no Inspector.
+  const EditorProbeView *probeView=nullptr;
   const runtime::SceneNavigation *navigationRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
@@ -735,6 +738,10 @@ struct EditorScreenState final {
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  // Play com duas câmeras na tela (PK-7): o retângulo da câmera de cima na
+  // vista de jogo e se a imagem dela já foi desenhada pelo renderer.
+  ui::UiRect playStackRect{};
+  bool playStackReady=false;
   bool cameraPreviewMaterial=false;
   bool cameraPreviewActive=false,cameraPreviewStandalone=false;
   u8 materialPreviewShape=0;

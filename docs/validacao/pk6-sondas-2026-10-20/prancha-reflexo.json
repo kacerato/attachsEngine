@@ -1,0 +1,15 @@
+{"title": "PK-6 · Reflection Probe — Unity × Astra (POCO F7)",
+ "rows": [
+  {"unity": "referencia-unity/R1-brackeys-02m00s-sem-sonda.png", "device": "P1-editor-esfera-sem-sonda.png",
+   "unity_caption": "Brackeys, REFLECTIONS in Unity, 2:00 — sem sonda", "device_caption": "Astra Dev 450 · Sponza · esfera cromada antes do bake",
+   "verdict": "Igual: sem sonda o metal só tem o céu (Unity preto, Astra cinza claro do céu procedural)."},
+  {"unity": "referencia-unity/R3-brackeys-05m40s-esfera-cromada-interior.png", "device": "P2-editor-esfera-com-sonda-assada.png",
+   "unity_caption": "Brackeys, 5:40 — depois do Bake", "device_caption": "Astra Dev 450 · depois de Assar (0,1 s, 128 px, HDR)",
+   "verdict": "Igual: depois do bake a esfera reflete o cômodo (arcos, colunas, céu no alto). Astra puxa mais para o azul do céu."},
+  {"unity": "referencia-unity/R6-gamified-05m50s-box-projection.png", "device": "P7-play-reflexos-zoom.png",
+   "unity_caption": "Gamified, 5:50 — Box Projection no interior", "device_caption": "Astra Dev 450 · Play · pátio (dir.) e arcada (esq.)",
+   "verdict": "Paralaxe da caixa visível: cada esfera reflete a própria sala (pátio x colunata). Unity mais nítida (sonda 128 em tela maior)."},
+  {"unity": "referencia-unity/R2-brackeys-03m40s-caixa-da-sonda.png", "device": "P3-inspector-sonda-caixa.png",
+   "unity_caption": "Brackeys, 3:40 — caixa de influência e Inspector", "device_caption": "Astra Dev 450 · caixa em arame e Inspector da sonda",
+   "verdict": "Mesmo fluxo: caixa alinhada ao mundo, Inspector com Type, Importance, Box Projection, Blend Distance, Bake."}
+ ]}

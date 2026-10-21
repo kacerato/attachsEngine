@@ -423,6 +423,8 @@ add_library(aether_renderer STATIC
   renderer/scene_environment.cpp
   renderer/color_grading.cpp
   renderer/time_of_day.cpp
+  renderer/light_probes.cpp
+  renderer/reflection_probes.cpp
   renderer/procedural_sky.cpp
   renderer/cloud_layer.cpp
   renderer/physical_atmosphere.cpp
@@ -572,6 +574,7 @@ add_library(aether_runtime STATIC
   runtime/game_world.cpp
   runtime/game_world_paths.cpp
   runtime/scene_lights.cpp
+  runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
   runtime/scene_environment.cpp
   runtime/scene_physics.cpp
@@ -659,6 +662,7 @@ add_library(aether_editor STATIC
   editor/editor_animator.cpp
   editor/editor_animator_resources.cpp
   editor/editor_navigation.cpp
+  editor/editor_probes.cpp
   editor/editor_animation_clip_resources.cpp
   editor/editor_animation_clip_preview.cpp
   editor/editor_animation_clip.cpp
@@ -926,6 +930,7 @@ if(NOT ANDROID)
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
     ../tests/native/test_virtual_cameras.cpp
+    ../tests/native/test_camera_pk7.cpp
     ../tests/native/test_navigation_mesh.cpp
     ../tests/native/test_navigation_scene.cpp
     ../tests/native/test_audio_mixer.cpp
@@ -948,6 +953,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_lighting_specialization.cpp
     ../tests/native/test_light_renderer_unity.cpp
+    ../tests/native/test_probes_unity.cpp
     ../tests/native/test_runtime_environment.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
@@ -1190,7 +1196,26 @@ if(NOT ANDROID)
   if(MINGW)
     target_compile_options(aether_lighting_family_tests PRIVATE -Wa,-mbig-obj)
   endif()
+  # PK-6: Reflection Probe e Light Probe Group, sem a suíte inteira.
+  add_executable(aether_probe_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_probes_unity.cpp)
+  target_include_directories(aether_probe_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_probe_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_probe_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_probe_family_tests PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_material_shading_pk9.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
+  # PK-7 Câmera: modelo v4, lente física, máscara, pilha por prioridade e os
+  # cenários existentes de câmera virtual, sem o catálogo inteiro.
+  add_executable(aether_camera_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_camera_pk7.cpp ../tests/native/test_virtual_cameras.cpp ../tests/native/test_camera_ray_contract.cpp)
+  target_include_directories(aether_camera_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  if(MINGW)
+    target_compile_options(aether_camera_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  target_link_libraries(aether_camera_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   add_executable(aether_rig_authoring_tests ../tests/native/family_base_main.cpp ../tests/native/test_rig_authoring.cpp)
   target_include_directories(aether_rig_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_rig_authoring_tests PRIVATE aether_core aether_assets aether_runtime)
@@ -1263,6 +1288,12 @@ if(NOT ANDROID)
   endif()
   add_executable(component_scene_fixture EXCLUDE_FROM_ALL ../tests/native/component_scene_fixture.cpp)
   target_link_libraries(component_scene_fixture PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  # PK-6: variante de validação do Sponza (sondas, esferas e câmera).
+  add_executable(pk6_probe_scene_author EXCLUDE_FROM_ALL ../tools/pk6_probe_scene_author.cpp)
+  target_link_libraries(pk6_probe_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(pk6_probe_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(sponza_scene_author EXCLUDE_FROM_ALL ../tools/sponza_scene_author.cpp)
   target_link_libraries(sponza_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)

@@ -23,6 +23,10 @@ bool isImageDescValid(const ImageDesc &desc) {
   constexpr VkImageUsageFlags kAttachmentUsage =
       VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT |
       VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+  if (desc.arrayLayers == 0 || desc.arrayLayers > 256 || (desc.arrayLayers > 1 && desc.depth > 1) ||
+      (desc.cube && (desc.arrayLayers != 6 || desc.width != desc.height))) {
+    return false;
+  }
   if (desc.depth == 0 ||
       (desc.depth > 1 && (desc.transient || desc.mipLevels != 1 || (desc.usage & kAttachmentUsage) != 0))) {
     return false;

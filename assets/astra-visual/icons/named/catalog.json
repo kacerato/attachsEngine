@@ -2365,6 +2365,18 @@
       "name": "material-advanced",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/reflection-probe": {
+      "category": "lighting",
+      "name": "reflection-probe",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/light-probe-group": {
+      "category": "lighting",
+      "name": "light-probe-group",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

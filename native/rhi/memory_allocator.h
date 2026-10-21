@@ -49,6 +49,12 @@ struct ImageDesc {
   // Vulkan proíbe combinar TRANSIENT_ATTACHMENT com SAMPLED/STORAGE/TRANSFER:
   // isImageDescValid recusa a combinação em vez de deixar o device falhar.
   bool transient = false;
+  // PK-6: camadas de array. Com `cube` (exige 6 camadas e lado quadrado) a
+  // imagem nasce compatível com cubemap e a view padrão é CUBE; sem ele, uma
+  // imagem com várias camadas tem view 2D_ARRAY. Views por face ou por mip o
+  // dono cria sobre handle().
+  u32 arrayLayers = 1;
+  bool cube = false;
 };
 
 bool isImageDescValid(const ImageDesc &desc);

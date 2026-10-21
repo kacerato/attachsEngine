@@ -1,0 +1,12 @@
+{"title": "PK-6 · Light Probe Group — Unity × Astra (POCO F7)",
+ "rows": [
+  {"unity": "referencia-unity/L4-brackeys-06m40s-grupo-com-arestas.png", "device": "P5-grupo-50-sondas-arestas.png",
+   "unity_caption": "Brackeys, LIGHT PROBES in Unity, 6:40 — grupo com arestas", "device_caption": "Astra Dev 450 · Sponza · 50 sondas, 91 tetraedros",
+   "verdict": "Igual: pontos editáveis no viewport e a malha de tetraedros desenhada entre eles."},
+  {"unity": "referencia-unity/L3-gdblueprint-04m40s-capsula-na-sombra.png", "device": "P9-play-1500-sem-recurso-de-sonda-zoom.png",
+   "unity_caption": "GD Blueprint, 4:40 — objeto dinâmico lido pelo tetraedro em volta", "device_caption": "Astra Dev 1500 · Play · sem recurso assado (só o céu)",
+   "verdict": "Antes: sem sonda pronta, a esfera fosca e as cromadas caem no céu e ficam brancas e chapadas."},
+  {"unity": "referencia-unity/L5-brackeys-07m30s-esfera-no-sol.png", "device": "P10-play-1500-sondas-de-luz-e-reflexo-zoom.png",
+   "unity_caption": "Brackeys, 7:30 — Mesh Renderer em Blend Probes, esfera tingida pelo entorno", "device_caption": "Astra Dev 1500 · Play · mesma câmera, sondas assadas",
+   "verdict": "Igual: a esfera fosca (esq.) ganha o tom azul-acinzentado do pátio pelo SH, e a arquitetura Static fica como antes. A Unity tem cor de rebote mais forte (chão vermelho); nosso rebote é simples."}
+ ]}
