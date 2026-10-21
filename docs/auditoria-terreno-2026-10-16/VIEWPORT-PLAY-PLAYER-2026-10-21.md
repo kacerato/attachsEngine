@@ -176,6 +176,11 @@ conjunto novo pode compilar até aproximadamente50 pipelines; log de profiling m
 esse custo. Assets/propriedades continuam completos. Integração Control32/Dynamic
 futura exige nova prova de ABI e permanece explicitamente genérica até lá.
 
-APK privado111 `.20261021.3` em compilação, ainda NÃO instalado/testado. Revisões
-intermediárias canceladas não contam como entregas. A/B móvel, toque, água e Player
+APK privado111 `.20261021.3` compilado e instalado em21/10. SHA256
+`e6f4114746d082a43c996485299864b14f47ecf246c2b56f5246181633888c7b`.
+Auditoria do APK, assinatura e zipalign passaram, com82 materiais/156 texturas
+originais e atlas646 preservados. A primeira compilação falhou por declaração
+em namespace diferente; a declaração foi corrigida e o retry incremental passou
+em1m22s. O aparelho está bloqueado/apagado, aguardando desbloqueio do proprietário.
+Instalação não comprova cadência ou latência. A/B móvel, toque, água e Player
 exportado continuam pendentes; a janela ADB excepcional segue aberta.

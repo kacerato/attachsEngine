@@ -388,7 +388,9 @@ struct AndroidShell final {
 };
 
 void applyThermalRenderingPolicy(AndroidShell &shell, bool force);
+namespace {
 void synchronizePresentationBudget(AndroidShell &shell);
+}
 
 bool sameSpectrumAuthoring(const ae::renderer::WaterSpectrumAuthoringSettings &a,
                            const ae::renderer::WaterSpectrumAuthoringSettings &b) {

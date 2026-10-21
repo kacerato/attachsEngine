@@ -1,5 +1,16 @@
 # Retomada — 16/10/2026
 
+Estado mais recente21/10: APK111 `.20261021.3` compilado/auditado e instalado,
+SHA256 `e6f4114746d082a43c996485299864b14f47ecf246c2b56f5246181633888c7b`.
+Editor30FPS e Play/Player50FPS implementados; ganho de navegação ainda não medido.
+Aparelho conectado, porém bloqueado/apagado; pedido de desbloqueio pendente.
+Build Android incremental final passou em1m22s após corrigir namespace da declaração.
+Suíte host final de terreno está recompilando em um único job. Água, desempenho
+em movimento e Player exportado continuam sem aceite. Engine já publicada em
+`955458a6` nesta branch; correção subsequente de namespace em fechamento. As notas
+abaixo são checkpoints históricos, não anulam este estado. Docs públicas seguintes
+ainda não publicadas; autorização ADB excepcional segue aberta.
+
 Checkpoint local21/10: [separação Viewport/Play/Player e desempenho](VIEWPORT-PLAY-PLAYER-2026-10-21.md) complementa [correntes, lava, chuva e brilho por altura](FLUXOS-LAVA-CHUVA-2026-10-20.md). **239/239 terreno/editor,46/46 política gráfica,312/312 GPU e44 shaders** passaram na revisão local; os112 Core/2 assets/106 capturas anteriores continuam históricos. APK111 `.20261021.1` instalado para QA privada, SHA256 `c16bf1d44e63842c51c14d9f7e1900a4a17b254222f0014f2c218cba9f6301e6`; ainda apresentou cerca de5 FPS em movimento. **Não aprovado em desempenho/água visual.** Candidato intermediário `.20261021.2` compilado, sem instalação; revisão seguinte em preparação com presets editoriais próprios, relógio de prévia opcional, exclusão de preferências da exportação, prova de camadas vazias e shader que acumula um material por vez. Não há instalação do candidato novo, push ou próximas Docs confirmados neste checkpoint. ADB sem aparelho na última consulta. Play/Player agora têm atualização de UI enxuta, com toque em Canvas real verificado e arquivo autoral intacto; presets do editor e gráficos do próximo Play/APK têm escopos explícitos. Captura executável revelou navegação sobrepondo o popover; ordem corrigida e testada em655×300/1280×720, recaptura em andamento. A/B móvel e exportação executável pendentes. A passagem ADB excepcional desta entrega segue aberta; depois das próximas Docs continuar sem ADB até terminar o plano. Originais intactos; catálogo82/156, atlas646;71 itens/28 linhas preservados.
 
 Ajuste subsequente solicitado: autoria30FPS; Play/Player50FPS, sem seletor por enquanto.
