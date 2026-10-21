@@ -56,7 +56,7 @@ struct FrameProfileContext final {
   bool fullDetailSampling = false;
   bool pointLightingSpecialization = false;
   u32 spatialChunks = 0;
-  bool sceneReuseEnabled=false,sceneReused=false;
+  bool sceneReuseEnabled=false,sceneReused=false,postSceneReused=false;
   bool renderingQualityLocked=false;
   u32 shadowFilterTaps=0;
   bool lodEnabled = false;
@@ -95,7 +95,7 @@ public:
     collapsedAttributionFrames_ = 0;
     attributionSampleFrames_ = 0;
     renderScaleSamples_ = 0;
-    sceneReusedFrames_=0;
+    sceneReusedFrames_=0;postSceneReusedFrames_=0;
     opaqueNoClipFrames_=0;
     pointLightingFrames_=0;
     renderScaleMinimum_ = 1.0f;
@@ -124,7 +124,7 @@ private:
   u32 collapsedAttributionFrames_ = 0;
   u32 attributionSampleFrames_ = 0;
   u32 renderScaleSamples_ = 0;
-  u32 sceneReusedFrames_=0;
+  u32 sceneReusedFrames_=0,postSceneReusedFrames_=0;
   u32 opaqueNoClipFrames_=0;
   u32 pointLightingFrames_=0;
   float renderScaleMinimum_ = 1.0f;

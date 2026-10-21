@@ -1,5 +1,59 @@
 # Retomada — 16/10/2026
 
+Atualização21/10: proprietário autorizou explicitamente “Pode instalar e testar; celular livre”.
+APK111.5 instalado com Success; versão `.20261021.5` confirmada no Android.
+ADB permitido nesta passagem M14 antes das Docs, depois retomar sem aparelho.
+Teste restrito ao TerrainQA111, com guarda de foco. Duas janelas válidas de5s
+no Médio:18.057/17.854FPS, p95 intervalo83.256ms; snapshot p9529.260/27.874ms.
+Em14:03:35 o foco mudou para Astra u07, sem comando desta sessão; processo QA
+continuou vivo e buffer de crash consultado vazio. Guarda bloqueou próximos gestos.
+Pergunta assíncrona de exclusividade pendente: não retomar ações de aparelho até
+resposta. Precisão fracionária dos timestamps pode ser resampling do Android,
+não prova outra pessoa. Instalação e medições não são aceite de desempenho/água.
+Primeira tentativa durante carga falhou sem amostras: não usar como FPS.
+
+Checkpoint local21/10:238/238 Editor/Play/Player/UI,239/239 Terrain,
+54/54 política/frame e264 comparações GPU de pós passaram. Dez capturas finais
+foram conferidas em655×300/1280×720. CommitUI `7a36af7d` publicado na branch;
+cache de pós ainda em working tree. APK111.5 compilou em21m31s, assinatura v2
+ e alinhamento ZIP passaram, assets originais conferidos. SHA256 APK:
+`d0bf81e4b9981cfc5488d7aa63778405b981923588602c950ba9a3a8fe15c51f`.
+Docs públicas têm rascunho não publicado em `build/AstraDocs`: nota
+`2026-10-21-viewport-play-player` e guia correspondente. Fechar medição móvel,
+registrar cobertura, build/links/revisão, commit/push e Vercel antes de anunciar.
+
+Revisão visual21/10: vídeo do autor MicroSplat [Unity5.6.1p2](https://youtu.be/8nOYoPoqRec)
+revisitado em617.113/617.146s (molhado, frames consecutivos) e622.146s (seco).
+Capturas privadas fullscreen em `unity-water-video/wet-617113-fullscreen.png`,
+`wet-617146-fullscreen.png` e `dry-622146-fullscreen.png`. Não são evidência Astra.
+Traço ativo confirmou Medium/B/Hemispheric→specularProbe=false/splitSum=false;
+quality.w=0 pula IBL especular em dirt_road_shading.glsl. High/A habilita esse ramo.
+Sol/pontuais conservam GGX nos dois. Lerps aninhados e normal achatada só por
+puddleCoverage correspondem ao contrato atual; não alterar como “bug” sem prova.
+Próximo teste visual: mesma cena/câmera/material/ambiente publicado em Medium/High.
+Sem comparação Android atual nem aceite da água. Rascunho público explica a diferença.
+
+Próximo pacote Dynamic/Control32: preflight privadov3 passou, somente contexto do
+include novo no header ajustado. Nenhum ativo desse pacote integrado. Agente
+dynamic_authoring_finish prepara D09 privado: limpeza de órfãos conservando todas
+as .ref; não confundir com GC completo de revisões. Sem builds/ADB dos agentes.
+
+Continuação21/10 sem aparelho: ADB permanece suspenso.239/239 cenários de terreno
+passaram antes da correção de lifetime das métricas UI. A suíte Player ampla teve
+214/215; o caso de malhas expôs `UiDrawList::begin` retendo ponteiro para métricas
+temporárias. Corrigido para cópia própria, com regressão de temporário/mutação/cópia;
+recompilação serial em andamento, repetir suítes e capturas após ela. O ajuste de
+teste para respeitar paginação compacta não foi considerado suficiente para fechar
+o erro. Sem aceite Android.
+
+[Cache de pós do editor](CACHE-POS-EDITOR-2026-10-21.md) integrado em revisão local:
+54/54 política/frame e256 comparações Vulkan passaram. Assets originais intactos,
+UI sempre fresca, orçamento real14MiB e fallback completo. Ativação do caminho
+fundido baseada nessa prova local; custo de `clipped=false`, lifecycle e ganho móvel
+pendentes. Corrigido também fallback de swapchain aposentada e telemetria separada.
+Ainda sem APK dessa revisão;111.4 continua a última instalação. Fonte do pacote
+Dynamic/Control32 permanece privada e não integrada; não contar seus itens como prontos.
+
 21/10, continuação sem aparelho por solicitação do proprietário: **ADB suspenso**.
 Revisão local de [câmera e publicação de scripts no Player](PLAY-PLAYER-CONTRATO-2026-10-21.md)
 integrada, em validação;27 managed/3 Java passaram, GPU manteve312 modos e acrescentou

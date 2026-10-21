@@ -1698,6 +1698,8 @@ bool recreateSwapchainAndRenderer(AndroidShell &shell) {
   // Inverter esta ordem viola o lifetime Vulkan mesmo depois de wait-idle.
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
+  shell.vulkanSurface.swapchain().requestFullImageReadback(
+      shell.renderViewContext==ae::renderer::RenderViewContext::Authoring);
   if (shell.app->window == nullptr ||
       !shell.vulkanSurface.recreateSwapchain(shell.app->window)) {
     return false;
@@ -1711,6 +1713,8 @@ bool recreateSurfaceAndRenderer(AndroidShell &shell) {
   shell.instancedRenderer.shutdown();
   shell.instancedRendererReady = false;
   shell.vulkanSurface.shutdown();
+  shell.vulkanSurface.swapchain().requestFullImageReadback(
+      shell.renderViewContext==ae::renderer::RenderViewContext::Authoring);
   if (shell.app->window == nullptr ||
       !shell.vulkanSurface.initialize(shell.app->activity, shell.app->window,
                                       shell.frameBudget.renderHz, shell.useSwappy,
@@ -1727,6 +1731,8 @@ void applyEvent(AndroidShell &shell, ae::platform::AppEvent event) {
     ae::platform::android::ScopedLifecycleStage trace("create-surface-renderer");
     ae::platform::android::requestRenderFrameRate(shell.app->window,
                                                    static_cast<float>(shell.frameBudget.renderHz));
+    shell.vulkanSurface.swapchain().requestFullImageReadback(
+        shell.renderViewContext==ae::renderer::RenderViewContext::Authoring);
     if (!shell.vulkanSurface.initialize(shell.app->activity, shell.app->window,
                                         shell.frameBudget.renderHz, shell.useSwappy,
                                         !shell.forceDescriptorFallback)) {
@@ -2718,7 +2724,11 @@ void android_main(android_app *app) {
     if(shell.qualityRebuildPending && shell.renderingCapabilitiesReady && !shell.rendererInitialization.valid()) {
       shell.qualityRebuildPending=false;
       resolveRenderingPolicyForDevice(shell,shell.maximumDisplayHz);
-      const bool rebuildStarted=rebuildInstancedRenderer(shell);
+      // Authoring alone needs complete readback pixels. Play/Player retain the
+      // clipped baseline swapchain. Negotiate once at this existing safe rebuild.
+      const bool readbackChanged=shell.vulkanSurface.swapchain().fullImageReadbackRequested()!=
+          (shell.renderViewContext==ae::renderer::RenderViewContext::Authoring);
+      const bool rebuildStarted=readbackChanged?recreateSwapchainAndRenderer(shell):rebuildInstancedRenderer(shell);
       if(!rebuildStarted)
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao refazer o renderer.");
       if(shell.scriptRenderingRebuildPending && !shell.rendererInitialization.valid()) {
@@ -4174,6 +4184,7 @@ void android_main(android_app *app) {
         context.spatialChunks = shell.instancedRenderer.spatialGeometryChunkCount();
         context.sceneReuseEnabled=shell.instancedRenderer.editorSceneReuseEnabled();
         context.sceneReused=shell.instancedRenderer.editorSceneReusedLastFrame();
+        context.postSceneReused=shell.instancedRenderer.editorPostCacheHitLastFrame();
         context.renderingQualityLocked=shell.profileLockRenderingQuality;
         context.shadowFilterTaps=shell.instancedRenderer.activeRenderingPolicy().shadows.filterTaps;
         context.lodEnabled = shell.instancedRenderer.lodSelectionEnabled();

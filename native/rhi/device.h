@@ -156,6 +156,10 @@ public:
   // Temporal resolve can preserve its output with a transfer copy only when
   // the surface explicitly advertised TRANSFER_SRC for swapchain images.
   bool supportsTransferSource() const { return transferSourceSupported_; }
+  bool supportsTransferDestination() const {return transferDestinationSupported_;}
+  // Creation-time opt-in. Change only at a caller-owned recreation boundary.
+  void requestFullImageReadback(bool enabled) {fullImageReadbackRequested_=enabled;}
+  bool fullImageReadbackRequested() const {return fullImageReadbackRequested_;}
   bool isReady() const { return swapchain_ != VK_NULL_HANDLE && imageCount_ > 0; }
   VkSemaphore imageAvailableSemaphore() const { return imageAvailableSemaphore_; }
   // Item 2.1.6 (achado via validation layer em hardware real): o semáforo de
@@ -190,6 +194,8 @@ private:
   VkImageView imageViews_[kMaxSwapchainImages]{};
   u32 imageCount_ = 0;
   bool transferSourceSupported_ = false;
+  bool transferDestinationSupported_ = false;
+  bool fullImageReadbackRequested_ = false;
 
   // Sincronização de um frame em voo só na CPU (a fence abaixo — suficiente
   // para o item 5.2, múltiplos frames em voo é otimização do RHI completo,

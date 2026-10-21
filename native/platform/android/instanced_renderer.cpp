@@ -1,4 +1,5 @@
 #include "renderer/terrain_used_layers.h"
+#include "rhi/editor_post_cache_copy.h"
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
 #include "renderer/water_detail_texture.h"
@@ -320,6 +321,7 @@ InstancedRenderer::~InstancedRenderer() {
 void InstancedRenderer::applyRuntimeRenderingPolicy(
     const renderer::ResolvedRenderingPolicy &policy, bool preserveDynamicScale) {
   renderingPolicy_ = policy;
+  ++editorPostCachePolicyEpoch_;editorPostCacheValid_=false;
   if (preserveDynamicScale)
     dynamicResolution_.reconfigure(policy.dynamicResolution, policy.frame.gpuLaneBudgetMs);
   else
@@ -2165,6 +2167,40 @@ bool InstancedRenderer::createPostResources() {
   return ok;
 }
 
+bool InstancedRenderer::prepareEditorPostCache() {
+  const u32 width=swapchain_->width(),height=swapchain_->height();const auto format=swapchain_->imageFormat();
+  if(!swapchain_->supportsTransferSource() || !swapchain_->supportsTransferDestination() ||
+     !renderer::editorPostCacheFits(width,height) ||
+     (format!=VK_FORMAT_R8G8B8A8_UNORM && format!=VK_FORMAT_B8G8R8A8_UNORM &&
+      format!=VK_FORMAT_R8G8B8A8_SRGB && format!=VK_FORMAT_B8G8R8A8_SRGB))return false;
+  if(editorPostCache_.isReady()&&editorPostCache_.width()==width&&editorPostCache_.height()==height&&editorPostCache_.format()==format)return true;
+  if(editorPostCacheRejectedWidth_==width&&editorPostCacheRejectedHeight_==height&&
+     editorPostCacheRejectedFormat_==format&&editorPostCacheRejectedEpoch_==editorPostCachePolicyEpoch_)return false;
+  editorPostCacheRejectedWidth_=width;editorPostCacheRejectedHeight_=height;editorPostCacheRejectedFormat_=format;editorPostCacheRejectedEpoch_=editorPostCachePolicyEpoch_;
+  // Called only after acquire completed the previous submission fence.
+  // Release the old cache first: accepted cache allocation never exceeds14MiB.
+  editorPostCache_.reset();editorPostCacheValid_=editorPostCacheInitialized_=false;
+  VkImageCreateInfo probe{};probe.sType=VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;probe.imageType=VK_IMAGE_TYPE_2D;
+  probe.extent={width,height,1};probe.mipLevels=probe.arrayLayers=1;probe.format=format;
+  probe.tiling=VK_IMAGE_TILING_OPTIMAL;probe.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+  probe.usage=VK_IMAGE_USAGE_TRANSFER_SRC_BIT|VK_IMAGE_USAGE_TRANSFER_DST_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
+  probe.samples=VK_SAMPLE_COUNT_1_BIT;probe.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
+  VkImage temporary=VK_NULL_HANDLE;if(vkCreateImage(device_,&probe,nullptr,&temporary)!=VK_SUCCESS)return false;
+  VkMemoryRequirements requirements{};vkGetImageMemoryRequirements(device_,temporary,&requirements);vkDestroyImage(device_,temporary,nullptr);
+  if(!renderer::editorPostCacheFits(width,height,requirements.size))return false;
+  rhi::ImageDesc image{};image.width=width;image.height=height;image.format=format;image.usage=probe.usage;
+  image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;image.memoryClass=rhi::MemoryClass::RenderTarget;
+  if(!memoryAllocator_->createImage(image,&editorPostCache_))return false;
+  if(!renderer::editorPostCacheFits(width,height,editorPostCache_.allocationBytes())){editorPostCache_.reset();return false;}
+  editorPostCacheRejectedEpoch_=0;return true;
+}
+void InstancedRenderer::recordEditorPostCopy(u32 imageIndex,bool capture) {
+  rhi::recordEditorPostCacheCopy(commandBuffer_,swapchain_->image(imageIndex),editorPostCache_.handle(),
+      swapchain_->width(),swapchain_->height(),capture,editorPostCacheInitialized_,VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      vkCmdPipelineBarrier,vkCmdCopyImage);
+  editorPostCacheInitialized_=true;editorPostCacheCopyRecorded_=true;
+}
+
 bool InstancedRenderer::recordPostProcess(u32 imageIndex,
                                            const platform::FreeCameraState &camera,
                                            bool upscaledInput) {
@@ -2174,9 +2210,16 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   // tile pass. TAA has a second history output; FSR1 has an intermediate target;
   // The authored Play GUI is already in uiInstances_ and keeps the same order.
   // The separate first-person runtime HUD retains its original path.
-  const bool mergeUi = postUiFusionEnabled_ && (editorBackground_ || playPostUiFusionEnabled_) && !temporalAaActive_ &&
+  const bool baselineMergeUi = postUiFusionEnabled_ && (editorBackground_ || playPostUiFusionEnabled_) && !temporalAaActive_ &&
       !fsrActive_ && !runtimeHudEnabled_ && editorPostRenderPass_ != VK_NULL_HANDLE &&
       prepareUiOverlay(imageIndex);
+  const auto cacheLook=sceneEnvironment_.active?sceneEnvironment_:renderer::defaultSceneViewEnvironment();
+  const bool cacheCandidate=editorBackground_&&editorSceneReusedLastFrame_&&
+      !temporalAaActive_&&!fsrActive_&&!upscaledInput&&!cacheLook.autoExposure&&!cacheLook.filmGrain&&
+      (!baselineMergeUi||editorPostCacheFusionProof_)&&prepareEditorPostCache();
+  const bool mergeUi=baselineMergeUi&&!cacheCandidate;
+  if(!cacheCandidate)editorPostCacheValid_=false;
+  if(!editorBackground_){editorPostCache_.reset();editorPostCacheInitialized_=false;}
   if (temporalAaActive_ && !temporalHistoryLayoutInitialized_) {
     // The temporal descriptor is statically referenced by the shader. Dynamic
     // control flow that rejects an invalid first-frame history does not make an
@@ -2201,7 +2244,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass = postRenderPass_;
   VkClearValue backgroundClear{};
-  if (mergeUi) {
+  if (baselineMergeUi) {
     begin.renderPass = editorPostRenderPass_;
     float background[3]{.028f,.032f,.039f};
     const bool srgbTarget = swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
@@ -2217,11 +2260,10 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   const u32 postWidth = fsrActive_ ? renderWidth() : swapchain_->width();
   const u32 postHeight = fsrActive_ ? renderHeight() : swapchain_->height();
   begin.renderArea.extent = {postWidth, postHeight};
-  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
   VkViewport viewport{0.0f, 0.0f, static_cast<float>(postWidth),
                       static_cast<float>(postHeight), 0.0f, 1.0f};
   VkRect2D scissor{{0, 0}, {postWidth, postHeight}};
-  if (mergeUi && editorBackground_ && !sceneViewport_.isEmpty()) {
+  if (baselineMergeUi && editorBackground_ && !sceneViewport_.isEmpty()) {
     // Keep the fullscreen UV transform. Clip only rasterization; changing the
     // viewport itself would rescale/reposition reconstruction and break DRS.
     const auto cameraViewport = physicalSceneViewport();
@@ -2299,6 +2341,16 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.previousPositionFar[3] = dirtRoadPreview_ ? sceneFarPlane() : 1000.0f;
   vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), &push);
+  renderer::EditorPostCacheKey cacheKey;
+  if(cacheCandidate) {
+    cacheKey.value(editorPostCachePolicyEpoch_);cacheKey.value(postPipeline_);cacheKey.value(postSceneColor_.handle());
+    cacheKey.value(postWidth);cacheKey.value(postHeight);cacheKey.value(swapchain_->imageFormat());cacheKey.value(baselineMergeUi);
+    cacheKey.value(push);cacheKey.append(environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform));
+    if(editorPostCacheValid_&&cacheKey==editorPostCacheKey_) {
+      recordEditorPostCopy(imageIndex,false);editorPostCacheHit_=true;return false;
+    }
+  }
+  vkCmdBeginRenderPass(commandBuffer_,&begin,VK_SUBPASS_CONTENTS_INLINE);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
   if (mergeUi) {
     endGpuRegion(GpuPassClass::Post);
@@ -2306,6 +2358,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
     recordUiContents();
   }
   vkCmdEndRenderPass(commandBuffer_);
+  if(cacheCandidate){recordEditorPostCopy(imageIndex,true);editorPostCacheKey_=std::move(cacheKey);editorPostCacheValid_=true;}
   if (mergeUi) endGpuRegion(GpuPassClass::Ui);
   if (temporalAaActive_) {
     if (temporalPoseSupported && recordTemporalHistoryCopy()) {
@@ -2408,6 +2461,7 @@ void InstancedRenderer::destroyPostResources() {
   postDepthSampler_.shutdown();
   postSampler_.shutdown();
   postHistory_.reset();postResolved_.reset();
+  editorPostCache_.reset();editorPostCacheKey_.bytes.clear();editorPostCacheValid_=editorPostCacheInitialized_=editorPostCacheHit_=false;
   postSceneColor_.reset();
   temporalHistoryLayoutInitialized_ = false;
   temporalHistoryInitialized_ = false;
@@ -5714,6 +5768,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrameWithoutCamera() {
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                                   const platform::FreeCameraState &camera,
                                                   const renderer::RuntimeHudState &hud) {
+  editorPostCacheHit_=false;editorPostCacheCopyRecorded_=false;
   if(!sceneCameraAvailable_)return drawFrameWithoutCamera();
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
@@ -7183,7 +7238,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
   const VkSemaphore waitSemaphore = swapchain_->imageAvailableSemaphore();
   const VkSemaphore signalSemaphore = swapchain_->renderFinishedSemaphore(imageIndex);
-  VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|
+      (editorPostCacheCopyRecorded_?VkPipelineStageFlags(VK_PIPELINE_STAGE_TRANSFER_BIT):VkPipelineStageFlags{0});
   VkSubmitInfo submitInfo{};
   submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submitInfo.waitSemaphoreCount = 1;

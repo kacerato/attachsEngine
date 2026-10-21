@@ -63,7 +63,7 @@ void VulkanSwapchain::destroySwapchainObjects() {
     }
   }
   imageCount_ = 0;
-  transferSourceSupported_ = false;
+  transferSourceSupported_ = false;transferDestinationSupported_=false;
   if (swapchain_ != VK_NULL_HANDLE) {
     if (presentationScheduler_ != nullptr)
       presentationScheduler_->onSwapchainDestroyed(device_, swapchain_);
@@ -242,7 +242,9 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   swapchainInfo.imageArrayLayers = 1;
   const bool transferSourceSupported =
       (caps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0;
-  swapchainInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+  bool transferDestinationSupported=fullImageReadbackRequested_ && transferSourceSupported &&
+      (caps.supportedUsageFlags&VK_IMAGE_USAGE_TRANSFER_DST_BIT)!=0;
+  swapchainInfo.imageUsage = (transferDestinationSupported?VkImageUsageFlags(VK_IMAGE_USAGE_TRANSFER_DST_BIT):VkImageUsageFlags{0}) | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
       (transferSourceSupported
            ? static_cast<VkImageUsageFlags>(VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
            : VkImageUsageFlags{0});
@@ -250,16 +252,29 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   swapchainInfo.preTransform = preTransform;
   swapchainInfo.compositeAlpha = compositeAlpha;
   swapchainInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR; // sempre suportado, vsync — ponto de partida seguro
-  swapchainInfo.clipped = VK_TRUE;
+  // Full-image cache readback must retain obscured pixels.
+  swapchainInfo.clipped = transferDestinationSupported ? VK_FALSE : VK_TRUE;
   swapchainInfo.oldSwapchain = oldSwapchain;
 
   VkSwapchainKHR newSwapchain = VK_NULL_HANDLE;
-  const VkResult createResult = vkCreateSwapchainKHR(device_, &swapchainInfo, nullptr, &newSwapchain);
+  VkResult createResult = vkCreateSwapchainKHR(device_, &swapchainInfo, nullptr, &newSwapchain);
+  if(transferDestinationSupported && (createResult==VK_ERROR_FORMAT_NOT_SUPPORTED ||
+     createResult==VK_ERROR_FEATURE_NOT_PRESENT || createResult==VK_ERROR_INITIALIZATION_FAILED)) {
+    // Passing oldSwapchain retires it even on failure (VkSwapchainCreateInfoKHR).
+    // recreate requires the caller to have released framebuffers and waited idle.
+    destroySwapchainObjects();
+    swapchainInfo.oldSwapchain=VK_NULL_HANDLE;
+    // Retry the original usage contract, with no retired handle.
+    swapchainInfo.clipped=VK_TRUE;
+    transferDestinationSupported=false;swapchainInfo.imageUsage&=~VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    newSwapchain=VK_NULL_HANDLE;
+    createResult=vkCreateSwapchainKHR(device_,&swapchainInfo,nullptr,&newSwapchain);
+  }
 
   if (createResult != VK_SUCCESS) {
-    // A swapchain antiga NÃO é aposentada quando a criação falha e continua
-    // sendo a única opção válida. Destruí-la aqui transformaria uma falha
-    // recuperável de resize em perda total do renderer.
+    // A non-null oldSwapchain is retired even when creation fails.
+    // Publish an unavailable state; never acquire from its retired handle.
+    destroySwapchainObjects();
     return false;
   }
 
@@ -314,7 +329,7 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   extent_ = extent;
   surfaceTransform_ = transform;
   imageCount_ = actualImageCount;
-  transferSourceSupported_ = transferSourceSupported;
+  transferSourceSupported_ = transferSourceSupported;transferDestinationSupported_=transferDestinationSupported;
   for (u32 i = 0; i < imageCount_; ++i) {
     images_[i] = newImages[i];
     imageViews_[i] = newImageViews[i];

@@ -103,6 +103,7 @@ public:
   VkFormat format() const { return format_; }
   u32 width() const { return width_; }
   u32 height() const { return height_; }
+  u64 allocationBytes() const noexcept {return accountedBytes_;}
   ImageDesc description() const { return {width_, height_, format_, usage_, aspectMask_, memoryClass_, mipLevels_}; }
 
 private:

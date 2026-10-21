@@ -187,6 +187,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
     renderScaleLast_ = scale;
     ++renderScaleSamples_;
     if(context.sceneReused) ++sceneReusedFrames_;
+    if(context.postSceneReused) ++postSceneReusedFrames_;
     if(context.opaqueNoClip && !context.sceneReused) ++opaqueNoClipFrames_;
     if(context.pointLightingSpecialization && !context.sceneReused) ++pointLightingFrames_;
   }
@@ -203,14 +204,14 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
       "{\"schemaVersion\":%u,\"pid\":%d,\"epoch\":%u,\"window\":%llu,\"build\":\"%s\","
       "\"instances\":%u,\"width\":%u,\"height\":%u,\"frames\":%u,\"elapsed_ms\":%.6f,"
       "\"present_fps\":%.6f,\"warmup_samples\":%u,\"warmup_process_cpu_max_ms\":%.6f,"
-      "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu,\"scene_reused_frames\":%u,\"opaque_no_clip_frames\":%u,\"point_lighting_frames\":%u",
+      "\"route_frame\":%llu,\"visible_draws\":%u,\"visible_triangles\":%llu,\"scene_reused_frames\":%u,\"post_scene_reused_frames\":%u,\"opaque_no_clip_frames\":%u,\"point_lighting_frames\":%u",
       ProfileSchemaVersion, getpid(), epoch_, static_cast<unsigned long long>(++window_), build,
       instances, width, height,
       summary.samples, summary.elapsedMs, summary.presentFps, summary.warmupSamples,
       summary.warmupProcessCpuMaxMs,
       static_cast<unsigned long long>(context.cameraRouteFrameOrdinal),
       context.visibleDrawCount,
-      static_cast<unsigned long long>(context.visibleTriangleCount),sceneReusedFrames_,opaqueNoClipFrames_,pointLightingFrames_);
+      static_cast<unsigned long long>(context.visibleTriangleCount),sceneReusedFrames_,postSceneReusedFrames_,opaqueNoClipFrames_,pointLightingFrames_);
   if (used < 0 || static_cast<size_t>(used) >= sizeof(json)) return;
   // Vetor compacto [mean,p50,p95,p99,max] por métrica. Cada entrada do Logcat é
   // truncada em silêncio perto de 1023 bytes, e a janela v3 já ocupava 937 com
@@ -375,7 +376,7 @@ void AndroidFrameProfiler::record(const profiler::RenderPhaseTimings &phases,
   collapsedAttributionFrames_ = 0;
   attributionSampleFrames_ = 0;
   renderScaleSamples_ = 0;
-  sceneReusedFrames_=0;
+  sceneReusedFrames_=0;postSceneReusedFrames_=0;
   opaqueNoClipFrames_=0;
   pointLightingFrames_=0;
 }

@@ -34,6 +34,9 @@ for folder in sorted(root.iterdir()):
     if all("scene_reused_frames" in w for w in values):
         entry["scene_reused_frames"] = sum(w["scene_reused_frames"] for w in values)
         entry["scene_reuse_ratio"] = entry["scene_reused_frames"] / (600 * len(values))
+    if all("post_scene_reused_frames" in w for w in values):
+        entry["post_scene_reused_frames"] = sum(w["post_scene_reused_frames"] for w in values)
+        entry["post_scene_reuse_ratio"] = entry["post_scene_reused_frames"] / sum(w["frames"] for w in values)
     entry["thermal_pressure"] = sorted({w["thermal_pressure"] for w in values})
     entry["render_scale_range"] = [min(w["render_scale_min"] for w in values),
                                     max(w["render_scale_max"] for w in values)]

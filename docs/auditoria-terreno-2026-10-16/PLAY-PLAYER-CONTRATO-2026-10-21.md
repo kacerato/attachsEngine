@@ -65,9 +65,14 @@ a mesma execução acrescentou3 readbacks de clear/UI/câmera e2 cenários de de
 dois subpasses, em2,19s com cache aquecido. Não somar isso como novos modos Terrain.
 - A fixture de GPU valida operações de attachments/layout/cópia e pixels de overlay;
 não instancia UiRenderer Android, swapchain real ou binding depth real do app.
-- A suíte nativa Player/Terrain e o preview executável estão em compilação serial.
-Ainda faltam resultado nativo, captura real da UI revisada, build/auditoria do novo
-APK, Player exportado e validação Android de câmera/descritores/lifecycle/scripts.
+- Compilação/link host passaram.238/238 cenários de Editor/Play/Player/UI e239/239
+de terreno passaram após corrigir lifetime das métricas UiDrawList. Dez capturas
+da UI executável foram conferidas em655×300 e1280×720, incluindo presets e aviso.
+APK111.5 compilado/auditado e instalado no QA. Médio em movimento apresentou
+18.057/17.854FPS em duas janelas de5s; não há aceite de fluidez. A passagem
+foi interrompida quando o foco mudou para Astra u07. Continuam pendentes
+Play50, Player exportado e validação Android completa de câmera/descritores/lifecycle/scripts. O cache posterior acrescentou264 comparações
+GPU próprias; não somá-las como modos Terrain.
 
 Fontes de evidência locais em `build/terrain-evidence/terrain111-player-*` e
 `terrain111-camera-absence-gpu-*`; não publicar logs ou fontes privadas de plugins.

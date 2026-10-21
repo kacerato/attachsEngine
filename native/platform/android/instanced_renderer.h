@@ -13,6 +13,7 @@
 #include "renderer/terrain_pipeline_publication_owner.h"
 
 #include "core/base.h"
+#include "renderer/editor_post_cache_key.h"
 #include "profiler/frame_statistics.h"
 #include "platform/android/dotnet_host.h"
 #include "rhi/bindless_registry.h"
@@ -106,7 +107,7 @@ public:
   bool sceneCameraAvailable() const noexcept {return sceneCameraAvailable_;}
   void setSceneCameraAvailable(bool available) {
     if(sceneCameraAvailable_==available)return;
-    sceneCameraAvailable_=available;editorSceneCacheValid_=false;
+    sceneCameraAvailable_=available;editorSceneCacheValid_=false;editorPostCacheValid_=false;
     temporalHistoryInitialized_=false;hzbPyramidValid_=false;
     hzbPyramidCameraValid_=false;hzbPreviousFrameEligible_=false;hzbRecordedCameraValid_=false;
     hzbLastEditorCameraValid_=false;shadowCacheInitialized_=false;
@@ -357,6 +358,9 @@ public:
   void setEditorSceneReuseEnabled(bool enabled) { editorSceneReuseEnabled_=enabled;editorSceneCacheValid_=false; }
   bool editorSceneReuseEnabled() const {return editorSceneReuseEnabled_;}
   bool editorSceneReusedLastFrame() const {return editorSceneReusedLastFrame_;}
+  // Allows A/B verification of the locally proven fused/separate scene boundary.
+  void setEditorPostCacheFusionProof(bool accepted){editorPostCacheFusionProof_=accepted;editorPostCacheValid_=false;}
+  bool editorPostCacheHitLastFrame()const{return editorPostCacheHit_;}
   u32 spatialGeometryChunkCount() const { return static_cast<u32>(spatialGeometryChunks_.size()); }
   // Chave diagnóstica A/B. O padrão da engine permanece ativado; jogos não
   // precisam configurar nada para receber o caminho otimizado.
@@ -650,6 +654,8 @@ private:
   bool createEditorGridPipeline();
   bool createRuntimeHudPipeline();
   bool createUiRenderPass();
+  bool prepareEditorPostCache();
+  void recordEditorPostCopy(u32 imageIndex,bool capture);
   void recordRuntimeHud(u32 imageIndex, const renderer::RuntimeHudState &hud);
   // Carrega os atlas do APK e monta a pipeline. Falhar aqui NÃO derruba o
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
@@ -937,6 +943,15 @@ private:
   VkPipelineLayout autoExposurePipelineLayout_=VK_NULL_HANDLE;
   VkPipeline autoExposurePipelines_[2]{};
   rhi::VulkanImage postSceneColor_{};
+  rhi::VulkanImage editorPostCache_{};
+  renderer::EditorPostCacheKey editorPostCacheKey_{};
+  bool editorPostCacheValid_=false,editorPostCacheInitialized_=false,editorPostCacheHit_=false;
+  // 256 production-post pixel comparisons passed on host Vulkan (21/10/2026).
+  // Android timing/presentation validation remains a separate acceptance gate.
+  bool editorPostCacheCopyRecorded_=false,editorPostCacheFusionProof_=true;
+  u64 editorPostCachePolicyEpoch_=1,editorPostCacheRejectedEpoch_=0;
+  u32 editorPostCacheRejectedWidth_=0,editorPostCacheRejectedHeight_=0;
+  VkFormat editorPostCacheRejectedFormat_=VK_FORMAT_UNDEFINED;
   // Entradas temporais unificadas (temporal_projection.glsl).
   bool temporalInputsActive_ = false;
   bool temporalMasksActive_ = false;

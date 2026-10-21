@@ -1,3 +1,4 @@
+#include "renderer/editor_post_cache_key.h"
 #include "core/frame_policy.h"
 #include "harness.h"
 
@@ -72,4 +73,18 @@ AE_TEST(frame_admission_coalesces_gpu_stalls_without_a_catch_up_burst) {
  AE_EXPECT_TRUE(!ae::admitPresentationFrame(4008333333,20000000,phase),"next physical VSYNC is still before the next deadline");
  AE_EXPECT_TRUE(ae::admitPresentationFrame(4025000000,20000000,phase),"next actual presentation deadline");
  phase=0;AE_EXPECT_TRUE(!ae::admitPresentationFrame(0,20000000,phase),"invalid clock produces no frame");
+}
+
+AE_TEST(editor_post_cache_bounds_and_complete_shader_key) {
+  using namespace ae::renderer;
+  AE_EXPECT_TRUE(editorPostCacheFits(1920,1080,9ull*1024*1024),"actual allocation within14MiB");
+  AE_EXPECT_TRUE(!editorPostCacheFits(4096,2160)&&!editorPostCacheFits(1,1,EditorPostCacheBudget+1),"no hidden downsize or allocation overrun");
+  AE_EXPECT_TRUE(!editorPostCacheFits(0,1)&&!editorPostCacheFits(0xffffffffu,0xffffffffu),"overflow and zero extent refuse");
+  EditorPostCacheKey key;ae::u64 policy=2,shader=3,resource=4;ae::u32 width=1920,format=37;float grade=1,fxaa=1;
+  key.value(policy);key.value(shader);key.value(resource);key.value(width);key.value(format);key.value(grade);key.value(fxaa);
+  auto same=key;AE_EXPECT_TRUE(key==same,"same effective shader inputs reuse");
+  for(ae::usize i=0;i<key.bytes.size();++i){auto changed=key;changed.bytes[i]^=1;AE_EXPECT_TRUE(!(key==changed),"every policy/shader/resource/extent/format/effect input invalidates");}
+  // UI is deliberately not part of the scene shader key: a fresh overlay
+  // must not force recomputation of identical scene post pixels.
+  std::vector<ae::u8> ui{1,2};ui[0]=4;AE_EXPECT_TRUE(key==same,"UI mutation leaves scene-only key unchanged");
 }
