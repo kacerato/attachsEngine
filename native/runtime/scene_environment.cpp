@@ -43,6 +43,13 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
                      (component->overrideFog?renderer::EnvironmentOverrideFog:0u)|
                      (component->overridePost?renderer::EnvironmentOverridePost:0u)|
                      (component->overrideIndirect?renderer::EnvironmentOverrideIndirect:0u)|
+                     (component->overrideExposure?renderer::EnvironmentOverrideExposure:0u)|
+                     (component->overrideBloom?renderer::EnvironmentOverrideBloom:0u)|
+                     (component->overrideVignette?renderer::EnvironmentOverrideVignette:0u)|
+                     (component->overrideColorAdjustments?renderer::EnvironmentOverrideColorAdjustments:0u)|
+                     (component->overrideColorGrading?renderer::EnvironmentOverrideColorGrading:0u)|
+                     (component->overrideFilmGrain?renderer::EnvironmentOverrideFilmGrain:0u)|
+                     (component->overrideAmbientOcclusion?renderer::EnvironmentOverrideAmbientOcclusion:0u)|
                      (component->overrideClouds?renderer::EnvironmentOverrideClouds:0u);
     volume.layer=component->layer;volume.stableId=id;volume.weight=component->weight;
     volume.blendDistance=component->blendDistance;volume.sphereRadius=component->sphereRadius;

@@ -70,7 +70,7 @@ int main(int argc,char **argv) {
     if(const auto *v=o.components.find(scene::PhysicsBody::descriptor))std::cout<<" BODY="<<int(static_cast<const scene::PhysicsBody*>(v)->motion);
     if(const auto *v=o.components.find(scene::Collider::descriptor))std::cout<<" COLLIDER="<<int(static_cast<const scene::Collider*>(v)->shape);
     if(const auto *v=o.components.find(scene::Light::descriptor)){const auto &l=*static_cast<const scene::Light*>(v);std::cout<<" LIGHT="<<int(l.kind)<<" intensity="<<l.intensity<<" unit="<<int(l.unit);}
-    if(const auto *v=o.components.find(scene::Environment::descriptor)){const auto &e=*static_cast<const scene::Environment*>(v);std::cout<<" ENV diffuse="<<e.values.indirectDiffuse<<" exposure="<<e.values.exposureEv<<" sky="<<int(e.values.sky);}
+    if(const auto *v=o.components.find(scene::Environment::descriptor)){const auto &e=*static_cast<const scene::Environment*>(v);std::cout<<" ENV diffuse="<<e.values.indirectDiffuse<<" exposure_mode="<<int(e.values.exposureMode)<<" fixed="<<e.values.fixedExposure<<" sky="<<int(e.values.sky);}
     std::cout<<"\n";
   }
   std::cout<<"TOTAL_AUTHORED_TRIANGLES="<<total<<" imported_draws="<<model.draws.size()<<"\n";
@@ -127,7 +127,7 @@ int main(int argc,char **argv) {
   auto sun=*doc.find(158);assignEntityName(sun,"Sol da Sponza");sun.transform.rotationDegrees[0]=82;sun.transform.rotationDegrees[1]=-22;sun.transform.rotationDegrees[2]=0;
   auto *light=static_cast<scene::Light*>(sun.components.edit(scene::Light::descriptor));light->kind=scene::LightKind::Directional;light->unit=scene::LightUnit::Engine;light->intensity=8;light->useColorTemperature=true;light->colorTemperature=5600;apply(158,sun);
   for(auto id:{130u,131u,135u,137u,141u,151u}){auto v=*doc.find(id);auto *l=static_cast<scene::Light*>(v.components.add(scene::Light::descriptor));l->kind=scene::LightKind::Point;l->unit=scene::LightUnit::LuxLumen;l->intensity=30000;l->range=7;l->useColorTemperature=true;l->colorTemperature=3000;l->shadowMode=0;apply(id,v);}
-  group=*doc.find(2);auto *environment=static_cast<scene::Environment*>(group.components.edit(scene::Environment::descriptor));auto &env=environment->values;env.exposureEv=.20f;env.indirectDiffuse=1.1f;env.indirectSpecular=1;env.contrast=1.03f;env.saturation=1.03f;env.bloomIntensity=.08f;env.autoExposure=false;
+  group=*doc.find(2);auto *environment=static_cast<scene::Environment*>(group.components.edit(scene::Environment::descriptor));auto &env=environment->values;env.exposureMode=renderer::ExposureMode::Fixed;env.fixedExposure=-.20f-std::log2(1.2f);env.indirectDiffuse=1.1f;env.indirectSpecular=1;env.contrast=1.03f;env.saturation=1.03f;env.bloomIntensity=.08f;
   const float zenith[3]{.20f,.32f,.46f},horizon[3]{.45f,.45f,.42f},ground[3]{.26f,.24f,.22f};std::copy(zenith,zenith+3,env.skyZenith);std::copy(horizon,horizon+3,env.skyHorizon);std::copy(ground,ground+3,env.ground);apply(2,group);
   resources::AssetRegistry registry;if(!resources::AssetRegistry::deserialize(readText(root/".astra/assets.astra"),registry))return 9;
   resources::AssetRecord uiAsset;uiAsset.guid=resources::assetGuidFromSeed("astra:sponza:player-controls:20261005");uiAsset.type=resources::AssetType::UiDocument;uiAsset.path="UI/SponzaPlayer.aeui";if(!registry.add(uiAsset))return 10;

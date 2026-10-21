@@ -9,8 +9,11 @@
 #include "scene/component_schema.h"
 #include "scene/component_properties.h"
 #include "scene/environment.h"
+#include "environment_legacy_lines.h"
 
 #include <cmath>
+#include <iomanip>
+#include <locale>
 #include <sstream>
 
 using namespace ae;
@@ -25,7 +28,7 @@ EditorEntityId environmentAt(EditorDocument &document, EditorEntityId parent,
       values.components.add(scene::Environment::descriptor));
   if(!component) return 0;
   component->values.priority=priority;
-  component->values.exposureEv=exposure;
+  component->values.exposureCompensation=exposure;
   return document.applyEntityValues(id,values)?id:0;
 }
 } // namespace
@@ -53,15 +56,18 @@ AE_TEST(scene_environment_has_one_authoring_contract_and_archive_identity) {
   environment->values.fog=true;environment->values.fogBaseHeight=12.5f;
   environment->values.fogHeightFalloff=.075f;
   environment->values.fogLightEnergy=100.0f;
-  environment->values.autoExposure=true;
-  environment->values.autoExposureMinEv=-3.0f;
-  environment->values.autoExposureMaxEv=4.0f;
-  environment->values.autoExposureLowPercent=.1f;
-  environment->values.autoExposureHighPercent=.9f;
-  environment->values.autoExposureTargetGrey=.2f;
-  environment->values.autoExposureSpeedUp=1.5f;
-  environment->values.autoExposureSpeedDown=2.5f;
-  environment->values.autoExposureCenterWeighted=true;
+  environment->values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
+  environment->values.exposureMetering=renderer::ExposureMetering::Spot;
+  environment->values.exposureAdaptation=renderer::ExposureAdaptation::Fixed;
+  environment->values.fixedExposure=2.5f;
+  environment->values.exposureLimitMin=-3.0f;
+  environment->values.exposureLimitMax=4.0f;
+  environment->values.exposureHistogramLow=10.0f;
+  environment->values.exposureHistogramHigh=90.0f;
+  environment->values.exposureTargetMidGrey=.14f;
+  environment->values.exposureSpeedDarkToLight=1.5f;
+  environment->values.exposureSpeedLightToDark=2.5f;
+  environment->overrideBloom=false;environment->overrideExposure=true;
   environment->values.environmentMap=resources::assetGuidFromSeed("panorama-patio");
   environment->values.hdriRotationDegrees=127.5f;environment->values.hdriExposureEv=-2.25f;
   environment->profile=resources::assetGuidFromSeed("perfil-noite");
@@ -73,7 +79,7 @@ AE_TEST(scene_environment_has_one_authoring_contract_and_archive_identity) {
       restored.find(id)->components.find(scene::Environment::descriptor));
   AE_EXPECT_TRUE(back!=nullptr,"componente preservado");
   AE_EXPECT_TRUE(back->values.toneMapper==renderer::ToneMapper::AgX,"AgX preservado na cena");
-  AE_EXPECT_EQ(back->values.exposureEv,1.25f,"exposição preservada");
+  AE_EXPECT_EQ(back->values.exposureCompensation,1.25f,"compensação preservada");
   AE_EXPECT_EQ(back->values.priority,7.0f,"prioridade preservada");
   AE_EXPECT_TRUE(back->values.ambientOcclusion&&back->values.ambientOcclusionRadius==2.25f,
                  "parâmetros de AO preservados");
@@ -90,12 +96,16 @@ AE_TEST(scene_environment_has_one_authoring_contract_and_archive_identity) {
   AE_EXPECT_TRUE(back->values.fog&&back->values.fogLightEnergy==100.0f&&back->values.fogBaseHeight==12.5f&&
                  back->values.fogHeightFalloff==.075f,
                  "neblina por altura sobrevive ao contrato autoral único");
-  AE_EXPECT_TRUE(back->values.autoExposure&&back->values.autoExposureMinEv==-3.0f&&
-                 back->values.autoExposureMaxEv==4.0f&&back->values.autoExposureLowPercent==.1f&&
-                 back->values.autoExposureHighPercent==.9f&&back->values.autoExposureTargetGrey==.2f&&
-                 back->values.autoExposureSpeedUp==1.5f&&back->values.autoExposureSpeedDown==2.5f&&
-                 back->values.autoExposureCenterWeighted,
-                 "medição e adaptação de exposição sobrevivem ao arquivo de cena");
+  AE_EXPECT_TRUE(back->values.exposureMode==renderer::ExposureMode::AutomaticHistogram&&
+                 back->values.exposureMetering==renderer::ExposureMetering::Spot&&
+                 back->values.exposureAdaptation==renderer::ExposureAdaptation::Fixed&&
+                 back->values.fixedExposure==2.5f&&back->values.exposureLimitMin==-3.0f&&
+                 back->values.exposureLimitMax==4.0f&&back->values.exposureHistogramLow==10.0f&&
+                 back->values.exposureHistogramHigh==90.0f&&back->values.exposureTargetMidGrey==.14f&&
+                 back->values.exposureSpeedDarkToLight==1.5f&&back->values.exposureSpeedLightToDark==2.5f,
+                 "Exposure do HDRP sobrevive ao arquivo de cena");
+  AE_EXPECT_TRUE(!back->overrideBloom&&back->overrideExposure&&back->overridePost,
+                 "cada override de pós é uma caixa própria persistida");
 }
 
 AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_override) {
@@ -108,17 +118,18 @@ AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_overri
   profile.values.physicalAtmosphereHighQuality=true;
   profile.values.physicalSkyIntensity=1.7f;profile.values.aerosolDensity=2.1f;
   profile.values.aerosolAnisotropy=.88f;profile.values.observerHeightKm=.12f;
-  profile.values.ambientOcclusionIntensity=1.75f;profile.values.exposureEv=-.5f;
+  profile.values.ambientOcclusionIntensity=1.75f;profile.values.exposureCompensation=-.5f;
   profile.values.environmentMap=resources::assetGuidFromSeed("panorama-perfil");
   profile.values.hdriRotationDegrees=45;profile.values.hdriExposureEv=1.5f;
   profile.values.fog=true;profile.values.fogBaseHeight=-18.0f;
   profile.values.fogHeightFalloff=.04f;
   profile.values.fogLightEnergy=100.0f;
-  profile.values.autoExposure=true;profile.values.autoExposureMinEv=-5;
-  profile.values.autoExposureMaxEv=6;profile.values.autoExposureLowPercent=.12f;
-  profile.values.autoExposureHighPercent=.88f;profile.values.autoExposureTargetGrey=.22f;
-  profile.values.autoExposureSpeedUp=4;profile.values.autoExposureSpeedDown=1;
-  profile.values.autoExposureCenterWeighted=true;
+  profile.values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
+  profile.values.exposureMetering=renderer::ExposureMetering::Average;
+  profile.values.exposureLimitMin=-5;profile.values.exposureLimitMax=6;
+  profile.values.exposureHistogramLow=12;profile.values.exposureHistogramHigh=88;
+  profile.values.exposureTargetMidGrey=.18f;profile.values.fixedExposure=3;
+  profile.values.exposureSpeedDarkToLight=4;profile.values.exposureSpeedLightToDark=1.5f;
   resources::EnvironmentProfile restored;
   AE_EXPECT_TRUE(profile.valid()&&resources::EnvironmentProfile::deserialize(profile.serialize(),restored),
                  "perfil válido relê do arquivo próprio");
@@ -136,14 +147,16 @@ AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_overri
   AE_EXPECT_TRUE(restored.values.environmentMap==profile.values.environmentMap&&
                  restored.values.hdriRotationDegrees==45&&restored.values.hdriExposureEv==1.5f,
                  "perfil v4 preserva panorama e radiância");
-  AE_EXPECT_TRUE(restored.values.autoExposure&&restored.values.autoExposureMinEv==-5&&
-                 restored.values.autoExposureMaxEv==6&&restored.values.autoExposureLowPercent==.12f&&
-                 restored.values.autoExposureHighPercent==.88f&&restored.values.autoExposureTargetGrey==.22f&&
-                 restored.values.autoExposureSpeedUp==4&&restored.values.autoExposureSpeedDown==1&&
-                 restored.values.autoExposureCenterWeighted,
-                 "perfil v7 preserva parâmetros de exposição automática");
+  AE_EXPECT_TRUE(restored.values.exposureMode==renderer::ExposureMode::AutomaticHistogram&&
+                 restored.values.exposureMetering==renderer::ExposureMetering::Average&&
+                 restored.values.exposureLimitMin==-5&&restored.values.exposureLimitMax==6&&
+                 restored.values.exposureHistogramLow==12&&restored.values.exposureHistogramHigh==88&&
+                 restored.values.exposureTargetMidGrey==.18f&&restored.values.fixedExposure==3&&
+                 restored.values.exposureSpeedDarkToLight==4&&restored.values.exposureSpeedLightToDark==1.5f&&
+                 restored.values.exposureCompensation==-.5f,
+                 "perfil v11 preserva a Exposure do HDRP");
 
-  EditorDocument document;const auto id=environmentAt(document,document.root(),"Volume",9,profile.values.exposureEv);
+  EditorDocument document;const auto id=environmentAt(document,document.root(),"Volume",9,profile.values.exposureCompensation);
   auto values=*document.find(id);auto *environment=static_cast<scene::Environment*>(
       values.components.edit(scene::Environment::descriptor));
   environment->profile=profile.guid;environment->values=resources::applyEnvironmentProfile(environment->values,profile);
@@ -156,10 +169,10 @@ AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_overri
 
   values=*document.find(id);environment=static_cast<scene::Environment*>(
       values.components.edit(scene::Environment::descriptor));
-  environment->values.exposureEv=1.25f;
+  environment->values.exposureCompensation=1.25f;
   AE_EXPECT_TRUE(document.applyEntityValues(id,values),"override local editado");
   AE_EXPECT_TRUE(runtime::collectSceneEnvironmentVolumes(document,volumes,std::span{&profile,usize{1}})&&
-                 volumes[0].environment.exposureEv==1.25f,"diferença local explícita vence o perfil");
+                 volumes[0].environment.exposureCompensation==1.25f,"diferença local explícita vence o perfil");
 }
 
 AE_TEST(auto_exposure_properties_reject_invalid_pairs_without_mutation) {
@@ -168,17 +181,22 @@ AE_TEST(auto_exposure_properties_reject_invalid_pairs_without_mutation) {
   const auto set=[&](std::string_view id,float value) {
     return scene::setComponentProperty(components,"astra.render.environment",id,value);
   };
-  AE_EXPECT_TRUE(set("auto_exposure_min_ev",-3.0f)==scene::ComponentPropertyStatus::Applied,
+  AE_EXPECT_TRUE(set("exposure_limit_min",-3.0f)==scene::ComponentPropertyStatus::Applied,
                  "limite inferior editável pelo contrato comum");
-  AE_EXPECT_TRUE(set("auto_exposure_max_ev",-4.0f)==scene::ComponentPropertyStatus::InvalidValue,
+  AE_EXPECT_TRUE(set("exposure_limit_max",-4.0f)==scene::ComponentPropertyStatus::InvalidValue,
                  "limites invertidos recusados");
-  AE_EXPECT_TRUE(set("auto_exposure_low_percent",.96f)==scene::ComponentPropertyStatus::InvalidValue,
+  AE_EXPECT_TRUE(set("exposure_histogram_low",96.0f)==scene::ComponentPropertyStatus::InvalidValue,
                  "percentis invertidos recusados");
   const auto *environment=static_cast<const scene::Environment*>(components.find(scene::Environment::descriptor));
-  AE_EXPECT_TRUE(environment&&environment->values.autoExposureMinEv==-3.0f&&
-                 environment->values.autoExposureMaxEv==8.0f&&
-                 environment->values.autoExposureLowPercent==.05f,
+  AE_EXPECT_TRUE(environment&&environment->values.exposureLimitMin==-3.0f&&
+                 environment->values.exposureLimitMax==renderer::SceneEnvironment{}.exposureLimitMax&&
+                 environment->values.exposureHistogramLow==40.0f,
                  "candidato inválido não alterou o componente");
+}
+
+// Números da exposição automática (v11): não existiam antes; exposure_fixed é da v16.
+static bool legacyExposureNumber(std::string_view id) {
+  return id.starts_with("exposure_")&&id!="exposure_compensation";
 }
 
 AE_TEST(scene_environment_v6_archive_keeps_physical_atmosphere_defaults) {
@@ -192,7 +210,7 @@ AE_TEST(scene_environment_v6_archive_keeps_physical_atmosphere_defaults) {
      <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
      <<source.layer<<" - "<<source.overrideIndirect;
   for(const auto &property:scene::Environment::descriptor.numbers) {
-    if(property.id.starts_with("hdri_")||property.id.starts_with("auto_exposure_")||
+    if(property.id.starts_with("hdri_")||legacyExposureNumber(property.id)||
        property.id=="fog_base_height"||property.id=="fog_height_falloff"||
        property.id=="fog_light_energy"||
        property.id.starts_with("physical_")||property.id.starts_with("air_")||
@@ -259,7 +277,7 @@ AE_TEST(scene_default_is_the_component_default_and_is_valid) {
   const auto view=renderer::defaultSceneEnvironment();
   AE_EXPECT_TRUE(!authored.active&&view.active,"o padrão da cena é o contrato do componente, ativo");
   auto same=view;same.active=false;
-  AE_EXPECT_TRUE(view.valid()&&same.post==authored.post&&same.sky==authored.sky&&same.exposureEv==authored.exposureEv,
+  AE_EXPECT_TRUE(view.valid()&&same.post==authored.post&&same.sky==authored.sky&&same.exposureCompensation==authored.exposureCompensation,
                  "editor e Play usam o mesmo padrão, sem ajuste exclusivo da Scene View");
 }
 
@@ -288,20 +306,22 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
   AE_EXPECT_TRUE(result.environmentMap==local.environment.environmentMap&&result.hdriRotationDegrees==-70&&
                  result.hdriExposureEv==-1,"panorama troca com sua orientação e exposição");
   volumes[1].weight=.25f;result=renderer::resolveSceneEnvironment(volumes,camera);
+  // VolumeParameter.Interp da Unity: o que não interpola troca assim que t > 0.
+  AE_EXPECT_TRUE(result.environmentMap==local.environment.environmentMap&&result.hdriRotationDegrees==-70,
+                 "qualquer influência troca o mapa junto com sua orientação");
+  volumes[1].weight=0.0f;result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.environmentMap==base.environment.environmentMap&&result.hdriRotationDegrees==30,
-                 "peso abaixo do limiar conserva o mapa anterior e sua orientação");
+                 "peso zero conserva o mapa anterior e sua orientação");
 }
 
 // Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
 static bool newerThanV12(std::string_view id) {
   return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity"||
-         id=="sky_exposure"||id.starts_with("sun_size")||id.starts_with("ambient_sky_color")||
-         id.starts_with("ambient_equator_color")||id.starts_with("ambient_ground_color")||
-         id.starts_with("ambient_color")||id=="fog_end";
+         scene::environmentNumberSinceV17(id)||scene::environmentNumberSinceV18(id);
 }
 
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
-  scene::Environment source;source.values.exposureEv=2.25f;source.values.groundAlbedo=.3f;
+  scene::Environment source;source.values.exposureCompensation=2.25f;source.values.groundAlbedo=.3f;
   std::ostringstream legacy;
   legacy<<source.values.active<<' '<<source.values.fog<<' '<<source.values.post<<' '
         <<source.values.bloom<<' '<<source.values.vignette<<' '<<source.values.filmGrain<<' '
@@ -310,7 +330,7 @@ AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
         <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
         <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality;
   for(const auto &property:scene::Environment::descriptor.numbers) {
-    if(property.id.starts_with("hdri_")||property.id.starts_with("auto_exposure_")||
+    if(property.id.starts_with("hdri_")||legacyExposureNumber(property.id)||
        property.id=="fog_base_height"||property.id=="fog_height_falloff"||
        property.id=="fog_light_energy"||newerThanV12(property.id)) continue;
     legacy<<' '<<property.read(source);
@@ -319,13 +339,15 @@ AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
   std::istringstream input(legacy.str());
   AE_EXPECT_TRUE(restored.read(input,7),"v7 reste legível");
   input>>std::ws;
+  // A exposição antiga (+2,25 EV de clareamento) vira Fixed com o mesmo multiplicador.
   AE_EXPECT_TRUE(input.eof()&&!restored.values.environmentMap.valid()&&restored.values.hdriRotationDegrees==0&&
-                 restored.values.exposureEv==2.25f&&restored.values.groundAlbedo==.3f,
+                 restored.values.exposureMode==renderer::ExposureMode::Fixed&&
+                 std::abs(restored.values.fixedBrighteningEv()-2.25f)<1e-5f&&restored.values.groundAlbedo==.3f,
                  "migração consome todos os campos legados e aplica HDRI neutro");
 }
 
 AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
-  scene::Environment source;source.values.exposureEv=1.25f;
+  scene::Environment source;source.values.exposureCompensation=1.25f;
   std::ostringstream old;
   old<<source.values.active<<' '<<source.values.fog<<' '<<source.values.post<<' '
      <<source.values.bloom<<' '<<source.values.vignette<<' '<<source.values.filmGrain<<' '
@@ -335,39 +357,136 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
      <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" -";
   for(const auto &property:scene::Environment::descriptor.numbers)
-    if(!property.id.starts_with("auto_exposure_")&&property.id!="fog_light_energy"&&!newerThanV12(property.id))
+    if(!legacyExposureNumber(property.id)&&property.id!="fog_light_energy"&&!newerThanV12(property.id))
       old<<' '<<property.read(source);
-  scene::Environment restored;restored.values.autoExposure=true;
-  restored.values.autoExposureMinEv=-12;restored.values.autoExposureCenterWeighted=true;
+  scene::Environment restored;restored.values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
+  restored.values.exposureLimitMin=-12;restored.values.exposureMetering=renderer::ExposureMetering::Spot;
   std::istringstream input(old.str());
   AE_EXPECT_TRUE(restored.read(input,10),"cena v10 relida");
   input>>std::ws;
-  AE_EXPECT_TRUE(input.eof()&&!restored.values.autoExposure&&
-                 restored.values.autoExposureMinEv==-8&&restored.values.autoExposureMaxEv==8&&
-                 restored.values.autoExposureLowPercent==.05f&&
-                 !restored.values.autoExposureCenterWeighted&&restored.values.exposureEv==1.25f&&
+  const renderer::SceneEnvironment defaults{};
+  AE_EXPECT_TRUE(input.eof()&&restored.values.exposureMode==renderer::ExposureMode::Fixed&&
+                 restored.values.exposureLimitMin==defaults.exposureLimitMin&&
+                 restored.values.exposureLimitMax==defaults.exposureLimitMax&&
+                 restored.values.exposureHistogramLow==defaults.exposureHistogramLow&&
+                 restored.values.exposureMetering==defaults.exposureMetering&&
+                 restored.values.exposureCompensation==0&&
+                 std::abs(restored.values.fixedBrighteningEv()-1.25f)<1e-5f&&
                  restored.values.fogLightEnergy==1.0f,
-                 "migração da cena mantém compensação e desliga medição nova");
+                 "cena sem medição vira Fixed com a mesma imagem");
 
   resources::EnvironmentProfile profile;
   profile.guid=resources::assetGuidFromSeed("perfil-exposicao-legado");
-  profile.name="Legado";profile.values.autoExposure=true;
+  profile.name="Legado";profile.values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
   std::istringstream profileTokens(profile.serialize());
   std::vector<std::string> fields;
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
-  // v7..v10 acrescentaram no fim: 9 de exposição + energia da neblina (v7, v8),
-  // 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11) e
-  // 21 da janela Lighting (v12).
-  fields[1]="6";fields.resize(fields.size()-83);
+  // v7..v13 acrescentaram no fim: 11 de exposição (v12; eram 9 na v7) + energia
+  // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11),
+  // 10 de Color Adjustments/Bloom (v12) e 21 da janela Lighting (v13).
+  fields[1]="6";fields.resize(fields.size()-95);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(legacy.str(),migrated),"perfil v6 relido");
-  AE_EXPECT_TRUE(!migrated.values.autoExposure&&migrated.values.fogLightEnergy==1.0f&&
-                 migrated.values.autoExposureMinEv==-8&&
-                 migrated.values.autoExposureMaxEv==8&&migrated.values.exposureEv==0,
-                 "perfil antigo recebe exposição manual padrão");
+  AE_EXPECT_TRUE(migrated.values.exposureMode==renderer::ExposureMode::Fixed&&
+                 migrated.values.fogLightEnergy==1.0f&&
+                 migrated.values.exposureLimitMin==renderer::SceneEnvironment{}.exposureLimitMin&&
+                 std::abs(migrated.values.fixedBrighteningEv())<1e-5f&&migrated.values.exposureCompensation==0,
+                 "perfil antigo recebe exposição fixa com a mesma imagem");
+}
+
+AE_TEST(auto_exposure_v15_scene_migrates_to_hdrp_histogram_in_ev100) {
+  // Arquivo v15: chaves autoExposure/centro no cabeçalho e números antigos
+  // (EV de clareamento, percentis em fração, velocidades lineares).
+  scene::Environment source;source.values.exposureCompensation=.5f;source.overridePost=false;
+  source.values.exposureLimitMin=-8;source.values.exposureLimitMax=6;
+  source.values.exposureHistogramLow=.05f;source.values.exposureHistogramHigh=.95f;
+  source.values.exposureTargetMidGrey=.18f;
+  source.values.exposureSpeedDarkToLight=2;source.values.exposureSpeedLightToDark=3; // ordem antiga: subir, descer
+  std::ostringstream old;
+  old<<source.values.active<<' '<<source.values.fog<<' '<<source.values.post<<' '
+     <<source.values.bloom<<' '<<source.values.vignette<<' '<<source.values.filmGrain<<' '
+     <<static_cast<u32>(source.values.sky)<<' '<<static_cast<u32>(source.values.toneMapper)<<' '
+     <<source.values.ambientOcclusion<<' '<<static_cast<u32>(source.shape)<<' '
+     <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
+     <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
+     <<" - 1 1";
+  for(const auto &property:scene::Environment::descriptor.numbers)
+    if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")&&!scene::environmentNumberSinceV17(property.id)&&
+       !scene::environmentNumberSinceV18(property.id))
+      old<<' '<<property.read(source);
+  scene::Environment restored;
+  std::istringstream input(old.str());
+  AE_EXPECT_TRUE(restored.read(input,15),"cena v15 relida");
+  input>>std::ws;
+  const float toEv100=std::log2(1.2f);
+  const auto &v=restored.values;
+  AE_EXPECT_TRUE(input.eof()&&v.exposureMode==renderer::ExposureMode::AutomaticHistogram&&
+                 v.exposureMetering==renderer::ExposureMetering::CenterWeighted&&
+                 v.exposureCompensation==.5f,"medição antiga vira Automatic Histogram com peso no centro");
+  AE_EXPECT_TRUE(std::abs(v.exposureLimitMin-(-6-toEv100))<1e-5f&&std::abs(v.exposureLimitMax-(8-toEv100))<1e-5f,
+                 "limites de clareamento viram EV100 e trocam de ponta");
+  AE_EXPECT_TRUE(std::abs(v.exposureHistogramLow-5)<1e-4f&&std::abs(v.exposureHistogramHigh-95)<1e-4f&&
+                 v.exposureTargetMidGrey==.18f,"percentis em fração viram porcentagem");
+  AE_EXPECT_TRUE(v.exposureSpeedDarkToLight==3&&v.exposureSpeedLightToDark==2,
+                 "velocidade de clarear (cena escureceu) vira Light to Dark");
+  AE_EXPECT_TRUE(!restored.overrideExposure&&!restored.overrideBloom&&!restored.overrideColorGrading&&
+                 !restored.overrideAmbientOcclusion,"override de pós antigo vale para cada override novo");
+}
+
+AE_TEST(exposure_defaults_follow_hdrp_default_volume_profile) {
+  // HDRP 17: Exposure.cs e DefaultSettingsVolumeProfile.asset (mode Automatic).
+  const renderer::SceneEnvironment world{};
+  AE_EXPECT_TRUE(world.exposureMode==renderer::ExposureMode::Automatic&&
+                 world.exposureMetering==renderer::ExposureMetering::CenterWeighted&&
+                 world.exposureAdaptation==renderer::ExposureAdaptation::Progressive,
+                 "Automatic, Center Weighted e Progressive");
+  AE_EXPECT_TRUE(world.fixedExposure==0&&world.exposureCompensation==0&&
+                 world.exposureSpeedDarkToLight==3&&world.exposureSpeedLightToDark==1&&
+                 world.exposureHistogramLow==40&&world.exposureHistogramHigh==90&&
+                 world.exposureTargetMidGrey==.125f,"valores do Exposure.cs");
+  // EV100 = log2(L·100/K) com K = 12,5: a luminância média vai a 12,5%/1,2.
+  const float ev=renderer::exposureEv100FromLuminance(.5f,.125f);
+  AE_EXPECT_TRUE(std::abs(ev-2.0f)<1e-6f,"0,5 cd/m² mede EV100 2 com K 12,5");
+  AE_EXPECT_TRUE(std::abs(.5f*renderer::exposureMultiplierFromEv100(ev)-.125f/1.2f)<1e-6f,
+                 "a média exposta é o cinza alvo / 1,2");
+  AE_EXPECT_TRUE(std::abs(std::exp2(renderer::exposureBrighteningEvFromEv100(ev))-
+                          renderer::exposureMultiplierFromEv100(ev))<1e-6f,
+                 "o pós aplica o mesmo multiplicador por exp2");
+  // ComputeLuminanceAdaptation: metade do caminho em 1/velocidade segundos.
+  AE_EXPECT_TRUE(std::abs(renderer::adaptExposureEv100(0,4,1.0f/3.0f,3,1)-2)<1e-5f,
+                 "escuro para claro usa Speed Dark to Light");
+  AE_EXPECT_TRUE(std::abs(renderer::adaptExposureEv100(4,0,1.0f,3,1)-2)<1e-5f,
+                 "claro para escuro usa Speed Light to Dark");
+}
+
+AE_TEST(exposure_override_unchecked_inherits_from_lower_priority_volume) {
+  // Volume da Unity: sem a caixa de Exposure, o volume local não decide a
+  // exposição; o global de prioridade menor continua valendo.
+  renderer::SceneEnvironmentVolume global;global.stableId=1;global.environment.active=true;
+  global.environment.exposureMode=renderer::ExposureMode::AutomaticHistogram;
+  global.environment.exposureLimitMin=-3;global.environment.bloomIntensity=.2f;
+  auto local=global;local.stableId=2;local.environment.priority=5;
+  local.environment.exposureMode=renderer::ExposureMode::Fixed;local.environment.exposureLimitMin=-9;
+  local.environment.bloomIntensity=1.0f;
+  local.overrides=renderer::EnvironmentOverrideAll&~renderer::EnvironmentOverrideExposure;
+  std::array volumes{global,local};const float camera[3]{};
+  auto result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::AutomaticHistogram&&result.exposureLimitMin==-3,
+                 "exposição herdada do volume global");
+  AE_EXPECT_EQ(result.bloomIntensity,1.0f,"bloom marcado vem do volume local");
+  volumes[1].overrides=renderer::EnvironmentOverrideExposure;
+  result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::Fixed&&result.exposureLimitMin==-9&&
+                 result.bloomIntensity==.2f,"só a Exposure marcada troca; o bloom volta a herdar");
+  // Sem nenhum volume decidindo a exposição, vale o padrão do mundo (Automatic).
+  volumes[0].overrides=renderer::EnvironmentOverrideBloom;volumes[1].overrides=renderer::EnvironmentOverrideBloom;
+  result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::Automatic&&
+                 result.exposureLimitMin==renderer::SceneEnvironment{}.exposureLimitMin,
+                 "ninguém sobrescreve: padrão do Default Volume Profile");
 }
 
 AE_TEST(physical_atmosphere_volume_blends_scalars_and_selects_quality_discretely) {
@@ -381,12 +500,12 @@ AE_TEST(physical_atmosphere_volume_blends_scalars_and_selects_quality_discretely
   auto result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_EQ(result.physicalSkyIntensity,1.5f,"intensidade mistura com o peso do volume");
   AE_EXPECT_EQ(result.aerosolDensity,2.0f,"aerossóis misturam continuamente");
-  AE_EXPECT_TRUE(!result.physicalAtmosphereHighQuality,
-                 "qualidade discreta não oscila antes da metade da mistura");
+  AE_EXPECT_TRUE(result.physicalAtmosphereHighQuality,
+                 "qualidade discreta troca com qualquer influência (t > 0, como na Unity)");
   volumes[1].weight=.75f;result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_EQ(result.physicalSkyIntensity,2.5f,"intensidade acompanha a influência atualizada");
   AE_EXPECT_TRUE(result.physicalAtmosphereHighQuality,
-                 "qualidade discreta troca a partir da metade da mistura");
+                 "qualidade discreta continua trocada com mais peso");
 }
 
 AE_TEST(physical_atmosphere_ground_irradiance_is_finite_and_cached_by_inputs) {
@@ -425,13 +544,13 @@ AE_TEST(scene_environment_priority_and_hierarchy_choose_one_result) {
   renderer::SceneEnvironment selected{};
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(document,selected),"coleta concluída");
   AE_EXPECT_TRUE(selected.active,"há ambiente ativo");
-  AE_EXPECT_EQ(selected.exposureEv,2.0f,"maior prioridade vence");
+  AE_EXPECT_EQ(selected.exposureCompensation,2.0f,"maior prioridade vence");
 
   auto groupValues=*document.find(group);
   groupValues.active=false;
   AE_EXPECT_TRUE(document.applyEntityValues(group,groupValues),"grupo desativado");
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(document,selected),"coleta refeita");
-  AE_EXPECT_EQ(selected.exposureEv,-1.0f,"ancestral inativo exclui o ambiente filho");
+  AE_EXPECT_EQ(selected.exposureCompensation,-1.0f,"ancestral inativo exclui o ambiente filho");
 }
 
 AE_TEST(scene_environment_local_box_blends_by_world_distance_and_priority) {
@@ -443,9 +562,10 @@ AE_TEST(scene_environment_local_box_blends_by_world_distance_and_priority) {
   environment->shape=renderer::EnvironmentVolumeShape::Box;
   environment->boxSize[0]=environment->boxSize[1]=environment->boxSize[2]=2;
   environment->blendDistance=2;environment->overrideSky=false;environment->overrideFog=false;
-  environment->values.autoExposure=true;environment->values.autoExposureCenterWeighted=true;
-  environment->values.autoExposureMinEv=-4;environment->values.autoExposureMaxEv=4;
-  environment->values.autoExposureSpeedUp=6;
+  environment->values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
+  environment->values.exposureMetering=renderer::ExposureMetering::Spot;
+  environment->values.exposureLimitMin=-4;environment->values.exposureLimitMax=4;
+  environment->values.exposureSpeedDarkToLight=6;
   AE_EXPECT_TRUE(document.applyEntityValues(local,values),"volume local configurado");
   std::vector<renderer::SceneEnvironmentVolume> volumes;
   AE_EXPECT_TRUE(runtime::collectSceneEnvironmentVolumes(document,volumes),"instâncias extraídas");
@@ -454,16 +574,20 @@ AE_TEST(scene_environment_local_box_blends_by_world_distance_and_priority) {
   const auto a=renderer::resolveSceneEnvironment(volumes,inside);
   const auto b=renderer::resolveSceneEnvironment(volumes,halfway);
   const auto c=renderer::resolveSceneEnvironment(volumes,outside);
-  AE_EXPECT_EQ(a.exposureEv,4.0f,"dentro recebe o perfil local inteiro");
-  AE_EXPECT_TRUE(std::abs(b.exposureEv-2.0f)<.0001f,"faixa externa mistura continuamente");
-  AE_EXPECT_EQ(c.exposureEv,0.0f,"fora conserva o ambiente global");
-  AE_EXPECT_TRUE(a.autoExposure&&a.autoExposureCenterWeighted&&a.autoExposureMinEv==-4,
-                 "interior recebe exposição automática completa");
-  AE_EXPECT_TRUE(b.autoExposure&&std::abs(b.autoExposureMinEv+6.0f)<.0001f&&
-                 std::abs(b.autoExposureSpeedUp-4.0f)<.0001f,
+  const renderer::SceneEnvironment world{};
+  AE_EXPECT_EQ(a.exposureCompensation,4.0f,"dentro recebe o perfil local inteiro");
+  AE_EXPECT_TRUE(std::abs(b.exposureCompensation-2.0f)<.0001f,"faixa externa mistura continuamente");
+  AE_EXPECT_EQ(c.exposureCompensation,0.0f,"fora conserva o ambiente global");
+  AE_EXPECT_TRUE(a.exposureMode==renderer::ExposureMode::AutomaticHistogram&&
+                 a.exposureMetering==renderer::ExposureMetering::Spot&&a.exposureLimitMin==-4,
+                 "interior recebe a Exposure local completa");
+  AE_EXPECT_TRUE(b.exposureMode==renderer::ExposureMode::AutomaticHistogram&&
+                 std::abs(b.exposureLimitMin-(world.exposureLimitMin-4)*.5f)<.0001f&&
+                 std::abs(b.exposureSpeedDarkToLight-(world.exposureSpeedDarkToLight+6)*.5f)<.0001f,
                  "faixa mistura escalares e escolhe modo discreto na metade");
-  AE_EXPECT_TRUE(!c.autoExposure&&c.autoExposureMinEv==-8,
-                 "fora conserva exposição manual global");
+  AE_EXPECT_TRUE(c.exposureMode==world.exposureMode&&c.exposureMetering==world.exposureMetering&&
+                 c.exposureLimitMin==world.exposureLimitMin,
+                 "fora conserva a Exposure global");
   (void)global;
 }
 
@@ -482,8 +606,8 @@ AE_TEST(scene_environment_volume_layers_and_group_overrides_are_camera_scoped) {
   const float camera[3]{};
   const auto ignored=renderer::resolveSceneEnvironment(volumes,camera,1u);
   const auto accepted=renderer::resolveSceneEnvironment(volumes,camera,1u<<3);
-  AE_EXPECT_EQ(ignored.exposureEv,0.0f,"máscara da câmera exclui outra camada");
-  AE_EXPECT_EQ(accepted.exposureEv,3.0f,"máscara inclui o pós local");
+  AE_EXPECT_EQ(ignored.exposureCompensation,0.0f,"máscara da câmera exclui outra camada");
+  AE_EXPECT_EQ(accepted.exposureCompensation,3.0f,"máscara inclui o pós local");
   AE_EXPECT_TRUE(accepted.skyZenith[0]!=1.0f && !accepted.fog,"grupos não sobrescritos herdam a base");
 }
 
@@ -498,4 +622,67 @@ AE_TEST(scene_environment_singular_local_transform_is_rejected_without_partial_p
   std::vector<renderer::SceneEnvironmentVolume> sentinel(1);
   AE_EXPECT_TRUE(!runtime::collectSceneEnvironmentVolumes(document,sentinel),"publicação recusa inversa singular");
   AE_EXPECT_EQ(sentinel.size(),usize(1),"falha não publica coleção parcial");
+}
+
+AE_TEST(tonemapping_follows_unity_options_and_reinhard_migrates_to_neutral) {
+  // URP/HDRP 17 Tonemapping: None, Neutral, ACES. AgX fica como extra.
+  const auto *tone=[]{for(const auto &e:scene::environmentEnums) if(std::string_view(e.id)=="tone_mapper") return &e;return static_cast<const scene::ComponentEnum*>(nullptr);}();
+  AE_EXPECT_TRUE(tone&&tone->options.size()==4&&tone->options[0].value==3&&tone->options[1].value==4&&
+                 tone->options[2].value==1&&tone->options[3].value==2,"menu None, Neutral, ACES, AgX");
+  AE_EXPECT_TRUE(renderer::SceneEnvironment{}.toneMapper==renderer::ToneMapper::Aces,"ACES do Default Volume Profile do HDRP");
+  scene::Environment source;source.values.toneMapper=renderer::ToneMapper::Reinhard;
+  std::ostringstream out;out.imbue(std::locale::classic());source.write(out);
+  scene::Environment restored;
+  std::istringstream input(environment_legacy::componentAsV16(out.str()));input.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(restored.read(input,16)&&restored.values.toneMapper==renderer::ToneMapper::Neutral,
+                 "Reinhard antigo abre como Neutral");
+}
+
+AE_TEST(color_adjustments_and_bloom_detail_round_trip_blend_and_migrate) {
+  const renderer::SceneEnvironment world{};
+  AE_EXPECT_TRUE(world.postExposure==0&&world.hueShift==0&&world.colorFilter[0]==1&&world.colorFilter[2]==1&&
+                 world.bloomScatter==.7f&&world.bloomClamp==65472.0f&&world.bloomTint[1]==1,
+                 "padrões do Color Adjustments e do Bloom da Unity");
+  scene::Environment authored;
+  authored.values.postExposure=.75f;authored.values.hueShift=-40;
+  authored.values.colorFilter[0]=.9f;authored.values.colorFilter[1]=.8f;authored.values.colorFilter[2]=.6f;
+  authored.values.bloomScatter=.3f;authored.values.bloomClamp=20;
+  authored.values.bloomTint[0]=1;authored.values.bloomTint[1]=.7f;authored.values.bloomTint[2]=.4f;
+  authored.values.toneMapper=renderer::ToneMapper::None;
+  std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(9);authored.write(out);
+  scene::Environment back;std::istringstream in(out.str());in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(back.read(in,scene::Environment::descriptor.version),"cena relida");
+  AE_EXPECT_TRUE(back.values.postExposure==.75f&&back.values.hueShift==-40&&back.values.colorFilter[2]==.6f&&
+                 back.values.bloomScatter==.3f&&back.values.bloomClamp==20&&back.values.bloomTint[2]==.4f&&
+                 back.values.toneMapper==renderer::ToneMapper::None,"campos novos atravessam a cena");
+  scene::Environment old;std::istringstream oldIn(environment_legacy::componentAsV16(out.str()));
+  oldIn.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(oldIn,16)&&old.values.postExposure==0&&old.values.hueShift==0&&
+                 old.values.colorFilter[0]==1&&old.values.bloomScatter==0&&old.values.bloomClamp==65472.0f,
+                 "cena antiga: sem filtro, sem giro, bloom com o raio de antes");
+
+  resources::EnvironmentProfile profile;profile.guid=resources::assetGuidFromSeed("perfil-ajustes");
+  profile.name="Ajustes";profile.values=authored.values;profile.values.active=true;
+  resources::EnvironmentProfile reread;
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(),reread)&&
+                 reread.values.hueShift==-40&&reread.values.bloomTint[1]==.7f&&
+                 reread.values.toneMapper==renderer::ToneMapper::None,"perfil v12 guarda os campos novos");
+  resources::EnvironmentProfile legacy;profile.values.toneMapper=renderer::ToneMapper::Aces; // None não existia na v11
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(environment_legacy::profileAsV11(profile.serialize()),legacy)&&
+                 legacy.values.bloomScatter==0&&legacy.values.hueShift==0,"perfil v11 abre neutro");
+
+  renderer::SceneEnvironmentVolume base;base.stableId=1;base.environment.active=true;
+  auto look=base;look.stableId=2;look.environment.priority=1;look.weight=.5f;
+  look.environment.postExposure=2;look.environment.hueShift=90;look.environment.colorFilter[0]=0;
+  look.environment.bloomScatter=.1f;look.environment.bloomTint[2]=0;
+  look.overrides=renderer::EnvironmentOverrideColorAdjustments;
+  std::array volumes{base,look};const float camera[3]{};
+  auto result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.postExposure==1&&result.hueShift==45&&result.colorFilter[0]==.5f&&
+                 result.bloomScatter==world.bloomScatter&&result.bloomTint[2]==1,
+                 "Color Adjustments mistura pelo peso; o Bloom desmarcado herda");
+  volumes[1].overrides=renderer::EnvironmentOverrideBloom;
+  result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.postExposure==0&&std::abs(result.bloomScatter-.4f)<1e-6f&&result.bloomTint[2]==.5f,
+                 "Bloom mistura espalhamento e tom; os ajustes de cor herdam");
 }

@@ -89,8 +89,14 @@ EnvironmentMigrationReport migrateLegacyEnvironmentLighting(SceneGraph &graph) {
       if (report.rootMultipliers) {
         if (environment.overrideIndirect)
           look.indirectDiffuse = std::clamp(look.indirectDiffuse * multipliers[1], 0.0f, 8.0f);
-        if (environment.overridePost)
-          look.exposureEv = std::clamp(look.exposureEv + std::log2(std::max(multipliers[2], 1e-6f)), -16.0f, 16.0f);
+        // "Exposição ×" clareava a imagem: na Exposure do HDRP isso é a
+        // compensação (automática) ou um EV100 fixo menor (fixa).
+        if (environment.overrideExposure) {
+          const float brighten = std::log2(std::max(multipliers[2], 1e-6f));
+          if (look.automaticExposure())
+            look.exposureCompensation = std::clamp(look.exposureCompensation + brighten, -16.0f, 16.0f);
+          else look.fixedExposure = std::clamp(look.fixedExposure - brighten, -16.0f, 24.0f);
+        }
         if (environment.overrideSky) {
           float rotation = std::fmod(look.hdriRotationDegrees + multipliers[3], 360.0f);
           look.hdriRotationDegrees = rotation;

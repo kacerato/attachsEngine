@@ -16,7 +16,7 @@ namespace ae::resources {
 // (shader Procedural/Panorâmico/Físico e os parâmetros dele). Arquivo .skybox,
 // tipo de recurso SkyboxMaterial, cabeçalho ASTRA_SKYBOX_MATERIAL.
 struct EnvironmentProfile final {
-  static constexpr u32 FormatVersion = 12;
+  static constexpr u32 FormatVersion = 13;
   AssetGuid guid{};
   u32 revision = 1;
   std::string name;

@@ -7,6 +7,7 @@
 #include "resources/environment_profile.h"
 #include "runtime/scene_environment.h"
 #include "scene/environment.h"
+#include "environment_legacy_lines.h"
 
 #include <cmath>
 #include <iterator>
@@ -42,11 +43,6 @@ float meanAlpha(const renderer::CloudLayer &clouds) {
 std::vector<std::string> tokens(const std::string &text) {
   std::istringstream in(text);
   return {std::istream_iterator<std::string>(in), std::istream_iterator<std::string>()};
-}
-std::string join(const std::vector<std::string> &parts) {
-  std::string out;
-  for (const auto &part : parts) { if (!out.empty()) out += ' '; out += part; }
-  return out;
 }
 } // namespace
 
@@ -132,24 +128,23 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 17u, "Ambiente v17");
-  AE_EXPECT_TRUE(reread.read(in, 17), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 18u, "Ambiente v18");
+  AE_EXPECT_TRUE(reread.read(in, 18), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
   // exposição automática) e sem os 14 números do fim.
-  auto parts = tokens(out.str());
-  AE_EXPECT_TRUE(parts.size() > 40, "texto completo");
-  // Primeiro a v16: sem as 5 palavras e os 16 números da janela Lighting (v17).
-  parts.erase(parts.begin() + 23, parts.begin() + 28);
-  parts.resize(parts.size() - 16);
-  std::vector<std::string> legacy(parts.begin(), parts.begin() + 20);
-  legacy.insert(legacy.end(), parts.begin() + 23, parts.end() - 14);
-  scene::Environment old;std::istringstream oldIn(join(legacy));oldIn.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(tokens(out.str()).size() > 40, "texto completo");
+  scene::Environment v16;std::istringstream v16In(environment_legacy::componentAsV16(out.str()));
+  v16In.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(v16.read(v16In, 16) && v16.values.clouds == clouds && !v16.overrideClouds,
+                 "cena v16 (nuvens antes da Exposure) abre com as nuvens");
+  scene::Environment old;std::istringstream oldIn(environment_legacy::componentAsV15(out.str()));oldIn.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(oldIn, 15), "cena v15 abre");
   AE_EXPECT_TRUE(!old.values.clouds.enabled && old.values.clouds == renderer::CloudLayer{} && old.overrideClouds,
                  "cena antiga: sem nuvens, o mesmo céu de antes");
-  AE_EXPECT_TRUE(old.values.exposureEv == authored.values.exposureEv, "o resto do arquivo antigo continua no lugar");
+  AE_EXPECT_TRUE(old.values.fogDensity == authored.values.fogDensity && old.values.contrast == authored.values.contrast,
+                 "o resto do arquivo antigo continua no lugar");
 
   const auto &type = scene::Environment::descriptor;
   bool coverage = false, toggle = false, tint = false;
@@ -160,28 +155,28 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(coverage && toggle && tint, "Inspector: seção Nuvens com interruptor, cobertura e cor");
 }
 
-AE_TEST(cloud_layer_round_trips_in_environment_profile_v11) {
+AE_TEST(cloud_layer_round_trips_in_environment_profile_v12) {
   resources::EnvironmentProfile profile;
   profile.guid = resources::assetGuidFromSeed("perfil-nublado");
   profile.name = "Nublado";
   profile.values.clouds.enabled = true;profile.values.clouds.coverage = 0.95f;profile.values.clouds.windSpeedKmh = 80.0f;
   const auto text = profile.serialize();
   resources::EnvironmentProfile reread;
-  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, reread), "perfil v11 relido");
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, reread), "perfil v12 relido");
   AE_EXPECT_TRUE(reread.values.clouds == profile.values.clouds, "nuvens no perfil compartilhado");
-  // v10: troca a versão e corta as 21 palavras da janela Lighting (v12) e as 16 das nuvens.
-  auto parts = tokens(text);
-  parts[1] = "10";
-  parts.resize(parts.size() - 21 - 16);
+  resources::EnvironmentProfile v11;
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(environment_legacy::profileAsV11(text), v11) &&
+                 v11.values.clouds == profile.values.clouds, "perfil v11 (nuvens antes da Exposure) abre");
+  // v10: sem as 16 palavras das nuvens.
   resources::EnvironmentProfile old;
-  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(join(parts), old), "perfil v10 abre");
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(environment_legacy::profileAsV10(text), old), "perfil v10 abre");
   AE_EXPECT_TRUE(old.values.clouds == renderer::CloudLayer{}, "perfil antigo sem nuvens");
 }
 
 AE_TEST(cloud_volume_overrides_only_the_clouds_like_a_unity_cloud_layer_override) {
   renderer::SceneEnvironmentVolume base;
   base.environment.active = true;base.environment.sky = renderer::SkyModel::PhysicalAtmosphere;
-  base.environment.fog = true;base.environment.exposureEv = 1.5f;base.stableId = 1;
+  base.environment.fog = true;base.environment.exposureCompensation = 1.5f;base.stableId = 1;
   renderer::SceneEnvironmentVolume cloudy;
   cloudy.environment.active = true;cloudy.environment.priority = 1.0f;cloudy.stableId = 2;
   cloudy.environment.clouds.enabled = true;cloudy.environment.clouds.coverage = 0.9f;
@@ -190,7 +185,7 @@ AE_TEST(cloud_volume_overrides_only_the_clouds_like_a_unity_cloud_layer_override
   const renderer::SceneEnvironmentVolume both[]{base, cloudy};
   auto look = renderer::resolveSceneEnvironment(both, camera);
   AE_EXPECT_TRUE(look.clouds.enabled && look.clouds.coverage == 0.9f, "nuvens do volume");
-  AE_EXPECT_TRUE(look.sky == renderer::SkyModel::PhysicalAtmosphere && look.fog && look.exposureEv == 1.5f,
+  AE_EXPECT_TRUE(look.sky == renderer::SkyModel::PhysicalAtmosphere && look.fog && look.exposureCompensation == 1.5f,
                  "céu, neblina e pós continuam os do Ambiente");
   // Peso 0,5: o céu abre aos poucos pela opacidade, sem trocar a forma.
   renderer::SceneEnvironmentVolume halfVolume = cloudy;halfVolume.weight = 0.5f;
@@ -227,7 +222,8 @@ AE_TEST(cloud_volume_recipe_creates_a_global_cloud_layer_above_the_scene_environ
   const auto *component = static_cast<const scene::Environment *>(
       graph.find(created)->components.find(scene::Environment::descriptor));
   AE_EXPECT_TRUE(component && component->values.clouds.enabled && component->overrideClouds && !component->overrideSky &&
-                 !component->overrideFog && !component->overridePost && component->values.priority == 1.0f,
+                 !component->overrideFog && !component->overridePost && !component->overrideExposure && !component->overrideBloom &&
+                 component->values.priority == 1.0f,
                  "só o override das nuvens, acima do Ambiente");
   renderer::SceneEnvironment look;
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(graph, look), "cena resolvida");

@@ -1,6 +1,7 @@
 // PK-1/PK-2 da auditoria full Unity: janela Iluminação, Skybox, luz ambiente
 // por fonte, neblina por modo e a migração das cenas antigas.
 #include "harness.h"
+#include "environment_legacy_lines.h"
 
 #include "editor/editor_archive.h"
 #include "editor/editor_creation_catalog.h"
@@ -30,24 +31,16 @@ namespace {
 scene::Environment *addEnvironment(EditorEntity &values) {
   return static_cast<scene::Environment *>(values.components.add(scene::Environment::descriptor));
 }
-// Texto v16 de um Ambiente: o v17 sem os campos novos no fim nem os 4 enums/GUID.
-std::string asVersion16(const scene::Environment &environment) {
+// Texto v17 de um Ambiente (antes da janela Lighting), a partir do atual.
+std::string asVersion17(const scene::Environment &environment) {
   std::ostringstream full;full.imbue(std::locale::classic());full<<std::setprecision(9);
   environment.write(full);
-  std::istringstream in(full.str());std::vector<std::string> tokens;std::string token;
-  while(in>>token) tokens.push_back(token);
-  // 23 campos fixos até override_clouds; depois 5 novos (enums + skybox); os
-  // números novos (sky_exposure .. fog_end) são os 16 últimos.
-  constexpr usize fixed=23,added=5,newNumbers=16;
-  std::vector<std::string> legacy(tokens.begin(),tokens.begin()+fixed);
-  legacy.insert(legacy.end(),tokens.begin()+fixed+added,tokens.end()-newNumbers);
-  std::string text;for(const auto &value:legacy) text+=value+" ";
-  return text;
+  return environment_legacy::componentAsV17(full.str());
 }
 float luminance(const float c[3]) {return .2126f*c[0]+.7152f*c[1]+.0722f*c[2];}
 } // namespace
 
-AE_TEST(environment_v17_round_trips_lighting_window_fields) {
+AE_TEST(environment_v18_round_trips_lighting_window_fields) {
   scene::Environment environment;
   auto &v=environment.values;
   v.skyExposure=2.5f;v.sunDisk=renderer::SunDiskMode::Simple;v.sunSize=.1f;v.sunSizeConvergence=7.0f;
@@ -58,7 +51,7 @@ AE_TEST(environment_v17_round_trips_lighting_window_fields) {
   AE_EXPECT_TRUE(environment.valid(),"valores da janela Lighting são válidos");
   std::ostringstream out;out.imbue(std::locale::classic());environment.write(out);
   scene::Environment back;std::istringstream in(out.str());
-  AE_EXPECT_TRUE(back.read(in,scene::Environment::CurrentVersion),"v17 relido");
+  AE_EXPECT_TRUE(back.read(in,scene::Environment::CurrentVersion),"v18 relido");
   AE_EXPECT_TRUE(back.values.skyExposure==2.5f&&back.values.sunDisk==renderer::SunDiskMode::Simple&&
                  back.values.sunSize==.1f&&back.values.sunSizeConvergence==7.0f&&back.values.atmosphere==2.0f,
                  "Exposure, Sun, Sun Size, Convergence e Atmosphere Thickness preservados");
@@ -68,23 +61,23 @@ AE_TEST(environment_v17_round_trips_lighting_window_fields) {
   AE_EXPECT_TRUE(back.values.fogMode==renderer::FogMode::Linear&&back.values.fogEnd==420.0f&&
                  back.values.fogColorMode==renderer::FogColorMode::SkyLight,"Fog Mode, End e cor preservados");
   AE_EXPECT_TRUE(back.values.skybox==v.skybox,"Material do céu preservado");
-  AE_EXPECT_EQ(back.loadedVersion,17u,"lido na versão atual");
+  AE_EXPECT_EQ(back.loadedVersion,18u,"lido na versão atual");
 }
 
-AE_TEST(environment_v16_migrates_to_the_same_image) {
+AE_TEST(environment_v17_migrates_to_the_same_image) {
   scene::Environment environment;
   environment.values.fog=true;environment.values.fogDensity=.02f;environment.values.fogStart=5;
   environment.values.atmosphere=.6f;environment.values.sunDiskIntensity=8.0f;
-  const auto text=asVersion16(environment);
+  const auto text=asVersion17(environment);
   scene::Environment old;std::istringstream in(text);
-  AE_EXPECT_TRUE(old.read(in,16),"texto v16 aceito");
+  AE_EXPECT_TRUE(old.read(in,17),"texto v17 aceito");
   AE_EXPECT_TRUE(old.values.fogMode==renderer::FogMode::Exponential,"neblina antiga continua exponencial");
   AE_EXPECT_TRUE(old.values.fogColorMode==renderer::FogColorMode::SkyLight,"cor da neblina antiga acompanha o céu");
   AE_EXPECT_EQ(old.values.atmosphere,1.0f,"mistura antiga vira espessura 1, a de antes");
   AE_EXPECT_TRUE(old.values.sunDisk==renderer::SunDiskMode::HighQuality,"disco solar antigo vira High Quality");
   AE_EXPECT_TRUE(old.values.ambientSource==renderer::AmbientSource::Skybox,"ambiente antigo vem do céu");
   AE_EXPECT_EQ(old.values.skyExposure,1.3f,"Exposure padrão da Unity = brilho antigo sem sol fotométrico");
-  AE_EXPECT_EQ(old.loadedVersion,16u,"versão de origem registrada para a migração de documento");
+  AE_EXPECT_EQ(old.loadedVersion,17u,"versão de origem registrada para a migração de documento");
   AE_EXPECT_EQ(old.values.fogDensity,.02f,"números antigos lidos nos lugares certos");
 }
 
@@ -101,8 +94,9 @@ AE_TEST(legacy_sky_scale_and_root_multipliers_migrate_to_owner_fields) {
   const auto ambient=document.createEntity(document.root(),EditorEntityKind::Folder,"Ambiente");
   {
     auto values=*document.find(ambient);auto *environment=addEnvironment(values);
-    environment->values.hdriExposureEv=1.0f;environment->values.exposureEv=-6.8f;environment->values.indirectDiffuse=1.0f;
-    environment->loadedVersion=16;
+    environment->values.hdriExposureEv=1.0f;environment->values.exposureMode=renderer::ExposureMode::Fixed;
+    environment->values.fixedExposure=8.0f;environment->values.indirectDiffuse=1.0f;
+    environment->loadedVersion=17;
     AE_EXPECT_TRUE(document.applyEntityValues(ambient,values),"ambiente v16");
   }
   {
@@ -117,7 +111,7 @@ AE_TEST(legacy_sky_scale_and_root_multipliers_migrate_to_owner_fields) {
       document.find(ambient)->components.find(scene::Environment::descriptor));
   AE_EXPECT_NEAR(environment->values.skyExposure,1.3f*scale,1e-2f,"Exposure do céu absorve a escala");
   AE_EXPECT_NEAR(environment->values.hdriExposureEv,1.0f+std::log2(scale),1e-4f,"EV do HDRI absorve a escala");
-  AE_EXPECT_NEAR(environment->values.exposureEv,-5.8f,1e-4f,"Exposição × 2 vira +1 EV");
+  AE_EXPECT_NEAR(environment->values.fixedExposure,7.0f,1e-4f,"Exposição × 2 vira 1 EV100 a menos (clareia)");
   AE_EXPECT_NEAR(environment->values.indirectDiffuse,.5f,1e-6f,"Ambiente × vira Intensity Multiplier");
   AE_EXPECT_NEAR(environment->values.hdriRotationDegrees,30.0f,1e-4f,"rotação do céu vai para o HDRI");
   const auto *root=document.find(document.root());
@@ -189,18 +183,18 @@ AE_TEST(skybox_material_shares_only_the_sky) {
   resources::EnvironmentProfile material;material.skybox=true;material.name="Céu de teste";
   material.guid=resources::assetGuidFromSeed("material-ceu");
   renderer::SceneEnvironment source{};source.sky=renderer::SkyModel::Atmosphere;source.skyExposure=2.0f;
-  source.sunSize=.08f;source.atmosphere=1.5f;source.fog=true;source.exposureEv=3.0f;
+  source.sunSize=.08f;source.atmosphere=1.5f;source.fog=true;source.postExposure=3.0f;
   material.values=resources::skyboxMaterialValues(source);
-  AE_EXPECT_TRUE(!material.values.fog&&material.values.exposureEv==0.0f,"material guarda só o céu");
+  AE_EXPECT_TRUE(!material.values.fog&&material.values.postExposure==0.0f,"material guarda só o céu");
   const auto text=material.serialize();
-  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 12 ",0)==0,"cabeçalho próprio do Material do céu");
+  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 13 ",0)==0,"cabeçalho próprio do Material do céu");
   resources::EnvironmentProfile back;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text,back)&&back.skybox,"material relido");
   AE_EXPECT_TRUE(back.assetType()==resources::AssetType::SkyboxMaterial,"tipo de recurso SkyboxMaterial");
-  renderer::SceneEnvironment instance{};instance.fog=true;instance.fogDensity=.05f;instance.exposureEv=-2.0f;
+  renderer::SceneEnvironment instance{};instance.fog=true;instance.fogDensity=.05f;instance.postExposure=-2.0f;
   const auto applied=resources::applySkyboxMaterial(instance,back);
   AE_EXPECT_TRUE(applied.skyExposure==2.0f&&applied.sunSize==.08f&&applied.atmosphere==1.5f,"céu vem do material");
-  AE_EXPECT_TRUE(applied.fog&&applied.fogDensity==.05f&&applied.exposureEv==-2.0f,"neblina e pós ficam na instância");
+  AE_EXPECT_TRUE(applied.fog&&applied.fogDensity==.05f&&applied.postExposure==-2.0f,"neblina e pós ficam na instância");
   AE_EXPECT_TRUE(applied.skybox==material.guid,"instância lembra o material");
   // O runtime lê o material ao coletar: editar o recurso muda o Ambiente.
   EditorDocument document;
@@ -223,10 +217,10 @@ AE_TEST(scene_without_environment_uses_unity_defaults_everywhere) {
   AE_EXPECT_TRUE(look.sunSize==.04f&&look.sunSizeConvergence==5.0f,"Sun Size 0,04 e Convergence 5");
   // Só um volume local: fora dele vale o padrão; dentro, o padrão é a base.
   renderer::SceneEnvironmentVolume local;local.environment.active=true;local.shape=renderer::EnvironmentVolumeShape::Box;
-  local.environment.exposureEv=2.0f;local.overrides=renderer::EnvironmentOverridePost;
+  local.environment.exposureCompensation=2.0f;local.overrides=renderer::EnvironmentOverrideAll;
   const float inside[3]{};
   const auto resolved=renderer::resolveSceneEnvironment(std::span(&local,1),inside);
-  AE_EXPECT_TRUE(resolved.active&&resolved.sky==renderer::SkyModel::Atmosphere&&resolved.exposureEv==2.0f,
+  AE_EXPECT_TRUE(resolved.active&&resolved.sky==renderer::SkyModel::Atmosphere&&resolved.exposureCompensation==2.0f,
                  "volume local se mistura sobre o ambiente padrão");
 }
 
@@ -278,12 +272,13 @@ AE_TEST(volume_recipes_create_empty_volumes_and_scene_environment) {
   const auto *volume=static_cast<const scene::Environment *>(graph.find(box)->components.find(scene::Environment::descriptor));
   AE_EXPECT_TRUE(volume&&volume->shape==renderer::EnvironmentVolumeShape::Box&&volume->blendDistance==1.0f&&
                  !volume->overrideSky&&!volume->overrideFog&&!volume->overridePost&&!volume->overrideIndirect&&
+                 !volume->overrideExposure&&!volume->overrideBloom&&!volume->overrideColorAdjustments&&
                  !volume->overrideClouds&&volume->values.priority==1.0f,
                  "Volume novo não muda nada até ligar um grupo (perfil vazio da Unity)");
   renderer::SceneEnvironment look;
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(graph,look),"cena resolvida");
   const auto defaults=renderer::defaultSceneEnvironment();
-  AE_EXPECT_TRUE(look.exposureEv==defaults.exposureEv&&look.sky==defaults.sky,"imagem igual à do padrão");
+  AE_EXPECT_TRUE(look.exposureCompensation==defaults.exposureCompensation&&look.sky==defaults.sky,"imagem igual à do padrão");
   const auto ambient=session.createRecipe(recipeOf("volume.environment"),graph.root());
   const auto *environment=static_cast<const scene::Environment *>(graph.find(ambient)->components.find(scene::Environment::descriptor));
   AE_EXPECT_TRUE(environment&&environment->overrideSky&&environment->overrideFog&&environment->overridePost&&

@@ -184,8 +184,13 @@ struct DirtRoadFrameUniform {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens.
   // Só o fragmento de superfície declara (environment_lighting.glsl, offset explícito).
   renderer::PunctualLight punctualLightsExtra[renderer::MaximumPunctualLights - renderer::PunctualLightBankSize]{};
+  // PK-5: Color Adjustments e Bloom completos da Unity (post_process_common.glsl).
+  float postColorAdjust[4]{1,1,1,0}; // filtro de cor rgb, giro de matiz em graus
+  float postBloomTint[4]{1,1,1,0};   // tom rgb, espalhamento 0..1
+  float postBloomDetail[4]{65472,0,0,0}; // brilho máximo antes do bloom, reservados
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4112);
+static_assert(sizeof(DirtRoadFrameUniform) == 4160);
+static_assert(offsetof(DirtRoadFrameUniform, postColorAdjust) == 4112);
 static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
 static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
 static_assert(offsetof(DirtRoadFrameUniform, punctualLightsExtra) == 3600);
@@ -1724,7 +1729,21 @@ bool applySceneEnvironmentLook(
   frame.sceneFog[1]=look.fogStart;
   frame.sceneFog[2]=look.fogBaseHeight;
   frame.sceneFog[3]=look.fogMode==renderer::FogMode::Linear?0.0f:look.fogHeightFalloff;
-  frame.scenePost[0]=look.active&&look.post&&postEnabled?look.exposureEv:0.0f;
+  // Fixa: o EV100 vira EV de clareamento aqui. Automática: o estado da GPU
+  // (instanced_auto_exposure.inl) já traz compensação, adaptação e limites.
+  frame.scenePost[0]=look.active&&look.post&&postEnabled&&!look.automaticExposure()?
+      look.fixedBrighteningEv():0.0f;
+  // Post Exposure soma depois da exposição (fixa ou medida) e não entra na
+  // medição: o histograma lê a cena antes de scenePost.x, como na Unity.
+  const bool authoredLook=look.active&&look.post&&postEnabled;
+  if(authoredLook) frame.scenePost[0]+=look.postExposure;
+  for(u32 channel=0;channel<3;++channel) {
+    frame.postColorAdjust[channel]=authoredLook?look.colorFilter[channel]:1.0f;
+    frame.postBloomTint[channel]=authoredLook?look.bloomTint[channel]:1.0f;
+  }
+  frame.postColorAdjust[3]=authoredLook?look.hueShift:0.0f;
+  frame.postBloomTint[3]=authoredLook?look.bloomScatter:0.0f;
+  frame.postBloomDetail[0]=authoredLook?look.bloomClamp:65472.0f;
   frame.scenePost[1]=look.active&&look.post&&postEnabled?
       static_cast<float>(look.toneMapper):static_cast<float>(renderer::ToneMapper::Aces);
   frame.scenePost[3]=look.active&&look.post&&postEnabled?1.0f:0.0f;
@@ -6424,13 +6443,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
 
-  const auto cachedLook=effectiveSceneLook();
+  // A exposição automática não impede o reaproveitamento: ele exige o mesmo
+  // tempo, e com dt zero o estado adaptado da câmera não muda.
   const bool sceneCacheEligible=editorSceneReuseEnabled_ && editorBackground_ && dirtRoadPreview_ &&
       renderingPolicy_.post.dedicatedPass && postPipeline_!=VK_NULL_HANDLE &&
       !temporalInputsActive_ && !temporalUpscaler_.ready() &&
       waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
-      !textureStreamingDebugView_ &&
-      !cachedLook.autoExposure;
+      !textureStreamingDebugView_;
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
       (textureStreamingDebugView_?32u:0u);
@@ -7324,7 +7343,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::AutoExposure);
   if(renderingPolicy_.post.dedicatedPass) {
     auto look=effectiveSceneLook();
-    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.autoExposure=false;
+    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.exposureMode=renderer::ExposureMode::Fixed;
     const auto record=[&](const renderer::SceneEnvironment &environment) {
       return recordAutoExposure(0,environment,camera,timeSeconds,physicalSceneViewport(),
                                 renderWidth(),renderHeight(),renderTargetWidth(),renderTargetHeight(),
@@ -7332,11 +7351,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     };
     if(!record(look)) {
       const std::string diagnostic=autoExposureDiagnostic_;
-      look.autoExposure=false;
+      look.exposureMode=renderer::ExposureMode::Fixed;
       if(!record(look)) return rhi::SwapchainStatus::FatalError;
       autoExposureDiagnostic_=diagnostic;
     }
-  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.autoExposure) {
+  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.automaticExposure()) {
     autoExposureDiagnostic_="Exposição automática requer pós-processamento dedicado";
   } else autoExposureDiagnostic_.clear();
   endGpuRegion(GpuPassClass::AutoExposure);
