@@ -38,6 +38,11 @@ inline constexpr LightDefault kPointLightDefault{LightKind::Point, LightUnit::Lu
 inline constexpr LightDefault kSpotLightDefault{LightKind::Spot, LightUnit::LuxLumen, 1000.0f, 10.0f, 30.0f, 21.8f, 0};
 // Sol físico do meio-dia, só para cenas com exposição calibrada para ele.
 inline constexpr float kPhysicalSunLux = 100000.0f;
+// V-2: a Lua do "Sol com dia e noite", como a Moon do tutorial HDRP Night
+// (Directional, 0,5 lux, Filter and Temperature frio, sombra ligada). A
+// temperatura é a do quadro de referência (8570 K), arredondada.
+inline constexpr LightDefault kMoonLightDefault{LightKind::Directional, LightUnit::LuxLumen, 0.5f, 10.0f, 30.0f, 21.8f, 2};
+inline constexpr float kMoonColorTemperature = 8500.0f;
 
 inline constexpr const LightDefault &lightDefault(LightKind kind) noexcept {
   return kind == LightKind::Directional ? kDirectionalLightDefault

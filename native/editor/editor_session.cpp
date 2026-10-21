@@ -19,6 +19,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/primitive_geometry.h"
 #include "runtime/scene_time_of_day.h"
+#include "scene/time_of_day.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
 #include "editor/editor_studio_tools.h"
@@ -6134,6 +6135,31 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
       history_.cancel(document_);return refuse("Não foi possível criar o filho visual");
     }
   }
+  // V-2: "Sol com dia e noite" traz a Lua (o par Sun/Moon do ciclo do HDRP):
+  // uma direcional irmã, girada pela Hora do dia do sol. Desfazer leva os dois.
+  std::string moonNote;
+  if(recipe.id==recipe::dayNightRecipe) {
+    EditorEntity moon;
+    for(const auto &part:recipe::dayNightMoon) {
+      auto plan=scene::planComponentAddition(moon.components,part.type);
+      if(!plan.ready) {history_.cancel(document_);return refuse("Não foi possível compor a Lua");}
+      moon.components=std::move(plan.candidate);
+      for(const auto &initial:part.values)
+        if(scene::setComponentProperty(moon.components,initial.component,initial.property,initial.value)!=
+           scene::ComponentPropertyStatus::Applied) {history_.cancel(document_);return refuse("Lua: valor inicial recusado");}
+    }
+    moon.transform=document_.find(id)->transform;
+    assignEntityName(moon,"Lua");
+    const auto moonId=history_.createEntity(document_,parent,runtime::ObjectKind::Light,"Lua");
+    auto sun=*document_.find(id);
+    if(!moonId||!history_.applyValues(document_,moonId,moon)||
+       scene::setComponentProperty(sun.components,scene::TimeOfDay::descriptor.id,"moon_light",
+                                   scene::ObjectReference{moonId})!=scene::ComponentPropertyStatus::Applied||
+       !history_.applyValues(document_,id,sun)) {
+      history_.cancel(document_);return refuse("Não foi possível criar a Lua");
+    }
+    moonNote=" · Lua criada e ligada em Hora do dia";
+  }
   // Cinemachine: a primeira câmera virtual põe um Cérebro na câmera principal.
   // Mesma transação: desfazer remove a câmera virtual e o Cérebro juntos.
   std::string brainNote;
@@ -6179,7 +6205,7 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   if(!recipe.pathPoints.empty()){
     refreshPathEditorState();state_.pathEditorOpen=true;state_.pathPointList=false;
   }
-  state_.status=std::string("Objeto criado: ")+recipe.name+brainNote;
+  state_.status=std::string("Objeto criado: ")+recipe.name+brainNote+moonNote;
   return id;
 }
 

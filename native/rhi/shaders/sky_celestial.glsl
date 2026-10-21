@@ -56,6 +56,9 @@ float celestialSunGlare(float angle,float cosine,float radius) {
 // Direção da lua pela fase: gira a direção do sol em torno do eixo horizontal
 // perpendicular a ele. Fase 0,5 é exatamente oposta (lua cheia).
 vec3 celestialMoonDirection(vec3 sunDirection) {
+  // V-2: com uma direcional Lua (Hora do dia › Lua), o disco fica onde ela
+  // está, como o Celestial Body do HDRP desenha a lua na direção da luz.
+  if(environment.skyMoon.w>0.5) return normalize(environment.skyMoon.xyz);
   vec3 axis=cross(sunDirection,vec3(0.0,1.0,0.0));
   axis=dot(axis,axis)<1.0e-6?vec3(1.0,0.0,0.0):normalize(axis);
   float angle=6.2831853*environment.celestialParameters.y;
@@ -97,30 +100,94 @@ vec3 celestialMoon(vec3 direction,vec3 sunDirection,float pixelAngle,out float c
   return (surface*coverage+moonTint*halo)*intensity;
 }
 
-// Estrelas: uma em ~3% das células de uma grade na direção, com brilho em lei de
-// potência (poucas fortes, muitas fracas), cor de temperatura e cintilação lenta.
-// Só aparecem com o sol abaixo do horizonte e onde o céu já está escuro.
+// Estrelas (V-2), no lugar do campo uniforme do G4: o céu do Physically Based
+// Sky da HDRP é um mapa de emissão do espaço (catálogo real, Via Láctea), e os
+// ciclos de dia da Unity giram esse mapa com a hora ("Space Rotation"). Aqui o
+// mesmo céu sai de células hash na ESFERA CELESTE: a direção do mundo passa
+// pelas linhas de environment.skyStarRotation (renderer/time_of_day.h), então
+// as estrelas nascem a leste e giram em torno do polo da latitude.
+//
+// Contagem e brilho pela lei de Pogson: N(<m) cresce 10^(0,6 m) até o limite
+// de visão (m 6,5, ~6000 no céu inteiro), fluxo 10^(-0,4 m). Quase todas são
+// fracas; poucas dezenas brilham. O tamanho cresce só nas fortes, a cor segue
+// a temperatura (azuladas e alaranjadas raras), a cintilação é discreta e
+// aumenta perto do horizonte, onde a extinção também apaga as fracas.
+vec3 celestialHash3(vec3 p) { return celestialHash33(p); }
+float celestialNoise3(vec3 p) {
+  vec3 i=floor(p),f=fract(p);
+  f=f*f*(3.0-2.0*f);
+  float a=celestialHash13(i),b=celestialHash13(i+vec3(1,0,0));
+  float c=celestialHash13(i+vec3(0,1,0)),d=celestialHash13(i+vec3(1,1,0));
+  float e=celestialHash13(i+vec3(0,0,1)),g=celestialHash13(i+vec3(1,0,1));
+  float h=celestialHash13(i+vec3(0,1,1)),k=celestialHash13(i+vec3(1,1,1));
+  return mix(mix(mix(a,b,f.x),mix(c,d,f.x),f.y),mix(mix(e,g,f.x),mix(h,k,f.x),f.y),f.z);
+}
+
+// Uma camada de estrelas: células de `cells` por raio, `presence` delas
+// ocupadas, magnitudes de `brightest` a `faintest`.
+vec3 celestialStarLayer(vec3 celestial,float cells,float presence,float brightest,float faintest,
+                        float pixelAngle,float time,float horizonTwinkle) {
+  vec3 cell=floor(celestial*cells);
+  float occupied=celestialHash13(cell+17.0);
+  if(occupied>presence) return vec3(0.0);
+  vec3 jitter=celestialHash3(cell);
+  vec3 star=normalize((cell+0.5+(jitter-0.5)*0.7)/cells);
+  float angle=acos(clamp(dot(celestial,star),-1.0,1.0));
+  // Pogson: u uniforme dá N(<m) ~ 10^(0,6 m) entre as magnitudes da camada.
+  float u=max(occupied/presence,1.0e-4);
+  float magnitude=min(faintest+log(u)/(0.6*2.302585),faintest);
+  magnitude=max(magnitude,brightest);
+  float flux=exp2(-1.3287712*magnitude); // 10^(-0,4 m)
+  // As fortes ocupam um pouco mais que o pixel; as fracas, o pixel.
+  float size=pixelAngle*(0.65+0.9*clamp(sqrt(flux)*0.7,0.0,1.4));
+  float shape=exp(-(angle*angle)/(size*size));
+  float twinkle=1.0-horizonTwinkle*(0.5+0.5*sin(time*(2.1+jitter.y*4.0)+occupied*911.0));
+  float temperature=jitter.z;
+  vec3 color=temperature<0.12?vec3(0.70,0.80,1.0):
+             (temperature>0.90?vec3(1.0,0.78,0.58):vec3(1.0,0.96,0.90));
+  return color*flux*shape*twinkle;
+}
+
+// Via Láctea: faixa em torno do plano galáctico (polo norte galáctico em
+// AR 192,9°, Dec +27,1°; centro em AR 266,4°, Dec -28,9°), mais clara no
+// bojo, com nuvens e a faixa escura de poeira por ruído.
+vec3 celestialMilkyWay(vec3 celestial) {
+  const vec3 galacticPole=vec3(-0.8676,-0.1981,0.4560);
+  const vec3 galacticCenter=vec3(-0.0548,-0.8728,-0.4834);
+  float latitude=dot(celestial,galacticPole);
+  float band=exp(-latitude*latitude/(0.17*0.17));
+  if(band<0.01) return vec3(0.0);
+  float bulge=0.45+0.55*pow(max(dot(celestial,galacticCenter),0.0),3.0);
+  float clouds=celestialNoise3(celestial*7.0)*0.6+celestialNoise3(celestial*17.0)*0.4;
+  float dust=smoothstep(0.035,0.0,abs(latitude+0.02*(celestialNoise3(celestial*11.0)-0.5)))*
+             smoothstep(0.35,0.75,celestialNoise3(celestial*9.0+3.7));
+  float glow=band*bulge*(0.35+0.65*clouds)*(1.0-0.75*dust);
+  return vec3(1.0,0.94,0.86)*glow;
+}
+
 vec3 celestialStars(vec3 direction,vec3 sunDirection,vec3 sky,float pixelAngle,float time) {
   float intensity=environment.celestialStars.x;
   if(intensity<=0.0 || direction.y<=-0.02) return vec3(0.0);
   // Como no céu da Unity: nenhuma estrela com o sol acima do horizonte; elas
-  // acendem ao longo do crepúsculo civil (sol até -6 graus, y ~ -0,10).
-  float night=smoothstep(-0.01,-0.10,sunDirection.y);
+  // acendem ao longo do crepúsculo (sol até ~-10 graus, y ~ -0,17).
+  float night=smoothstep(-0.02,-0.17,sunDirection.y);
   float darkness=clamp(1.0-dot(sky,vec3(0.2126,0.7152,0.0722))*10.0,0.0,1.0);
-  float horizon=smoothstep(-0.02,0.18,direction.y);
-  float visibility=night*darkness*horizon;
+  // Extinção: perto do horizonte o ar apaga e avermelha as estrelas.
+  float airmass=smoothstep(-0.02,0.30,direction.y);
+  float visibility=night*darkness*airmass;
   if(visibility<=0.0) return vec3(0.0);
-  const float cells=170.0;
-  vec3 cell=floor(direction*cells);
-  float presence=celestialHash13(cell);
-  if(presence>0.032) return vec3(0.0);
-  vec3 jitter=celestialHash33(cell);
-  vec3 star=normalize((cell+0.5+(jitter-0.5)*0.55)/cells);
-  float angle=acos(clamp(dot(direction,star),-1.0,1.0));
-  float size=max(pixelAngle*0.9,2.0e-4);
-  float shape=exp(-(angle*angle)/(size*size));
-  float magnitude=0.25+3.5*pow(jitter.x,7.0);
-  float twinkle=0.78+0.22*sin(time*(1.3+jitter.y*3.0)+presence*120.0);
-  vec3 color=mix(vec3(1.0,0.80,0.60),vec3(0.72,0.84,1.0),jitter.z);
-  return color*magnitude*shape*twinkle*visibility*intensity;
+  vec3 celestial=direction;
+  if(environment.skyStarRotation[0].w>0.5)
+    celestial=normalize(vec3(dot(environment.skyStarRotation[0].xyz,direction),
+                             dot(environment.skyStarRotation[1].xyz,direction),
+                             dot(environment.skyStarRotation[2].xyz,direction)));
+  float twinkle=0.10+0.25*(1.0-airmass);
+  // Visíveis a olho nu (~6000 no céu inteiro) e um véu fraco que dá textura.
+  vec3 stars=celestialStarLayer(celestial,120.0,0.040,-1.4,6.5,pixelAngle,time,twinkle)+
+             celestialStarLayer(celestial,240.0,0.018,5.0,8.0,pixelAngle,time,twinkle);
+  // Escala da cena com o meio-dia em ~EV100 0: a magnitude 0 fica ~200 vezes
+  // acima do chão ao luar, uma de magnitude 6,5 abaixo dele, e a Via Láctea
+  // no nível das estrelas mais fracas, como no céu real à mesma exposição.
+  vec3 milkyWay=celestialMilkyWay(celestial)*2.5e-5;
+  return (stars*0.012+milkyWay)*visibility*intensity*mix(vec3(1.0,0.82,0.66),vec3(1.0),airmass);
 }

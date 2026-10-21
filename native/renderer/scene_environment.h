@@ -223,8 +223,12 @@ struct SceneEnvironment final {
   float exposureCompensation = 0.0f;   // EV; positivo clareia
   // Limit Min/Max em EV100 da cena. Os -1/14 do HDRP supõem sol de 100000 lux
   // (meio-dia ~EV100 14). Na Astra o meio-dia mede ~0 e o poente da Vila ~-2,7
-  // (POCO, 20/10/2026): -2 deixa o poente legível e segura a noite (~-4,7).
-  float exposureLimitMin = -2.0f;
+  // (POCO, 20/10/2026). V-2: com o céu noturno escuro e a Lua de 0,5 lux, a
+  // noite mede ~-12 (luar) a ~-10 (praça com postes). O limite fica ~2 EV acima
+  // disso, como o Volume noturno da Unity (exposição fixa EV 1 sobre ~-1,4
+  // medidos no tutorial HDRP Night): a noite fica escura, a praça dos postes
+  // legível, e dia e poente, que medem acima de -8, não mudam.
+  float exposureLimitMin = -8.0f;
   float exposureLimitMax = 10.0f;
   float exposureHistogramLow = 40.0f;  // Histogram Percentages, 0 a 100
   float exposureHistogramHigh = 90.0f;

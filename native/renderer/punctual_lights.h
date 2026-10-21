@@ -171,6 +171,9 @@ struct SceneLightShadow {
 inline constexpr float ReferenceShadowBias = .05f;
 inline constexpr float ReferenceShadowNormalBias = .4f;
 
+// V-2: o corpo que a Hora do dia faz a direcional seguir.
+enum class CelestialLightBody : u8 { None = 0, Sun = 1, Moon = 2 };
+
 // O que a extração produz, antes de qualquer política de orçamento.
 struct SceneLight {
   u64 objectId = 0;
@@ -192,6 +195,13 @@ struct SceneLight {
   PunctualLightFilter filter{};
   // A Fonte do sol das Configurações de iluminação aponta para esta luz.
   bool sunSource = false;
+  // V-2: Sol ou Lua da Hora do dia. O céu precisa do sol verdadeiro mesmo
+  // quando a luz principal da noite é a Lua: `celestialToSun` é a direção do
+  // chão ao sol daquela hora, e `celestialSphere` (linhas mundo -> esfera das
+  // estrelas, renderer/time_of_day.h) gira as estrelas com a hora.
+  CelestialLightBody celestialBody = CelestialLightBody::None;
+  float celestialToSun[3]{0, 1, 0};
+  float celestialSphere[3][3]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 };
 
 // Nenhuma luz some em silêncio: o que não coube é contado, por modalidade, e
@@ -297,7 +307,7 @@ inline bool directionalCandidate(const SceneLight &light) {
 // aponta para uma direcional ativa; senão ("None"), a mais brilhante. Na regra
 // automática, o sol movido por TimeOfDay vence mesmo à noite (intensidade
 // zero), senão a direcional antiga reacenderia o dia.
-inline const SceneLight *selectDirectionalLight(std::span<const SceneLight> lights) {
+inline const SceneLight *selectDirectionalLightBeforeNight(std::span<const SceneLight> lights) {
   for (const auto &light : lights)
     if (light.sunSource && detail::directionalCandidate(light)) return &light;
   const SceneLight *chosen = nullptr;
@@ -313,6 +323,21 @@ inline const SceneLight *selectDirectionalLight(std::span<const SceneLight> ligh
       chosen = &light;
   }
   return chosen;
+}
+
+// V-2: troca de sombra do ciclo do HDRP. Com o sol da Hora do dia apagado (ou
+// sem nenhum sol), a Lua mais forte acesa vira a luz principal: ela ganha as
+// cascatas e o sombreamento direto; o sol volta a mandar quando acende.
+inline const SceneLight *selectDirectionalLight(std::span<const SceneLight> lights) {
+  const SceneLight *chosen = selectDirectionalLightBeforeNight(lights);
+  if (chosen && chosen->celestialBody == CelestialLightBody::Moon) chosen = nullptr;
+  if (chosen && chosen->intensity > 0.0f) return chosen;
+  const SceneLight *moon = nullptr;
+  for (const auto &light : lights)
+    if (light.celestialBody == CelestialLightBody::Moon && detail::directionalCandidate(light) &&
+        light.intensity > 0.0f && (!moon || light.intensity > moon->intensity)) moon = &light;
+  if (moon) return moon;
+  return chosen ? chosen : selectDirectionalLightBeforeNight(lights);
 }
 
 // Escolhe as luzes adicionais do quadro: pontuais, spots e as direcionais além

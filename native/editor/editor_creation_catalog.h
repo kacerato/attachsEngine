@@ -107,6 +107,14 @@ inline const CreationComponent directional[]{{light,directionalLight}};
 inline const CreationValue timeOfDayStart[]{{"astra.render.time_of_day","hour",10.f}};
 // O mesmo sol da Luz direcional: a hora do dia só gira e tinge.
 inline const CreationComponent dayNightSun[]{{light,directionalLight},{"astra.render.time_of_day",timeOfDayStart}};
+// V-2: a Lua que nasce junto com o sol (Sun e Moon do ciclo do HDRP), na mesma
+// transação, já ligada em Hora do dia › Lua. Ver EditorSession::createRecipe.
+inline constexpr std::string_view dayNightRecipe="light.day_night";
+inline const CreationValue moonLight[]{{light,"kind",static_cast<u32>(scene::kMoonLightDefault.kind)},
+  {light,"unit",static_cast<u32>(scene::kMoonLightDefault.unit)},{light,"intensity",scene::kMoonLightDefault.intensity},
+  {light,"use_color_temperature",true},{light,"color_temperature",scene::kMoonColorTemperature},
+  {light,"shadow_mode",scene::kMoonLightDefault.shadowMode}};
+inline const CreationComponent dayNightMoon[]{{light,moonLight}};
 // Configurações de iluminação da cena (janela Lighting da Unity): a Fonte do
 // sol nasce vazia, que é a regra automática.
 inline const CreationComponent lightingSettings[]{{"astra.render.lighting_settings",{}}};
@@ -294,7 +302,7 @@ inline const std::array<EditorCreationEntry,101> editorCreationCatalog{{
   {"basic.scene_template",EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
-  {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,
+  {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,
     runtime::ObjectKind::Light,recipe::dayNightSun,CreationPose::ViewTargetTilted,0,{},{},"TimeOfDay DayNight Ciclo dia noite Sol"},
   {"light.clouds",EditorWidget::None,4,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
     runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
