@@ -72,3 +72,33 @@ A Vila foi devolvida ao final com o app parado: md5 `2e2e996841f1f0eb5af1572c68d
 O editor redesenha sob demanda com o relógio parado: a adaptação Progressiva nunca andava e, depois de
 mudar a hora, a vista de edição ficava presa na exposição antiga. Agora, sem tempo correndo (ou com salto
 longo), a exposição vai direto ao alvo; o Play pausado continua congelado.
+
+## Referência em vídeo da Unity (frames em `referencia-unity/`)
+
+| Frame | Vídeo e instante | Para que serve |
+|---|---|---|
+| `unite2020-yqCHiZrgKzs-23m21s-inspector-exposure.jpg` | Unity, *Lighting & rendering tutorial for HDRP — Unite Now 2020*, [23:21](https://www.youtube.com/watch?v=yqCHiZrgKzs&t=1401s) | Inspector do override Exposure (Automatic, Average, Limits, Progressive) |
+| `unite2020-yqCHiZrgKzs-17m36s-faixas-ev100.jpg` | mesmo vídeo, [17:36](https://www.youtube.com/watch?v=yqCHiZrgKzs&t=1056s) | Faixas de EV100 do HDRP: noite −3..0, lua 0..3, interior 3..6, poente 6..8, nublado 9..12, sol 13..16 |
+| `unite2020-yqCHiZrgKzs-24m51s-noite-praca.jpg` | mesmo vídeo, [24:51](https://www.youtube.com/watch?v=yqCHiZrgKzs&t=1491s) | Noite com exposição automática: praça escura, lampiões acesos |
+| `unite2020-yqCHiZrgKzs-25m51s-curve-mapping.jpg` | mesmo vídeo, [25:51](https://www.youtube.com/watch?v=yqCHiZrgKzs&t=1551s) | Curve Mapping (não implementado) |
+| `hdrp-dusk-QCbGEsLGZsA-06m40s-poente-final.jpg` | Seta — Level Design, *Realistic Lighting in Unity HDRP: Dusk / Sunset*, [6:40](https://www.youtube.com/watch?v=QCbGEsLGZsA&t=400s) | Poente no HDRP e o Volume com overrides (ALL/NONE, caixa por propriedade) |
+| `hdrp-dusk-QCbGEsLGZsA-03m20s-sol-baixo.jpg`, `-09m20s-poente-cena.jpg`, `-00m02s-resultado.jpg` | mesmo vídeo, [3:20](https://www.youtube.com/watch?v=QCbGEsLGZsA&t=200s), [9:20](https://www.youtube.com/watch?v=QCbGEsLGZsA&t=560s), [0:02](https://www.youtube.com/watch?v=QCbGEsLGZsA&t=2s) | Céu e luz quente com o sol baixo |
+| `hdrp-dia-noite-sjSAP7USx2I-00m04s-dia.jpg`, `-00m07s-noite.jpg` | 988u, *Day/Night Cycle — Unity HDRP*, [0:04](https://www.youtube.com/watch?v=sjSAP7USx2I&t=4s), [0:07](https://www.youtube.com/watch?v=sjSAP7USx2I&t=7s) | Dia e noite no HDRP: a noite fica escura |
+| `autoexposure-6oPLQbfhJfE-02m08s-histograma.jpg`, `-02m32s-parede-clara.jpg`, `-02m40s-adaptando.jpg` | Omar Hidoussi, *How to setup Auto Exposure effect in Unity correctly*, [2:08](https://www.youtube.com/watch?v=6oPLQbfhJfE&t=128s), [2:32](https://www.youtube.com/watch?v=6oPLQbfhJfE&t=152s), [2:40](https://www.youtube.com/watch?v=6oPLQbfhJfE&t=160s) | Histograma e a adaptação ao chegar perto de uma parede clara (pós v2, mesmo princípio) |
+
+## Pranchas Unity × POCO e o julgamento
+
+- `prancha-poente-unity-x-poco.jpg`: a **exposição** é comparável (cena bem exposta). O que difere é o **céu e a cor da luz**:
+  no HDRP o céu acima do sol continua claro e dourado e a luz rasante é quente; na Astra o zênite fica preto e o
+  chão sai cinza-claro. Causa: céu físico do G4 sem espalhamento múltiplo e cor da direcional no sol baixo. Fica
+  como pendência do G4, não da exposição.
+- `prancha-noite-unity-x-poco.jpg`: a noite da Astra fica **clara demais**. A noite da Vila mede só ~4,7 EV abaixo do
+  meio-dia (no HDRP físico são ~15 EV, segundo as faixas do slide), então o Limite mínimo −2 ainda a clareia
+  ~2,7 EV. O limite foi mantido em −2 porque o poente precisa dele; a radiância noturna do céu/lua é pendência do G4.
+- `prancha-dia-unity-x-poco.jpg`: dia com os médios no cinza nas duas; o vídeo é dia nublado, a Vila é céu limpo.
+- `prancha-inspector-unity-x-poco.jpg`: mesma estrutura (Modo, Medição, Compensação, Limites, Adaptação e
+  velocidades). A Unity tem caixa **por propriedade** (desmarcada fica cinza com o valor herdado) e ALL/NONE; a
+  Astra tem uma caixa por seção — próximo passo do Volume (V-02 da auditoria).
+
+O que mudou por causa da comparação: o padrão de cinza ficou em 12,5% (o do HDRP), os limites ficaram em −2/10
+(o poente sem limite, a −3,2, saía mais claro que o do vídeo) e a noite clara foi registrada como defeito do céu.
