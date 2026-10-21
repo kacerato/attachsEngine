@@ -86,14 +86,39 @@ void SceneParticles::reconcile(const SceneGraph &graph) {
   distributeBudget();
 }
 
+// Quantas partículas o sistema pode ter vivas ao mesmo tempo pelo que emite
+// (taxa máxima × vida máxima + rajadas), limitado ao Máximo autoral. Repartir o
+// teto pelo Máximo deixava um sistema parado (a Neve com taxa zero) com a maior
+// fatia, e o que emite (a Chuva) batia no teto: as gotas novas só nasciam quando
+// as velhas morriam, todas juntas, e a chuva vinha em ondas. Um piso pequeno
+// guarda lugar para Emit e sub-emissores.
+static u64 particleDemand(const scene::ParticleSystemSettings &s) {
+  const auto peak = [](const scene::ParticleMinMaxCurve &curve) {
+    float top = std::max(curve.constantMin, curve.constantMax);
+    if (curve.usesCurves()) {
+      float keys = 0;
+      for (const auto *c : {&curve.curveMin, &curve.curveMax})
+        for (const auto &key : c->keys) keys = std::max(keys, key.value);
+      top = keys * curve.multiplier;
+    }
+    return std::max(0.0f, top);
+  };
+  const auto authored = static_cast<u64>(std::max(1.0f, s.maxParticles));
+  double alive = s.emissionEnabled ? static_cast<double>(peak(s.emissionRate)) * peak(s.startLifetime) : 0.0;
+  for (usize b = 0; b < s.activeBursts(); ++b) alive += std::max(s.bursts[b].countMin, s.bursts[b].countMax);
+  const u64 floor = std::min<u64>(authored, 256);
+  return std::clamp<u64>(static_cast<u64>(std::ceil(alive)), floor, authored);
+}
+
 void SceneParticles::distributeBudget() {
   u64 requested = 0;
   for (const auto &[key, entry] : entries_)
-    if (entry.active) requested += static_cast<u64>(entry.emitter.settings().maxParticles);
+    if (entry.active) requested += particleDemand(entry.emitter.settings());
   for (auto &[key, entry] : entries_) {
     const auto authored = static_cast<u64>(entry.emitter.settings().maxParticles);
     u32 limit = static_cast<u32>(authored);
-    if (requested > budget_) limit = static_cast<u32>(std::max<u64>(1, authored * budget_ / requested));
+    if (requested > budget_)
+      limit = static_cast<u32>(std::max<u64>(1, particleDemand(entry.emitter.settings()) * budget_ / requested));
     entry.emitter.setCapacityLimit(limit);
   }
 }

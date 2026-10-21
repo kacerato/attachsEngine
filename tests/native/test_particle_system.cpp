@@ -413,6 +413,20 @@ AE_TEST(particle_scene_world_play_on_awake_budget_and_build_order) {
   particles.advance(graph, 0.1f);
   AE_EXPECT_EQ(particles.emitterCount(), 2u, "dois emissores");
   AE_EXPECT_TRUE(particles.aliveTotal() <= 1000 && particles.aliveTotal() >= 998, "teto do nível C repartido");
+  {
+    // Um sistema parado (taxa zero, máximo alto) não toma a fatia de quem emite.
+    runtime::SceneGraph rainy;
+    const auto rain = rainy.createEntity(rainy.root(), runtime::ObjectKind::Folder, "Chuva");
+    const auto snow = rainy.createEntity(rainy.root(), runtime::ObjectKind::Folder, "Neve");
+    auto &r = scene::particleSystem(*rainy.editComponents(rain)->add(scene::ParticleSystem::descriptor));
+    r.maxParticles = 8000;r.emissionRate = scene::particleCurveDefault(3000);r.startLifetime = scene::particleCurveDefault(1.6f);
+    auto &n = scene::particleSystem(*rainy.editComponents(snow)->add(scene::ParticleSystem::descriptor));
+    n.maxParticles = 12000;n.emissionRate = scene::particleCurveDefault(0);
+    runtime::SceneParticles weather;
+    weather.setBudget(8000);
+    weather.advance(rainy, 0.0f);
+    AE_EXPECT_EQ(weather.capacityOf(rain, rainy.find(rain)->components.at(0)->instanceId()), 8000u, "a chuva cabe inteira");
+  }
   renderer::particles::ParticleFrame frame;
   const float camera[3]{0, 0, -5};
   particles.build(graph, camera, frame);

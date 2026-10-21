@@ -66,6 +66,62 @@
           "type": "Weather"
         },
         {
+          "id": "variation",
+          "label": "Variação natural",
+          "member": "variation",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "default": {
+            "cpp": "0.35f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Em Play a chuva e a neve engrossam e afinam sozinhas; 0 deixa a intensidade fixa",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "variation_period",
+          "label": "Ritmo da variação",
+          "member": "variationPeriod",
+          "min": {
+            "cpp": "5"
+          },
+          "max": {
+            "cpp": "600"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "default": {
+            "cpp": "45.0f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "s",
+            "help": "Tempo médio entre uma pancada e uma calmaria",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
           "id": "rain_rate",
           "label": "Gotas por segundo",
           "member": "rainRate",
@@ -380,6 +436,8 @@
         "weatherBooleans/enabled",
         "weatherNumbers/intensity",
         "weatherNumbers/transition_seconds",
+        "weatherNumbers/variation",
+        "weatherNumbers/variation_period",
         "weatherNumbers/rain_rate",
         "weatherNumbers/snow_rate",
         "weatherNumbers/height_above_camera",

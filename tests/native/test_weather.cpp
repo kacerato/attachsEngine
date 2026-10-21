@@ -48,6 +48,7 @@ WeatherScene makeWeatherScene(scene::WeatherKind kind, float intensity) {
   auto *weather = static_cast<scene::Weather *>(values.components.add(scene::Weather::descriptor));
   weather->kind = kind;weather->intensity = intensity;
   weather->rain = s.rain;weather->snow = s.snow;
+  weather->variation = 0;  // cenários determinísticos; a variação tem teste próprio
   g.applyEntityValues(s.weather, values);
   return s;
 }
@@ -147,6 +148,26 @@ AE_TEST(weather_transition_in_play_moves_from_rain_to_snow_over_time) {
   for (int i = 0; i < 60 * 30; ++i) weather.advance(s.graph, t += 1.0 / 60, 1.0f / 60, true, nullptr, write);
   AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 0.0f, "a chuva para de verdade");
   AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).emissionRate.constantMax - 1600.0f) < 1.0f, "neve cheia");
+}
+
+AE_TEST(weather_natural_variation_moves_intensity_only_in_play) {
+  auto s = makeWeatherScene(scene::WeatherKind::Rain, 1.0f);
+  auto values = *s.graph.find(s.weather);
+  auto *weather = static_cast<scene::Weather *>(values.components.edit(scene::Weather::descriptor));
+  weather->variation = 0.5f;weather->variationPeriod = 10;weather->transitionSeconds = 0;
+  s.graph.applyEntityValues(s.weather, values);
+  runtime::SceneWeather edit, play;
+  const auto write = [&](runtime::ObjectId id, const runtime::Transform &tr) { return writeTransform(s.graph, id, tr); };
+  edit.advance(s.graph, 33.0, 0, false, nullptr, write);
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "na edição, a intensidade autoral");
+  float low = 1e9f, high = 0;
+  for (double t = 0; t < 120; t += 0.5) {
+    play.advance(s.graph, t, 0.5f, true, nullptr, write);
+    const float rate = particlesOf(s.graph, s.rain).emissionRate.constantMax;
+    low = std::min(low, rate);high = std::max(high, rate);
+  }
+  AE_EXPECT_TRUE(high <= 3500.0f + 1e-3f && low >= 1750.0f - 1e-3f, "fica entre metade e o autoral");
+  AE_EXPECT_TRUE(high - low > 700.0f, "pancadas e calmarias em dois minutos");
 }
 
 AE_TEST(weather_storm_flashes_lightning_only_in_play_and_deterministically) {

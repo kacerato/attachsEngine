@@ -15,6 +15,22 @@ u32 hash(u32 x) {
   return x;
 }
 float unit(u32 x) { return static_cast<float>(hash(x) >> 8) * (1.0f / 16777216.0f); }
+// Ruído suave em 0..1 ao longo do tempo (duas oitavas de ruído de valor com
+// interpolação suave): pancadas e calmarias sem repetição perceptível.
+float gusts(u32 seed, double t) {
+  float sum = 0, weight = 0, amplitude = 1;
+  for (u32 octave = 0; octave < 2; ++octave) {
+    const double x = t * static_cast<double>(1u << octave);
+    const auto cell = static_cast<i64>(std::floor(x));
+    const float f = static_cast<float>(x - std::floor(x)), s = f * f * (3 - 2 * f);
+    const u32 key = seed ^ (octave * 0x85ebca6bU);
+    const float a = unit(key ^ static_cast<u32>(cell * 0x27d4eb2d)), b = unit(key ^ static_cast<u32>((cell + 1) * 0x27d4eb2d));
+    sum += amplitude * (a + (b - a) * s);
+    weight += amplitude;
+    amplitude *= 0.5f;
+  }
+  return sum / weight;
+}
 
 // Escreve só quando muda: a revisão do grafo é o sinal de "quadro novo" para
 // partículas, ambiente e cache de cena.
@@ -216,7 +232,12 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
     if (!weather.enabled || !weather.valid()) continue;
     ++report.weathers;
     auto &state = states_[{id, found->instanceId()}];
-    const auto target = weatherTarget(weather.kind, weather.intensity);
+    // Variação natural (só em Play): a intensidade oscila devagar abaixo da
+    // autoral, e a transição suaviza a passagem como nas trocas de tipo.
+    float intensity = weather.intensity;
+    if (live && weather.variation > 0)
+      intensity *= 1.0f - weather.variation * gusts(static_cast<u32>(id) * 0x9e3779b1U, seconds / std::max(5.0f, weather.variationPeriod));
+    const auto target = weatherTarget(weather.kind, intensity);
     if (!live || !state.initialized || weather.transitionSeconds <= 0) state.look = target;
     else {
       // Aproximação exponencial: ~95 % do caminho em Transição segundos.

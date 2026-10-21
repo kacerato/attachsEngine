@@ -4833,6 +4833,20 @@ public readonly struct Weather : IComponentFacade<Weather>
         get => Component.GetFloat("transition_seconds");
         set => Component.SetFloat("transition_seconds", value);
     }
+    /// <summary>Variação natural. Em Play a chuva e a neve engrossam e afinam sozinhas; 0 deixa a intensidade fixa</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float Variation
+    {
+        get => Component.GetFloat("variation");
+        set => Component.SetFloat("variation", value);
+    }
+    /// <summary>Ritmo da variação (s). Tempo médio entre uma pancada e uma calmaria</summary>
+    /// <remarks>Faixa válida: 5 a 600.</remarks>
+    public float VariationPeriod
+    {
+        get => Component.GetFloat("variation_period");
+        set => Component.SetFloat("variation_period", value);
+    }
     /// <summary>Gotas por segundo (/s). Emissão da Chuva na intensidade máxima</summary>
     /// <remarks>Faixa válida: 0 a 20000.</remarks>
     public float RainRate
