@@ -1,5 +1,6 @@
 #include "editor/editor_session_internal.h"
 #include "editor/editor_widgets.h"
+#include "editor/editor_material_fields.h"
 #include "scene/script_behavior.h"
 #include "scene/import_link.h"
 #include "scene/prefab_link.h"
@@ -81,6 +82,14 @@ void materialDifferences(const resources::MaterialAsset &a,const resources::Mate
   add(a.channels.occlusion!=b.channels.occlusion,"ch3.2");
   add(a.channels.normalFlipY!=b.channels.normalFlipY,"ch4");add(a.channels.alphaSource!=b.channels.alphaSource,"ch5");
   add(a.channels.roughnessSource!=b.channels.roughnessSource,"ch6");
+  // PK-9: pela mesma tabela que o Inspector lê.
+  for(const auto &spec:materialFieldSpecs) {
+    if(!spec.read) continue;
+    float x[3]{},y[3]{};spec.read(a,x);spec.read(b,y);
+    add(x[0]!=y[0] || x[1]!=y[1] || x[2]!=y[2],std::string(spec.key));
+  }
+  for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+    add(!(a.extraTextures[extra]==b.extraTextures[extra]),"x"+std::to_string(extra));
   scene::MeshRenderer pa,pb;pa.material=a.values;pb.material=b.values;
   for(u32 field=0;field<scene::meshRendererNumbers.size();++field)
     add(scene::meshRendererNumbers[field].read(pa)!=scene::meshRendererNumbers[field].read(pb),"num"+std::to_string(field));
@@ -113,6 +122,19 @@ bool copyMaterialChange(const resources::MaterialAsset &before,const resources::
   copy(ch.normalFlipY,now.normalFlipY,old.normalFlipY,"ch4");copy(ch.alphaSource,now.alphaSource,old.alphaSource,"ch5");
   copy(ch.roughnessSource,now.roughnessSource,old.roughnessSource,"ch6");
   copy(target.occlusionTexture,after.occlusionTexture,before.occlusionTexture,"ch1");
+  for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+    copy(target.extraTextures[extra],after.extraTextures[extra],before.extraTextures[extra],"x"+std::to_string(extra));
+  // PK-9: o campo que mudou no ativo, pela tabela do Inspector. Os campos que
+  // compartilham dado com os acima (cutoff, rugosidade...) se repetem sem dano.
+  for(const auto &spec:materialFieldSpecs) {
+    if(!spec.read || !spec.write) continue;
+    float was[3]{},now[3]{},to[3]{};spec.read(before,was);spec.read(after,now);spec.read(target,to);
+    const bool differs=was[0]!=now[0] || was[1]!=now[1] || was[2]!=now[2];
+    if(field!=spec.key && !differs) continue;
+    if(to[0]==now[0] && to[1]==now[1] && to[2]==now[2]) continue;
+    auto candidate=target;
+    if(spec.write(candidate,now) && candidate.valid()) {target=std::move(candidate);changed=true;}
+  }
   copy(target.values.enabled,after.values.enabled,before.values.enabled,field.starts_with("num")?std::string(field):"enabled");
   scene::MeshRenderer was,now2,to;was.material=before.values;now2.material=after.values;to.material=target.values;
   for(u32 i=0;i<scene::meshRendererNumbers.size();++i) {
@@ -125,6 +147,11 @@ bool copyMaterialChange(const resources::MaterialAsset &before,const resources::
   return changed;
 }
 std::string materialWidgetField(u32 widget,u32 binding) {
+  // PK-9: campos do Inspector por shader respondem pela chave da tabela.
+  if(isMaterialFieldWidget(widget)) {
+    const u32 index=(widget-widgetId(EditorWidget::MaterialFieldBase))/16u;
+    return index<materialFieldSpecs.size()?std::string(materialFieldSpecs[index].key):std::string();
+  }
   if(widget>=widgetId(EditorWidget::MaterialNumberBase) && widget-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size())
     return "num"+std::to_string(widget-widgetId(EditorWidget::MaterialNumberBase));
   if(widget>=widgetId(EditorWidget::MaterialTextureBase) && widget-widgetId(EditorWidget::MaterialTextureBase)<scene::MaterialTextureCount)
@@ -161,7 +188,16 @@ std::string materialFieldText(const resources::MaterialAsset &material,std::stri
     return i<scene::meshRendererNumbers.size()?number(scene::meshRendererNumbers[i].read(probe)):std::string();
   }
   if(key=="alpha") {static constexpr const char *labels[]{"Como a fonte","Opaco","Recorte","Transparente"};return labels[material.surface.alphaMode];}
-  if(key=="sides") {static constexpr const char *labels[]{"Como a fonte","Uma face","Dupla face"};return labels[material.surface.sides];}
+  if(key=="sides") {static constexpr const char *labels[]{"Como a fonte","Uma face","Dupla face","Só a de trás"};return labels[material.surface.sides];}
+  // PK-9: campos do Inspector por shader e texturas extras.
+  if(const auto *spec=findMaterialField(key); spec && spec->read) {
+    float value[3]{};spec->read(material,value);
+    if(!spec->options.empty()) return std::string(spec->options[std::clamp<u32>(static_cast<u32>(value[0]+.5f),0,static_cast<u32>(spec->options.size())-1)]);
+    if(spec->kind==MaterialFieldKind::Toggle) return value[0]>.5f?"Ligado":"Desligado";
+    const u32 count=spec->kind==MaterialFieldKind::Color?3u:spec->kind==MaterialFieldKind::Pair?2u:1u;
+    std::string text;for(u32 i=0;i<count;++i) text+=(i?" ":"")+number(value[i]);
+    return text;
+  }
   if(key=="cutoff") return number(material.surface.alphaCutoff);
   if(key=="ch0") {static constexpr const char *labels[]{"Como a fonte","Sem oclusão","Metal/rugosidade","Textura própria"};return labels[material.channels.occlusionSource];}
   if(key=="ch2") return material.channels.occlusionStrength<0?"Como a fonte":number(material.channels.occlusionStrength);

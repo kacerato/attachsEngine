@@ -2032,6 +2032,13 @@ public:
     return render && state_.materialSlot<render->slotCount()?render->slotMaterialAsset(state_.materialSlot):resources::AssetGuid{};
   }
   void refreshMaterialAssetView(const resources::MaterialAsset &material);
+  // PK-9: um campo do Inspector do Material (editor_material_fields.h) no
+  // material do projeto aberto, pelo histórico; `preview` só republica a
+  // biblioteca na GPU (arraste do slider), sem arquivo nem histórico.
+  bool setMaterialField(std::string_view key,const float value[3],std::string &diagnostic);
+  void previewMaterialField(std::string_view key,const float value[3]);
+  bool handleMaterialFieldPointer(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool commitMaterialFieldText(u32 widget,std::string_view text);
   // Aplica um arranjo de painéis e o guarda como o atual do projeto.
   void applyLayout(const EditorLayout &layout);
   bool openSearchResult(u32 index);

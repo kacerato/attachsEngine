@@ -67,7 +67,8 @@ AE_TEST(unity_material_rejects_shader_and_incoherent_variants_instead_of_silent_
   AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&result.supported()&&result.textures.empty(),"inactive metallic map ignored like Unity");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_METALLICGLOSSMAP"),result)&&!result.supported(),"metallic map keyword without texture refused");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _SmoothnessTextureChannel: 1\n"),result)&&!result.supported(),"smoothness channel bookkeeping without the shader variant refused");
-  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_PARALLAXMAP"),result)&&result.audit()==resources::UnityMaterialAudit::Unsupported,"parallax still has no consumer");
+  // PK-9: _PARALLAXMAP tem consumidor (Height Map); sem textura a altura é 0,5 e o deslocamento, zero.
+  AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_PARALLAXMAP"),result)&&result.audit()==resources::UnityMaterialAudit::Complete,"parallax converts");
   source.replace(source.find("fileID: 46"),10,"fileID: 99");
   AE_EXPECT_TRUE(resources::readUnityMaterial(source,result)&&!result.supported(),"unknown shader rejected");
   AE_EXPECT_TRUE(!resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Metallic: nan\n"),result),"nonfinite rejected");
@@ -78,7 +79,8 @@ AE_TEST(unity_material_rejects_shader_and_incoherent_variants_instead_of_silent_
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Mode: 2\n    - _SrcBlend: 5\n    - _DstBlend: 10\n    - _ZWrite: 0\n","_ALPHABLEND_ON"),result)&&result.supported()&&result.material.surface.alphaMode==scene::MaterialAlphaBlend,"effective Fade blend accepted");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Colors:\n    - _EmissionColor: {r: 4, g: 1, b: 0, a: 1}\n","_EMISSION_FAKE"),result)&&result.supported()&&result.material.values.emission[0]==0,"keyword substring cannot enable emission");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("","_SPECULARHIGHLIGHTS_OFF"),result)&&result.supported()&&
-    result.audit()==resources::UnityMaterialAudit::Approximated&&result.material.values.specular==1,"highlights alone converts as a declared approximation");
+    result.audit()==resources::UnityMaterialAudit::Complete&&!result.material.shading.specularHighlights&&
+    result.material.shading.environmentReflections&&result.material.values.specular==1,"highlights alone has its own consumer (PK-9)");
 }
 // G3a: Standard.shader 2022.3, UnityStandardInput.cginc MetallicGloss/Alpha.
 AE_TEST(unity_material_metallic_gloss_map_becomes_inverted_smoothness_channel) {
@@ -110,12 +112,13 @@ AE_TEST(unity_material_metallic_gloss_map_becomes_inverted_smoothness_channel) {
   renderer::materialExtensionEntry(values,0,renderer::MaterialExtensionNoTexture,entry);
   AE_EXPECT_EQ(entry[9*4+0],3.f,"roughness channel index A");AE_EXPECT_EQ(entry[9*4+1],0.f,"metallic channel index R");
   AE_EXPECT_EQ(entry[10*4+1],1.f,"row 10.y: channel as smoothness");
-  // Persistência v7 e leitura de um v6 antigo sem o campo.
+  // Persistência atual e leitura de um v6 antigo sem a origem (v7) nem o shader (v8, 32 números).
   resources::MaterialAsset reopened;
-  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(asset.serialize(),reopened)&&reopened.channels==asset.channels,"v7 round trip");
-  auto old=asset.serialize();old.replace(old.find("ASTRA_MATERIAL 7"),16,"ASTRA_MATERIAL 6");
+  AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(asset.serialize(),reopened)&&reopened.channels==asset.channels,"current round trip");
+  auto old=asset.serialize();old.replace(old.find("ASTRA_MATERIAL 8"),16,"ASTRA_MATERIAL 6");
   while(!old.empty()&&(old.back()=='\n'||old.back()=='\r'))old.pop_back();
-  old.erase(old.rfind(' '));old+="\n";
+  for(int token=0;token<33;++token) old.erase(old.rfind(' '));
+  old+="\n";
   AE_EXPECT_TRUE(resources::MaterialAsset::deserialize(old,reopened)&&reopened.channels.roughnessSource==scene::MaterialRoughnessKeep,"v6 material keeps inherited roughness");
 }
 AE_TEST(unity_material_albedo_alpha_smoothness_and_forward_options) {
@@ -129,12 +132,13 @@ AE_TEST(unity_material_albedo_alpha_smoothness_and_forward_options) {
   renderer::materialExtensionEntry(values,0,renderer::MaterialExtensionNoTexture,entry);
   AE_EXPECT_EQ(entry[10*4+1],2.f,"row 10.y: base alpha as smoothness");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _SpecularHighlights: 0\n    - _GlossyReflections: 0\n",
-    "_SPECULARHIGHLIGHTS_OFF _GLOSSYREFLECTIONS_OFF"),result)&&result.audit()==resources::UnityMaterialAudit::Complete&&result.material.values.specular==0,
-    "both forward options off: dielectric specular 0");
+    "_SPECULARHIGHLIGHTS_OFF _GLOSSYREFLECTIONS_OFF"),result)&&result.audit()==resources::UnityMaterialAudit::Complete&&
+    !result.material.shading.specularHighlights&&!result.material.shading.environmentReflections,"both forward options off map to Advanced Options");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Metallic: 1\n","_SPECULARHIGHLIGHTS_OFF _GLOSSYREFLECTIONS_OFF"),result)&&
-    result.audit()==resources::UnityMaterialAudit::Approximated,"metal keeps reflecting: approximation declared");
+    result.audit()==resources::UnityMaterialAudit::Complete,"metal with both off is exact now");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _GlossyReflections: 0\n"),result)&&
-    result.audit()==resources::UnityMaterialAudit::Approximated&&result.material.values.specular==1,"reflections alone approximated");
+    result.audit()==resources::UnityMaterialAudit::Complete&&!result.material.shading.environmentReflections&&result.material.values.specular==1,
+    "reflections alone exact");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Colors:\n    - _Color: {r: 1, g: 1, b: 1, a: 0.5}\n"),result)&&result.supported(),
     "opaque mode ignores colour alpha like Unity");
   AE_EXPECT_TRUE(resources::readUnityMaterial(materialSource("    m_Floats:\n    - _Mode: 1\n    m_Colors:\n    - _Color: {r: 1, g: 1, b: 1, a: 0.5}\n","_ALPHATEST_ON"),result)&&

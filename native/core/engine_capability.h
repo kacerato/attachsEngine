@@ -105,8 +105,9 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "renderer/environment_map.cpp", "Sem captura local, atlas nem blend por volume"},
 
   // --- Material ------------------------------------------------------------
-  {"render.material.pbr", "Superfície PBR metálico/rugosidade", CapabilityState::Implemented,
-   "rhi/shaders/material_shading.glsl", ""},
+  {"render.material.pbr", "Shader do Material: Lit (metálico/especular), Simple Lit, Unlit, Particles", CapabilityState::Implemented,
+   "rhi/shaders/dirt_road_shading.glsl + editor/editor_material_fields.h",
+   "PK-9. Altura e detalhe exigem bindless; sem ele o material desenha sem esses mapas"},
   {"render.material.alpha_mask", "Recorte por alfa, inclusive na sombra", CapabilityState::Implemented,
    "rhi/shaders/shadow_depth_masked.frag", ""},
   {"render.material.alpha_blend", "Transparência com mistura", CapabilityState::Implemented,
@@ -117,8 +118,8 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "rhi/shaders/world_uv.glsl", ""},
   {"render.material.variants", "Especialização de pipeline por material", CapabilityState::DeviceLimited,
    "renderer/rendering_policy.cpp", "Drivers móveis podem regredir com muitos pipelines pequenos"},
-  {"render.material.clearcoat", "Camada de verniz e transmissão", CapabilityState::Planned,
-   "rhi/shaders/material_shading.glsl", "Sem variante de BRDF com camada adicional"},
+  {"render.material.clearcoat", "Camada de verniz (Clear Coat do Complex Lit)", CapabilityState::Implemented,
+   "rhi/shaders/dirt_road_shading.glsl", "PK-9: sol e reflexo do ambiente no verniz; luzes adicionais só na camada de baixo. Sem transmissão"},
 
   // --- Textura -------------------------------------------------------------
   {"render.texture.anisotropy", "Filtragem anisotrópica", CapabilityState::DeviceLimited,

@@ -15,7 +15,8 @@ inline constexpr std::uint32_t MaterialOcclusionTextureBinding=MaterialTextureCo
 
 // R4: modo de alfa e faces. `Keep` herda (do material compartilhado, senão da fonte).
 inline constexpr std::uint8_t MaterialAlphaKeep=0,MaterialAlphaOpaque=1,MaterialAlphaMask=2,MaterialAlphaBlend=3;
-inline constexpr std::uint8_t MaterialSidesKeep=0,MaterialSidesSingle=1,MaterialSidesDouble=2;
+// PK-9: Render Face da Unity é Front (uma face), Back (só a de trás) e Both.
+inline constexpr std::uint8_t MaterialSidesKeep=0,MaterialSidesSingle=1,MaterialSidesDouble=2,MaterialSidesBack=3;
 
 // Superfície trocada num slot ou num MaterialAsset: modo de alfa, corte (só vale
 // no modo recorte) e faces. É dado persistido, por identidade de valor.
@@ -29,7 +30,7 @@ struct MaterialSurface {
   }
 };
 inline bool validMaterialSurface(const MaterialSurface &surface) {
-  return surface.alphaMode<=MaterialAlphaBlend && surface.sides<=MaterialSidesDouble &&
+  return surface.alphaMode<=MaterialAlphaBlend && surface.sides<=MaterialSidesBack &&
          std::isfinite(surface.alphaCutoff) && surface.alphaCutoff>=0 && surface.alphaCutoff<=1;
 }
 
@@ -118,6 +119,100 @@ inline void materialUvTransformRows(const MaterialSampling &sampling,float out[6
   out[3]=-s*sampling.scale[0];out[4]=c*sampling.scale[1];out[5]=sampling.offset[1];
 }
 
+// PK-9: o Shader do Material da Unity 6/URP e as opções que dependem dele.
+// Mora só no MaterialAsset (como na Unity: keyword e shader são do Material;
+// a instância troca escalares, não o shader). O padrão (Lit, Metallic, Alpha,
+// sem detalhe, altura nem clear coat) é exatamente o material de antes.
+//
+//  - Lit: PBR metal/suavidade (o atual). Complex Lit: Lit + Clear Coat.
+//  - Simple Lit: Blinn-Phong normalizado (difuso Lambert, brilho com cor
+//    especular e expoente da suavidade), sem reflexo do ambiente.
+//  - Unlit: cor base × textura (× cor do vértice), sem luz.
+//  - Particles Lit/Unlit: Lit/Unlit mais o modo de cor do vértice e o
+//    esmaecimento perto da câmera; é o Material que o PK-10 liga às partículas.
+inline constexpr std::uint8_t MaterialShaderLit=0,MaterialShaderComplexLit=1,MaterialShaderSimpleLit=2,MaterialShaderUnlit=3,
+                              MaterialShaderParticlesLit=4,MaterialShaderParticlesUnlit=5,MaterialShaderCount=6;
+// Workflow Mode: Metallic usa o fator/mapa metálico; Specular usa a cor
+// especular (e o RGB do binding 2 como Specular Map, A como suavidade).
+inline constexpr std::uint8_t MaterialWorkflowMetallic=0,MaterialWorkflowSpecular=1;
+// Blending Mode do Surface Type Transparent.
+inline constexpr std::uint8_t MaterialBlendAlpha=0,MaterialBlendPremultiply=1,MaterialBlendAdditive=2,MaterialBlendMultiply=3;
+// Color Mode dos shaders de partícula: como a cor do vértice entra na cor base.
+inline constexpr std::uint8_t MaterialParticleColorMultiply=0,MaterialParticleColorAdditive=1,MaterialParticleColorSubtract=2,
+                              MaterialParticleColorOverlay=3,MaterialParticleColorColor=4,MaterialParticleColorDifference=5;
+// Texturas além dos bindings do pacote, por identidade, na ordem da extensão.
+inline constexpr std::uint32_t MaterialExtraHeight=0,MaterialExtraDetailMask=1,MaterialExtraDetailAlbedo=2,MaterialExtraDetailNormal=3,
+                               MaterialExtraClearCoat=4,MaterialExtraTextureCount=5;
+// Classe de publicação de cada textura extra (o binding cuja cor/dado ela
+// segue): altura, máscara e clear coat são dado; detalhe de cor é cor; o
+// normal de detalhe sobe como normal.
+// No Inspector e no seletor de textura as extras seguem a oclusão própria.
+inline constexpr std::uint32_t MaterialExtraTextureBindingBase=MaterialOcclusionTextureBinding+1;
+inline constexpr std::uint32_t materialExtraPublicationBinding(std::uint32_t extra) {
+  return extra==MaterialExtraDetailAlbedo?0u:extra==MaterialExtraDetailNormal?1u:2u;
+}
+inline constexpr bool materialShaderHasLighting(std::uint8_t shader) {
+  return shader!=MaterialShaderUnlit && shader!=MaterialShaderParticlesUnlit;
+}
+inline constexpr bool materialShaderIsParticle(std::uint8_t shader) {
+  return shader==MaterialShaderParticlesLit || shader==MaterialShaderParticlesUnlit;
+}
+// Lit e Complex Lit leem detalhe, altura e o workflow; Particles Lit e Simple
+// Lit, só o workflow especular; Unlit nada disso (URP 17).
+inline constexpr bool materialShaderHasSurfaceDetail(std::uint8_t shader) {
+  return shader==MaterialShaderLit || shader==MaterialShaderComplexLit;
+}
+struct MaterialShading {
+  std::uint8_t shader=MaterialShaderLit;
+  std::uint8_t workflow=MaterialWorkflowMetallic;
+  std::uint8_t blend=MaterialBlendAlpha;
+  // Preserve Specular Lighting (Transparent com Alpha ou Additive): o brilho
+  // não é multiplicado pelo alfa.
+  bool preserveSpecular=true;
+  // Alpha Clipping também no Transparent (no Opaque o recorte é o modo Mask).
+  bool transparentClip=false;
+  // Advanced Options: tirar o brilho das luzes diretas e o reflexo do ambiente.
+  bool specularHighlights=true,environmentReflections=true;
+  // Sorting Priority (-50..50): fila Transparent 3000 + prioridade, depois distância.
+  std::int8_t sortingPriority=0;
+  std::uint8_t particleColorMode=MaterialParticleColorMultiply;
+  bool cameraFading=false;
+  float cameraFadeNear=1,cameraFadeFar=2;
+  // Specular Color (linear) do workflow Specular.
+  float specularColor[3]{.2f,.2f,.2f};
+  // Height Map: amplitude da paralaxe (URP: 0..0,1, padrão 0,005), canal G.
+  float heightScale=.005f;
+  // Detail Inputs: Base Map (×2, visibilidade 0..2) e Normal Map (0..2), com
+  // tiling/offset e conjunto de UV próprios; a máscara usa o canal A e o UV
+  // da cor base, como na Unity.
+  float detailAlbedoScale=1,detailNormalScale=1;
+  MaterialSampling detailSampling{MaterialUv0};
+  // Clear Coat (Complex Lit): máscara e suavidade; o mapa (R máscara, G
+  // suavidade) multiplica os dois.
+  bool clearCoat=false;
+  float clearCoatMask=1,clearCoatSmoothness=.95f;
+  friend bool operator==(const MaterialShading &a,const MaterialShading &b) {
+    return a.shader==b.shader && a.workflow==b.workflow && a.blend==b.blend && a.preserveSpecular==b.preserveSpecular &&
+           a.transparentClip==b.transparentClip && a.specularHighlights==b.specularHighlights &&
+           a.environmentReflections==b.environmentReflections && a.sortingPriority==b.sortingPriority &&
+           a.particleColorMode==b.particleColorMode && a.cameraFading==b.cameraFading && a.cameraFadeNear==b.cameraFadeNear &&
+           a.cameraFadeFar==b.cameraFadeFar && a.specularColor[0]==b.specularColor[0] && a.specularColor[1]==b.specularColor[1] &&
+           a.specularColor[2]==b.specularColor[2] && a.heightScale==b.heightScale && a.detailAlbedoScale==b.detailAlbedoScale &&
+           a.detailNormalScale==b.detailNormalScale && a.detailSampling==b.detailSampling && a.clearCoat==b.clearCoat &&
+           a.clearCoatMask==b.clearCoatMask && a.clearCoatSmoothness==b.clearCoatSmoothness;
+  }
+};
+inline bool validMaterialShading(const MaterialShading &value) {
+  const auto unit=[](float v,float maximum) {return std::isfinite(v) && v>=0 && v<=maximum;};
+  return value.shader<MaterialShaderCount && value.workflow<=MaterialWorkflowSpecular && value.blend<=MaterialBlendMultiply &&
+         value.sortingPriority>=-50 && value.sortingPriority<=50 && value.particleColorMode<=MaterialParticleColorDifference &&
+         unit(value.cameraFadeNear,1000) && unit(value.cameraFadeFar,1000) && value.cameraFadeFar>=value.cameraFadeNear &&
+         unit(value.specularColor[0],1) && unit(value.specularColor[1],1) && unit(value.specularColor[2],1) &&
+         unit(value.heightScale,.1f) && unit(value.detailAlbedoScale,2) && unit(value.detailNormalScale,2) &&
+         validMaterialSampling(value.detailSampling) && value.detailSampling.uvSet!=MaterialUvKeep && value.detailSampling.uvSet!=MaterialUvWorld &&
+         unit(value.clearCoatMask,1) && unit(value.clearCoatSmoothness,1);
+}
+
 // Authored scalar overrides. Resource textures and pipeline selection remain
 // with the referenced material; this value has no renderer dependency.
 //
@@ -148,6 +243,11 @@ struct MaterialParameters {
   std::uint32_t lightmapTexture=MaterialTextureKeep;
   float lightmapScaleOffset[4]{1,1,0,0};
   float lightmapIntensity=1;
+  // PK-9: shader e opções do MaterialAsset, e as texturas extras resolvidas
+  // como as dos bindings (índice publicado; Keep/InvalidMapTexture = nenhuma).
+  MaterialShading shading{};
+  std::uint32_t extraTextures[MaterialExtraTextureCount]{MaterialTextureKeep,MaterialTextureKeep,MaterialTextureKeep,MaterialTextureKeep,
+                                                         MaterialTextureKeep};
 
   // Comparação por valor, não por bytes: a struct tem padding depois do bool, e
   // um memcmp acusaria diferença onde não existe nenhuma.
@@ -163,6 +263,8 @@ struct MaterialParameters {
     if(a.lightmapTexture!=b.lightmapTexture || a.lightmapIntensity!=b.lightmapIntensity) return false;
     for(unsigned i=0;i<4;++i) if(a.lightmapScaleOffset[i]!=b.lightmapScaleOffset[i]) return false;
     if(!(a.channels==b.channels) || a.occlusionTexture!=b.occlusionTexture || a.isolate!=b.isolate) return false;
+    if(!(a.shading==b.shading)) return false;
+    for(std::uint32_t i=0;i<MaterialExtraTextureCount;++i) if(a.extraTextures[i]!=b.extraTextures[i]) return false;
     return a.alphaMode==b.alphaMode && a.sides==b.sides && a.alphaCutoff==b.alphaCutoff;
   }
   friend bool operator!=(const MaterialParameters &a,const MaterialParameters &b) {return !(a==b);}
@@ -178,6 +280,7 @@ inline MaterialParameters withoutResolvedTextures(MaterialParameters value) {
   value.lightmapScaleOffset[0]=value.lightmapScaleOffset[1]=1;value.lightmapScaleOffset[2]=value.lightmapScaleOffset[3]=0;
   value.channels={};value.occlusionTexture=MaterialTextureKeep;value.isolate=MaterialIsolateNone;
   value.alphaMode=MaterialAlphaKeep;value.sides=MaterialSidesKeep;value.alphaCutoff=.5f;
+  value.shading={};for(auto &texture:value.extraTextures) texture=MaterialTextureKeep;
   return value;
 }
 }

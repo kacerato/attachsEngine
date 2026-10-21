@@ -14,6 +14,10 @@ struct EditorScreenLayout final {
   // Áreas contínuas da janela de cor; o toque vira valor a partir delas.
   ui::UiRect colorSquare{},colorHue{};
   ui::UiRect colorSliders[5]{};
+  // PK-9: barras dos sliders do Inspector do Material (campo, trilho) e a
+  // altura rolável dele.
+  std::vector<std::pair<u32,ui::UiRect>> materialSliders;
+  float materialInspectorContent=0,materialInspectorWindow=0;
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
   ui::UiRect animatorCanvas{};

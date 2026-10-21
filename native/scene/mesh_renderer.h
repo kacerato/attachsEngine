@@ -291,7 +291,7 @@ public:
     if(version>=5) {
       for(u32 slot=0;slot<slotCount();++slot) {
         unsigned alpha=0,sides=0;float cutoff=.5f;
-        if(!(in>>alpha>>sides>>cutoff) || alpha>MaterialAlphaBlend || sides>MaterialSidesDouble) return false;
+        if(!(in>>alpha>>sides>>cutoff) || alpha>MaterialAlphaBlend || sides>MaterialSidesBack) return false;
         *editSlotSurface(slot)={static_cast<std::uint8_t>(alpha),static_cast<std::uint8_t>(sides),cutoff};
         if(!validMaterialSurface(*editSlotSurface(slot))) return false;
       }
@@ -457,8 +457,8 @@ inline constexpr std::array<ComponentEnumOption,2> materialOverrideOptions{{
 inline constexpr std::array<ComponentEnumOption,4> materialAlphaModeOptions{{
   {MaterialAlphaKeep,"Herdar"},{MaterialAlphaOpaque,"Opaco"},{MaterialAlphaMask,"Recorte"},{MaterialAlphaBlend,"Mistura"}
 }};
-inline constexpr std::array<ComponentEnumOption,3> materialSidesOptions{{
-  {MaterialSidesKeep,"Herdar"},{MaterialSidesSingle,"Face única"},{MaterialSidesDouble,"Face dupla"}
+inline constexpr std::array<ComponentEnumOption,4> materialSidesOptions{{
+  {MaterialSidesKeep,"Herdar"},{MaterialSidesSingle,"Face única"},{MaterialSidesDouble,"Face dupla"},{MaterialSidesBack,"Só a face de trás"}
 }};
 inline constexpr std::array<ComponentEnumOption,5> materialChannelOptions{{
   {MaterialChannelKeep,"Herdar"},{MaterialChannelR,"R"},{MaterialChannelG,"G"},{MaterialChannelB,"B"},{MaterialChannelA,"A"}

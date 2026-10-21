@@ -441,6 +441,30 @@ ICONS["assets/material-unconverted"] = (
     MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M94 80v16" {stroke(6, ACCENT)}/><circle cx="94" cy="107" r="3.5" fill="{ACCENT}"/>')
 
 
+# PK-9: seções do Inspector do Material (Unity 6/URP). A mesma esfera do
+# material; em lima o que a seção controla: o shader (chaves de código), as
+# opções da superfície (frente/trás e transparência), as entradas (o mapa
+# aplicado), o detalhe (grade fina sobre a esfera), a partícula (faíscas) e o
+# avançado (dois controles deslizantes).
+ICONS["assets/material-shader"] = (
+    MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M86 84l-8 10 8 10M102 84l8 10-8 10" {stroke(5, ACCENT)}/>')
+ICONS["assets/material-surface-options"] = (
+    MATERIAL_BALL + f'<path d="M72 80h40v36H72z" fill="#15191e" {stroke(5, ACCENT)}/>'
+    f'<path d="M72 98h40" {stroke(4, ACCENT, 'stroke-dasharray="5 5"')}/><path d="M92 80v36" {stroke(4, ACCENT, 'opacity=".55"')}/>')
+ICONS["assets/material-surface-inputs"] = (
+    MATERIAL_BALL + f'<rect x="72" y="72" width="42" height="42" rx="6" fill="#15191e" {stroke(5, ACCENT)}/>'
+    f'<path d="M78 106l11-13 8 8 6-6 7 11" {stroke(4, ACCENT)}/><circle cx="102" cy="84" r="4" fill="{ACCENT}"/>')
+ICONS["assets/material-detail"] = (
+    MATERIAL_BALL + MATERIAL_SEAL +
+    f'<path d="M80 86h28M80 94h28M80 102h28M86 80v28M94 80v28M102 80v28" {stroke(3, ACCENT)}/>')
+ICONS["assets/material-particles"] = (
+    MATERIAL_BALL + f'<path d="M98 70v14M91 77h14M84 98v10M79 103h10M108 94v8M104 98h8" {stroke(5, ACCENT)}/>'
+    f'<circle cx="98" cy="77" r="3" fill="{ACCENT}"/>')
+ICONS["assets/material-advanced"] = (
+    MATERIAL_BALL + f'<path d="M76 84h38M76 104h38" {stroke(4, ACCENT, 'opacity=".55"')}/>'
+    f'<circle cx="88" cy="84" r="7" fill="#15191e" {stroke(5, ACCENT)}/><circle cx="104" cy="104" r="7" fill="#15191e" {stroke(5, ACCENT)}/>')
+
+
 # G4: hora do dia. O arco é o caminho do sol sobre o horizonte; o sol no alto e
 # a lua crescente na outra ponta dizem "dia e noite" sem texto.
 ICONS["lighting/time-of-day"] = (

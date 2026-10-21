@@ -635,6 +635,7 @@ private:
   bool uvTransformOverflowReported_ = false;
   bool lightmapUnsupportedReported_ = false;
   bool writeAuthoredUvTransforms();
+  u32 transparentBlendOutput(u32 drawIndex) const;
   float environmentAdjustment_[4]{1,1,1,0};
 
   void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy,
@@ -897,6 +898,9 @@ private:
   VkPipeline coveragePipeline_ = VK_NULL_HANDLE;
   VkPipeline coverageShadePipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentPipeline_ = VK_NULL_HANDLE;
+  // PK-9: Premultiply, Additive e Multiply (índice renderer::MaterialBlendOutput*;
+  // o 0, reto, é transparentPipeline_ e suas variantes).
+  VkPipeline transparentBlendPipelines_[renderer::MaterialBlendOutputCount]{};
   // Água usa um subpass próprio: lê o depth opaco como input attachment e
   // compõe transmissão/reflexão sem uma cópia full-resolution da cena.
   VkPipeline waterPipeline_ = VK_NULL_HANDLE;
