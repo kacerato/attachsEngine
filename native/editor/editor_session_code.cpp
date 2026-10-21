@@ -61,6 +61,19 @@ void EditorSession::pumpCodeAutoBuild(double seconds) {
   reportProblem(EditorConsoleSeverity::Info,"Compilação automática iniciada · revisão "+std::to_string(generation));
 }
 
+bool EditorSession::restorePlayerPublishedCode(std::string_view report) {
+  if(!state_.standalonePlayer || isPlaying() || code_.dirty() || state_.codeBuildBusy) return false;
+  if(!code_.applyBuildReport(report,code_.generation())) {
+    console_.replaceCompiler(code_.diagnostics(),files_.rootPath());
+    state_.status=code_.error();return false;
+  }
+  // Managed LoadPublished has accepted the persisted assembly and schema.
+  // This publishes the native catalogue only; it never requests a compiler job.
+  code_.publishBuild();
+  state_.status="Scripts publicados do jogo carregados";
+  return true;
+}
+
 bool EditorSession::completeCodeBuild(std::string_view report) {
   if(codeBuildGeneration_!=code_.generation()) {
     state_.codeBuildBusy=false;

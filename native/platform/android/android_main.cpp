@@ -164,6 +164,8 @@ struct AndroidShell final {
   using CodeBuildFn = int (*)(const ae::u8 *,int);
   using CodeReportFn = int (*)(ae::u8 *,int);
   using CodeCommitFn = int (*)();
+  std::string playerCodeBootstrapRoot;
+  ae::u64 playerCodeBootstrapEpoch=0;
   CodeBuildFn codeBuild=nullptr;
   CodeReportFn codeReport=nullptr;
   CodeCommitFn codeCommit=nullptr;
@@ -785,9 +787,40 @@ void updateEditorTools(AndroidShell &shell) {
 }
 void updateEditorCodeCompiler(AndroidShell &shell) {
   if(!shell.editorUi || !shell.independentWorkspace) return;
-  updateEditorLanguage(shell);
-  shell.editorSession.setCodeCompilerAvailable(true);
-  updateEditorTools(shell);
+  const bool player=shell.editorSession.screen().standalonePlayer;
+  if(player) {
+    const auto root=shell.editorSession.codeProjectRoot();
+    const auto epoch=shell.editorSession.sceneVersion().epoch;
+    if(!shell.projectReopening && !shell.editorSession.isPlaying() && !root.empty() &&
+       (shell.playerCodeBootstrapRoot!=root || shell.playerCodeBootstrapEpoch!=epoch) &&
+       ae::runtime::ScriptBridge::hasScripts(shell.editorSession.document())) {
+      // One attempt per opened project epoch, including failure. Never refresh
+      // sources or run Roslyn every frame in an exported game.
+      shell.playerCodeBootstrapRoot=root;shell.playerCodeBootstrapEpoch=epoch;
+      if(!shell.dotNetHost.isReady())initializeDotNetHost(shell);
+      constexpr const char *type="Astra.Compilation.NativeCompiler, Astra.Scripting";
+      auto load=reinterpret_cast<AndroidShell::CodeBuildFn>(shell.dotNetHost.getManagedFunctionPointer(type,"LoadPublished"));
+      auto copy=reinterpret_cast<AndroidShell::CodeReportFn>(shell.dotNetHost.getManagedFunctionPointer(type,"CopyReport"));
+      bool accepted=false;
+      if(load&&copy&&load(reinterpret_cast<const ae::u8*>(root.data()),int(root.size()))==0) {
+        const int size=copy(nullptr,0);
+        if(size>0&&size<=4*1024*1024) {
+          std::string report(size,'\0');
+          if(copy(reinterpret_cast<ae::u8*>(report.data()),size)==size)
+            accepted=shell.editorSession.restorePlayerPublishedCode(report);
+        }
+      }
+      if(!accepted) {
+        shell.editorSession.restorePlayerPublishedCode(R"(ASTRA_CODE 1 0 1 "" 1 1 1 "ASTRA_PLAYER_CODE" "Published scripts unavailable; export a compatible published generation" 0)");
+        shell.startPlayOnOpen=false;
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Player] Published scripts unavailable; Play refused without recompilation.");
+      }
+    }
+  } else {
+    updateEditorLanguage(shell);
+    shell.editorSession.setCodeCompilerAvailable(true);
+    updateEditorTools(shell);
+  }
   if(shell.editorSession.needsScriptRuntime()&&!shell.dotNetHost.isReady()) initializeDotNetHost(shell);
   if(shell.dotNetHost.isReady()&&!shell.scriptRuntime.available()) {
     constexpr const char *type="Astra.Runtime.NativeBehaviorRuntime, Astra.Scripting";
@@ -806,6 +839,7 @@ void updateEditorCodeCompiler(AndroidShell &shell) {
     api.copyDiagnostics=reinterpret_cast<decltype(api.copyDiagnostics)>(shell.dotNetHost.getManagedFunctionPointer(type,"CopyDiagnostics"));
   }
   if(shell.scriptRuntime.available()) shell.editorSession.setScriptRuntime(shell.scriptRuntime);
+  if(player)return; // Runtime binding above remains available; authoring compilation does not.
   static constexpr const char *failure =
       "ASTRA_CODE 1 0 1 \"\" 1 1 1 \"ASTRA_HOST\" \"Compilador indisponível; código preservado\" 0";
   if(shell.codeCompilation.valid()) {
@@ -3916,7 +3950,7 @@ void android_main(android_app *app) {
           !editorActive||editorPlaying||editorScreen.sceneSky,
           !editorActive||editorPlaying||editorScreen.sceneFog,
           !editorActive||editorPlaying||editorScreen.scenePost);
-      if (editorActive) {
+      if (editorActive && !editorPlaying) {
         const auto &projection = shell.editorSession.view().frustum;
         sceneNear=projection.nearPlane;sceneFar=projection.farPlane;
         sceneFov=2*std::atan(projection.tangentHalfVertical);
@@ -3925,8 +3959,12 @@ void android_main(android_app *app) {
         sceneCamera.yaw = projection.yaw;
         sceneCamera.pitch = projection.pitch;
         sceneCamera.roll = projection.roll;
-        if(editorPlaying) {
+      }
+      bool runtimeCameraAvailable=true;
+      if(editorActive && editorPlaying) {
+          sceneCamera={}; // unused by the clear/UI path; never an implicit camera
           const auto authoredCamera=shell.editorSession.sceneCameraPose();
+          runtimeCameraAvailable=authoredCamera.entity!=0;
           if(authoredCamera.entity) {
             exposureCameraEntity=authoredCamera.entity;
             std::copy(authoredCamera.position,authoredCamera.position+3,sceneCamera.position);
@@ -3937,8 +3975,8 @@ void android_main(android_app *app) {
             sceneOrthoHeight=authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0;
             sceneEnvironmentMask=authoredCamera.environmentMask;
           }
-        }
       }
+      shell.instancedRenderer.setSceneCameraAvailable(runtimeCameraAvailable);
       // Publish only the selected camera. Resetting to defaults before applying
       // it invalidated TAA history on every frame, even with a static camera.
       shell.instancedRenderer.setSceneClipPlanes(sceneNear,sceneFar);

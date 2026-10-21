@@ -1,3 +1,4 @@
+#include "scene/script_behavior.h"
 #include "harness.h"
 #include "editor/editor_code_workspace.h"
 #include "editor/editor_session.h"
@@ -264,4 +265,24 @@ AE_TEST(pasting_is_one_undo_entry_of_its_own) {
                  "a colagem sai sozinha e a digitacao fica");
   AE_EXPECT_TRUE(workspace.code.undo(), "desfazer a digitacao");
   AE_EXPECT_TRUE(workspace.code.active()->text == base, "e a digitacao sai inteira");
+}
+
+AE_TEST(player_published_catalogue_bootstraps_without_an_auto_build) {
+  Workspace workspace;EditorSession session;
+  AE_EXPECT_TRUE(session.setProjectDirectory(workspace.root.string().c_str()),"project open");
+  AE_EXPECT_TRUE(session.screen().code->catalogState()!=EditorCodeCatalogState::Current,"fresh open has no native catalogue");
+  const auto persisted=report(true,"project.Comportamento","Scripts/Comportamento.cs");
+  AE_EXPECT_TRUE(!session.restorePlayerPublishedCode(persisted),"authoring cannot use player bootstrap");
+  session.setStandalonePlayer(true);
+  auto &doc=session.document();const auto object=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Scripted object");
+  auto value=*doc.find(object);auto *script=static_cast<scene::ScriptBehavior *>(value.components.add(scene::ScriptBehavior::descriptor));
+  script->scriptType="project.Comportamento";script->source="Scripts/Comportamento.cs";
+  AE_EXPECT_TRUE(doc.applyEntityValues(object,value),"real ScriptBehavior attached");
+  AE_EXPECT_TRUE(!session.startPlay(),"fresh Player with scripts reproduces catalogue barrier");
+  AE_EXPECT_TRUE(!session.restorePlayerPublishedCode("invalid"),"invalid publication refused");
+  AE_EXPECT_TRUE(session.restorePlayerPublishedCode(persisted),"validated persisted report publishes catalogue");
+  AE_EXPECT_TRUE(session.screen().code->catalogState()==EditorCodeCatalogState::Current,"Play catalogue barrier can pass");
+  AE_EXPECT_TRUE(session.screen().code->scriptTypes().size()==1,"published schema restored");
+  AE_EXPECT_TRUE(session.takeCodeBuildRequest().empty(),"no compiler request generated");
+  AE_EXPECT_TRUE(session.startPlay(),"persisted catalogue permits Player startup without autobuild");
 }

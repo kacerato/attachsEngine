@@ -72,6 +72,17 @@ int main(int argc,char **argv){
   for(auto draw:d){draw.vertexOffset+=vb;draw.firstIndex+=ib;draw.materialIndex+=mb;draw.lodGroupId=u32(draws.size());draws.push_back(draw);}out={draws,materials,vertices,indices};return true;
  });
  session.initialize(&font,&icons);session.setSurface({0,0,float(width),float(height)},{});
+ if(argc>4 && std::string_view(argv[4])=="play-no-camera") {
+  if(!check(session.setProjectDirectory(project.path.string().c_str()),"open isolated Play UI fixture"))return 7;
+  session.advanceClock(0);
+  if(!check(session.startPlay(),"start real Play without camera"))return 7;
+  std::vector<renderer::MapDrawState> runtimeDraws;
+  if(!check(session.extractPlayMap(runtimeDraws)&&!session.sceneCameraPose().entity,"actual headless runtime world"))return 7;
+  session.update();test::UiSoftwareTarget image;image.resize(width,height,0,0,0);
+  test::rasterizeUi(session.instances(),font,icons,image);
+  if(!check(capturePpm(output/("play-no-camera-"+std::to_string(width)+"x"+std::to_string(height)+".ppm"),image),"write actual Play absence UI"))return 7;
+  return 0;
+ }
  if(!check(session.setProjectDirectory(project.path.string().c_str())&&session.openTerrain(),"open production terrain workspace"))return 3;
  resources::TerrainRecipe recipe;recipe.cells=8;recipe.controlCells=16;recipe.size=32;recipe.height=0;
  recipe.fx.enabled=true;recipe.fx.width=recipe.fx.height=64;recipe.fx.domain={-16,-16,32,32};recipe.fx.seedPixels.resize(64*64*4);

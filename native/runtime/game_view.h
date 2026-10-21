@@ -29,7 +29,7 @@ struct GameView {
   bool safeAreaReported=false;      // falso: a plataforma não entregou recortes
   float safeX=0,safeY=0,safeWidth=0,safeHeight=0; // pixels, origem inferior esquerda
   GameViewPlatform platform=GameViewPlatform::Host;
-  u64 camera=0;                     // objeto da câmera autorada; zero = câmera do editor
+  u64 camera=0;                     // câmera runtime; zero = nenhuma câmera, frustum inválido
   renderer::PerspectiveFrustum frustum{};
 };
 

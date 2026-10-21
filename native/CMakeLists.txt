@@ -1031,6 +1031,17 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_static_fx_source_remap.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
+  # Play/Player catalogue, camera and Canvas lifecycle without the unrelated
+  # platform/Vulkan suites in the historical all-tests executable.
+  add_executable(aether_player_contract_tests EXCLUDE_FROM_ALL
+    ../tests/native/family_base_main.cpp ../tests/native/test_editor_code_catalog.cpp
+    ../tests/native/test_editor_session.cpp ../tests/native/test_scene_gui.cpp)
+  target_include_directories(aether_player_contract_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_player_contract_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_player_contract_tests PRIVATE aether_editor aether_ui aether_renderer)
+  if(MINGW)
+    target_compile_options(aether_player_contract_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
   add_executable(aether_terrain_pipeline_capabilities_tests EXCLUDE_FROM_ALL
     ../tests/native/family_base_main.cpp ../tests/native/test_terrain_pipeline_capabilities.cpp
     ../tests/native/test_terrain_pipeline_publication_owner.cpp)

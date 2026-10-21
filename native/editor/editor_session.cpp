@@ -6453,6 +6453,15 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   refreshTerrainJob();
+  const auto drawCameraAbsenceNotice=[&] {
+    if(!isPlaying() || state_.standalonePlayer || sceneCameraPose().entity)return;
+    const auto &theme=editorTheme();
+    const float width=std::min(360.f,std::max(0.f,layout_.viewport.width-24));
+    const ui::UiRect notice{layout_.viewport.x+(layout_.viewport.width-width)*.5f,layout_.viewport.y+12,width,52};
+    list_.addRect(notice,theme.color.surface,theme.radius.control);
+    list_.addText({notice.x+8,notice.y+6,notice.width-16,18},"Nenhuma câmera ativa",theme.color.text,theme.type.cardName,ui::UiAlign::Center);
+    list_.addText({notice.x+8,notice.y+27,notice.width-16,16},"A simulação continua sem imagem 3D.",theme.color.textDim,theme.type.body,ui::UiAlign::Center);
+  };
   const auto drawRuntimeGui=[&](const UiFontMetrics &metrics) {
   if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.contextMenu) {
     auto &sceneGui=playScene_.sceneGui();sceneGui.prepare(playScene_.world(),guiPlayView().frustum,layout_.viewport,state_.surface);
@@ -6487,7 +6496,7 @@ void EditorSession::update() {
     view_=buildEditorViewport(camera_,layout_.viewport,{},projection_);
     if(isPlaying()&&playScene_.active())view_=guiPlayView();
     state_.view=&view_;
-    refreshGuiImages();drawRuntimeGui(metrics);
+    refreshGuiImages();drawRuntimeGui(metrics);drawCameraAbsenceNotice();
     instances_.clear();buildUiInstances(list_,*font_,*icons_,kMaximumInstances,instances_);
     return;
   }
@@ -6757,7 +6766,7 @@ void EditorSession::update() {
     area.height=std::max(0.0f,area.height-state_.surface.height*state_.platformImeFraction);
     gui_.draw(area,state_.surface,list_,guiDeltaSeconds_);
   }
-  drawRuntimeGui(metrics);
+  drawRuntimeGui(metrics);drawCameraAbsenceNotice();
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);
 }
@@ -6910,7 +6919,7 @@ void EditorSession::refreshGuiImages() {
   if(guiImages_.revision()!=previous) {gui_.setImages(&guiImages_);playScene_.gui().setImages(&guiImages_);playScene_.sceneGui().setImages(&guiImages_);}
 }
 EditorViewport EditorSession::guiPlayView() const {
-  auto view=view_;view.rect=layout_.viewport;
+  EditorViewport view{};view.rect=layout_.viewport;
   // GUI input has already been mapped from the physical display to logical
   // coordinates. Use the same ray as GuiWorldFrame, without a second rotation.
   view.surfaceTransform={};const auto pose=sceneCameraPose();

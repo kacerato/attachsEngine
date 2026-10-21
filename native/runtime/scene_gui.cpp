@@ -21,7 +21,7 @@ bool samePresentation(const scene::UiCanvas &a,const scene::UiCanvas &b) {
     std::equal(a.offset,a.offset+3,b.offset)&&std::equal(a.rotation,a.rotation+3,b.rotation)&&std::equal(a.resolution,a.resolution+2,b.resolution);
 }
 }
-void SceneGui::reset(){cancelPointers();for(auto &input:sourceInputs_)input.reset();routes_.clear();receivers_.clear();instances_.clear();documents_.clear();failures_.clear();world_=0;graphRevision_=~u64{0};diagnostic_.clear();inputDiagnostic_.clear();++revision_;}
+void SceneGui::reset(){cancelPointers();for(auto &input:sourceInputs_)input.reset();routes_.clear();receivers_.clear();instances_.clear();documents_.clear();failures_.clear();world_=0;graphRevision_=~u64{0};diagnostic_.clear();inputDiagnostic_.clear();presentationDiagnostic_.clear();++revision_;}
 void SceneGui::invalidateResources(){cancelPointers();instances_.clear();documents_.clear();failures_.clear();graphRevision_=~u64{0};++revision_;}
 void SceneGui::cancelDefaultControls(){for(auto &i:instances_)if(!i->config.inputReceiver)i->runtime.cancelPointers();rootControlInput_.reset();rootSample_={};rootPendingJump_.clear();rootHardwareJump_=false;}
 void SceneGui::cancelPointers(){for(auto &i:instances_)i->runtime.cancelPointers();sourceInputs_[0].reset();rootControlInput_.reset();rootSample_={};rootPendingJump_.clear();rootHardwareJump_=false;for(auto &r:receivers_){r.input.reset();r.controlInput.reset();r.pendingJump.clear();}}
@@ -83,12 +83,12 @@ bool SceneGui::reconcile(GameWorld &world) {
 }
 void SceneGui::advance(GameWorld &world,double seconds){reconcile(world);for(auto &i:instances_)if(i->enabled&&find(world,i->id))i->runtime.advance(seconds);}
 void SceneGui::prepare(GameWorld &world,const renderer::PerspectiveFrustum &camera,const ui::UiRect &viewport,const ui::UiRect &surface) {
-  reconcile(world);
+  reconcile(world);presentationDiagnostic_.clear();
   for(auto &i:instances_) {
     i->prepared=false;if(!i->enabled||!find(world,i->id))continue;
     const auto &canvas=i->runtime.document().canvas();
     if(canvas.mode==ui::GuiCanvasMode::World) {
-      if(!worldMatrix(world.poseGraph(),i->owner.object.id,i->hostMatrix)||!i->frame.configure(canvas,camera,viewport,surface,i->hostMatrix)){i->runtime.cancelPointers();diagnostic_="Matriz/câmera inválida para Canvas UI "+std::to_string(i->owner.object.id);continue;}
+      if(!worldMatrix(world.poseGraph(),i->owner.object.id,i->hostMatrix)||!i->frame.configure(canvas,camera,viewport,surface,i->hostMatrix)){i->runtime.cancelPointers();presentationDiagnostic_="Matriz/câmera inválida para Canvas UI "+std::to_string(i->owner.object.id);continue;}
       i->runtime.layout({0,0,canvas.resolution.x,canvas.resolution.y});
     } else {if(viewport.isEmpty()){i->runtime.cancelPointers();continue;}i->runtime.layout(viewport);}
     i->viewport=viewport;i->prepared=true;

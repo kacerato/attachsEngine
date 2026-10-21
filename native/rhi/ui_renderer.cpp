@@ -58,7 +58,7 @@ void VulkanUiRenderer::shutdown() {
   iconAtlas_.reset();
   previewAtlas_.reset();
   immediateAtlas_.reset();
-  guiAtlas_.reset();sceneDepthView_=VK_NULL_HANDLE;
+  guiAtlas_.reset();sceneDepthView_=VK_NULL_HANDLE;sceneDepthSampler_=VK_NULL_HANDLE;
   cameraPreviewView_=VK_NULL_HANDLE;
   instanceBuffer_.reset();
   allocator_ = nullptr;
@@ -324,7 +324,7 @@ bool VulkanUiRenderer::initialize(VkDevice device, VulkanMemoryAllocator &alloca
   writes[4].pImageInfo=&previewInfo;
   writes[5].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[5].pImageInfo=&previewInfo;
-  for(u32 i=6;i<8;++i){writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=&previewInfo;}
+  for(u32 i=6;i<8;++i){writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=i==6?&fontInfo:&previewInfo;}
   vkUpdateDescriptorSets(device_, 8, writes, 0, nullptr);
 
   if (!createPipeline(renderPass, subpass, pipelineCache)) {
@@ -455,11 +455,23 @@ bool VulkanUiRenderer::setGuiAtlas(VulkanUploadContext &upload, std::span<const 
   write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; write.pImageInfo=&info;
   vkUpdateDescriptorSets(device_,1,&write,0,nullptr); guiAtlas_=std::move(next); return true;
 }
+void VulkanUiRenderer::clearSceneDepth() {
+  if(!isReady() || !sceneDepthView_)return;
+  // The immutable font atlas is already owned and sampled in this descriptor
+  // set. Flag zero disables depth tests; binding6 remains valid even if preview
+  // atlases change, and no scene/transient depth image is referenced.
+  VkDescriptorImageInfo info{sampler_.handle(),fontAtlas_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet=descriptorSet_;write.dstBinding=6;write.descriptorCount=1;
+  write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&info;
+  vkUpdateDescriptorSets(device_,1,&write,0,nullptr);
+  sceneDepthView_=VK_NULL_HANDLE;sceneDepthSampler_=VK_NULL_HANDLE;depthSurface_[0]=depthSurface_[1]=0;
+}
 void VulkanUiRenderer::setSceneDepth(VkImageView view,VkSampler sampler,u32 width,u32 height) {
   if(!isReady() || !view || !sampler || !width || !height)return;
   depthSurface_[0]=1.f/width;depthSurface_[1]=1.f/height;
-  if(sceneDepthView_==view)return;
-  sceneDepthView_=view;
+  if(sceneDepthView_==view&&sceneDepthSampler_==sampler)return;
+  sceneDepthView_=view;sceneDepthSampler_=sampler;
   VkDescriptorImageInfo info{sampler,view,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
   VkWriteDescriptorSet write{};write.sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;write.dstSet=descriptorSet_;write.dstBinding=6;write.descriptorCount=1;write.descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;write.pImageInfo=&info;
   vkUpdateDescriptorSets(device_,1,&write,0,nullptr);

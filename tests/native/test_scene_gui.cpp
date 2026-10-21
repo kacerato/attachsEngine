@@ -296,3 +296,24 @@ AE_TEST(gui_scene_canvas_follows_actual_dynamic_body_without_pose_authority) {
   const auto lease=play.sceneGui().instanceFor(play.world(),child);auto *instance=play.sceneGui().find(play.world(),lease);
   AE_EXPECT_TRUE(instance&&instance->prepared&&instance->hostMatrix[12]>.1f&&std::abs(instance->hostMatrix[12]-world.graph().find(id)->transform.position[0])<.0001f,"UI samples the final solver pose used by the mesh");play.stop();
 }
+
+AE_TEST(screen_and_world_canvas_survive_camera_absence_lifecycle_independently) {
+  const auto asset=resources::assetGuidFromSeed("camera-absence-ui");runtime::SceneGraph graph;
+  const auto screen=canvas(graph,asset,"Screen"),worldPanel=canvas(graph,asset,"World");
+  auto value=*graph.find(screen);static_cast<scene::UiCanvas *>(value.components.editInstance(value.components.find(scene::UiCanvas::descriptor)->instanceId()))->mode=0;graph.applyEntityValues(screen,value);
+  runtime::GameWorld world;AE_EXPECT_TRUE(world.load(graph),"runtime loaded");runtime::SceneGui gui;
+  gui.configure([&](resources::AssetGuid,GuiDocument &out,std::string &){out=clickable();return true;});
+  renderer::PerspectiveFrustum absent{};gui.prepare(world,absent,{0,0,600,400},{0,0,600,400});
+  const auto screenLease=gui.instanceFor(world,screen),worldLease=gui.instanceFor(world,worldPanel);
+  AE_EXPECT_TRUE(gui.find(world,screenLease)->prepared&&!gui.find(world,worldLease)->prepared,"screen prepares without camera; world does not");
+  AE_EXPECT_TRUE(gui.pointer(world,{41,UiPointerPhase::Down,{80,70}})&&gui.pointer(world,{41,UiPointerPhase::Up,{80,70}}),"Screen input survives absent camera");
+  GuiEvent click;AE_EXPECT_TRUE(gui.find(world,screenLease)->runtime.poll(click)&&click.kind==GuiEventKind::Click,"actual screen click dispatched");
+  const float eye[3]{};const auto camera=renderer::buildPerspectiveFrustum(eye,0,0,1.5f);
+  gui.prepare(world,camera,{0,0,600,400},{0,0,600,400});
+  AE_EXPECT_TRUE(gui.find(world,worldLease)->prepared&&gui.diagnostic().empty(),"WorldCanvas recovers without reopening or stale diagnostic");
+  UiPoint point;float depth;AE_EXPECT_TRUE(gui.find(world,worldLease)->frame.project({80,70},point,depth),"world projection restored");
+  AE_EXPECT_TRUE(gui.pointer(world,{42,UiPointerPhase::Down,point})&&gui.find(world,worldLease)->runtime.captures(42),"real world pointer is held before camera removal");
+  gui.prepare(world,absent,{0,0,600,400},{0,0,600,400});
+  AE_EXPECT_TRUE(!gui.find(world,worldLease)->prepared&&gui.find(world,screenLease)->prepared,"camera removal affects only world presentation");
+  AE_EXPECT_TRUE(!gui.find(world,worldLease)->runtime.captures(42),"world capture is cancelled when projection disappears");
+}

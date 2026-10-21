@@ -9,7 +9,8 @@ runtime::GameView EditorSession::gameView() const {
   if(rect.isEmpty()) return view;
   view.width=rect.width*pixelsPerUnit_;view.height=rect.height*pixelsPerUnit_;
   view.dpi=dpi_;view.platform=platform_;
-  view.frustum=view_.frustum;
+  // A valid display remains usable by Screen without an authored camera.
+  view.frustum={};
   const auto pose=sceneCameraPose();
   if(pose.entity) {
     auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;
@@ -19,7 +20,7 @@ runtime::GameView EditorSession::gameView() const {
     view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,rect.width/rect.height,projection);
     view.camera=pose.entity;
   }
-  view.valid=view.frustum.valid&&view.width>0&&view.height>0;
+  view.valid=view.width>0&&view.height>0;
   return view;
 }
 
@@ -228,7 +229,8 @@ bool EditorSession::extractPlayMap(std::vector<renderer::MapDrawState> &out,
   state_.playTimeScale=playScene_.world().clock().scale();
   if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
   if(!playScene_.extract(mapScene_,out)) {reportProblem(EditorConsoleSeverity::Error,"Play: recurso da malha não pôde ser extraído");return false;}
-  applyLodGroups(playScene_.document(),out);
+  if(sceneCameraPose().entity)applyLodGroups(playScene_.document(),out);
+  else for(auto &draw:out){draw.visible=false;draw.castShadow=false;}
   return true;
 }
 

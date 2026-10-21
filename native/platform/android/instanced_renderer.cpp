@@ -1606,6 +1606,12 @@ bool InstancedRenderer::createUiRenderPass() {
   VkRenderPassCreateInfo pass{};pass.sType=VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;pass.attachmentCount=1;pass.pAttachments=&attachment;
   pass.subpassCount=1;pass.pSubpasses=&subpass;pass.dependencyCount=1;pass.pDependencies=&dependency;
   if(vkCreateRenderPass(device_,&pass,nullptr,&uiRenderPass_)!=VK_SUCCESS) return false;
+  // Compatible with uiRenderPass_ pipelines/framebuffers: load/store and
+  // initial/final layouts are not render-pass compatibility conditions.
+  // UNDEFINED discards stale scene pixels; CLEAR defines every display pixel.
+  attachment.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachment.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+  if(vkCreateRenderPass(device_,&pass,nullptr,&cameraAbsentClearPass_)!=VK_SUCCESS)return false;
   uiFramebuffers_.resize(swapchain_->imageCount(),VK_NULL_HANDLE);
   for(u32 i=0;i<uiFramebuffers_.size();++i) {
     const auto view=swapchain_->imageView(i);VkFramebufferCreateInfo fb{};fb.sType=VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1803,7 +1809,8 @@ void InstancedRenderer::recordRuntimeHud(u32 imageIndex,const renderer::RuntimeH
 
 bool InstancedRenderer::prepareUiOverlay(u32 imageIndex) {
   if(!uiRenderer_.isReady() || uiInstances_.empty() || imageIndex>=uiFramebuffers_.size()) return false;
-  uiRenderer_.setSceneDepth(depthImage_.view(),postDepthSampler_.handle(),swapchain_->width(),swapchain_->height());
+  if(sceneCameraAvailable_)uiRenderer_.setSceneDepth(depthImage_.view(),postDepthSampler_.handle(),swapchain_->width(),swapchain_->height());
+  else uiRenderer_.clearSceneDepth();
   if(uiGuiPending_) {
     rhi::VulkanUploadContext upload;
     if(upload.initialize(device_,rhiDevice_->graphicsQueueFamily()) && uiRenderer_.setGuiAtlas(upload,uiGuiAtlas_,uiGuiSize_,uiGuiSize_))uiGuiPending_=false;
@@ -4701,6 +4708,8 @@ void InstancedRenderer::shutdown() {
   pixelSampleBuffer_.reset();pixelSampleRequested_=pixelSampleInFlight_=pixelSampleReady_=false;
   for(auto framebuffer:uiFramebuffers_) if(framebuffer) vkDestroyFramebuffer(device_,framebuffer,nullptr);
   uiFramebuffers_.clear();if(uiRenderPass_) vkDestroyRenderPass(device_,uiRenderPass_,nullptr);uiRenderPass_=VK_NULL_HANDLE;
+  if(cameraAbsentClearPass_)vkDestroyRenderPass(device_,cameraAbsentClearPass_,nullptr);
+  cameraAbsentClearPass_=VK_NULL_HANDLE;sceneCameraAvailable_=true;cameraAbsentFrameSubmitted_=false;
   uiInstances_.clear();
 
   for(auto &cascade:*waterSpectralCompute_) cascade.shutdown();
@@ -5646,9 +5655,66 @@ bool InstancedRenderer::queueMapDrawPose(u32 drawIndex, const float *model,
   return true;
 }
 
+rhi::SwapchainStatus InstancedRenderer::drawFrameWithoutCamera() {
+  using Clock=std::chrono::steady_clock;
+  lastFrameTimings_={};const auto acquireStart=Clock::now();
+  // Validate recording resources before acquiring/resetting the owned fence.
+  if(!cameraAbsentClearPass_ || uiFramebuffers_.empty())return rhi::SwapchainStatus::FatalError;
+  u32 imageIndex=0;const auto acquired=swapchain_->acquireNextImage(&imageIndex);
+  if(acquired!=rhi::SwapchainStatus::Ok && acquired!=rhi::SwapchainStatus::SuboptimalNeedsRecreate)return acquired;
+  const auto acquiredAt=Clock::now();
+  if(submittedPreview_.requestId){completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;}
+  if(pendingPreview_.requestId){completedPreview_=pendingPreview_;pendingPreview_={};previewCompletionSuccess_=false;}
+  if(previewCloseRequested_){destroyCameraPreview();previewCloseRequested_=false;}
+  if(gpuTimingEnabled()) {
+    rhi::GpuFrameTimings previous{};
+    if(gpuFrameTimer_.collectPrevious(previous)){lastFrameTimings_.gpuFrameMs=previous.frameMs;lastFrameTimings_.gpuPassMs=previous.passesMs;}
+  }
+  readPixelSampleFromPreviousFrame();
+  editorSceneReusedLastFrame_=false;postUiFusedLastFrame_=false;
+  drawCullDispatchedThisFrame_=false;drawCompactionDispatchedThisFrame_=false;
+  visibilityTelemetry_={};shadowSubmittedDraws_=shadowCandidateDraws_=shadowRenderedCascades_=0;
+  // GUI publication may upload an explicitly changed atlas. No scene streaming,
+  // environment upload, culling, skinning, water, shadows, post or HZB runs here.
+  // UI was composed before this frame's script callbacks. If a script removed
+  // its camera, discard only projected/world quads from this private frame copy.
+  std::erase_if(uiInstances_,[](const ui::UiInstance &instance){return (instance.colors[3]&1u)!=0u;});
+  const bool haveUi=prepareUiOverlay(imageIndex);
+  if(vkResetCommandBuffer(commandBuffer_,0)!=VK_SUCCESS)return rhi::SwapchainStatus::FatalError;
+  VkCommandBufferBeginInfo command{};command.sType=VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  if(vkBeginCommandBuffer(commandBuffer_,&command)!=VK_SUCCESS)return rhi::SwapchainStatus::FatalError;
+  if(gpuTimingEnabled())gpuFrameTimer_.begin(commandBuffer_);
+  if(gpuTimingEnabled())gpuFrameTimer_.markPassEnd(commandBuffer_,GpuPassClass(u32(GpuPassClass::Ui)-1));
+  // No world camera: no scene/depth render pass, including water subpasses.
+  VkClearValue black{};black.color={{0,0,0,1}};
+  VkRenderPassBeginInfo color{};color.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  color.renderPass=cameraAbsentClearPass_;color.framebuffer=uiFramebuffers_[imageIndex];
+  color.renderArea.extent={swapchain_->width(),swapchain_->height()};color.clearValueCount=1;color.pClearValues=&black;
+  vkCmdBeginRenderPass(commandBuffer_,&color,VK_SUBPASS_CONTENTS_INLINE);
+  if(haveUi)recordUiContents();
+  vkCmdEndRenderPass(commandBuffer_);
+  recordPixelSample(imageIndex);
+  if(gpuTimingEnabled()){gpuFrameTimer_.markPassEnd(commandBuffer_,GpuPassClass::Ui);gpuFrameTimer_.end(commandBuffer_);}
+  if(vkEndCommandBuffer(commandBuffer_)!=VK_SUCCESS)return rhi::SwapchainStatus::FatalError;
+  const auto wait=swapchain_->imageAvailableSemaphore(),signal=swapchain_->renderFinishedSemaphore(imageIndex);
+  VkPipelineStageFlags stage=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  VkSubmitInfo submit{};submit.sType=VK_STRUCTURE_TYPE_SUBMIT_INFO;submit.waitSemaphoreCount=1;submit.pWaitSemaphores=&wait;
+  submit.pWaitDstStageMask=&stage;submit.commandBufferCount=1;submit.pCommandBuffers=&commandBuffer_;
+  submit.signalSemaphoreCount=1;submit.pSignalSemaphores=&signal;
+  if(vkQueueSubmit(graphicsQueue_,1,&submit,swapchain_->inFlightFence())!=VK_SUCCESS)return rhi::SwapchainStatus::FatalError;
+  cameraAbsentFrameSubmitted_=true;
+  const auto presentAt=Clock::now();const auto presented=swapchain_->present(imageIndex);
+  if(frameProfilingEnabled_){lastFrameTimings_.acquireMs=std::chrono::duration<double,std::milli>(acquiredAt-acquireStart).count();
+    lastFrameTimings_.recordSubmitMs=std::chrono::duration<double,std::milli>(presentAt-acquiredAt).count();
+    lastFrameTimings_.presentMs=std::chrono::duration<double,std::milli>(Clock::now()-presentAt).count();}
+  if(presented!=rhi::SwapchainStatus::Ok)return presented;
+  return acquired;
+}
+
 rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                                   const platform::FreeCameraState &camera,
                                                   const renderer::RuntimeHudState &hud) {
+  if(!sceneCameraAvailable_)return drawFrameWithoutCamera();
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
@@ -5702,7 +5768,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       lastFrameTimings_.gpuFrameMs = gpuTimings.frameMs;
       lastFrameTimings_.gpuPassMs = gpuTimings.passesMs;
       const renderer::DynamicResolutionUpdate resolution =
-          dynamicResolution_.observe(static_cast<float>(gpuTimings.frameMs));
+          cameraAbsentFrameSubmitted_?renderer::DynamicResolutionUpdate{}:dynamicResolution_.observe(static_cast<float>(gpuTimings.frameMs));
+      cameraAbsentFrameSubmitted_=false;
       if (resolution.changed) {
         hzbPyramidValid_ = false;
         hzbPyramidCameraValid_ = false;

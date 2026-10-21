@@ -57,6 +57,8 @@ public:
   void setCameraPreview(VkImageView view);
   bool setGuiAtlas(VulkanUploadContext &upload,std::span<const u8> rgba,u32 width,u32 height);
   void setSceneDepth(VkImageView view,VkSampler sampler,u32 displayWidth,u32 displayHeight);
+  // Caller has completed the previous submission before replacing descriptors.
+  void clearSceneDepth();
 
 private:
   struct PushConstants final {
@@ -84,6 +86,7 @@ private:
   VulkanImage immediateAtlas_{};
   VulkanImage guiAtlas_{};
   VkImageView sceneDepthView_=VK_NULL_HANDLE;
+  VkSampler sceneDepthSampler_=VK_NULL_HANDLE;
   float depthSurface_[2]{};
   VkImageView cameraPreviewView_=VK_NULL_HANDLE;
   float previewAtlasSize_[2]{};

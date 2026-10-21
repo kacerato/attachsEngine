@@ -49,7 +49,7 @@
                               X(BeginCommandBuffer) X(EndCommandBuffer) X(     \
                                   CmdPipelineBarrier) X(CmdCopyBufferToImage)  \
                                   X(CmdCopyImageToBuffer) X(                   \
-                                      CmdBeginRenderPass) X(CmdEndRenderPass)  \
+                                      CmdBeginRenderPass) X(CmdEndRenderPass) X(CmdNextSubpass) X(CmdClearAttachments)  \
                                       X(CmdBindPipeline)                       \
                                           X(CmdBindDescriptorSets)             \
                                               X(CmdPushConstants) X(CmdDraw)   \
@@ -202,13 +202,13 @@ struct Fixture {
     buffers.push_back(b);
     return b;
   }
-  Image image(uint32_t width, uint32_t height, VkImageUsageFlags usage,uint32_t levels=1) {
+  Image image(uint32_t width, uint32_t height, VkImageUsageFlags usage,uint32_t levels=1,VkFormat format=VK_FORMAT_R8G8B8A8_UNORM,VkImageAspectFlags aspect=VK_IMAGE_ASPECT_COLOR_BIT) {
     Image im;
     im.width = width;
     im.levels = levels;
     VkImageCreateInfo ci{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
     ci.imageType = VK_IMAGE_TYPE_2D;
-    ci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ci.format = format;
     ci.extent = {width, height, 1};
     ci.mipLevels = levels;ci.arrayLayers = 1;
     ci.samples = VK_SAMPLE_COUNT_1_BIT;
@@ -227,7 +227,7 @@ struct Fixture {
     vi.image = im.handle;
     vi.viewType = VK_IMAGE_VIEW_TYPE_2D;
     vi.format = ci.format;
-    vi.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, levels, 0, 1};
+    vi.subresourceRange = {aspect, 0, levels, 0, 1};
     check(vkCreateImageView(device, &vi, nullptr, &im.view),
           "create image view");
     images.push_back(im);
@@ -1448,6 +1448,74 @@ int main(int argc, char **argv) {
                   mode == 3   ? "closed side keeps vertex weights"
                   : mode == 4 ? "legacy material keeps vertex weights"
                               : "non-bindless shader keeps vertex weights");
+  }
+  // Water-style clear-depth regression: both subpasses must be visited even
+  // when they contain no draw. Test stored/read-only and transient/discard depth.
+  for(bool sampledDepth:{false,true}) {
+    auto depthImage=f.image(width,height,VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT|
+        (sampledDepth?VK_IMAGE_USAGE_SAMPLED_BIT:VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT),1,VK_FORMAT_D16_UNORM,VK_IMAGE_ASPECT_DEPTH_BIT);
+    VkAttachmentDescription attachments[2]{attachment,{}};
+    attachments[1].format=VK_FORMAT_D16_UNORM;attachments[1].samples=VK_SAMPLE_COUNT_1_BIT;
+    attachments[1].loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[1].storeOp=sampledDepth?VK_ATTACHMENT_STORE_OP_STORE:VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].stencilLoadOp=VK_ATTACHMENT_LOAD_OP_DONT_CARE;attachments[1].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[1].initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[1].finalLayout=sampledDepth?VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference depthWrite{1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL},depthRead{1,VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL};
+    VkSubpassDescription passes[2]{subpass,subpass};passes[0].pDepthStencilAttachment=&depthWrite;
+    passes[1].pDepthStencilAttachment=&depthRead;passes[1].inputAttachmentCount=1;passes[1].pInputAttachments=&depthRead;
+    VkSubpassDependency dependencies[2]{};dependencies[0].srcSubpass=0;dependencies[0].dstSubpass=1;
+    dependencies[0].srcStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    dependencies[0].dstStageMask=VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    dependencies[0].srcAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    dependencies[0].dstAccessMask=VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    dependencies[0].dependencyFlags=VK_DEPENDENCY_BY_REGION_BIT;
+    dependencies[1].srcSubpass=1;dependencies[1].dstSubpass=VK_SUBPASS_EXTERNAL;
+    dependencies[1].srcStageMask=VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;dependencies[1].dstStageMask=VK_PIPELINE_STAGE_TRANSFER_BIT;
+    dependencies[1].srcAccessMask=VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;dependencies[1].dstAccessMask=VK_ACCESS_TRANSFER_READ_BIT;
+    VkRenderPassCreateInfo info=rpi;info.attachmentCount=2;info.pAttachments=attachments;info.subpassCount=2;info.pSubpasses=passes;info.dependencyCount=2;info.pDependencies=dependencies;
+    VkRenderPass depthPass{};check(vkCreateRenderPass(f.device,&info,nullptr,&depthPass),"two-subpass depth pass");
+    VkImageView views[]{target.view,depthImage.view};auto frameInfo=fi;frameInfo.renderPass=depthPass;frameInfo.attachmentCount=2;frameInfo.pAttachments=views;
+    VkFramebuffer depthFrame{};check(vkCreateFramebuffer(f.device,&frameInfo,nullptr,&depthFrame),"two-subpass depth framebuffer");
+    auto cmd=f.command();VkClearValue values[2]{};values[0].color={{.25f,0,.5f,1}};values[1].depthStencil={1,0};
+    VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};begin.renderPass=depthPass;begin.framebuffer=depthFrame;begin.renderArea.extent={width,height};begin.clearValueCount=2;begin.pClearValues=values;
+    vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdNextSubpass(cmd,VK_SUBPASS_CONTENTS_INLINE);vkCmdEndRenderPass(cmd);
+    f.transition(cmd,target,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+    VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={width,height,1};
+    vkCmdCopyImageToBuffer(cmd,target.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,readback.handle,1,&copy);f.submit(cmd);
+    expectPixel(16,{64,0,128,255},"empty water pass advances to final subpass under both depth store/layout policies");
+    vkDestroyFramebuffer(f.device,depthFrame,nullptr);vkDestroyRenderPass(f.device,depthPass,nullptr);
+  }
+  // Camera-absence presentation contract: CLEAR and LOAD render passes are
+  // compatible; discard old world pixels on both sides of a live-camera frame.
+  // This fixture tests Vulkan pass/layout/readback, not the Android UI renderer.
+  {
+    auto clearAttachment=attachment;clearAttachment.loadOp=VK_ATTACHMENT_LOAD_OP_CLEAR;
+    clearAttachment.initialLayout=VK_IMAGE_LAYOUT_UNDEFINED;
+    auto clearInfo=rpi;clearInfo.pAttachments=&clearAttachment;
+    VkRenderPass clearPass{};check(vkCreateRenderPass(f.device,&clearInfo,nullptr,&clearPass),"camera-absent clear pass");
+    auto loadAttachment=attachment;loadAttachment.loadOp=VK_ATTACHMENT_LOAD_OP_LOAD;
+    loadAttachment.initialLayout=VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    auto loadInfo=rpi;loadInfo.pAttachments=&loadAttachment;
+    VkRenderPass loadPass{};check(vkCreateRenderPass(f.device,&loadInfo,nullptr,&loadPass),"compatible UI load pass");
+    for(uint32_t stage=0;stage<3;++stage) {
+      const bool cameraPresent=stage==1;auto cmd=f.command();
+      VkClearValue background{};background.color={{cameraPresent?1.f:0.f,0,0,1}};
+      VkRenderPassBeginInfo begin{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+      begin.renderPass=clearPass;begin.framebuffer=framebuffer;begin.renderArea.extent={width,height};begin.clearValueCount=1;begin.pClearValues=&background;
+      vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);vkCmdEndRenderPass(cmd);
+      begin.renderPass=loadPass;begin.clearValueCount=0;begin.pClearValues=nullptr;
+      vkCmdBeginRenderPass(cmd,&begin,VK_SUBPASS_CONTENTS_INLINE);
+      VkClearAttachment ui{};ui.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;ui.colorAttachment=0;ui.clearValue.color={{0,1,1,1}};
+      VkClearRect uiRect{{{0,0},{8,height}},0,1};vkCmdClearAttachments(cmd,1,&ui,1,&uiRect);vkCmdEndRenderPass(cmd);
+      f.transition(cmd,target,VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,VK_ACCESS_TRANSFER_READ_BIT,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,VK_PIPELINE_STAGE_TRANSFER_BIT);
+      VkBufferImageCopy copy{};copy.imageSubresource={VK_IMAGE_ASPECT_COLOR_BIT,0,0,1};copy.imageExtent={width,height,1};
+      vkCmdCopyImageToBuffer(cmd,target.handle,VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,readback.handle,1,&copy);f.submit(cmd);
+      expectPixel(16,cameraPresent?std::array<uint8_t,4>{255,0,0,255}:std::array<uint8_t,4>{0,0,0,255},"absent-camera clear removes previous world frame without removing the presentation surface");
+      expectPixel(4,{0,255,255,255},"screen overlay remains after black clear and camera lifecycle");
+    }
+    vkDestroyRenderPass(f.device,loadPass,nullptr);vkDestroyRenderPass(f.device,clearPass,nullptr);
   }
   std::puts(
       "PASS: production terrain fragment shader, narrow stripe/exterior, exact "

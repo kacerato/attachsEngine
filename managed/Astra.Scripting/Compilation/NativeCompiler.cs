@@ -58,6 +58,29 @@ public static class NativeCompiler
             _report.CopyTo(new Span<byte>(destination, capacity)); return _report.Length;
         }
     }
+    // Player bootstrap reads the already published generation. No source discovery,
+    // compilation, candidate commit or artifact writes happen here.
+    [UnmanagedCallersOnly]
+    public static unsafe int LoadPublished(byte* root, int length)
+    {
+        lock (Gate)
+        {
+            try
+            {
+                if (root == null || length <= 0 || length > 32768) return 1;
+                var directory = new UTF8Encoding(false, true).GetString(new ReadOnlySpan<byte>(root, length));
+                var project = LoadApplied(directory);
+                _report = Encoding.UTF8.GetBytes(SerializeReport(new(project, [])));
+                return 0;
+            }
+            catch (Exception error)
+            {
+                _report = Encoding.UTF8.GetBytes(SerializeReport(new(null,
+                    [new("", 1, 1, "ASTRA_PLAYER_CODE", error.Message, true)])));
+                return 1;
+            }
+        }
+    }
     private static string Quote(string text) => "\"" + text.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
     private static string SerializeReport(ScriptBuildResult result)
     {

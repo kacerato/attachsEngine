@@ -103,6 +103,15 @@ public:
   // da tela é do editor, não do renderer) e valem para UM frame: quem não as
   // publicar de novo simplesmente não desenha interface, sem estado preso.
   void setUiInstances(std::span<const ui::UiInstance> instances);
+  bool sceneCameraAvailable() const noexcept {return sceneCameraAvailable_;}
+  void setSceneCameraAvailable(bool available) {
+    if(sceneCameraAvailable_==available)return;
+    sceneCameraAvailable_=available;editorSceneCacheValid_=false;
+    temporalHistoryInitialized_=false;hzbPyramidValid_=false;
+    hzbPyramidCameraValid_=false;hzbPreviousFrameEligible_=false;hzbRecordedCameraValid_=false;
+    hzbLastEditorCameraValid_=false;shadowCacheInitialized_=false;
+    shadowCascadeDirtyMask_=0xffffffffu;
+  }
   void setTemporalDebugView(TemporalDebugView view) { temporalDebugView_ = view; }
   bool temporalDebugAvailable() const {
     return temporalInputsActive_ &&
@@ -585,6 +594,8 @@ public:
 
 private:
   bool editorBackground_=false;
+  bool sceneCameraAvailable_=true;
+  bool cameraAbsentFrameSubmitted_=false;
   float materialPreviewTime_=-1.f;
   bool editorSceneLighting_=true,editorSceneEffects_=true,editorSceneSky_=true;
   bool editorSceneFog_=true,editorScenePost_=true;
@@ -644,6 +655,7 @@ private:
   // renderer: uma cena sem interface ainda é uma cena, e o log diz o motivo.
   void createUiRenderer(AAssetManager *assets);
   void recordUiOverlay(u32 imageIndex);
+  rhi::SwapchainStatus drawFrameWithoutCamera();
   bool prepareUiOverlay(u32 imageIndex);
   void recordUiContents();
   bool createPostResources();
@@ -1157,6 +1169,7 @@ private:
   std::vector<u8> uiGuiAtlas_;
   u64 uiGuiRevision_=~u64{0};u32 uiGuiSize_=0;bool uiGuiPending_=false;
   VkRenderPass uiRenderPass_=VK_NULL_HANDLE;
+  VkRenderPass cameraAbsentClearPass_=VK_NULL_HANDLE;
   std::vector<VkFramebuffer> uiFramebuffers_;
   std::vector<ui::UiInstance> uiInstances_;
   float uiSurfaceWidth_ = 0.0f;

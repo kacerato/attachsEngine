@@ -1,5 +1,12 @@
 # Retomada — 16/10/2026
 
+21/10, continuação sem aparelho por solicitação do proprietário: **ADB suspenso**.
+Revisão local de [câmera e publicação de scripts no Player](PLAY-PLAYER-CONTRATO-2026-10-21.md)
+integrada, em validação;27 managed/3 Java passaram, GPU manteve312 modos e acrescentou
+5 readbacks de apresentação/depth. Native Player/Terrain/preview compilam em um job.
+Ainda sem APK dessa revisão ou aceite de UI/runtime Android.111.4 permanece como
+último APK instalado; sua otimização de shader continua sem medição móvel.
+
 Revisão posterior21/10:111 `.20261021.4` instalada, SHA256
 `07a59b2a12ca3b7141a7b03d7ec669d08aa48f601893c164075554041cf4b5ca`.
 A revisão3 confirmou30FPS em repouso, mas movimento continuou com intervalos~200ms

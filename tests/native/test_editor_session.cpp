@@ -6423,3 +6423,36 @@ AE_TEST(physics_material_file_opens_in_properties_and_edits_the_shared_resource)
   AE_EXPECT_EQ(f.session.findPhysicsMaterial(guid)->surface,1u,"superfície avança pelas opções");
   AE_EXPECT_TRUE(f.session.history().undo(doc)&&f.session.findPhysicsMaterial(guid)->surface==0,"desfazer volta a superfície");
 }
+
+AE_TEST(play_camera_absence_runtime_lifecycle_does_not_inherit_authoring_view) {
+  for(bool player:{false,true}) {
+  Fixture f;f.session.setStandalonePlayer(player);auto &doc=f.session.document();
+  const auto camera=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Runtime camera");
+  auto values=*doc.find(camera);auto *component=static_cast<scene::Camera *>(values.components.add(scene::Camera::descriptor));
+  component->enabled=false;doc.applyEntityValues(camera,values);
+  const auto authoringYaw=f.session.camera().yaw;f.session.advanceClock(0);
+  AE_EXPECT_TRUE(f.session.startPlay(),"simulation may start without camera");
+  std::vector<renderer::MapDrawState> draws;
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"runtime starts without camera");
+  const auto display=f.session.gameView();
+  AE_EXPECT_TRUE(display.valid&&display.width>0&&display.height>0&&!display.camera&&!display.frustum.valid,"Screen stays valid, camera projections do not");
+  AE_EXPECT_TRUE(!f.session.guiPlayView().frustum.valid,"WorldCanvas cannot borrow authoring projection");
+  for(const auto &draw:draws)AE_EXPECT_TRUE(!draw.visible&&!draw.castShadow,"no camera hides 3D and its shadows");
+  auto &runtime=const_cast<EditorPlayScene &>(f.session.playScene());
+  const auto elapsed=runtime.world().elapsedSeconds();f.session.advanceClock(.1f);
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws)&&runtime.world().elapsedSeconds()>elapsed,"world clock advances with no camera");
+  float origin[3]{},direction[3]{};
+  AE_EXPECT_TRUE(!runtime::gameViewScreenRay(f.session.gameView(),20,20,origin,direction),"no camera produces no script ray");
+  auto &graph=runtime.world().poseGraph();
+  auto live=*graph.find(camera);static_cast<scene::Camera *>(live.components.editInstance(live.components.find(scene::Camera::descriptor)->instanceId()))->enabled=true;
+  graph.applyEntityValues(camera,live);
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws),"same runtime continues after camera enable");
+  AE_EXPECT_TRUE(f.session.gameView().camera==camera&&f.session.gameView().frustum.valid&&f.session.guiPlayView().frustum.valid,"real runtime camera restores projection");
+  bool visible=false;for(const auto &draw:draws)visible|=draw.visible;
+  AE_EXPECT_TRUE(visible,"fresh drawstates restore visible geometry");
+  live=*graph.find(camera);static_cast<scene::Camera *>(live.components.editInstance(live.components.find(scene::Camera::descriptor)->instanceId()))->enabled=false;graph.applyEntityValues(camera,live);
+  AE_EXPECT_TRUE(f.session.extractPlayMap(draws)&&!f.session.gameView().camera&&!f.session.gameView().frustum.valid,"removing runtime camera invalidates the view again");
+  for(const auto &draw:draws)AE_EXPECT_TRUE(!draw.visible,"previous camera's visible geometry cannot leak");
+  AE_EXPECT_TRUE(runtime.active()&&f.session.camera().yaw==authoringYaw,"simulation survives and authoring pose stays independent");
+  }
+}

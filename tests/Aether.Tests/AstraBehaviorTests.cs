@@ -711,6 +711,33 @@ public static class AstraBehaviorTests
         world.Start(compiled, scene, [Attach(1, 1, "test.force")]); Assert.True(world.Running, "failed preparation can recover");
     }
     [Test]
+    public static unsafe void PlayerPublishedCode_LoadsWithoutSourceOrBuildOutputs()
+    {
+        using var project = new Project(Source); var sourceRoot = Encoding.UTF8.GetBytes(project.Root);
+        delegate* unmanaged<byte*, int, int> build = &NativeCompiler.Build;
+        delegate* unmanaged<int> commit = &NativeCompiler.Commit;
+        fixed(byte* ptr=sourceRoot) Assert.Equal(0,build(ptr,sourceRoot.Length));
+        Assert.Equal(0,commit());
+        using var exported = new Project("");
+        File.Delete(Path.Combine(exported.Root,"Behavior.cs"));
+        var published=Path.Combine(project.Root,".astra","code");
+        foreach(var file in Directory.EnumerateFiles(published,"*",SearchOption.AllDirectories)) {
+            var target=Path.Combine(exported.Root,".astra","code",Path.GetRelativePath(published,file));
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);File.Copy(file,target);
+        }
+        // A different root forces LoadApplied's disk path rather than its in-memory cache.
+        var bytes=Encoding.UTF8.GetBytes(exported.Root);
+        delegate* unmanaged<byte*, int, int> load=&NativeCompiler.LoadPublished;
+        fixed(byte* ptr=bytes) Assert.Equal(0,load(ptr,bytes.Length));
+        var loaded=NativeCompiler.LoadApplied(exported.Root);var scene=new Scene();
+        using var world=new BehaviorWorld();world.Start(loaded,scene,[Attach(1,10,"test.force",3)]);
+        Assert.True(world.Running);world.Update(.1f);Assert.True(scene.Events.Count>0,"published behavior callbacks execute");
+        Assert.False(Directory.Exists(Path.Combine(exported.Root,"bin")));
+        Assert.False(Directory.Exists(Path.Combine(exported.Root,"obj")));
+        using var missing=new Project("");var absent=Encoding.UTF8.GetBytes(missing.Root);
+        fixed(byte* ptr=absent) Assert.Equal(1,load(ptr,absent.Length));
+    }
+    [Test]
     public static unsafe void ApplyPublicationAndCompilerDiagnostics_PreserveLastGoodGeneration()
     {
         using var project = new Project(Source); var bytes = Encoding.UTF8.GetBytes(project.Root);

@@ -372,6 +372,7 @@ public:
   EditorToolRequest takeEditorToolRequest() {auto request=std::move(editorToolRequest_);editorToolRequest_={};return request;}
   void completeEditorToolRequest(const EditorToolRequest &request,bool accepted,std::string_view report);
   bool completeCodeBuild(std::string_view report);
+  bool restorePlayerPublishedCode(std::string_view report);
   // O que o catálogo publicado diz sobre si mesmo, em texto de interface. É a
   // resposta honesta para "o componente sumiu": ele não some, o catálogo é que
   // pode estar atrás do texto.

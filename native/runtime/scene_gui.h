@@ -50,7 +50,7 @@ public:
   Instance *find(GameWorld &world,u64 instance);
   u64 instanceFor(GameWorld &world,ObjectId object,u64 component=0);
   std::span<const std::unique_ptr<Instance>> instances() const {return instances_;}
-  const std::string &diagnostic() const {return diagnostic_.empty()?inputDiagnostic_:diagnostic_;}
+  const std::string &diagnostic() const {return !diagnostic_.empty()?diagnostic_:!presentationDiagnostic_.empty()?presentationDiagnostic_:inputDiagnostic_;}
   u64 revision() const {return revision_;}
 private:
   Loader loader_{};
@@ -64,7 +64,7 @@ private:
   // a held pointer to a replacement lease or to gameplay.
   std::vector<PointerRoute> routes_;
   u32 world_=0;u64 nextId_=1,graphRevision_=~u64{0},revision_=0;
-  std::string diagnostic_,inputDiagnostic_;
+  std::string diagnostic_,inputDiagnostic_,presentationDiagnostic_;
   struct PendingJump {u64 instance=0;ui::GuiId node=0;u64 cancellation=0;};
   std::array<InputService,3> sourceInputs_;
   std::array<InputDeviceState,3> sourceSamples_;

@@ -34,6 +34,24 @@ public class GamePackageTest {
             try {GamePackage.validPath("../escape");fail("traversal accepted");}catch(IOException expected){}
         } finally {GamePackage.deleteTree(root);}
     }
+    @Test public void publishedScriptsSurviveWhileBuildOutputsAreExcluded() throws Exception {
+        File root=Files.createTempDirectory("astra-script-package").toFile();
+        try {
+            File project=new File(root,"source");new File(project,"scenes").mkdirs();
+            Files.writeString(new File(project,"project.json").toPath(),"{}");
+            Files.writeString(new File(project,"scenes/editor.aescene").toPath(),"ScriptBehavior fixture");
+            for(String path:Arrays.asList(".astra/code/current",".astra/code/hash/Project.dll",".astra/code/hash/Project.pdb",".astra/code/hash/schema.json",".astra/code/hash/compiler.id","bin/Project.dll","obj/cache")) {
+                File file=new File(project,path);file.getParentFile().mkdirs();Files.writeString(file.toPath(),path);
+            }
+            File snapshot=new File(root,"snapshot");List<GamePackage.Entry> entries=GamePackage.snapshot(project,snapshot);
+            assertEquals(7,entries.size());
+            File apk=new File(root,"game.apk");writeApk(apk,snapshot,entries,false);
+            File restored=new File(root,"restored");GamePackage.extract(apk,restored);
+            assertTrue(new File(restored,".astra/code/hash/Project.dll").isFile());
+            assertTrue(new File(restored,".astra/code/current").isFile());
+            assertFalse(new File(restored,"bin").exists());assertFalse(new File(restored,"obj").exists());
+        } finally {GamePackage.deleteTree(root);}
+    }
     private static void writeApk(File file,File snapshot,List<GamePackage.Entry> entries,boolean tamper) throws IOException {
         try(ZipOutputStream zip=new ZipOutputStream(new FileOutputStream(file))) {
             zip.putNextEntry(new ZipEntry(GamePackage.INDEX));zip.write(GamePackage.index(entries));zip.closeEntry();
