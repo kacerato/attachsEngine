@@ -88,12 +88,18 @@ vec3 applySceneFog(vec2 sourceUv, vec3 color) {
   // dobraria a densidade, e com profundidade de outra resolução.
   // 512: a cor de entrada já recebeu a névoa por texel no pré-passe (256).
   if(environment.sceneFog.x>0.5 && !postFlag(128.0) && !postFlag(512.0)) {
-    float viewDepth=viewDistance(sourceUv);
+    float rawDepth=texture(sceneDepth,clampSourceUv(sourceUv)).r;
+    float viewDepth=viewDistanceFromDepth(rawDepth);
     float falloff=environment.sceneFog.w;
     float opticalDepth;
     // PK-1: Fog Mode da janela Lighting. x = 1 exponencial, 2 exponencial ao
     // quadrado, 3 linear (Start/End; a linha da densidade carrega o End).
+    // +4 = a neblina também cobre o céu ("Acompanhar o céu", o visual antigo);
+    // sem isso o Skybox fica limpo, como na Unity (o céu não recebe Fog).
     float fogMode=environment.sceneFog.x;
+    bool fogsSky=fogMode>4.5;
+    if(fogsSky) fogMode-=4.0;
+    else if(rawDepth>=0.99999) return color;
     if(fogMode>2.5) {
       float start=environment.sceneFog.y,end=environment.sceneFogColorDensity.w;
       float linearFog=clamp((viewDepth-start)/max(end-start,1.0e-4),0.0,1.0);

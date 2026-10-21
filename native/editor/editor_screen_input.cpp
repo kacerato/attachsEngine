@@ -529,7 +529,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         is(EditorWidget::ComponentPasteNewBase)||is(EditorWidget::ComponentHelpBase)||is(EditorWidget::ComponentEnableBase)||
         (script&&(is(EditorWidget::ComponentCopyBase)||is(EditorWidget::ComponentPasteBase)||is(EditorWidget::ComponentResetBase)));
     if(generic) {
-      if(!component || state.workspace!=EditorWorkspace::Scene || history.isOpen()) return outcome;
+      if(!component || (state.workspace!=EditorWorkspace::Scene && state.workspace!=EditorWorkspace::Lighting) ||
+         history.isOpen()) return outcome;
       // Como o menu de contexto da Unity, escolher uma ação fecha o menu.
       state.nativeMenu=0;state.scriptMenu=0;
       auto value=*entity;
@@ -593,7 +594,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
 
   if(widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentEnumBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);
-    if(!entity || state.workspace!=EditorWorkspace::Scene) return outcome;
+    // A janela Iluminação edita o cartão do Ambiente da cena com os mesmos controles.
+    if(!entity || (state.workspace!=EditorWorkspace::Scene && state.workspace!=EditorWorkspace::Lighting)) return outcome;
     if(state.componentSelection!=state.selection) {
       state.componentSelection=state.selection;state.expandedComponent.clear();state.expandedNative=0;state.nativeMenu=0;state.addingComponent=false;state.componentPage=0;state.expandedScript=0;state.scriptMenu=0;
     }

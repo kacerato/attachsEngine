@@ -1385,6 +1385,12 @@ AE_TEST(session_material_and_environment_numeric_controls_use_the_same_history_p
                  environment->shape==renderer::EnvironmentVolumeShape::Global,"Ambiente da cena na raiz, prioridade mínima");
   AE_EXPECT_EQ(f.session.screen().expandedNative,environment->instanceId(),"a janela passa a editar esse Ambiente");
   AE_EXPECT_EQ(root->environment[0],1.0f,"raiz sem multiplicadores");
+  // Os controles do cartão respondem dentro da janela (antes só no workspace Cena).
+  u32 componentIndex=0,skyEnum=0;
+  for(u32 i=0;i<root->components.size();++i) if(root->components.at(i)==environment) componentIndex=i;
+  for(u32 i=0;i<scene::Environment::descriptor.enums.size();++i) if(scene::Environment::descriptor.enums[i].id=="sky") skyEnum=i;
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+componentIndex+(skyEnum<<8));
+  AE_EXPECT_TRUE(f.session.screen().enumPicker!=0,"Shader do céu abre o seletor na janela Iluminação");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo environment");
   AE_EXPECT_TRUE(!f.session.document().find(f.session.document().root())->components.find(scene::Environment::descriptor),
                  "desfazer volta ao ambiente padrão");

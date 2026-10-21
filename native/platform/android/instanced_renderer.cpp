@@ -112,7 +112,7 @@ struct DirtRoadFrameUniform {
   // EnvironmentLighting e antes das linhas transitórias, igual nos shaders.
   float sceneSky[4]{};             // força, raio solar rad, brilho, modelo
   float sceneFogColorDensity[4]{}; // rgb linear, densidade 1/m (Linear: fim m)
-  float sceneFog[4]{};             // modo (0 off, 1 exp, 2 exp², 3 linear), início m, altura base m, queda 1/m
+  float sceneFog[4]{};             // modo (0 off, 1 exp, 2 exp², 3 linear; +4 cobre o céu), início m, altura base m, queda 1/m
   float scenePost[4]{};            // EV, curva, intermediário HDR, override
   float sceneAo[4]{};              // ativo, raio m, intensidade, potência
   float sceneAoDetail[4]{};        // viés em m, reservados
@@ -1718,8 +1718,9 @@ bool applySceneEnvironmentLook(
   // No linear a densidade não vale, então a linha carrega o End.
   const bool fogOn=look.active&&look.fog&&fogEnabled;
   frame.sceneFogColorDensity[3]=look.fogMode==renderer::FogMode::Linear?look.fogEnd:look.fogDensity;
-  frame.sceneFog[0]=!fogOn?0.0f:look.fogMode==renderer::FogMode::Linear?3.0f:
-      look.fogMode==renderer::FogMode::ExponentialSquared?2.0f:1.0f;
+  frame.sceneFog[0]=!fogOn?0.0f:(look.fogMode==renderer::FogMode::Linear?3.0f:
+      look.fogMode==renderer::FogMode::ExponentialSquared?2.0f:1.0f)+
+      (look.fogColorMode==renderer::FogColorMode::SkyLight?4.0f:0.0f);
   frame.sceneFog[1]=look.fogStart;
   frame.sceneFog[2]=look.fogBaseHeight;
   frame.sceneFog[3]=look.fogMode==renderer::FogMode::Linear?0.0f:look.fogHeightFalloff;
