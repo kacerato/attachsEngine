@@ -13,6 +13,16 @@ enum class SkyModel : u32 { Hdri = 0, Atmosphere = 1, PhysicalAtmosphere = 2 };
 // Neutral was the historical name for Reinhard, not Unity's Neutral curve.
 enum class ToneMapper : u32 { Reinhard = 0, Neutral = Reinhard, Aces = 1, AgX = 2 };
 enum class EnvironmentVolumeShape : u32 { Global = 0, Box = 1, Sphere = 2 };
+// PK-1/PK-2: os enums da janela Lighting da Unity 6 e do Skybox/Procedural.
+// Sun do Skybox/Procedural: None, Simple, High Quality.
+enum class SunDiskMode : u32 { None = 0, Simple = 1, HighQuality = 2 };
+// Environment Lighting › Source.
+enum class AmbientSource : u32 { Skybox = 0, Gradient = 1, Color = 2 };
+// Other Settings › Fog › Mode (RenderSettings.fogMode).
+enum class FogMode : u32 { Linear = 0, Exponential = 1, ExponentialSquared = 2 };
+// Cor da neblina: a do autor (Unity URP) ou acompanhando a luz do céu (o
+// comportamento anterior da Astra, como o "Sky Color" do HDRP).
+enum class FogColorMode : u32 { Color = 0, SkyLight = 1 };
 
 enum EnvironmentOverride : u32 {
   EnvironmentOverrideSky = 1u << 0,
@@ -144,7 +154,18 @@ struct SceneEnvironment final {
   float skyZenith[3]{0.5f, 0.5f, 0.5f};
   float skyHorizon[3]{0.46f, 0.66f, 0.82f};
   float ground[3]{0.369f, 0.349f, 0.341f}; // Ground do Skybox/Procedural da Unity
+  // Atmosphere Thickness do Skybox/Procedural (0..5). Até a v16 era uma
+  // mistura 0..1 com o panorama; a migração devolve 1, a espessura de antes.
   float atmosphere = 1.0f;
+  // PK-1: Exposure do Skybox (Unity 1,3). Só o céu procedural; o HDRI usa
+  // hdriExposureEv e o físico physicalSkyIntensity. Nunca mais depende da
+  // intensidade do sol (o antigo skyScale).
+  float skyExposure = 1.3f;
+  // PK-2: o sol do Skybox/Procedural (Sun, Sun Size, Sun Size Convergence).
+  SunDiskMode sunDisk = SunDiskMode::HighQuality;
+  float sunSize = 0.04f;
+  float sunSizeConvergence = 5.0f;
+  // Disco do céu físico (Physically Based Sky): diâmetro e brilho próprios.
   float sunDiskDegrees = 0.53f;
   float sunDiskIntensity = 8.0f;
   // Physical-atmosphere distances use kilometres. Keeping the planetary
@@ -162,6 +183,18 @@ struct SceneEnvironment final {
   float aerosolScaleHeightKm = 1.2f;
   float atmosphereHeightKm = 100.0f;
   float groundAlbedo = 0.10f;
+  // PK-1: Environment Lighting. Skybox tira harmônicos esféricos do próprio
+  // céu; Gradient e Color usam as cores abaixo (sRGB, como o seletor da Unity:
+  // ambientSkyColor/EquatorColor/GroundColor). A intensidade é indirectDiffuse.
+  AmbientSource ambientSource = AmbientSource::Skybox;
+  float ambientSkyColor[3]{0.212f, 0.227f, 0.259f};
+  float ambientEquatorColor[3]{0.114f, 0.125f, 0.133f};
+  float ambientGroundColor[3]{0.047f, 0.043f, 0.035f};
+  float ambientColor[3]{0.212f, 0.227f, 0.259f}; // Source = Color (Ambient Color)
+  // Fog da janela Lighting: Mode, Start/End (Linear), Density (exponenciais).
+  FogMode fogMode = FogMode::ExponentialSquared;
+  FogColorMode fogColorMode = FogColorMode::Color;
+  float fogEnd = 300.0f;
   float fogColor[3]{0.58f, 0.67f, 0.76f};
   // Multiplies the linear fog tint into scene-referred HDR radiance.
   float fogLightEnergy = 1.0f;
@@ -208,9 +241,13 @@ struct SceneEnvironment final {
   float moonIntensity = 1.0f;
   float starIntensity = 1.0f;
   CloudLayer clouds{};
+  // PK-2: Material do céu (recurso Skybox). Vazio = céu desta instância.
+  resources::AssetGuid skybox{};
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid() || !clouds.valid()) return false;
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid() || !clouds.valid() ||
+        static_cast<u32>(sunDisk) > 2 || static_cast<u32>(ambientSource) > 2 || static_cast<u32>(fogMode) > 2 ||
+        static_cast<u32>(fogColorMode) > 1) return false;
     const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
                           fogLightEnergy, fogDensity, fogStart, fogBaseHeight, fogHeightFalloff,
                           exposureEv, autoExposureMinEv, autoExposureMaxEv,
@@ -224,15 +261,20 @@ struct SceneEnvironment final {
                           physicalSkyIntensity, airDensity, aerosolDensity, aerosolAnisotropy,
                           planetRadiusKm, observerHeightKm, rayleighScaleHeightKm,
                           aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo,
-                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity};
+                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity,
+                          skyExposure, sunSize, sunSizeConvergence, fogEnd};
     for (float value : scalars) if (!std::isfinite(value)) return false;
-    for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
+    for (const float *color : {skyZenith, skyHorizon, ground, fogColor, ambientSkyColor, ambientEquatorColor,
+                               ambientGroundColor, ambientColor})
       for (u32 channel = 0; channel < 3; ++channel)
         if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f)
           return false;
     return hdriRotationDegrees>=-360.0f && hdriRotationDegrees<=360.0f &&
            hdriExposureEv>=-16.0f && hdriExposureEv<=16.0f &&
-           atmosphere >= 0.0f && atmosphere <= 1.0f &&
+           atmosphere >= 0.0f && atmosphere <= 5.0f &&
+           skyExposure >= 0.0f && skyExposure <= 1000.0f && sunSize >= 0.0f && sunSize <= 1.0f &&
+           sunSizeConvergence >= 1.0f && sunSizeConvergence <= 10.0f &&
+           fogEnd >= 0.0f && fogEnd <= 1000000.0f &&
            sunDiskDegrees >= 0.05f && sunDiskDegrees <= 10.0f && sunDiskIntensity >= 0.0f &&
            fogLightEnergy >= 0.0f && fogLightEnergy <= 65504.0f &&
            fogDensity >= 0.0f && fogDensity <= 1.0f && fogStart >= 0.0f &&
@@ -255,8 +297,8 @@ struct SceneEnvironment final {
            ambientOcclusionIntensity >= 0.0f && ambientOcclusionIntensity <= 4.0f &&
            ambientOcclusionPower >= 0.1f && ambientOcclusionPower <= 4.0f &&
            ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f &&
-           indirectDiffuse >= 0.0f && indirectDiffuse <= 4.0f &&
-           indirectSpecular >= 0.0f && indirectSpecular <= 4.0f &&
+           indirectDiffuse >= 0.0f && indirectDiffuse <= 8.0f &&
+           indirectSpecular >= 0.0f && indirectSpecular <= 8.0f &&
            sunGlare >= 0.0f && sunGlare <= 4.0f && moonPhase >= 0.0f && moonPhase <= 1.0f &&
            moonSizeDegrees >= 0.1f && moonSizeDegrees <= 10.0f &&
            moonIntensity >= 0.0f && moonIntensity <= 8.0f &&
@@ -274,11 +316,11 @@ struct SceneEnvironment final {
   }
 };
 
-// Look inicial da Scene View quando o documento ainda não possui um Ambiente.
-// É transitório: não cria componente, não altera a cena e não afeta a câmera
-// de jogo. Assim o autor começa com céu, luz e pós coerentes e pode substituí-los
-// ao adicionar um Environment/Profile.
-SceneEnvironment defaultSceneViewEnvironment();
+// PK-2 (A-05): o ambiente de uma cena sem nenhum Ambiente, igual no editor e no
+// Play -- o que a Unity dá a toda cena nova: Default-Skybox procedural, luz
+// ambiente do Skybox e pós neutro. Também é a base sobre a qual volumes locais
+// se misturam quando não há volume global.
+SceneEnvironment defaultSceneEnvironment();
 
 // Instância resolvida da cena. `worldToLocal` mantém o volume independente do
 // editor e do grafo; o renderer só precisa da posição da câmera para atualizar

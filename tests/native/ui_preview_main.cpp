@@ -1,3 +1,4 @@
+#include "scene/environment.h"
 #include "scene/ik_constraints.h"
 #include "scene/ik_effects.h"
 #include "runtime/transform_math.h"
@@ -1921,7 +1922,7 @@ int main(int argc, char **argv) {
     state.profileInspector=resources::assetGuidFromSeed("preview-profile");
     state.profileInspectorName="Tarde nublada";state.profileInspectorPath="Ambientes/Tarde nublada.environment";
     state.profileInspectorRevision=4;state.profileObjects={1,2};
-    state.profileGroups={"Geral","Atmosfera","Neblina","Exposição","Pós","Oclusão ambiente","Luz indireta","HDRI"};
+    state.profileGroups={"Geral","Céu","Neblina","Exposição","Pós","Oclusão ambiente","Luz ambiente"};
     state.profileGroup=2;
     using Row=editor::EditorScreenState::ProfileRow;
     Row fog;fog.kind=Row::Kind::Boolean;fog.label="Neblina";fog.on=true;
@@ -2292,6 +2293,26 @@ int main(int argc, char **argv) {
   }
   if(argc>4 && std::string(argv[4])=="lighting") {
     state.selection=document.root();state.workspace=editor::EditorWorkspace::Lighting;
+  }
+  // PK-1/PK-2: janela Iluminação com o Ambiente da cena, por grupo
+  // (lighting-env-ceu, -ambiente, -neblina, -gradiente, -linear) e Criar › Volume e céu.
+  if(argc>4 && std::string(argv[4]).starts_with("lighting-env")) {
+    const std::string mode=argv[4];
+    auto values=*document.find(document.root());
+    auto *environment=static_cast<scene::Environment*>(values.components.add(scene::Environment::descriptor));
+    environment->values.priority=-1000;
+    if(mode.ends_with("gradiente")) environment->values.ambientSource=renderer::AmbientSource::Gradient;
+    if(mode.ends_with("neblina")||mode.ends_with("linear")) environment->values.fog=true;
+    if(mode.ends_with("linear")) environment->values.fogMode=renderer::FogMode::Linear;
+    const auto instance=environment->instanceId();
+    document.applyEntityValues(document.root(),values);
+    state.selection=document.root();state.componentSelection=document.root();state.expandedNative=instance;
+    state.workspace=editor::EditorWorkspace::Lighting;
+    state.componentGroup=mode.ends_with("ceu")?"Céu":mode.ends_with("neblina")||mode.ends_with("linear")?"Neblina":"Luz ambiente";
+  }
+  if(argc>4 && std::string(argv[4])=="create-volume") {
+    state.creationMenu=true;state.creationCategory=10;
+    editor::findCreationRecipe("volume.global",&state.creationSelection);
   }
   if(argc>4 && std::string(argv[4]).starts_with("play-time")) {
     state.workspace=editor::EditorWorkspace::Play;

@@ -180,18 +180,8 @@ AE_TEST(editor_archive_v1_migrates_neutral_appearance_and_v2_rejects_invalid_val
   AE_EXPECT_EQ(doc.revision(),revision,"rejection is atomic");
 }
 
-AE_TEST(editor_environment_adjustment_uses_source_without_accumulation) {
-  renderer::EnvironmentLighting source{},output{};source.sunDirectionIntensity[3]=3;
-  source.ambientColorStrength[3]=.5f;source.parameters[0]=2;
-  const float values[4]{2,4,.5f,90};
-  AE_EXPECT_TRUE(renderer::adjustEnvironmentLighting(source,values,output),"apply");
-  AE_EXPECT_EQ(output.sunDirectionIntensity[3],6.0f,"sun power");
-  AE_EXPECT_EQ(output.ambientColorStrength[3],2.0f,"ambient power");
-  AE_EXPECT_EQ(output.parameters[0],1.0f,"exposure");
-  AE_EXPECT_TRUE(std::abs(output.parameters[1]-1.5707963f)<.00001f,"degrees to shader radians");
-  AE_EXPECT_TRUE(renderer::adjustEnvironmentLighting(source,values,output),"next frame");
-  AE_EXPECT_EQ(output.sunDirectionIntensity[3],6.0f,"not multiplied cumulatively");
-}
+// PK-1 (A-04): os multiplicadores da raiz não chegam mais ao renderer; a
+// migração os leva aos campos donos (test_environment_lighting_window.cpp).
 
 AE_TEST(editor_reparent_preserves_world_matrix_and_undo_restores_hierarchy) {
   EditorDocument doc;EditorHistory history;

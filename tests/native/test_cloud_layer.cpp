@@ -132,14 +132,17 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 16u, "Ambiente v16");
-  AE_EXPECT_TRUE(reread.read(in, 16), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 17u, "Ambiente v17");
+  AE_EXPECT_TRUE(reread.read(in, 17), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
   // exposição automática) e sem os 14 números do fim.
   auto parts = tokens(out.str());
   AE_EXPECT_TRUE(parts.size() > 40, "texto completo");
+  // Primeiro a v16: sem as 5 palavras e os 16 números da janela Lighting (v17).
+  parts.erase(parts.begin() + 23, parts.begin() + 28);
+  parts.resize(parts.size() - 16);
   std::vector<std::string> legacy(parts.begin(), parts.begin() + 20);
   legacy.insert(legacy.end(), parts.begin() + 23, parts.end() - 14);
   scene::Environment old;std::istringstream oldIn(join(legacy));oldIn.imbue(std::locale::classic());
@@ -166,10 +169,10 @@ AE_TEST(cloud_layer_round_trips_in_environment_profile_v11) {
   resources::EnvironmentProfile reread;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, reread), "perfil v11 relido");
   AE_EXPECT_TRUE(reread.values.clouds == profile.values.clouds, "nuvens no perfil compartilhado");
-  // v10: troca a versão e corta as 16 palavras das nuvens.
+  // v10: troca a versão e corta as 21 palavras da janela Lighting (v12) e as 16 das nuvens.
   auto parts = tokens(text);
   parts[1] = "10";
-  parts.resize(parts.size() - 16);
+  parts.resize(parts.size() - 21 - 16);
   resources::EnvironmentProfile old;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(join(parts), old), "perfil v10 abre");
   AE_EXPECT_TRUE(old.values.clouds == renderer::CloudLayer{}, "perfil antigo sem nuvens");

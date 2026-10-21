@@ -91,6 +91,14 @@ vec3 applySceneFog(vec2 sourceUv, vec3 color) {
     float viewDepth=viewDistance(sourceUv);
     float falloff=environment.sceneFog.w;
     float opticalDepth;
+    // PK-1: Fog Mode da janela Lighting. x = 1 exponencial, 2 exponencial ao
+    // quadrado, 3 linear (Start/End; a linha da densidade carrega o End).
+    float fogMode=environment.sceneFog.x;
+    if(fogMode>2.5) {
+      float start=environment.sceneFog.y,end=environment.sceneFogColorDensity.w;
+      float linearFog=clamp((viewDepth-start)/max(end-start,1.0e-4),0.0,1.0);
+      return mix(color,environment.sceneFogColorDensity.rgb,linearFog);
+    }
     if(falloff<=0.0) {
       // Exact legacy path: default/old scenes retain depth-linear exponential fog.
       opticalDepth=environment.sceneFogColorDensity.w*
@@ -141,6 +149,7 @@ vec3 applySceneFog(vec2 sourceUv, vec3 color) {
         opticalDepth=exp(clamp(logDepth,-80.0,log(80.0)));
       }
     }
+    if(fogMode>1.5) opticalDepth*=opticalDepth;
     float fog=1.0-exp(-opticalDepth);
     color=mix(color,environment.sceneFogColorDensity.rgb,clamp(fog,0.0,1.0));
   }

@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 52> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -93,8 +93,9 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "platform/android/instanced_renderer.cpp (passes de sombra) + rhi/shaders/dirt_road_shading.glsl", ""},
 
   // --- Ambiente, GI e sondas ----------------------------------------------
-  {"render.ambient.hemispheric", "Ambiente hemisférico céu/chão", CapabilityState::Implemented,
-   "renderer/environment_lighting.h", ""},
+  {"render.ambient.hemispheric", "Luz ambiente (Skybox, Gradiente, Cor)", CapabilityState::Implemented,
+   "renderer/environment_ambient.cpp + rhi/shaders/environment_lighting.glsl",
+   "Environment Lighting da janela Iluminação: sonda SH L2 do céu procedural, do HDRI, de um gradiente ou de uma cor, com Intensity Multiplier; o nível Constante usa o hemisfério céu/chão da mesma sonda"},
   {"render.ambient.specular", "Reflexo especular do ambiente", CapabilityState::Implemented,
    "renderer/environment_map.cpp", ""},
   {"render.gi.lightmap", "Lightmap indireto externo por submalha", CapabilityState::DeviceLimited,
@@ -161,7 +162,11 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
   {"render.environment.physical_atmosphere", "Céu físico Rayleigh/Mie", CapabilityState::Implemented,
    "renderer/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
   {"render.environment.fog", "Neblina por profundidade", CapabilityState::Implemented,
-   "rhi/shaders/post_process_common.glsl", ""},
+   "rhi/shaders/post_process_common.glsl",
+   "Fog da janela Iluminação: Linear (Início/Fim), Exponencial e Exponencial ao quadrado, cor própria ou acompanhando a luz do céu, decaimento por altura nos modos exponenciais"},
+  {"render.environment.skybox", "Material do céu (Skybox Material)", CapabilityState::Implemented,
+   "resources/environment_profile.cpp + runtime/scene_environment.cpp",
+   "Recurso .skybox com shader Procedural (Sun, Sun Size, Convergence, Atmosphere Thickness, Exposure), Panorâmico (HDRI) ou Físico, escolhido na janela Iluminação; sem Cubemap de 6 faces nem override por câmera"},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
 

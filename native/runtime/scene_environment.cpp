@@ -30,6 +30,14 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
       if(found!=profiles.end()&&resources::sameEnvironmentAppearance(component->values,*found))
         volume.environment=resources::applyEnvironmentProfile(component->values,*found);
     }
+    // PK-2: Material do céu compartilhado, lido do recurso a cada coleta (editar
+    // o material muda todo Ambiente que o usa). Ausente: o céu da instância.
+    if(volume.environment.skybox.valid()) {
+      const auto found=std::find_if(profiles.begin(),profiles.end(),[&](const auto &profile) {
+        return profile.skybox&&profile.guid==volume.environment.skybox;
+      });
+      if(found!=profiles.end()) volume.environment=resources::applySkyboxMaterial(volume.environment,*found);
+    }
     volume.shape=component->shape;
     volume.overrides=(component->overrideSky?renderer::EnvironmentOverrideSky:0u)|
                      (component->overrideFog?renderer::EnvironmentOverrideFog:0u)|

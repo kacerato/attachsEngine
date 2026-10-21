@@ -802,6 +802,11 @@ public:
   }
   resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
+  // PK-2: Material do céu (.skybox) a partir do céu do Ambiente, já escolhido
+  // nele; e o Ambiente da cena (Volume global de prioridade mínima na raiz)
+  // para a janela Iluminação quando a cena só tem o ambiente padrão.
+  resources::AssetGuid createSkyboxMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
+  bool createSceneEnvironment(std::string &diagnostic);
   // Material físico (editor_physics_materials.cpp): mesmo modelo do perfil de
   // ambiente; o corpo ou o colisor com material próprio guarda a cópia e o GUID.
   const std::vector<resources::PhysicsMaterialAsset> &physicsMaterials() const {return physicsMaterials_;}

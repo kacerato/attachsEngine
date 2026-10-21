@@ -4578,7 +4578,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   // Malha já navega entre Geometria e o editor de Material por slot acima.
   // As abas refletidas repetiriam esses nomes sem acrescentar controles.
   const auto groups=mesh?std::vector<std::string_view>{}:constantForce?
-    std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component);
+    std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component,builder.state.workspace==EditorWorkspace::Lighting);
   std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":builder.state.meshTab==3?"Iluminação":"Geometria"}:
       std::string_view{builder.state.componentGroup};
   if(constantForce) {if(group=="Torque mundo") group="Força mundo";else if(group=="Torque local") group="Força local";}
@@ -4745,6 +4745,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const bool lightmap=binding.kind==resources::AssetType::Texture&&binding.id=="texture.lightmap";
     if((mesh&&!searching&&!lightmap)||(binding.kind!=resources::AssetType::Mesh&&!lightmap&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
+             binding.kind!=resources::AssetType::SkyboxMaterial&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
              binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument&&
              binding.kind!=resources::AssetType::PhysicsMaterial&&binding.kind!=resources::AssetType::AnimatorController)||!show(binding.presentation)) continue;
@@ -4800,6 +4801,27 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const auto rank=[&](const Field &f){
       if(f.kind==0) {const auto id=entry.type->booleans[f.index].id;return id=="enabled"||id=="avoid_obstacles"?0:3;}
       return f.kind==1?1:f.kind==4?4:2;};
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  // PK-1/PK-2: ordem da janela Lighting e do Skybox/Procedural da Unity 6.
+  // Céu: Material do céu primeiro, depois o shader e os campos dele na ordem
+  // do material (Sun, Sun Size, Convergence, Atmosphere Thickness, Sky Tint,
+  // Ground, Exposure); Luz ambiente: Source, cores, Intensity Multiplier;
+  // Neblina: Fog, Mode, cor, Density/Start/End.
+  if(entry.type==&scene::Environment::descriptor&&!searching) {
+    static constexpr std::string_view order[]{"skybox","sky","sun_disk","sun_size","sun_size_convergence","atmosphere",
+        "sky_zenith","ground","sky_exposure","environment_map","hdri_rotation_degrees","hdri_exposure_ev",
+        "ambient_source","ambient_sky_color","ambient_equator_color","ambient_ground_color","ambient_color",
+        "indirect_diffuse","indirect_specular",
+        "fog","fog_mode","fog_color_mode","fog_color","fog_light_energy","fog_density","fog_start","fog_end",
+        "fog_base_height","fog_height_falloff"};
+    const auto rank=[&](const Field &f)->usize{
+      const std::string_view id=f.kind==0?entry.type->booleans[f.index].id:f.kind==1?entry.type->enums[f.index].id:
+          f.kind==2?entry.type->numbers[f.index].id:f.kind==5?entry.type->triples[f.index].id:
+          f.kind==6?entry.type->resourceBindings[f.index].id:std::string_view{};
+      for(usize i=0;i<std::size(order);++i) if(order[i]==id) return i;
+      return std::size(order);
+    };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
   if((std::string_view(entry.type->id).starts_with("astra.constraint.")||std::string_view(entry.type->id).starts_with("astra.spring."))&&!searching) {
@@ -5456,6 +5478,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
+              binding.kind==resources::AssetType::SkyboxMaterial?"Céu deste Ambiente":
               binding.kind==resources::AssetType::PhysicsMaterial?(entry.type==&scene::Collider::descriptor?"Sem material · valores desta forma":"Sem material · valores deste corpo"):
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
               binding.kind==resources::AssetType::AnimatorController?"Grafo local":
@@ -5616,6 +5639,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.meshQuery.empty()?
       (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Buscar material do céu":
        resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":
        resourceBinding&&resourceBinding->kind==resources::AssetType::Texture?"Buscar textura":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
@@ -5627,6 +5651,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
+                       resourceBinding->kind==resources::AssetType::SkyboxMaterial||
                        resourceBinding->kind==resources::AssetType::EnvironmentMap||
                        resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument||
                        resourceBinding->kind==resources::AssetType::PhysicsMaterial||resourceBinding->kind==resources::AssetType::AnimatorController)) {
@@ -5640,6 +5665,23 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       builder.label(label,selectedResource.valid()?"Atualizar material com os valores deste corpo":"Criar material com os valores deste corpo",
                     theme.color.accentInk,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::PhysicsMaterialUpdate:EditorWidget::PhysicsMaterialCreate));
+    }
+    if(resourceBinding->kind==resources::AssetType::SkyboxMaterial&&state.workspace!=EditorWorkspace::Play) {
+      // Unity: Assets › Create › Material com shader Skybox/*. Aqui nasce do céu
+      // atual deste Ambiente e já fica escolhido; editar abre o material.
+      auto row=deflate(takeTop(content,44),UiInsets::all(2));
+      auto edit=selectedResource.valid()?takeRight(row,row.width*.42f):UiRect{};
+      builder.list.addRect(row,theme.color.accent,theme.radius.control);
+      auto label=row;
+      builder.list.addImage(centred(takeLeft(label,34),20,20),static_cast<UiImageId>(UiIcon::LightingSkyboxMaterial),theme.color.accentInk);
+      builder.label(label,"Novo material do céu",theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(row,widgetId(EditorWidget::LightingCreateSkybox));
+      if(selectedResource.valid()) {
+        edit=deflate(edit,UiInsets{4,0,0,0});
+        builder.list.addRect(edit,theme.color.raised,theme.radius.control);
+        builder.label(edit,"Editar material",theme.color.text,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(edit,widgetId(EditorWidget::LightingEditSkybox));
+      }
     }
     if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
       const auto action=deflate(takeTop(content,40),UiInsets::all(2));
@@ -5661,6 +5703,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     const u32 page=std::min(state.meshPage,pages-1);
     auto clear=takeTop(content,34);builder.label(clear,
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
+        resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Sem material · céu deste Ambiente":
         resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Sem material · conservar os valores do corpo":
         resourceBinding->kind==resources::AssetType::AnimatorController?"Desvincular · incorporar o grafo resolvido":
         resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":resourceBinding->kind==resources::AssetType::UiDocument?"Sem documento UI · canvas inativo":"Sem mapa HDRI",
@@ -5671,7 +5714,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       auto slot=takeTop(content,50);const auto hit=slot;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
-      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:resourceBinding->kind==resources::AssetType::AnimatorController?UiIcon::AnimationController:UiIcon::LightingSun),0xffffffff);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:resourceBinding->kind==resources::AssetType::AnimatorController?UiIcon::AnimationController:resourceBinding->kind==resources::AssetType::SkyboxMaterial?UiIcon::LightingSkyboxMaterial:UiIcon::LightingSun),0xffffffff);
       const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
       builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
@@ -5680,7 +5723,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     if(matches.empty()) builder.label(content,resourceCount&& !query.empty()?
         (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?
-        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::AnimatorController?"Crie um recurso no grafo do Animator":resourceBinding->kind==resources::AssetType::Texture?
+        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Nenhum material do céu no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::AnimatorController?"Crie um recurso no grafo do Animator":resourceBinding->kind==resources::AssetType::Texture?
         "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":resourceBinding->kind==resources::AssetType::UiDocument?"Salve uma interface .aeui para registrar o documento":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
@@ -6880,7 +6923,7 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     items.push_back({UiIcon::SceneObject,"Voltar à edição",widgetId(EditorWidget::TabScene),state.workspace!=EditorWorkspace::Scene});
     items.push_back({UiIcon::AssetsFileMesh,"Malhas do projeto",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
     items.push_back({UiIcon::AssetsSourcePackage,"Biblioteca de pacotes",widgetId(EditorWidget::LibraryOpen)});
-    items.push_back({UiIcon::LightingSky,"Ambiente da cena",widgetId(EditorWidget::TabLighting)});
+    items.push_back({UiIcon::LightingWindow,"Iluminação",widgetId(EditorWidget::TabLighting)});
     items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
     items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
     items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
@@ -9461,8 +9504,66 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     return;
   }
   if(builder.state.workspace==EditorWorkspace::Lighting) {
-    builder.label(takeTop(content,38),"Ambiente",theme.color.text,theme.type.body);
-    buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Environment);
+    // PK-1/PK-2: janela Iluminação (Window › Rendering › Lighting › Environment
+    // da Unity 6). Edita o Ambiente da cena -- o Volume global de menor
+    // prioridade -- nos grupos da janela: Céu (Skybox Material, shader e sol),
+    // Luz ambiente (Source, Intensity Multiplier, reflexos) e Neblina
+    // (Other Settings › Fog). Os multiplicadores antigos da raiz não existem mais.
+    u64 instance=0;
+    const auto owner=sceneLightingEnvironment(*builder.state.document,&instance);
+    auto banner=takeTop(content,48);takeTop(content,6);
+    builder.list.addRect(banner,theme.color.raised,theme.radius.control);
+    builder.list.addRect({banner.x,banner.y+6,3,banner.height-12},theme.color.accent,1);
+    auto bannerText=deflate(banner,UiInsets{10,4,8,4});
+    builder.list.addImage(centred(takeLeft(bannerText,34),24,24),static_cast<UiImageId>(UiIcon::LightingWindow),theme.color.accent);
+    builder.label(takeTop(bannerText,22),"Iluminação",theme.color.text,theme.type.body);
+    if(owner!=kInvalidEntity&&owner==target&&instance) {
+      const auto *ownerEntity=builder.state.document->find(owner);
+      builder.label(bannerText,fitMiddle(builder.list,std::string("Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),
+                    bannerText.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+      builder.onlyComponent=instance;
+      buildComponents(builder,content,*entity);
+      builder.onlyComponent=onlyComponent;
+      return;
+    }
+    if(owner!=kInvalidEntity) {
+      // A seleção mudou na hierarquia: o Ambiente da cena continua a um toque.
+      const auto *ownerEntity=builder.state.document->find(owner);
+      builder.label(bannerText,"Outro objeto selecionado",theme.color.textDim,theme.type.caption);
+      const auto back=takeTop(content,46);
+      builder.list.addRect(back,theme.color.accent,theme.radius.control);
+      auto backText=back;
+      builder.list.addImage(centred(takeLeft(backText,40),20,20),static_cast<UiImageId>(UiIcon::LightingSky),theme.color.accentInk);
+      builder.label(backText,fitMiddle(builder.list,std::string("Abrir o Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),
+                    backText.width,theme.type.caption),theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(back,widgetId(EditorWidget::TabLighting));
+      return;
+    }
+    builder.label(bannerText,"Ambiente padrão da cena",theme.color.textDim,theme.type.caption);
+    // Sem Ambiente: o mesmo padrão do Play e da Scene View, descrito pelo que é
+    // (Default-Skybox procedural, luz ambiente do céu, sem neblina), e o botão
+    // que o transforma no Ambiente da cena para editar.
+    const struct {UiIcon icon;const char *name;const char *value;} defaults[]{
+        {UiIcon::LightingSkyboxMaterial,"Céu","Procedural · Exposição 1,3"},
+        {UiIcon::LightingAmbientSource,"Luz ambiente","Do céu · intensidade 1"},
+        {UiIcon::LightingFogMode,"Neblina","Desligada"}};
+    for(const auto &item:defaults) {
+      auto row=takeTop(content,46);takeTop(content,4);
+      builder.list.addRect(row,theme.color.silhouette,theme.radius.control);
+      builder.list.addImage(centred(takeLeft(row,40),22,22),static_cast<UiImageId>(item.icon),theme.color.text);
+      builder.label(takeTop(row,22),item.name,theme.color.text,theme.type.caption);
+      builder.label(row,item.value,theme.color.textMuted,theme.type.caption);
+    }
+    takeTop(content,6);
+    const auto action=takeTop(content,46);
+    const bool editable=builder.state.workspace!=EditorWorkspace::Play;
+    builder.list.addRect(action,editable?theme.color.accent:theme.color.raised,theme.radius.control);
+    auto actionText=action;
+    builder.list.addImage(centred(takeLeft(actionText,40),20,20),static_cast<UiImageId>(UiIcon::LightingSky),
+                          editable?theme.color.accentInk:theme.color.textMuted);
+    builder.label(actionText,"Personalizar o ambiente da cena",editable?theme.color.accentInk:theme.color.textMuted,
+                  theme.type.caption,UiAlign::Center);
+    if(editable) builder.router.addRegion(action,widgetId(EditorWidget::LightingCreateEnvironment));
     return;
   }
   if(builder.state.inspectorSurface==EditorInspectorSurface::Components && !onlyComponent && !builder.focusedWindow) {

@@ -19,6 +19,9 @@ namespace {
 inline std::string withoutClouds(const std::string &text) {
   std::istringstream in(text);std::vector<std::string> words;std::string word;
   while (in >> word) words.push_back(word);
+  // Antes, a v17 (PK-1/PK-2): 5 palavras depois das nuvens e 16 números no fim.
+  words.erase(words.begin() + 23, words.begin() + 28);
+  words.resize(words.size() - 16);
   std::string out;
   for (usize i = 0; i + 14 < words.size(); ++i) {
     if (i >= 20 && i <= 22) continue;
@@ -86,9 +89,9 @@ AE_TEST(sky_celestial_profile_v10_round_trips_and_v9_reads_with_defaults) {
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(), parsed), "v10 relido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == 0.1f && parsed.values.starIntensity == 2.0f, "perfil guarda lua e estrelas");
   auto text = profile.serialize();
-  text.replace(text.find(" 11 "), 4, " 9 ");
-  // v9: sem os 16 das nuvens (v11) e os 5 dos corpos celestes (v10).
-  text = dropTail(text.substr(0, text.size() - 1), 21) + "\n";
+  text.replace(text.find(" 12 "), 4, " 9 ");
+  // v9: sem os 21 da janela Lighting (v12), os 16 das nuvens (v11) e os 5 dos corpos celestes (v10).
+  text = dropTail(text.substr(0, text.size() - 1), 42) + "\n";
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v9 lido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == renderer::SceneEnvironment{}.moonPhase, "v9 recebe os padrões");
 }

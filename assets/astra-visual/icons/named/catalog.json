@@ -2329,6 +2329,48 @@
       "name": "rendering-layers",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/window": {
+      "category": "lighting",
+      "name": "window",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/skybox-material": {
+      "category": "lighting",
+      "name": "skybox-material",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/ambient-source": {
+      "category": "lighting",
+      "name": "ambient-source",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/fog-mode": {
+      "category": "lighting",
+      "name": "fog-mode",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/global": {
+      "category": "volume",
+      "name": "global",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/box": {
+      "category": "volume",
+      "name": "box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/sphere": {
+      "category": "volume",
+      "name": "sphere",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

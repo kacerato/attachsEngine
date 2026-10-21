@@ -231,9 +231,10 @@ AE_TEST(environment_profile_v8_reads_with_neutral_grading) {
   auto text = profile.serialize();
   // Um arquivo v8 é o atual sem os 31 números da gradação e os 5 dos corpos
   // celestes (v10) e os 16 das nuvens (v11), que são os últimos.
-  text.replace(text.find(" 11 "), 4, " 8 ");
+  // ...e os 21 da janela Lighting (v12).
+  text.replace(text.find(" 12 "), 4, " 8 ");
   auto cut = text.size() - 1;
-  for (u32 removed = 0; removed < 52; ++removed) cut = text.rfind(' ', cut - 1);
+  for (u32 removed = 0; removed < 73; ++removed) cut = text.rfind(' ', cut - 1);
   text = text.substr(0, cut) + "\n";
   resources::EnvironmentProfile parsed;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v8 lido");
@@ -268,6 +269,9 @@ AE_TEST(environment_volume_blend_reaches_the_exact_target_grading) {
 inline std::string withoutClouds(const std::string &text) {
   std::istringstream in(text);std::vector<std::string> words;std::string word;
   while (in >> word) words.push_back(word);
+  // Antes, a v17 (PK-1/PK-2): 5 palavras depois das nuvens e 16 números no fim.
+  words.erase(words.begin() + 23, words.begin() + 28);
+  words.resize(words.size() - 16);
   std::string out;
   for (usize i = 0; i + 14 < words.size(); ++i) {
     if (i >= 20 && i <= 22) continue;
