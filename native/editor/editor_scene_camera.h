@@ -87,18 +87,24 @@ const std::vector<EditorEntityId> &sceneCameraEntities(const runtime::SceneGraph
 inline SceneCameraPose resolveSceneCamera(const runtime::SceneGraph &document,EditorEntityId requested=0,bool preview=false) {
   SceneCameraPose result;
   // A escolha (maior prioridade; no empate, menor id) não depende da ordem.
+  // Camera.main da Unity: com uma câmera marcada "MainCamera", ela é a câmera
+  // do jogo (entrada, raios de tela, olhar) mesmo sob outra de prioridade maior
+  // na pilha da tela; sem a marca, vale a maior prioridade.
+  bool resultMain=false;
   for(auto id:sceneCameraEntities(document)) {
     const auto *entity=document.find(id);
     if(!entity || (requested && id!=requested)) continue;
     const auto *camera=cameraComponent(*entity);
+    const bool main=!requested && entity->tag=="MainCamera";
     if(!camera || (!preview && !camera->enabled) || !camera->valid() ||
-       (result.entity && (camera->priority<result.priority || (camera->priority==result.priority && id>=result.entity)))) continue;
+       (result.entity && (resultMain>main || (resultMain==main &&
+        (camera->priority<result.priority || (camera->priority==result.priority && id>=result.entity)))))) continue;
     bool active=true;
     for(auto parent=entity;parent;parent=document.find(parent->parent)) if(!parent->active) {active=false;break;}
     float world[16],pose[16];if((!preview&&!active) || !editorWorldMatrix(document,id,world)||!editorOpticalFrame(world,pose)) continue;
     const float length=std::sqrt(world[8]*world[8]+world[9]*world[9]+world[10]*world[10]);
     if(length<1e-6f) continue;
-    result.entity=id;std::copy(world+12,world+15,result.position);
+    result.entity=id;resultMain=main;std::copy(world+12,world+15,result.position);
     result.verticalFov=camera->verticalFov;result.nearPlane=camera->nearPlane;
     result.farPlane=camera->farPlane;result.priority=camera->priority;
     result.projection=camera->projection;result.orthographicHalfHeight=camera->orthographicHalfHeight;

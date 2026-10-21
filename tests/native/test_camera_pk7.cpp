@@ -143,6 +143,17 @@ AE_TEST(camera_stack_orders_by_priority_and_hides_covered_cameras) {
   AE_EXPECT_EQ(editor::resolveSceneCameraStack(scene.g).size(),usize{3},"viewport vazio fica fora da pilha");
 }
 
+AE_TEST(camera_main_camera_tag_picks_the_game_camera_like_camera_main) {
+  CameraScene scene;
+  const auto player=scene.camera("Jogador",0,[](scene::Camera &c){c.viewportWidth=.5f;});
+  const auto overview=scene.camera("Vista",1,[](scene::Camera &c){c.viewportX=.5f;c.viewportWidth=.5f;});
+  AE_EXPECT_TRUE(editor::resolveSceneCamera(scene.g).entity==overview,"sem marca, a maior prioridade é a câmera do jogo");
+  auto v=*scene.g.find(player);v.tag="MainCamera";scene.g.applyEntityValues(player,v);
+  AE_EXPECT_TRUE(editor::resolveSceneCamera(scene.g).entity==player,"MainCamera vence, como Camera.main");
+  const auto stack=editor::resolveSceneCameraStack(scene.g);
+  AE_EXPECT_TRUE(stack.size()==2 && stack.back().entity==overview,"a ordem de desenho continua sendo a prioridade");
+}
+
 AE_TEST(camera_viewport_rect_measures_from_the_bottom_left) {
   editor::SceneCameraPose pose;pose.viewport[0]=0;pose.viewport[1]=.5f;pose.viewport[2]=1;pose.viewport[3]=.5f;
   const auto top=pose.screenRect({10,20,200,100});

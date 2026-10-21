@@ -4823,9 +4823,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     }
     }
   }
-  if(std::string_view(entry.type->id).starts_with("astra.physics2d.")&&!searching) {
+  // Viewport Rect da Câmera em duas linhas (posição e tamanho), como na Unity.
+  if((std::string_view(entry.type->id).starts_with("astra.physics2d.")||entry.type==&scene::Camera::descriptor)&&!searching) {
     constexpr std::string_view pairs[][2]{{"velocity_x","velocity_y"},{"half_x","half_y"},{"offset_x","offset_y"},
-      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"}};
+      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"},
+      {"viewport_x","viewport_y"},{"viewport_width","viewport_height"}};
     for(const auto &names:pairs) {
       u32 channels[2]{~u32{0},~u32{0}};
       for(const auto &field:fields) if(field.kind==2)
@@ -5152,10 +5154,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     } else if(f.kind==16) {
       const auto id=entry.type->numbers[f.index].id;
       const char *title=id=="velocity_x"?"Vel. (m/s)":id=="half_x"?"Meia dim. (m)":id=="force_x"?"Mundo (N)":
-        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":"Centro (m)";
+        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":
+        id=="viewport_x"?"Viewport":id=="viewport_width"?"Tamanho":"Centro (m)";
       builder.label(takeLeft(slot,std::min(72.f,slot.width*.34f)),title,theme.color.textDim,theme.type.caption);
       const float width=slot.width*.5f;
-      const u32 channels[]{f.index,f.second};const char *names[]{"X","Y"};
+      const bool size=id=="viewport_width";
+      const u32 channels[]{f.index,f.second};const char *names[]{size?"L":"X",size?"A":"Y"};
       for(u32 axis=0;axis<2;++axis) {
         auto cell=takeLeft(slot,width);const auto field=channels[axis];const auto &property=entry.type->numbers[field];
         builder.label(takeLeft(cell,13),names[axis],axis?theme.color.axisY:theme.color.axisX,theme.type.caption);
@@ -7017,8 +7021,12 @@ std::vector<u32> enumMaskRows(const EditorScreenState &state,const scene::Compon
   for(u32 i=0;i<property.options.size();++i) {
     const auto &option=property.options[i];
     if(property.id=="culling_mask" && state.document) {
+      // Como o LayerMask da Unity: só camadas com nome. Uma sem nome aparece
+      // apenas quando ligada sozinha (máscara vinda de script), para poder ser
+      // desligada; "Tudo" não as lista.
       u32 bit=0;while(bit<31 && !(option.value&(1u<<bit))) ++bit;
-      if(!state.document->layers().named(bit) && !(value&option.value)) continue;
+      const bool everything=(value&scene::componentEnumFlagBits(property))==scene::componentEnumFlagBits(property);
+      if(!state.document->layers().named(bit) && (everything || !(value&option.value))) continue;
     }
     rows.push_back(i);
   }
