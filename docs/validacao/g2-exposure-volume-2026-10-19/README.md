@@ -102,3 +102,21 @@ longo), a exposição vai direto ao alvo; o Play pausado continua congelado.
 
 O que mudou por causa da comparação: o padrão de cinza ficou em 12,5% (o do HDRP), os limites ficaram em −2/10
 (o poente sem limite, a −3,2, saía mais claro que o do vídeo) e a noite clara foi registrada como defeito do céu.
+
+## PK-5 parcial: Tonemapping, Color Adjustments e Bloom (APK 170, 21/10/2026)
+
+Referências: URP/HDRP 17 *Tonemapping* (None, Neutral, ACES), *Color Adjustments* (Post Exposure, Color Filter,
+Hue Shift), *Bloom* (Scatter, Tint, Clamp); `Color.hlsl` (`NeutralTonemap`), `LutBuilderHdr.shader` (ordem:
+filtro e matiz antes da curva) e `VolumeParameter.Interp` (valor discreto troca assim que t > 0).
+
+| Arquivo | O que mostra |
+|---|---|
+| `14-menu-tonemapping-170.jpg` | Menu na ordem da Unity: Nenhum, Neutro, ACES, AgX (extra); Reinhard só existe como legado e abre como Neutro |
+| `12-inspector-bloom-ajustes-170.jpg` | Bloom com Espalhamento (0 na cena migrada: o raio de antes), Tom e Brilho máximo; Ajustes de cor com Pós-exposição, Filtro de cor e Giro de matiz |
+| `13-giro-de-matiz-60-170.jpg` | Giro de matiz em 60°: a vista de edição muda na hora |
+| `15-neutro-x-nenhum-170.jpg` | Neutro (esq.) × Nenhum (dir.): o Nenhum corta os altos |
+
+Host: aether_tests 1606/1606 e autoria de ambiente 48/48 (testes novos: menu e migração Reinhard → Neutral,
+campos novos na cena e no perfil, mistura por override, troca discreta em t > 0). O build Android do merge com a base
+(G3a, nuvens, PK-3/PK-8) compilou no clang (APK 170). Não testado no aparelho: Espalhamento > 0, Tom e Brilho máximo
+do bloom, Pós-exposição e Filtro de cor (só no host). A Vila foi devolvida com md5 `2e2e996841f1f0eb5af1572c68dec3fc`.
