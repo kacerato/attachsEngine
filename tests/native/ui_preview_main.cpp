@@ -1921,7 +1921,7 @@ int main(int argc, char **argv) {
     state.profileInspector=resources::assetGuidFromSeed("preview-profile");
     state.profileInspectorName="Tarde nublada";state.profileInspectorPath="Ambientes/Tarde nublada.environment";
     state.profileInspectorRevision=4;state.profileObjects={1,2};
-    state.profileGroups={"Geral","Atmosfera","Neblina","Exposição","Pós","Oclusão ambiente","Luz indireta","HDRI"};
+    state.profileGroups={"Geral","Atmosfera","Neblina","Exposição","Tonemapping","Bloom","Oclusão ambiente","Luz indireta","HDRI"};
     state.profileGroup=2;
     using Row=editor::EditorScreenState::ProfileRow;
     Row fog;fog.kind=Row::Kind::Boolean;fog.label="Neblina";fog.on=true;

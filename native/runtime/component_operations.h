@@ -32,6 +32,7 @@ class SceneAnimatorGraphs;
 class SceneNavigation;
 class SceneIk;
 class SceneParticles;
+class SceneReflectionProbeRequests;
 
 struct ComponentOperationServices {
   GameWorld *world=nullptr;
@@ -47,6 +48,7 @@ struct ComponentOperationServices {
   SceneNavigation *navigation=nullptr;
   SceneIk *ik=nullptr;
   SceneParticles *particles=nullptr;
+  SceneReflectionProbeRequests *reflectionProbes=nullptr;
 };
 
 using ComponentMethodInvoke=WorldStatus (*)(const ComponentOperationServices &,ComponentHandle,

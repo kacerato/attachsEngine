@@ -11,7 +11,7 @@ namespace ae::resources {
 // Aparência compartilhada por volumes. Forma, prioridade, camada e peso ficam
 // na instância; o recurso guarda somente o conteúdo visual reutilizável.
 struct EnvironmentProfile final {
-  static constexpr u32 FormatVersion = 11;
+  static constexpr u32 FormatVersion = 12;
   AssetGuid guid{};
   u32 revision = 1;
   std::string name;

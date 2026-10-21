@@ -88,11 +88,19 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
           return fail(diagnostic,"Material Unity ausente ou embutido sem conversão.");
         value.materials.push_back(reference);
       }
-      for(const char *field:{"m_LightProbeUsage","m_ReflectionProbeUsage"}) {
-        i64 mode=0;const auto *node=object.value.get(field);
-        if(node&&(!node->integer(mode)||mode<0||mode>1))return fail(diagnostic,"Uso especial de probes Unity exige configuração de render nativa explícita.");
+      // PK-6: LightProbeUsage Off/BlendProbes e ReflectionProbeUsage
+      // Off/BlendProbes/BlendProbesAndSkybox/Simple chegam iguais. Proxy Volume
+      // (2) e Custom Provided (4) não existem aqui: viram Misturar sondas, com aviso.
+      {
+        i64 mode=1;const auto *node=object.value.get("m_LightProbeUsage");
+        if(node&&(!node->integer(mode)||mode<0||mode>4))return fail(diagnostic,"LightProbeUsage Unity inválido.");
+        if(mode==2||mode==4) candidate.transformations.push_back("Light Probe Proxy Volume/Custom não existem na Astra; o renderer usa Misturar sondas.");
+        value.lightProbes=mode==0?0u:1u;
+        mode=1;node=object.value.get("m_ReflectionProbeUsage");
+        if(node&&(!node->integer(mode)||mode<0||mode>3))return fail(diagnostic,"ReflectionProbeUsage Unity fora de Off/BlendProbes/BlendProbesAndSkybox/Simple.");
+        value.reflectionProbes=static_cast<u32>(mode);
       }
-      candidate.transformations.push_back("Probes e GI Unity não transportados; iluminação e sombras são recalculadas pelo renderer Astra.");
+      candidate.transformations.push_back("Lightmaps e sondas assadas da Unity não são transportados; asse as sondas de novo na Astra.");
     }
   }
   usize roots=0;

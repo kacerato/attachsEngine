@@ -149,7 +149,7 @@ def render(root):
                 item = merged(table.get('defaults', {}), raw_item)
                 number = kind == 'Number'
                 required = ('id', 'label', 'type', 'member') + (('min', 'max', 'step') if number else ('options',) if kind == 'Enum' else ())
-                keys(item, required + ('presentation', 'default') + (('tweenable',) if number else ('animation_safe',)), required)
+                keys(item, required + ('presentation', 'default') + (('tweenable',) if number else ('animation_safe', 'flags') if kind == 'Enum' else ('animation_safe',)), required)
                 require(isinstance(item['id'], str) and item['id'] and item['id'] not in ids, f"{name}: empty/duplicate property id")
                 ids.add(item['id'])
                 typ = identifier(item['type']); member = item['member']
@@ -179,6 +179,10 @@ def render(root):
                     text += f'   [](const ComponentValue &value)->bool{{return {read};}},\n'
                     text += f'   [](ComponentValue &value,bool next){{{write}=next;}},\n   {metadata}'
                 if not number and 'animation_safe' in item: text += ', ' + cpp(item['animation_safe'])
+                if kind == 'Enum' and item.get('flags'):
+                    require(item['flags'] is True, f"{name}: flags must be true when present")
+                    if 'animation_safe' not in item: text += ', false'
+                    text += ', true'
                 text += '},\n'
             text += '}};\n'
             output = f'{Path(source).stem}_{name}.inc'

@@ -1,16 +1,30 @@
 #version 450
+// Medição da Exposure do HDRP 17 (ExposureCommon.hlsl, WeightSample): cada
+// amostra da grade entra no histograma de log2 da luminância com o peso do
+// Metering Mode. A redução (exposure_reduce.comp) escolhe média ou percentis.
 layout(local_size_x=16,local_size_y=16) in;
 layout(set=0,binding=0) uniform sampler2D sceneColor;
 layout(set=0,binding=1,std430) buffer Histogram { uint count[64]; uint sum[64]; } histogram;
 layout(push_constant) uniform ExposurePush {
   vec4 sourceSize; // active xy, allocated zw
   vec4 viewport; // normalized physical rectangle
-  vec4 metering; // min EV, max EV, target gray, base exposure multiplier
-  vec4 adaptation; // dt seconds, speed up/down EV/s, reset
-  vec4 range; // low percentile, high percentile, center weighted, reserved
+  vec4 metering; // limit min EV100, limit max EV100, target mid grey, base exposure multiplier
+  vec4 adaptation; // dt seconds, speed dark->light, speed light->dark, reset
+  vec4 range; // low/high fraction, metering mode (0 average, 1 spot, 2 center), evaluate (1 auto, 2 histogram)
+  vec4 extra; // compensation EV, progressive, reserved
 } exposure;
 shared uint localCount[64];
 shared uint localSum[64];
+
+float meteringWeight(vec2 pixel,vec2 size) {
+  float diagonal=0.5*(size.x+size.y);
+  float fromCenter=length(size*0.5-pixel);
+  uint mode=uint(exposure.range.z+0.5);
+  if(mode==1u) return 1.0-clamp(fromCenter-0.075*diagonal,0.0,1.0); // Spot
+  if(mode==2u) return 1.0-clamp(fromCenter/diagonal,0.0,1.0);       // Center Weighted
+  return 1.0;                                                        // Average
+}
+
 void main() {
   uint lane=gl_LocalInvocationIndex;
   if(lane<64) {localCount[lane]=0;localSum[lane]=0;}
@@ -19,16 +33,17 @@ void main() {
   // 256*144 samples, weight<=16 and value<=4095, each uint sum stays below 2^32.
   uvec2 grid=uvec2(clamp(ceil(exposure.viewport.zw*exposure.sourceSize.xy),vec2(1),vec2(256,144)));
   if(all(lessThan(gl_GlobalInvocationID.xy,grid))) {
-    vec2 localUv=(vec2(gl_GlobalInvocationID.xy)+0.5)/vec2(grid);
+    vec2 cell=vec2(gl_GlobalInvocationID.xy)+0.5;
+    vec2 localUv=cell/vec2(grid);
     vec2 activeUv=exposure.viewport.xy+localUv*exposure.viewport.zw;
     ivec2 pixel=ivec2(clamp(floor(activeUv*exposure.sourceSize.xy),vec2(0),exposure.sourceSize.xy-1));
     vec3 color=texelFetch(sceneColor,pixel,0).rgb;
-    if(!any(isnan(color))&&!any(isinf(color))) {
+    uint weight=uint(round(16.0*meteringWeight(cell,vec2(grid))));
+    if(weight>0u&&!any(isnan(color))&&!any(isinf(color))) {
       float luminance=dot(max(color,vec3(0)),vec3(.2126,.7152,.0722))*exposure.metering.w;
-      float logPosition=clamp((log2(max(luminance,exp2(-16.0)))+16.0)/40.0,0.0,1.0);
+      // HDRP: max(luma, 1e-4) antes do log. Faixa do histograma: 2^-16 a 2^24.
+      float logPosition=clamp((log2(max(luminance,1.0e-4))+16.0)/40.0,0.0,1.0);
       uint bin=min(uint(logPosition*64.0),63u);
-      vec2 fromCenter=localUv*2.0-1.0;
-      uint weight=exposure.range.z>0.5?uint(max(1.0,round(16.0*exp2(-4.0*dot(fromCenter,fromCenter))))):1u;
       atomicAdd(localCount[bin],weight);
       atomicAdd(localSum[bin],uint(round(logPosition*4095.0))*weight);
     }

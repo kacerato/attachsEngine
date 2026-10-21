@@ -31,16 +31,45 @@ runtime::GameView EditorSession::gameView() const {
   view.dpi=dpi_;view.platform=platform_;
   view.frustum=view_.frustum;
   const auto pose=sceneCameraPose();
-  if(pose.entity) {
-    auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;
-    projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
-    projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
-    projection.orthographicHalfHeight=pose.orthographicHalfHeight;
-    view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,rect.width/rect.height,projection);
+  float cameraRect[4];
+  if(pose.entity && pose.clippedViewport(cameraRect)) {
+    // Camera.pixelRect: lente e proporção do retângulo da câmera, não da vista.
+    auto projection=projection_;
+    const float aspect=pose.buildProjection(projection,rect.width*cameraRect[2],rect.height*cameraRect[3]);
+    view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,aspect,projection);
     view.camera=pose.entity;
+    view.pixelX=cameraRect[0]*view.width;view.pixelY=cameraRect[1]*view.height;
+    view.pixelWidth=cameraRect[2]*view.width;view.pixelHeight=cameraRect[3]*view.height;
   }
   view.valid=view.frustum.valid&&view.width>0&&view.height>0;
   return view;
+}
+
+bool EditorSession::playStackView(renderer::RenderViewSnapshot &out) {
+  out={};
+  const auto stack=sceneCameraStack();
+  if(stack.size()<2 || layout_.viewport.isEmpty()) return false;
+  // Até duas câmeras visíveis: a principal (a de baixo) e a de cima. As do meio
+  // ficam para um compositor de N vistas; o console avisa uma vez por Play.
+  if(stack.size()>2 && !playStackWarned_) {
+    playStackWarned_=true;
+    reportProblem(EditorConsoleSeverity::Warning,"Mais de duas câmeras na tela: só a de baixo e a de cima aparecem.");
+  }
+  const auto &pose=stack.back();
+  const auto rect=pose.screenRect(layout_.viewport);
+  if(rect.isEmpty()) return false;
+  out.width=std::clamp(static_cast<u32>(std::lround(rect.width*pixelsPerUnit_)),1u,4096u);
+  out.height=std::clamp(static_cast<u32>(std::lround(rect.height*pixelsPerUnit_)),1u,4096u);
+  auto settings=projection_;
+  const float aspect=pose.buildProjection(settings,rect.width,rect.height);
+  out.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,aspect,settings);
+  if(!out.frustum.valid) {out={};return false;}
+  const auto version=sceneVersion();
+  out.sceneEpoch=version.epoch;out.sceneRevision=version.revision;
+  out.cameraEntity=pose.entity;out.environmentLayerMask=pose.environmentMask;
+  applySceneCameraOutput(pose,out,aspect);
+  out.continuous=true;out.requestId=++playStackSerial_;
+  return true;
 }
 
 runtime::SceneView EditorSession::currentSceneView(std::string_view name) const {
@@ -78,6 +107,7 @@ bool EditorSession::loadAssets(std::string_view text) {
   loadPhysicsMaterials();
   loadAnimatorControllers();
   loadNavMeshes();
+  loadProbeAssets();
   loadAnimationClipAssets();
   refreshLibraryRows();
   return true;
@@ -121,7 +151,9 @@ runtime::LodView EditorSession::lodView() const {
     const auto camera=resolveSceneCamera(playScene_.document());
     if(camera.entity) {
       std::copy(camera.position,camera.position+3,lod.position);
-      lod.verticalFov=camera.verticalFov*.017453292519943295f;
+      float r[4];camera.clippedViewport(r);
+      const auto &area=layout_.viewport;
+      lod.verticalFov=camera.lens(area.height*r[3]>0?area.width*r[2]/(area.height*r[3]):1.f).verticalFovRadians;
       lod.orthographicHalfHeight=camera.projection==scene::CameraProjection::Orthographic?camera.orthographicHalfHeight:0;
       return lod;
     }

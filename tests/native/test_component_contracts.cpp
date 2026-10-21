@@ -116,7 +116,7 @@ AE_TEST(engine_capabilities_agree_with_the_renderer_tables) {
 
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.shadow.punctual"), "implementada é autorável");
   // Uma capacidade planejada nunca pode ser autorável: é o botão sem shader.
-  AE_EXPECT_TRUE(!core::engineCapabilityAuthorable("render.probe.reflection"), "planejada não é autorável");
+  AE_EXPECT_TRUE(!core::engineCapabilityAuthorable("render.light.cookie"), "planejada não é autorável");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.aa.temporal"),
                  "limitada pelo aparelho continua autorável, com degradação relatada");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable(""), "sem capacidade declarada é sempre autorável");

@@ -82,7 +82,7 @@ inline constexpr std::array<ComponentEnumOption,40> eventConnectionEvents{{
   {37,"Interação: entrou no gatilho"},{38,"Interação: saiu do gatilho"},
   {39,"Partículas: parou"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,39> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,40> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -117,13 +117,14 @@ inline constexpr std::array<EventConnectionMethodKey,39> eventConnectionMethodKe
   {32,"astra.ik.recoil","fire"},
   {33,"astra.ik.hit_reaction","hit_front"},
   {34,"astra.physics.character","set_vertical"},
-  {35,"astra.effects.particle_system","play"},
-  {36,"astra.effects.particle_system","stop"},
-  {37,"astra.effects.particle_system","stop_and_clear"},
-  {38,"astra.effects.particle_system","pause"},
-  {39,"astra.effects.particle_system","clear"},
+  {35,"astra.render.reflection_probe","render_probe"},
+  {36,"astra.effects.particle_system","play"},
+  {37,"astra.effects.particle_system","stop"},
+  {38,"astra.effects.particle_system","stop_and_clear"},
+  {39,"astra.effects.particle_system","pause"},
+  {40,"astra.effects.particle_system","clear"},
 }};
-inline constexpr std::array<ComponentEnumOption,40> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,41> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -136,7 +137,8 @@ inline constexpr std::array<ComponentEnumOption,40> eventConnectionMethods{{
   {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
   {30,"Agente: parar"},{31,"Agente: retomar"},
   {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},{34,"Personagem: subir/descer"},
-  {35,"Partículas: tocar"},{36,"Partículas: parar"},{37,"Partículas: parar e limpar"},{38,"Partículas: pausar"},{39,"Partículas: limpar"},
+  {35,"Sonda de reflexo: capturar agora"},
+  {36,"Partículas: tocar"},{37,"Partículas: parar"},{38,"Partículas: parar e limpar"},{39,"Partículas: pausar"},{40,"Partículas: limpar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},

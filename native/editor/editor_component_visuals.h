@@ -22,6 +22,9 @@
 #include "scene/audio.h"
 #include "scene/path.h"
 #include "scene/path_follow.h"
+#include "scene/reflection_probe.h"
+#include "scene/light_probe_group.h"
+#include "renderer/light_probes.h"
 #include "resources/curve3d_transform.h"
 #include <bit>
 
@@ -425,7 +428,64 @@ inline void navSurfaceVisual(const scene::ComponentValue &value,const EditorEnti
   constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
   for(const auto &e:edges) visual_detail::segment(out,world,c[e[0]],c[e[1]]);
 }
-inline const std::array<ComponentVisualProvider,72> componentVisualProviders{{
+// PK-6: a caixa de influência da Sonda de reflexo é alinhada aos eixos do
+// mundo, como na Unity: só a posição do objeto a move. A caixa interna é onde
+// a mistura termina (Blend Distance); três anéis marcam o ponto de captura.
+inline void reflectionProbeVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                                  float,bool detail,ComponentVisual &out) {
+  const auto &probe=static_cast<const scene::ReflectionProbe&>(value);out.enabled=probe.enabled;
+  float pose[16]{1,0,0,0,0,1,0,0,0,0,1,0,world[12],world[13],world[14],1};
+  for(u32 a=0;a<3;++a) visual_detail::ring(out,pose,.22f,0,a);
+  if(!detail) return;
+  const auto box=[&](float inset,u32 emphasis) {
+    float c[8][3];
+    for(u32 i=0;i<8;++i) for(u32 k=0;k<3;++k)
+      c[i][k]=probe.boxOffset[k]+((i>>k)&1?1.f:-1.f)*std::max(probe.boxSize[k]*.5f-inset,0.f);
+    constexpr u32 edges[12][2]{{0,1},{2,3},{4,5},{6,7},{0,2},{1,3},{4,6},{5,7},{0,4},{1,5},{2,6},{3,7}};
+    for(const auto &e:edges) {visual_detail::segment(out,pose,c[e[0]],c[e[1]]);out.segments.back().emphasis=emphasis;}
+  };
+  box(0,1);
+  if(probe.blendDistance>0) box(probe.blendDistance,0);
+}
+// Grupo de sondas de luz: cada sonda é uma pequena esfera (dois anéis); com
+// "Mostrar arestas", as arestas da tetraedralização que os objetos usam.
+inline void lightProbeGroupVisual(const scene::ComponentValue &value,const EditorEntity &,const EditorMapScene *,const float *world,
+                                  float,bool detail,ComponentVisual &out) {
+  const auto &group=static_cast<const scene::LightProbeGroup&>(value);out.enabled=group.enabled;
+  if(!detail) return;
+  std::vector<std::array<float,3>> positions;
+  for(const auto &p:group.points) {
+    float pose[16];std::copy(world,world+16,pose);
+    float centre[3];
+    for(u32 k=0;k<3;++k) centre[k]=world[k]*p.position[0]+world[4+k]*p.position[1]+world[8+k]*p.position[2]+world[12+k];
+    float frame[16]{1,0,0,0,0,1,0,0,0,0,1,0,centre[0],centre[1],centre[2],1};
+    visual_detail::ring(out,frame,.12f,0,1);visual_detail::ring(out,frame,.12f,0,2);
+    positions.push_back({centre[0],centre[1],centre[2]});
+  }
+  if(!group.showWireframe||positions.size()<4) return;
+  // Cache das arestas pela identidade e posições: tetraedralizar 512 pontos a
+  // cada quadro de interface seria desperdício.
+  static std::vector<std::pair<u32,u32>> edges;static u64 last=0;
+  u64 key=1469598103934665603ull;auto hash=[&](u64 n){key=(key^n)*1099511628211ull;};
+  hash(value.instanceId());hash(positions.size());
+  for(const auto &p:positions) for(float v:p) hash(std::bit_cast<u32>(v));
+  if(key!=last) {
+    edges.clear();
+    renderer::LightProbeSet set;set.positions=positions;set.sh.assign(positions.size(),renderer::ShL2{});
+    if(set.tetrahedralize())
+      for(const auto &t:set.tetrahedra) for(u32 a=0;a<4;++a) for(u32 b=a+1;b<4;++b)
+        edges.push_back({std::min(t.vertex[a],t.vertex[b]),std::max(t.vertex[a],t.vertex[b])});
+    std::sort(edges.begin(),edges.end());edges.erase(std::unique(edges.begin(),edges.end()),edges.end());
+    if(edges.size()>4096) edges.resize(4096);
+    last=key;
+  }
+  float identity[16]{1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1};
+  for(const auto &[a,b]:edges) if(a<positions.size()&&b<positions.size())
+    visual_detail::segment(out,identity,positions[a].data(),positions[b].data());
+}
+inline const std::array<ComponentVisualProvider,74> componentVisualProviders{{
+  {&scene::ReflectionProbe::descriptor,ui::UiIcon::LightingReflectionProbe,true,reflectionProbeVisual},
+  {&scene::LightProbeGroup::descriptor,ui::UiIcon::LightingLightProbeGroup,true,lightProbeGroupVisual},
   {&scene::NavSurface::descriptor,ui::UiIcon::NavigationSurface,true,navSurfaceVisual},
   {&scene::NavAgent::descriptor,ui::UiIcon::NavigationAgent,true,navAgentVisual},
   {&scene::NavObstacle::descriptor,ui::UiIcon::NavigationObstacle,true,navObstacleVisual},
@@ -665,7 +725,8 @@ inline ColliderVisualHit pickInspectedCollider(const runtime::SceneGraph &docume
   return {};
 }
 inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::SceneGraph &document,
-    EditorEntityId selected,float aspect,const EditorMapScene *resources=nullptr,u64 selectedPathInstance=0,u64 selectedPathPoint=0,EditorEntityId selectedPathEntity=0,u64 editedConnectionInstance=0) {
+    EditorEntityId selected,float aspect,const EditorMapScene *resources=nullptr,u64 selectedPathInstance=0,u64 selectedPathPoint=0,EditorEntityId selectedPathEntity=0,u64 editedConnectionInstance=0,
+    u64 selectedProbePoint=0) {
   std::vector<ComponentVisual> result;std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   // A finite diagnostic drawing budget never truncates the physics/picking
   // geometry. Give the explicitly inspected object first use of the budget.
@@ -716,6 +777,16 @@ inline std::vector<ComponentVisual> collectComponentVisuals(const runtime::Scene
           if(point){
             for(const auto *offset:{&point->in,&point->out}){auto tip=point->position;for(u32 a=0;a<3;++a)tip[a]+=(*offset)[a];visual_detail::segment(v,world,point->position.data(),tip.data());v.segments.back().emphasis=1;for(u32 a=0;a<3;++a){auto lo=tip,hi=tip;lo[a]-=.1f;hi[a]+=.1f;visual_detail::segment(v,world,lo.data(),hi.data());v.segments.back().emphasis=1;}}
             for(u32 a=0;a<3;++a){auto lo=point->position,hi=point->position;lo[a]-=.16f;hi[a]+=.16f;visual_detail::segment(v,world,lo.data(),hi.data());v.segments.back().emphasis=2;}
+          }
+        }
+        // PK-6: a sonda selecionada no modo Editar sondas, em destaque.
+        if(id==selected&&selectedProbePoint&&&value->type()==&scene::LightProbeGroup::descriptor) {
+          if(const auto *point=static_cast<const scene::LightProbeGroup&>(*value).point(selectedProbePoint)) {
+            float centre[3];
+            for(u32 k=0;k<3;++k) centre[k]=world[k]*point->position[0]+world[4+k]*point->position[1]+world[8+k]*point->position[2]+world[12+k];
+            float frame[16]{1,0,0,0,0,1,0,0,0,0,1,0,centre[0],centre[1],centre[2],1};
+            for(u32 a=0;a<3;++a) {visual_detail::ring(v,frame,.18f,0,a);}
+            for(usize s=v.segments.size()-144;s<v.segments.size();++s) v.segments[s].emphasis=2;
           }
         }
         if(id==selected && (value->type().id.starts_with("astra.constraint.")||value->type().id.starts_with("astra.spring."))) {
