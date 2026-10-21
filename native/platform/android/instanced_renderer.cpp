@@ -1,6 +1,7 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
 #include "renderer/procedural_sky.h"
+#include "renderer/cloud_layer.h"
 #include "renderer/time_of_day.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
@@ -121,7 +122,7 @@ struct DirtRoadFrameUniform {
   float quality[4]{};
   float shadowViewProjection[renderer::MaximumShadowCascades][16]{};
   float shadowSplitDepths[4]{};
-  float shadowParameters[4]{}; // inv atlas, cascade count, reserved, normal offset
+  float shadowParameters[4]{}; // inv atlas, cascade count, força da sombra do sol, normal offset
   float shadowWorldUnitsPerTexel[4]{};
   float shadowFilterParameters[4]{}; // near radius, far radius, reserved
   float shadowTransitionParameters[4]{}; // cascade blend, distance fade, reserved
@@ -143,7 +144,9 @@ struct DirtRoadFrameUniform {
   // Luzes pontuais e spot da cena. `x` é quantas valem neste quadro; o resto do
   // vetor existe para manter o alinhamento std140 do array que vem depois.
   float punctualLightParameters[4]{};
-  renderer::PunctualLight punctualLights[renderer::MaximumPunctualLights]{};
+  // Primeiro banco de luzes adicionais (vagas 0..7); o segundo fica no fim do
+  // bloco para nenhum offset mudar (punctualLightsExtra).
+  renderer::PunctualLight punctualLights[renderer::PunctualLightBankSize]{};
   // Sombra local (G6-B): x é quantos tiles valem, y o inverso do lado do
   // atlas. Um tile é a matriz da luz e o retângulo no atlas (x, y e lado já
   // normalizados; w é o tamanho do texel no alcance, a escala do desvio na
@@ -171,8 +174,21 @@ struct DirtRoadFrameUniform {
   float celestialParameters[4]{};
   float celestialStars[4]{};       // x estrelas, yzw tom do céu procedural
   float skyParameters[4]{};        // rgb chão do céu procedural, w espessura
+  // G4b, Cloud Layer: lidas pelo céu e pela sombra direcional (cloud_layer.glsl).
+  float cloudParameters[4]{};      // opacidade (0 desliga), cobertura, cirros, densidade
+  float cloudShape[4]{};           // 1/tamanho, altitude m, vento x, z (m, já no tamanho)
+  float cloudTint[4]{};            // tom*2^EV, luz do céu
+  float cloudShadow[4]{};          // força da sombra, reservados
+  // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens.
+  // Só o fragmento de superfície declara (environment_lighting.glsl, offset explícito).
+  renderer::PunctualLight punctualLightsExtra[renderer::MaximumPunctualLights - renderer::PunctualLightBankSize]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3536);
+static_assert(sizeof(DirtRoadFrameUniform) == 4112);
+static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
+static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
+static_assert(offsetof(DirtRoadFrameUniform, punctualLightsExtra) == 3600);
+static_assert(offsetof(DirtRoadFrameUniform, punctualLightParameters) + 16 ==
+              offsetof(DirtRoadFrameUniform, punctualLights));
 static_assert(offsetof(DirtRoadFrameUniform, skyParameters) == 3520);
 static_assert(offsetof(DirtRoadFrameUniform, celestialParameters) == 3488);
 static_assert(offsetof(DirtRoadFrameUniform, celestialStars) == 3504);
@@ -1089,7 +1105,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[18]{};
+  VkDescriptorSetLayoutBinding bindings[19]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1128,12 +1144,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={16,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G6-B: atlas de sombra das luzes locais, com o mesmo sampler de compare.
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G4b: mapa do Cloud Layer, lido pelo céu (conjunto 0) e pela sombra do sol (conjunto 1).
+  bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 1u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 2u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
@@ -1177,7 +1195,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[18]{};
+  VkWriteDescriptorSet writes[19]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1270,6 +1288,36 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorCount = 1;
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[writeCount].pImageInfo = &localShadow;
+  ++writeCount;
+  if (!cloudMapTexture_.isReady()) {
+    // Mapa procedural do Cloud Layer: 256² RGBA8 com mips, montado uma vez.
+    std::vector<u8> cloudMap;
+    if (!renderer::buildCloudMapTexture(renderer::CloudMapSize, 1u, cloudMap)) return false;
+    rhi::ImageDesc cloudDesc{};
+    cloudDesc.width = cloudDesc.height = renderer::CloudMapSize;
+    cloudDesc.mipLevels = 9;
+    cloudDesc.format = VK_FORMAT_R8G8B8A8_UNORM;
+    cloudDesc.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    cloudDesc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    cloudDesc.memoryClass = rhi::MemoryClass::Texture;
+    if (!memoryAllocator_->createImage(cloudDesc, &cloudMapTexture_) ||
+        !uploadContext_.uploadSampledMipChain(*memoryAllocator_, cloudMap.data(), cloudMap.size(), cloudMapTexture_))
+      return false;
+    rhi::SamplerDesc cloudSampler{};
+    cloudSampler.minFilter = cloudSampler.magFilter = VK_FILTER_LINEAR;
+    cloudSampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    cloudSampler.maxLod = 8;
+    cloudSampler.addressU = cloudSampler.addressV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    if (!cloudMapSampler_.initialize(device_, cloudSampler)) return false;
+  }
+  VkDescriptorImageInfo cloudMapInfo{cloudMapSampler_.handle(), cloudMapTexture_.view(),
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes[writeCount].dstSet = environmentSet_;
+  writes[writeCount].dstBinding = 18;
+  writes[writeCount].descriptorCount = 1;
+  writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  writes[writeCount].pImageInfo = &cloudMapInfo;
   ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
@@ -1602,7 +1650,7 @@ bool applySceneEnvironmentLook(
     const renderer::EnvironmentMapDescription &mapDescription, bool authoredMapActive,
     bool splitSumBrdf, bool fogEnabled, bool postEnabled,
     std::span<const renderer::SceneLight> lights,
-    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache) {
+    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache, double timeSeconds) {
   if(!renderer::adjustEnvironmentLighting(baseLighting,adjustment,frame.environment)) return false;
   frame.diffuseIrradianceSh={};
   if(mapDescription.hasDiffuseIrradianceSh()) {
@@ -1750,6 +1798,23 @@ bool applySceneEnvironmentLook(
     std::copy_n(frame.environment.sunColorAngularRadius,3,input.sunColor);
     input.sunIntensity=frame.environment.sunDirectionIntensity[3];
     if(!groundCache.resolve(input,frame.atmosphereGroundIrradiance)) return false;
+  }
+  // G4b: Cloud Layer. As linhas vão ao céu e à sombra do sol; o ambiente do céu
+  // perde o azul na proporção do céu coberto, como a sonda de ambiente do HDRP,
+  // que é renderizada com as nuvens.
+  const auto clouds=renderer::packCloudLayer(look.clouds,look.active,timeSeconds);
+  std::copy_n(clouds.parameters,4,frame.cloudParameters);
+  std::copy_n(clouds.shape,4,frame.cloudShape);
+  std::copy_n(clouds.tint,4,frame.cloudTint);
+  std::copy_n(clouds.shadow,4,frame.cloudShadow);
+  const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
+  if(occlusion>0.0f) {
+    const auto grey=[&](float color[3]) {
+      const float luminance=0.2126f*color[0]+0.7152f*color[1]+0.0722f*color[2];
+      for(u32 channel=0;channel<3;++channel) color[channel]+=(luminance*0.92f-color[channel])*occlusion*0.75f;
+    };
+    grey(frame.environment.ambientColorStrength);
+    grey(frame.atmosphereGroundIrradiance);
   }
   return true;
 }
@@ -2717,6 +2782,17 @@ bool InstancedRenderer::createShadowResources() {
     pipeline.stageCount = 2;
     if (ok) ok = vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,
                                            &shadowMaskedPipeline_)==VK_SUCCESS;
+    // PK-8: "Projetar sombras: Ligado" num material de face única descarta a
+    // face de trás no mapa, como o ShadowCaster da Unity com o Cull do
+    // material. As matrizes da luz não invertem Y, então a frente chega
+    // anti-horária aqui (na câmera, com o Y do clip invertido, é horária).
+    raster.cullMode = VK_CULL_MODE_BACK_BIT;
+    pipeline.stageCount = 1;
+    if (ok) ok = vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,
+                                           &shadowOpaqueCullPipeline_)==VK_SUCCESS;
+    pipeline.stageCount = 2;
+    if (ok) ok = vkCreateGraphicsPipelines(device_,VK_NULL_HANDLE,1,&pipeline,nullptr,
+                                           &shadowMaskedCullPipeline_)==VK_SUCCESS;
   }
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, masked, nullptr);
@@ -2775,7 +2851,9 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     }
   }
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
-    if (!authoredVisibility_.empty() && (!authoredVisibility_[drawIndex] || !authoredShadows_[drawIndex])) return;
+    // Só o modo de Projetar sombras decide aqui: "Só sombra" some da câmera
+    // (authoredVisibility_) e continua no mapa.
+    if (!authoredShadows_.empty() && !authoredShadows_[drawIndex]) return;
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
     // R4: a sombra recorta pelo material EFETIVO do desenho (textura, corte,
     // conjunto de UV e transformação trocados na instância ou no material do projeto).
@@ -2825,6 +2903,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
     ++shadowSubmittedDraws_;
   };
+  bool shadowDrawsSplit=false;
   for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
     if ((dirtyMask & (1u << cascade)) == 0) continue;
     ++shadowRenderedCascades_;
@@ -2835,9 +2914,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
                       static_cast<i32>((cascade>>1u)*resolution)}, {resolution,resolution}};
     vkCmdSetViewport(commandBuffer_,0,1,&viewport);
     vkCmdSetScissor(commandBuffer_,0,1,&scissor);
-    vkCmdSetDepthBias(commandBuffer_,renderingPolicy_.shadows.depthBiasConstant,0.0f,
-                      renderingPolicy_.shadows.depthBiasSlope);
-    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowOpaquePipeline_);
+    vkCmdSetDepthBias(commandBuffer_,renderingPolicy_.shadows.depthBiasConstant*sunShadowBiasScale_,0.0f,
+                      renderingPolicy_.shadows.depthBiasSlope*sunShadowBiasScale_);
     // Packages store every discrete LOD as draw records. Shadowing all stored
     // levels would duplicate the same caster and turn a content optimization
     // into a shadow spike. Until shadow LOD gets its own stable selection
@@ -2847,14 +2925,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
         lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
     const std::vector<u32> &shadowCoverageDraws =
         coverageLodGroups_.empty() ? coverageDrawOrder_ : levelZeroCoverageDrawOrder_;
-    for(u32 drawIndex:shadowSolidDraws) pushAndDraw(cascade,drawIndex,false);
-    if(!shadowCoverageDraws.empty()) {
-      vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowMaskedPipeline_);
-      if(useBindless_)
-        vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                shadowPipelineLayout_,0,1,&textureSet_,0,nullptr);
-      for(u32 drawIndex:shadowCoverageDraws) pushAndDraw(cascade,drawIndex,true);
-    }
+    if(!shadowDrawsSplit) {splitShadowDraws(shadowSolidDraws,shadowCoverageDraws);shadowDrawsSplit=true;}
+    recordShadowCasters([&](u32 drawIndex,bool masked){pushAndDraw(cascade,drawIndex,masked);});
   }
   vkCmdEndRenderPass(commandBuffer_);
   shadowCacheInitialized_ = true;
@@ -2864,6 +2936,9 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
 void InstancedRenderer::destroyShadowResources() {
   if (shadowOpaquePipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowOpaquePipeline_,nullptr);
   if (shadowMaskedPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowMaskedPipeline_,nullptr);
+  if (shadowOpaqueCullPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowOpaqueCullPipeline_,nullptr);
+  if (shadowMaskedCullPipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_,shadowMaskedCullPipeline_,nullptr);
+  shadowOpaqueCullPipeline_=VK_NULL_HANDLE; shadowMaskedCullPipeline_=VK_NULL_HANDLE;
   if (shadowPipelineLayout_ != VK_NULL_HANDLE) vkDestroyPipelineLayout(device_,shadowPipelineLayout_,nullptr);
   if (shadowFramebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(device_,shadowFramebuffer_,nullptr);
   if (shadowCachedFramebuffer_ != VK_NULL_HANDLE)
@@ -2909,7 +2984,7 @@ void InstancedRenderer::recordLocalShadowPass() {
   // O mesmo recorte de material das cascatas: folhagem recortada projeta a
   // mesma silhueta sob o sol e sob a lâmpada.
   auto pushAndDraw = [&](u32 tile, u32 drawIndex, bool masked) {
-    if (!authoredVisibility_.empty() && (!authoredVisibility_[drawIndex] || !authoredShadows_[drawIndex])) return;
+    if (!authoredShadows_.empty() && !authoredShadows_[drawIndex]) return;
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
     auto material=dirtRoadResources_.materials()[draw.materialIndex];
     const bool authored=drawIndex<authoredMaterials_.size();
@@ -2960,6 +3035,7 @@ void InstancedRenderer::recordLocalShadowPass() {
   const std::vector<u32> &solidDraws = lodGroups_.empty() ? solidDrawOrder_ : levelZeroSolidDrawOrder_;
   const std::vector<u32> &coverageDraws =
       coverageLodGroups_.empty() ? coverageDrawOrder_ : levelZeroCoverageDrawOrder_;
+  splitShadowDraws(solidDraws,coverageDraws);
   for (u32 tile = 0; tile < localShadowTileCount_; ++tile) {
     const auto &rect = localShadowTiles_[tile];
     VkViewport viewport{static_cast<float>(rect.x),static_cast<float>(rect.y),
@@ -2972,17 +3048,53 @@ void InstancedRenderer::recordLocalShadowPass() {
     const float biasScale = localShadowBias_[tile] / 0.05f;
     vkCmdSetDepthBias(commandBuffer_,renderingPolicy_.shadows.depthBiasConstant*biasScale,0.0f,
                       renderingPolicy_.shadows.depthBiasSlope*biasScale);
-    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowOpaquePipeline_);
-    for (u32 drawIndex : solidDraws) pushAndDraw(tile,drawIndex,false);
-    if (!coverageDraws.empty() && shadowMaskedPipeline_ != VK_NULL_HANDLE) {
-      vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,shadowMaskedPipeline_);
-      if(useBindless_)
-        vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                shadowPipelineLayout_,0,1,&textureSet_,0,nullptr);
-      for (u32 drawIndex : coverageDraws) pushAndDraw(tile,drawIndex,true);
-    }
+    recordShadowCasters([&](u32 drawIndex,bool masked){pushAndDraw(tile,drawIndex,masked);});
   }
   vkCmdEndRenderPass(commandBuffer_);
+}
+
+// PK-8: os casters de um mapa de sombra em até quatro grupos, um pipeline por
+// grupo: sem culling (Dupla face, material de face dupla, cena de pacote) e com
+// a face de trás descartada (Ligado ou Só sombra num material de face única),
+// opacos e recortados. A divisão resolve o material efetivo UMA vez por
+// desenho e quadro, e não uma vez por cascata.
+void InstancedRenderer::splitShadowDraws(const std::vector<u32> &solid,const std::vector<u32> &coverage) {
+  const auto split=[&](const std::vector<u32> &source,std::vector<u32> &none,std::vector<u32> &cull) {
+    none.clear();cull.clear();
+    for(u32 drawIndex:source) {
+      // Cena de pacote (sem estado autoral): o comportamento anterior, sem culling.
+      const u8 mode=authoredShadows_.empty()?u8{2}:drawIndex<authoredShadows_.size()?authoredShadows_[drawIndex]:u8{0};
+      if(!mode) continue;
+      bool culled=false;
+      if(mode==1||mode==3) {
+        auto material=dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex];
+        if(drawIndex<authoredMaterials_.size())
+          material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
+                                                   static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+        culled=(material.flags&renderer::MapMaterialCullBackFaces)!=0 &&
+               (material.flags&renderer::MapMaterialDoubleSided)==0;
+      }
+      (culled?cull:none).push_back(drawIndex);
+    }
+  };
+  split(solid,shadowSolidNone_,shadowSolidCull_);
+  split(coverage,shadowCoverageNone_,shadowCoverageCull_);
+}
+
+template<class Draw>
+void InstancedRenderer::recordShadowCasters(const Draw &draw) {
+  const auto group=[&](VkPipeline pipeline,const std::vector<u32> &draws,bool masked) {
+    if(draws.empty() || pipeline==VK_NULL_HANDLE) return;
+    vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
+    if(masked && useBindless_)
+      vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              shadowPipelineLayout_,0,1,&textureSet_,0,nullptr);
+    for(u32 drawIndex:draws) draw(drawIndex,masked);
+  };
+  group(shadowOpaquePipeline_,shadowSolidNone_,false);
+  group(shadowOpaqueCullPipeline_,shadowSolidCull_,false);
+  group(shadowMaskedPipeline_,shadowCoverageNone_,true);
+  group(shadowMaskedCullPipeline_,shadowCoverageCull_,true);
 }
 
 bool InstancedRenderer::createFramebuffers() {
@@ -4963,6 +5075,7 @@ void InstancedRenderer::shutdown() {
   baseSampler_.shutdown();
   baseTexture_.reset();
   waterDetailSampler_.shutdown();waterDetailTexture_.reset();
+  cloudMapSampler_.shutdown();cloudMapTexture_.reset();
   routeVertices_.reset();routeIndices_.reset();authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();authoredWaterTime_=-1;
   dummySampler_.shutdown();
   dummyTexture_.reset();
@@ -4975,8 +5088,8 @@ void InstancedRenderer::shutdown() {
   rhiDevice_ = nullptr;
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
-  pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredMaterials_.clear();authoredDrawIdentities_.clear();
-  authoredBaseVisibility_.clear();authoredLayers_.clear();
+  pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredLighting_.clear();authoredMaterials_.clear();authoredDrawIdentities_.clear();
+  authoredBaseVisibility_.clear();authoredBaseShadows_.clear();authoredLayers_.clear();
   authoredUvTransformEntries_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
@@ -5277,8 +5390,8 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
       authoringTextureSlots_.size(),dirtRoadResources_.lastGeometryReused()?"reaproveitada":"enviada");
   pendingScene_.clear();pendingMapPoseCount_=0;pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
-  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();
-  authoredBaseVisibility_.clear();authoredLayers_.clear();
+  authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredLighting_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();
+  authoredBaseVisibility_.clear();authoredBaseShadows_.clear();authoredLayers_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
@@ -5393,7 +5506,8 @@ bool InstancedRenderer::rebuildDrawOrders() {
   sourceDrawUvMetric_.assign(sourceMapDraws_.size(),-1.0f);
   if(emptyScene_) {
     authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0);
-    authoredBaseVisibility_.assign(sourceMapDraws_.size(),0);authoredLayers_.assign(sourceMapDraws_.size(),0);
+    authoredBaseVisibility_.assign(sourceMapDraws_.size(),0);authoredBaseShadows_.assign(sourceMapDraws_.size(),0);
+    authoredLayers_.assign(sourceMapDraws_.size(),0);
   }
   instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
   for (u32 index = 0; index < instanceCount_; ++index) {
@@ -5543,8 +5657,9 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     auto &state=pendingAuthoredState_[i];
     state.material=draws[i].material;
     state.visible=draws[i].visible;
-    state.castShadow=draws[i].castShadow;
-    state.layer=draws[i].layer;
+    state.castShadows=draws[i].castShadows;
+    state.lighting=draws[i].lighting;
+    state.layer=static_cast<u8>(draws[i].lighting.objectLayer&31u);
   }
   pendingAuthoredStateValid_=true;
   queueSkinPalettes(draws);
@@ -5600,7 +5715,8 @@ bool InstancedRenderer::commitAuthoredScene() {
   if(!instances) return false;
   std::vector<renderer::MapDrawRecord> records;records.reserve(count);
   authoredVisibility_.resize(count);authoredShadows_.resize(count);authoredMaterials_.resize(count);
-  authoredBaseVisibility_.resize(count);authoredLayers_.resize(count);
+  authoredLighting_.resize(count);
+  authoredBaseVisibility_.resize(count);authoredBaseShadows_.resize(count);authoredLayers_.resize(count);
   authoredDrawIdentities_.resize(count);
   routeVertices_=std::move(nextVertices);routeIndices_=std::move(nextIndices);authoredWaterLayers_.resize(count);
   authoredWaterFlowDepth_.resize(count);
@@ -5611,8 +5727,15 @@ bool InstancedRenderer::commitAuthoredScene() {
   cameraWaterHorizonFillActive_=false;
   for(u32 i=0;i<count;++i) {
     const auto &state=pendingScene_[i];records.push_back(state.pose.draw);instances[i]=state.pose.instance;
-    authoredBaseVisibility_[i]=state.visible;authoredLayers_[i]=state.layer&31u;
-    authoredVisibility_[i]=authoredVisibleIn(i,sceneCullingMask_);authoredShadows_[i]=state.castShadow;authoredMaterials_[i]=state.material;
+    // "Só sombra" sai da câmera e fica no mapa de sombra. A Culling Mask da
+    // câmera esconde o desenho e a sombra do objeto nesta vista.
+    authoredBaseVisibility_[i]=state.visible&&state.castShadows!=3;
+    authoredBaseShadows_[i]=state.visible?state.castShadows:u8{0};
+    authoredLayers_[i]=static_cast<u8>(state.lighting.objectLayer&31u);
+    authoredVisibility_[i]=authoredVisibleIn(i,sceneCullingMask_);
+    authoredShadows_[i]=authoredShadowsIn(i,sceneCullingMask_);
+    authoredLighting_[i]=state.lighting;
+    authoredMaterials_[i]=state.material;
     authoredDrawIdentities_[i]={state.objectId,state.sourceDrawIndex,state.route};
     std::copy(state.waterLayers,state.waterLayers+4,authoredWaterLayers_[i].begin());
     std::copy(state.waterFlowDepth,state.waterFlowDepth+4,authoredWaterFlowDepth_[i].begin());
@@ -5673,6 +5796,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   using Clock = std::chrono::steady_clock;
   const auto acquireStart = frameProfilingEnabled_ ? Clock::now() : Clock::time_point{};
   lastFrameTimings_ = {};
+  cloudTimeSeconds_ = timeSeconds;
   if(!sceneEnvironmentVolumes_.empty())
     sceneEnvironment_=renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,camera.position,
                                                          sceneEnvironmentLayerMask_,&environmentBlendReport_);
@@ -5753,20 +5877,23 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         std::min<usize>(pendingAuthoredState_.size(), authoredMaterials_.size()));
     for (u32 i = 0; i < states; ++i) {
       const auto &state = pendingAuthoredState_[i];
-      const bool baseVisible = i<authoredBaseVisibility_.size() ? authoredBaseVisibility_[i]!=0 : authoredVisibility_[i]!=0;
-      const u8 layer = i<authoredLayers_.size() ? authoredLayers_[i] : 0;
-      if (!(authoredMaterials_[i] == state.material) || baseVisible != state.visible ||
-          layer != (state.layer&31u) || authoredShadows_[i] != state.castShadow) {
+      const u8 visible = state.visible && state.castShadows != 3;
+      const u8 shadows = state.visible ? state.castShadows : u8{0};
+      const u8 layer = static_cast<u8>(state.lighting.objectLayer&31u);
+      const bool tracked = i<authoredBaseVisibility_.size();
+      if (!(authoredMaterials_[i] == state.material) ||
+          (tracked ? (authoredBaseVisibility_[i] != visible || authoredBaseShadows_[i] != shadows || authoredLayers_[i] != layer)
+                   : (authoredVisibility_[i] != visible || authoredShadows_[i] != shadows))) {
         shadowCascadeDirtyMask_ = 0xffffffffu;
         authoredAppearanceChanged=true;
       }
       authoredMaterials_[i] = state.material;
-      if (i<authoredBaseVisibility_.size()) {
-        authoredBaseVisibility_[i] = state.visible;
-        authoredLayers_[i] = state.layer&31u;
+      if (tracked) {
+        authoredBaseVisibility_[i] = visible;authoredBaseShadows_[i] = shadows;authoredLayers_[i] = layer;
         authoredVisibility_[i] = authoredVisibleIn(i,sceneCullingMask_);
-      } else authoredVisibility_[i] = state.visible;
-      authoredShadows_[i] = state.castShadow;
+        authoredShadows_[i] = authoredShadowsIn(i,sceneCullingMask_);
+      } else {authoredVisibility_[i] = visible;authoredShadows_[i] = shadows;}
+      if (i < authoredLighting_.size()) authoredLighting_[i] = state.lighting;
     }
     if (!writeAuthoredUvTransforms()) return rhi::SwapchainStatus::FatalError;
     pendingAuthoredStateValid_ = false;
@@ -5946,7 +6073,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
     if(!applySceneEnvironmentLook(*frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
           look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
-          editorFog,editorPost,lights,atmosphereGroundCache_))
+          editorFog,editorPost,lights,atmosphereGroundCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
@@ -6078,11 +6205,23 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // quadro, e o que não coube fica contado em `lightBudget_`.
     {
       u32 sources[renderer::MaximumPunctualLights]{};
+      // Teto do quadro pela política (Additional Lights do URP Asset); as
+      // vagas vão primeiro para a cópia CPU e depois para os dois bancos.
+      const u32 budget = std::min(renderingPolicy_.lights.additionalLights, renderer::MaximumPunctualLights);
       const u32 accepted = renderer::selectPunctualLights(
-          lights, camera.position, frame->punctualLights, lightBudget_, sources);
+          lights, camera.position, std::span<renderer::PunctualLight>(frameLights_, budget), lightBudget_, sources);
+      frameLightCount_ = accepted;
+      for (u32 i = accepted; i < renderer::MaximumPunctualLights; ++i) {
+        frameLights_[i] = {};frameLightFilters_[i] = {};
+      }
+      for (u32 i = 0; i < accepted; ++i) frameLightFilters_[i] = lights[sources[i]].filter;
       frame->punctualLightParameters[0] = static_cast<float>(accepted);
-      for (u32 i = accepted; i < renderer::MaximumPunctualLights; ++i)
-        frame->punctualLights[i] = {};
+      // Sol principal deste quadro: as máscaras dele decidem o bit "sem sol"
+      // de cada desenho. Sem direcional, o sol do Ambiente ilumina tudo.
+      {
+        const auto *sun = renderer::selectDirectionalLight(lights);
+        sunFilter_ = sun ? sun->filter : renderer::PunctualLightFilter{};
+      }
       // Sombra local (G6-B): o atlas é montado só com as luzes ACEITAS neste
       // quadro. Luz fora do orçamento não ilumina, e sombra de luz que não
       // ilumina seria trabalho jogado fora.
@@ -6097,7 +6236,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         u32 casterCount = 0;
         for (u32 slot = 0; slot < accepted; ++slot) {
           const auto &light = lights[sources[slot]];
-          if (!light.shadow.casts()) continue;
+          // Direcional adicional não tem mapa: só o sol principal projeta.
+          if (!light.shadow.casts() || light.modality == renderer::LightModality::Directional) continue;
           auto &caster = casters[casterCount++];
           caster.lightIndex = slot;
           caster.modality = light.modality;
@@ -6137,7 +6277,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
             // A primeira face aponta o slot da luz para o bloco dela. `y` leva
             // quantos tiles e, somado 16, o pedido de sombra suave.
             if (tile.face == 0) {
-              auto &shadow = frame->punctualLights[caster.lightIndex].shadow;
+              auto &shadow = frameLights_[caster.lightIndex].shadow;
               const u32 faces = caster.modality == renderer::LightModality::Point ? 6u : 1u;
               shadow[0] = static_cast<float>(index);
               shadow[1] = static_cast<float>(faces + (light.shadow.mode == 2 ? 16u : 0u));
@@ -6147,6 +6287,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           }
           frame->localShadowParameters[0] = static_cast<float>(localShadowTileCount_);
         }
+      }
+      // Os dois bancos do bloco recebem as vagas já com o tile de sombra.
+      for (u32 i = 0; i < renderer::MaximumPunctualLights; ++i) {
+        if (i < renderer::PunctualLightBankSize) frame->punctualLights[i] = frameLights_[i];
+        else frame->punctualLightsExtra[i - renderer::PunctualLightBankSize] = frameLights_[i];
       }
     }
     frame->waterSurfaceDetail[0] = waterShading_.foamElevation;
@@ -6160,13 +6305,35 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowParameters[0] = shadowAtlas_.width() > 0
                                      ? 1.0f / static_cast<float>(shadowAtlas_.width()) : 1.0f;
     frame->shadowParameters[1] = 0.0f;
-    frame->shadowParameters[3] = renderingPolicy_.shadows.normalOffsetTexels;
-    frame->shadowFilterParameters[0] = renderingPolicy_.shadows.filterTaps >= 25u ? 2.0f
-                                           : renderingPolicy_.shadows.filterTaps >= 9u ? 1.0f
-                                                                                        : 0.0f;
-    frame->shadowFilterParameters[1] = renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
-                                          : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
+    // A sombra do sol é da Luz principal (Luz v4), com a política do aparelho
+    // como teto: cascatas, distância e resolução continuam dela. Sem nenhuma
+    // direcional, o sol padrão do Ambiente projeta como sempre projetou.
+    renderer::SceneLightShadow sunShadow{};
+    sunShadow.mode = 2;
+    if (const auto *sunLight = renderer::selectDirectionalLight(lights)) sunShadow = sunLight->shadow;
+    frame->shadowParameters[2] = std::clamp(sunShadow.strength, 0.0f, 1.0f);
+    frame->shadowParameters[3] = renderingPolicy_.shadows.normalOffsetTexels *
+                                 (sunShadow.normalBias / renderer::ReferenceShadowNormalBias);
+    // Dura: uma busca de hardware (2x2 filtrada), como Hard Shadows; suave
+    // usa o kernel que a política deu ao aparelho.
+    const bool hardSunShadow = sunShadow.mode == 1;
+    frame->shadowFilterParameters[0] = hardSunShadow ? 0.0f
+                                       : renderingPolicy_.shadows.filterTaps >= 25u ? 2.0f
+                                       : renderingPolicy_.shadows.filterTaps >= 9u ? 1.0f
+                                                                                    : 0.0f;
+    frame->shadowFilterParameters[1] = hardSunShadow ? 0.0f
+                                       : renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
+                                       : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
                                                                                        : 0.0f;
+    {
+      // O mapa guardado das cascatas estáticas foi desenhado com o desvio
+      // anterior: trocar o Desvio da Luz exige redesenhar.
+      const float biasScale = sunShadow.bias / renderer::ReferenceShadowBias;
+      if (biasScale != sunShadowBiasScale_) {
+        sunShadowBiasScale_ = biasScale;
+        invalidateStaticShadowCache();
+      }
+    }
     frame->shadowFilterParameters[2] = temporalCurrentJitter_[0];
     frame->shadowFilterParameters[3] = temporalCurrentJitter_[1];
     frame->shadowTransitionParameters[0] = renderingPolicy_.shadows.cascadeBlendRatio;
@@ -6175,7 +6342,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
     // Render Shadows da câmera: sem cascatas nem atlas, o shader não amostra sombra.
-    if (renderingPolicy_.shadows.enabled && sceneShadows_) {
+    if (renderingPolicy_.shadows.enabled && sceneShadows_ && sunShadow.casts()) {
       renderer::ShadowCascadeInput input{};
       std::memcpy(input.cameraPosition, camera.position, sizeof(input.cameraPosition));
       std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
@@ -6798,18 +6965,28 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // G1: cada desenho visível recebe a máscara das luzes aceitas neste quadro
     // cuja esfera o alcança; o fragmento pula as demais. Sem a opção, a coluna
     // fica no zero de buildNormalMatrix, que o shader lê como "todas".
-    if (punctualLightMaskEnabled_ && lightingFrame && instanceBuffer_.mappedData()) {
+    //
+    // PK-3/PK-8: a mesma palavra leva as decisões autorais do desenho —
+    // Culling Mask e Rendering Layers de cada luz contra a camada do objeto e a
+    // Rendering Layer Mask do renderer, o limite de 8 luzes por objeto, o
+    // Receive Shadows e se o sol principal alcança o objeto. Numa cena autoral
+    // ela é sempre escrita; a opção de lançamento liga só o teste de esfera.
+    if (lightingFrame && instanceBuffer_.mappedData() &&
+        (punctualLightMaskEnabled_ || !authoredLighting_.empty() || frameLightCount_ > renderer::MaximumLightsPerObject)) {
       auto *maskInstances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
-      const float acceptedLights = lightingFrame->punctualLightParameters[0];
-      const u32 lightCount = acceptedLights > 0.0f
-          ? std::min(renderer::MaximumPunctualLights, static_cast<u32>(acceptedLights + 0.5f)) : 0u;
-      const std::span<const renderer::PunctualLight> maskLights(lightingFrame->punctualLights, lightCount);
+      const std::span<const renderer::PunctualLight> maskLights(frameLights_, frameLightCount_);
+      const std::span<const renderer::PunctualLightFilter> maskFilters(frameLightFilters_, frameLightCount_);
+      const u32 perObject = renderingPolicy_.lights.additionalLightsPerObject;
       bool masksChanged = false;
       auto applyLightMasks = [&](const std::vector<u32> &order) {
         for (u32 drawIndex : order) {
           const auto &draw = dirtRoadResources_.draws()[drawIndex];
-          const float encoded = renderer::encodePunctualLightMask(
-              renderer::punctualLightMask(draw.boundsCenter, draw.boundsRadius, maskLights));
+          const renderer::DrawLightingKey key =
+              drawIndex < authoredLighting_.size() ? authoredLighting_[drawIndex] : renderer::DrawLightingKey{};
+          const float encoded = renderer::encodeDrawLighting(
+              renderer::punctualLightMask(draw.boundsCenter, draw.boundsRadius, maskLights, maskFilters, key,
+                                          perObject, punctualLightMaskEnabled_),
+              key.receiveShadows, renderer::lightFilterAccepts(sunFilter_, key));
           if (maskInstances[drawIndex].normalColumns[11] != encoded) {
             maskInstances[drawIndex].normalColumns[11] = encoded;
             masksChanged = true;
@@ -6826,8 +7003,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         pointLightingSpecializationEnabled_ && pointLightingPipeline_ != VK_NULL_HANDLE && lightingFrame &&
         lightingFrame->punctualLightParameters[0] >= 0.0f &&
         lightingFrame->punctualLightParameters[0] <= static_cast<float>(renderer::MaximumPunctualLights) &&
-        renderer::unshadowedPointLighting(std::span<const renderer::PunctualLight>(
-            lightingFrame->punctualLights, static_cast<u32>(lightingFrame->punctualLightParameters[0])));
+        renderer::unshadowedPointLighting(std::span<const renderer::PunctualLight>(frameLights_, frameLightCount_));
     const auto *solidVariants = pointLightingSpecializationLastFrame_ ? pointLightingMaterialPipelines_ :
         opaqueNoClipLastFrame_ ? opaqueNoClipMaterialPipelines_ : opaqueMaterialPipelines_;
     const auto solidPipeline = pointLightingSpecializationLastFrame_ ? pointLightingPipeline_ :

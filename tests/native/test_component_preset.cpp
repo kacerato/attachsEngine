@@ -83,23 +83,23 @@ AE_TEST(apply_component_fields_is_a_single_transaction) {
   auto *value = components.add(scene::Light::descriptor);
   auto &light = static_cast<scene::Light &>(*value);
   light.kind = scene::LightKind::Spot;
-  light.innerAngle = 10;
-  light.outerAngle = 40;
+  light.innerSpotAngle = 10;
+  light.spotAngle = 40;
 
   // Um cone interno maior que o externo é recusado por `Light::valid()`. Aplicar
   // só o interno produziria exatamente esse estado — e precisa falhar INTEIRO,
   // sem deixar o valor pela metade.
   scene::Light preset;
   preset.kind = scene::LightKind::Spot;
-  preset.innerAngle = 80;
-  preset.outerAngle = 85;
-  const scene::FieldAddress inner[]{{"inner_angle", 0, scene::FieldKind::Number}};
+  preset.innerSpotAngle = 80;
+  preset.spotAngle = 85;
+  const scene::FieldAddress inner[]{{"inner_spot_angle", 0, scene::FieldKind::Number}};
   const auto outcome = scene::applyComponentFields(components, preset, inner);
   AE_EXPECT_TRUE(!outcome.ok(), "a combinação inválida foi recusada");
   AE_EXPECT_EQ(outcome.applied, 0u, "nenhum campo permanece aplicado após a recusa");
 
   const auto *unchanged = static_cast<const scene::Light *>(components.find(scene::Light::descriptor));
-  AE_EXPECT_TRUE(unchanged->innerAngle == 10, "o valor anterior continua no componente");
+  AE_EXPECT_TRUE(unchanged->innerSpotAngle == 10, "o valor anterior continua no componente");
 }
 
 AE_TEST(apply_component_fields_rejects_unknown_address_without_touching_the_rest) {

@@ -1,5 +1,6 @@
 #pragma once
 #include "scene/components.h"
+#include "scene/rendering_layers.h"
 #include <array>
 #include <cmath>
 namespace ae::scene {
@@ -41,7 +42,7 @@ public:
   CameraBackground background=CameraBackground::Skybox;
   // Cor de fundo da Unity (49,77,121 sRGB) em RGB linear.
   float backgroundColor[3]{.0307f,.0742f,.1912f};
-  u32 cullingMask=~0u;
+  u32 cullingMask=kAllObjectLayers;
   CameraAntialiasing antialiasing=CameraAntialiasing::Project;
   CameraGateFit gateFit=CameraGateFit::Horizontal;
   static const ComponentType descriptor;
@@ -144,18 +145,8 @@ inline constexpr std::array<ComponentEnumOption,3> cameraAntialiasingOptions{{
 inline constexpr std::array<ComponentEnumOption,5> cameraGateFitOptions{{
   {0,"Vertical"},{1,"Horizontal"},{2,"Preencher"},{3,"Sobrevarredura"},{4,"Nenhum (esticar)"}
 }};
-// Um bit por camada de objeto do projeto (runtime::GameplayLayers, 32). O
-// Inspector troca estes rótulos pelos nomes de camada do projeto.
-inline constexpr std::array<ComponentEnumOption,32> cameraCullingMaskOptions{{
-  {1u<<0,"Camada 0"},{1u<<1,"Camada 1"},{1u<<2,"Camada 2"},{1u<<3,"Camada 3"},
-  {1u<<4,"Camada 4"},{1u<<5,"Camada 5"},{1u<<6,"Camada 6"},{1u<<7,"Camada 7"},
-  {1u<<8,"Camada 8"},{1u<<9,"Camada 9"},{1u<<10,"Camada 10"},{1u<<11,"Camada 11"},
-  {1u<<12,"Camada 12"},{1u<<13,"Camada 13"},{1u<<14,"Camada 14"},{1u<<15,"Camada 15"},
-  {1u<<16,"Camada 16"},{1u<<17,"Camada 17"},{1u<<18,"Camada 18"},{1u<<19,"Camada 19"},
-  {1u<<20,"Camada 20"},{1u<<21,"Camada 21"},{1u<<22,"Camada 22"},{1u<<23,"Camada 23"},
-  {1u<<24,"Camada 24"},{1u<<25,"Camada 25"},{1u<<26,"Camada 26"},{1u<<27,"Camada 27"},
-  {1u<<28,"Camada 28"},{1u<<29,"Camada 29"},{1u<<30,"Camada 30"},{1u<<31,"Camada 31"}
-}};
+// Culling Mask: um bit por camada de objeto do projeto, a mesma lista da
+// Culling Mask da Luz (scene/rendering_layers.h); o Inspector mostra os nomes.
 #include "scene/generated/camera_cameraEnums.inc"
 inline constexpr std::array<ComponentTriple,1> cameraTriples{{
   {"background_color","Cor de fundo",{"background_color.r","background_color.g","background_color.b"},ComponentTripleKind::LinearColor}

@@ -86,10 +86,13 @@ public static class ComponentIds
     /// <summary>Follow target and damping for a Camera; only position is driven in Play.</summary>
     public const string CameraFollow = "astra.camera.follow";
     public const string MeshRenderer = "astra.render.mesh";
-    /// <summary>Luz: `kind`, `enabled`, `color`, `intensity`, `range`, `inner_angle`,
-    /// `outer_angle`, `unit` (0 escala legada, 1 lux/candela, 2 lux/lúmen),
-    /// `use_color_temperature` e `color_temperature` em kelvin.</summary>
+    /// <summary>Luz, como o Light da Unity: `kind`, `enabled`, `color` (sRGB), `intensity`, `range`,
+    /// `spot_angle` e `inner_spot_angle` (abertura total em graus), `unit` (0 relativa, 1 lux/candela,
+    /// 2 lux/lúmen), `use_color_temperature`, `color_temperature` em kelvin, `shadow_mode`,
+    /// `shadow_strength`, `shadow_bias`, `shadow_normal_bias`, `culling_mask` e `rendering_layers`.</summary>
     public const string Light = "astra.render.light";
+    /// <summary>Iluminação da cena (janela Lighting): `sun_source`, a direcional que é o sol.</summary>
+    public const string LightingSettings = "astra.render.lighting_settings";
     /// <summary>Ambiente autoral da cena: céu, atmosfera, neblina e pós.</summary>
     public const string Environment = "astra.render.environment";
     /// <summary>LOD Group: `level_count`, `transition_0..3` (% da altura da tela), `level_0..3` (objeto do nível),

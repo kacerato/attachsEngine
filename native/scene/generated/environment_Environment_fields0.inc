@@ -4,3 +4,4 @@
   bool overrideFog = true;
   bool overridePost = true;
   bool overrideIndirect = true;
+  bool overrideClouds = true;

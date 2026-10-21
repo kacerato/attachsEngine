@@ -143,7 +143,14 @@ struct EditorScreenState final {
     u32 projectAsset=~0u;
     // Modelo que a cena referencia sem registro em .astra/assets.astra.
     bool unregistered=false;
+    // G3a: classe do material Unity na auditoria (LibraryAudit*).
+    u8 audit=0;
   };
+  // G3a: auditoria de materiais Unity do pacote/busca atuais.
+  static constexpr u8 LibraryAuditNone=0,LibraryAuditComplete=1,LibraryAuditApproximated=2,LibraryAuditUnsupported=3;
+  u32 libraryMaterialAudit[3]{};
+  // Classe filtrada na grade (LibraryAudit*; None mostra todas).
+  u8 libraryAuditFilter=0;
   struct LibraryPackageRow {resources::AssetGuid id{};std::string name;};
   std::vector<LibraryRow> libraryRows;
   std::vector<LibraryPackageRow> libraryPackages;
@@ -999,6 +1006,8 @@ struct EditorScreenState final {
     std::string occlusionLabel,occlusionOrigin,occlusionTextureLabel,occlusionStrengthLabel;
     std::string channelLabels[3];
     std::string normalFlipLabel,normalFlipOrigin,alphaSourceLabel,alphaSourceOrigin,isolateLabel;
+    // G3a: rugosidade direta ou suavidade (Standard da Unity) e de onde vem.
+    std::string roughnessSourceLabel,roughnessSourceOrigin;
   };
   MaterialSlotView materialSlotView;
   // Material do projeto aberto em Propriedades (tocar num .material em

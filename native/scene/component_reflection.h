@@ -165,14 +165,15 @@ inline std::vector<PropertyContract> componentContracts(const ComponentSchema &s
   for (const auto &property : type.enums) {
     auto row = propertyContractBase(schema, property.id, property.name, PropertyKind::Enum, property.presentation);
     row.readOnly = row.readOnly || property.write == nullptr;
-    if (property.flags) {
-      // Máscara: o domínio é a combinação dos bits, não uma lista de valores.
-      row.domain = "máscara de " + std::to_string(property.options.size()) + " bits";
-      if (probe) row.defaultValue = componentEnumLabel(property, property.read(*probe));
-    } else for (const auto &option : property.options) {
-      if (!row.domain.empty()) row.domain += " | ";
+    for (const auto &option : property.options) {
+      if (!row.domain.empty()) row.domain += property.flags ? " + " : " | ";
       row.domain += option.name;
-      if (probe && property.read(*probe) == option.value) row.defaultValue = option.name;
+      if (!property.flags && probe && property.read(*probe) == option.value) row.defaultValue = option.name;
+    }
+    // Máscara: o domínio é qualquer união dos bits; o padrão é o texto da união.
+    if (property.flags) {
+      row.domain = "máscara: " + row.domain;
+      if (probe) row.defaultValue = componentEnumLabel(property, property.read(*probe));
     }
     rows.push_back(std::move(row));
   }

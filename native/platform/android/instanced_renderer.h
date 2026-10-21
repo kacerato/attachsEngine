@@ -652,13 +652,25 @@ private:
   std::vector<renderer::MapDrawState> pendingScene_;
   std::vector<renderer::MapDrawRecord> sourceMapDraws_;
   bool commitAuthoredScene();
+  // Visibilidade NA CÂMERA (falsa também em "Só sombra") e modo de Projetar
+  // sombras do Mesh Renderer (0 desligado, 1 ligado, 2 dupla face, 3 só
+  // sombra), já zerado quando o objeto não renderiza. Os passes de sombra leem
+  // só `authoredShadows_`; o passe de cor, só `authoredVisibility_`.
   std::vector<u8> authoredVisibility_, authoredShadows_;
   // Visibilidade autoral antes da Culling Mask e a camada de cada desenho.
   // `authoredVisibility_` é a da vista principal: base E camada na máscara.
-  std::vector<u8> authoredBaseVisibility_, authoredLayers_;
+  // `authoredBaseShadows_` é o modo de sombra (0..3) antes da máscara.
+  std::vector<u8> authoredBaseVisibility_, authoredBaseShadows_, authoredLayers_;
+  bool authoredLayerIn(u32 draw,u32 mask) const {
+    return draw>=authoredLayers_.size() || ((mask>>(authoredLayers_[draw]&31u))&1u);
+  }
   bool authoredVisibleIn(u32 draw,u32 mask) const {
     if(draw>=authoredBaseVisibility_.size()) return authoredVisibility_.empty() || (draw<authoredVisibility_.size()&&authoredVisibility_[draw]);
-    return authoredBaseVisibility_[draw] && (draw>=authoredLayers_.size() || ((mask>>(authoredLayers_[draw]&31u))&1u));
+    return authoredBaseVisibility_[draw] && authoredLayerIn(draw,mask);
+  }
+  u8 authoredShadowsIn(u32 draw,u32 mask) const {
+    if(draw>=authoredBaseShadows_.size()) return draw<authoredShadows_.size()?authoredShadows_[draw]:u8{1};
+    return authoredLayerIn(draw,mask)?authoredBaseShadows_[draw]:u8{0};
   }
   // Reaplica a máscara à vista principal; verdadeiro quando algo mudou.
   bool applySceneCullingMask() {
@@ -666,10 +678,16 @@ private:
     for(u32 i=0;i<authoredBaseVisibility_.size() && i<authoredVisibility_.size();++i) {
       const u8 next=authoredVisibleIn(i,sceneCullingMask_)?1:0;
       changed|=authoredVisibility_[i]!=next;authoredVisibility_[i]=next;
+      if(i<authoredShadows_.size()) {
+        const u8 shadow=authoredShadowsIn(i,sceneCullingMask_);
+        changed|=authoredShadows_[i]!=shadow;authoredShadows_[i]=shadow;
+      }
     }
     appliedCullingMask_=sceneCullingMask_;
     return changed;
   }
+  // Camada do objeto, Rendering Layer Mask e Receive Shadows de cada desenho.
+  std::vector<renderer::DrawLightingKey> authoredLighting_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
   struct AuthoredDrawIdentity {
     u64 objectId;
@@ -1135,6 +1153,24 @@ private:
   VkPipelineLayout shadowPipelineLayout_ = VK_NULL_HANDLE;
   VkPipeline shadowOpaquePipeline_ = VK_NULL_HANDLE;
   VkPipeline shadowMaskedPipeline_ = VK_NULL_HANDLE;
+  // "Projetar sombras: Ligado" num material de face única: o mapa de sombra
+  // descarta as faces de trás, como o passe ShadowCaster da Unity com o Cull
+  // do material. Dupla face e materiais de face dupla usam as de cima.
+  VkPipeline shadowOpaqueCullPipeline_ = VK_NULL_HANDLE;
+  VkPipeline shadowMaskedCullPipeline_ = VK_NULL_HANDLE;
+  void splitShadowDraws(const std::vector<u32> &solid,const std::vector<u32> &coverage);
+  template<class Draw> void recordShadowCasters(const Draw &draw);
+  std::vector<u32> shadowSolidNone_,shadowSolidCull_,shadowCoverageNone_,shadowCoverageCull_;
+  // Sol principal deste quadro (Luz v4): escala do desvio de profundidade em
+  // relação à política e máscaras autorais. O cache de cascatas estáticas é
+  // invalidado quando a escala muda, porque o mapa guardado usou a anterior.
+  float sunShadowBiasScale_ = 1.0f;
+  renderer::PunctualLightFilter sunFilter_{};
+  // Cópia CPU das luzes adicionais aceitas no quadro, nos dois bancos do bloco,
+  // e as máscaras autorais de cada vaga: a máscara por desenho lê daqui.
+  renderer::PunctualLight frameLights_[renderer::MaximumPunctualLights]{};
+  renderer::PunctualLightFilter frameLightFilters_[renderer::MaximumPunctualLights]{};
+  u32 frameLightCount_ = 0;
   rhi::VulkanImage shadowAtlas_{};
   // Atlas local: imagem própria em vez de dividir a das cascatas, para o cache
   // estático do sol continuar valendo quando só uma lâmpada muda. O passe é
@@ -1203,6 +1239,11 @@ private:
   rhi::VulkanBuffer routeVertices_,routeIndices_;
   std::vector<std::array<float,4>> authoredWaterLayers_;
   rhi::VulkanSampler waterDetailSampler_{};
+  // G4b: mapa procedural do Cloud Layer (binding 18 do conjunto de ambiente).
+  rhi::VulkanImage cloudMapTexture_{};
+  rhi::VulkanSampler cloudMapSampler_{};
+  // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
+  double cloudTimeSeconds_ = 0.0;
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;
@@ -1332,8 +1373,9 @@ private:
   struct AuthoredInstanceState {
     renderer::MaterialOverride material{};
     bool visible = true;
-    bool castShadow = true;
-    u8 layer = 0;
+    u8 castShadows = 1;
+    renderer::DrawLightingKey lighting{};
+    u8 layer = 0;  // camada do objeto (Culling Mask), cópia de lighting.objectLayer
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;

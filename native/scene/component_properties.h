@@ -45,7 +45,7 @@ inline ComponentPropertyStatus setComponentProperty(Components &components,
     if(!number->write || !std::isfinite(v) || v<number->minimum || v>number->maximum)
       return ComponentPropertyStatus::InvalidValue;
   } else if(enumeration) {
-    if(!componentEnumAccepts(*enumeration,std::get<u32>(value)) || !enumeration->write) return ComponentPropertyStatus::InvalidValue;
+    if(!enumeration->accepts(std::get<u32>(value)) || !enumeration->write) return ComponentPropertyStatus::InvalidValue;
   } else if(reference ? !reference->write : !boolean->write) return ComponentPropertyStatus::InvalidValue;
   auto candidate=source->clone();
   if(!candidate || &candidate->type()!=&source->type()) return ComponentPropertyStatus::InvalidValue;

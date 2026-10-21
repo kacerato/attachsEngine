@@ -15,6 +15,7 @@
 #include "editor/editor_scene_template_types.h"
 #include "editor/editor_animation_templates.h"
 #include "editor/editor_document.h"
+#include "scene/light_defaults.h"
 #include <functional>
 
 namespace ae::editor {
@@ -35,7 +36,7 @@ inline constexpr SceneTemplateNode kReferenceNodes[]{
     {"Terreno", 0, {0, -.1f, 0}, {0, 0, 0}, {60, .2f, 60}, true, SceneTemplateLight::None, 0, 0, {.62f, .60f, .56f}, false},
     // Sol: 100.000 lux é céu aberto de meio-dia; a inclinação dá sombra longa o
     // bastante para o relevo aparecer.
-    {"Sol", 0, {0, 8, 0}, {50, -35, 0}, {1, 1, 1}, false, SceneTemplateLight::Directional, 100000, 0, {1, .96f, .90f}, false},
+    {"Sol", 0, {0, 8, 0}, {50, -35, 0}, {1, 1, 1}, false, SceneTemplateLight::Directional, scene::kPhysicalSunLux, 0, {1, .96f, .90f}, false},
     // Referência humana: 1,80 m de pé. Todo julgamento de escala passa por ela.
     {"Pessoa 1,80 m", 0, {2.5f, .9f, 1.5f}, {0, 0, 0}, {.45f, 1.8f, .28f}, true, SceneTemplateLight::None, 0, 0, {.80f, .45f, .35f}, false},
     {"Bloco 1 m", 0, {-1.5f, .5f, 2.5f}, {0, 0, 0}, {1, 1, 1}, true, SceneTemplateLight::None, 0, 0, {.78f, .78f, .78f}, false},

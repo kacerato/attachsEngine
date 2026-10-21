@@ -147,7 +147,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
-    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,10},
+    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,11},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,6},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
     VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool.maxSets=1;pool.poolSizeCount=4;pool.pPoolSizes=sizes;
@@ -202,7 +202,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     uiRenderer_.setCameraPreview(previewColor_.view());
   }
   std::vector<VkCopyDescriptorSet> copies;
-  for(u32 binding=1;binding<=17;++binding) {
+  for(u32 binding=1;binding<=18;++binding) {
     if(binding==1||binding==3||binding==4) continue;
     if((binding==5||binding==6||binding==15)&&!waterSubpassActive_) continue;
     if(binding>=7&&binding<=14&&!spectralWaterCount_) continue;
@@ -271,17 +271,21 @@ bool InstancedRenderer::prepareCameraPreview() {
   if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
       previewSceneEnvironment_,mapDescription,static_cast<bool>(previewEnvironmentMap_) ||
       (previewEnvironmentUsesPrimary_&&static_cast<bool>(activeEnvironmentMap_)),
-      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_)) {
+      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,cloudTimeSeconds_)) {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
   }
   renderer::LightBudgetReport previewLightBudget{};
+  renderer::PunctualLight previewLights[renderer::MaximumPunctualLights]{};
   const u32 accepted=renderer::selectPunctualLights(lights,pendingPreview_.frustum.cameraPosition,
-      frame.punctualLights,previewLightBudget);
+      std::span<renderer::PunctualLight>(previewLights,std::min(renderingPolicy_.lights.additionalLights,
+                                                               renderer::MaximumPunctualLights)),previewLightBudget);
   frame.punctualLightParameters[0]=static_cast<float>(accepted);
   for(u32 i=0;i<renderer::MaximumPunctualLights;++i) {
-    if(i>=accepted) frame.punctualLights[i]={};
-    else frame.punctualLights[i].shadow[1]=0;
+    if(i>=accepted) previewLights[i]={};
+    else previewLights[i].shadow[1]=0;
+    if(i<renderer::PunctualLightBankSize) frame.punctualLights[i]=previewLights[i];
+    else frame.punctualLightsExtra[i-renderer::PunctualLightBankSize]=previewLights[i];
   }
   // The primary camera's cascades and local atlas do not describe this view.
   frame.shadowParameters[1]=0;

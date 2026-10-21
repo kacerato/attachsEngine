@@ -61,12 +61,20 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 58> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
   {"render.light.punctual", "Luzes pontuais e spot", CapabilityState::Implemented,
-   "renderer/punctual_lights.h (8 por quadro)", ""},
+   "renderer/punctual_lights.h (até 16 por quadro, 8 por objeto)", ""},
+  {"render.light.additional_directional", "Direcionais adicionais (lua, preenchimento)", CapabilityState::Implemented,
+   "renderer/punctual_lights.h + rhi/shaders/dirt_road_shading.glsl", "Sem sombra: só o sol principal tem cascatas, como a luz principal da URP"},
+  {"render.light.layers", "Máscara de culling e camadas de renderização da luz", CapabilityState::Implemented,
+   "renderer/punctual_lights.h (máscara por desenho) + rhi/shaders/dirt_road_vertex.glsl", ""},
+  {"render.light.sun_source", "Fonte do sol explícita (Sun Source)", CapabilityState::Implemented,
+   "scene/lighting_settings.h + renderer/punctual_lights.h", ""},
+  {"render.light.baked", "Luz Mista ou Assada (bake de iluminação)", CapabilityState::Planned,
+   "renderer/lightmap_baker (PK-6)", "Sem bake: toda luz é de tempo real; o modo fica gravado"},
   {"render.light.temperature", "Temperatura de cor em kelvin", CapabilityState::Implemented,
    "scene/light_units.h + runtime/scene_lights.cpp", ""},
   {"render.light.photometric", "Unidades fotométricas (lux, lumen, candela)", CapabilityState::Implemented,
@@ -81,6 +89,8 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "renderer/shadow_cascades.cpp + rhi/shaders/shadow_depth.vert", ""},
   {"render.shadow.punctual", "Sombra de luz pontual ou spot", CapabilityState::Implemented,
    "renderer/shadow_atlas.h", "Atlas em quadtree: spot ocupa um mapa, pontual seis faces"},
+  {"render.shadow.renderer", "Projetar e receber sombra por Mesh Renderer", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp (passes de sombra) + rhi/shaders/dirt_road_shading.glsl", ""},
 
   // --- Ambiente, GI e sondas ----------------------------------------------
   {"render.ambient.hemispheric", "Ambiente hemisférico céu/chão", CapabilityState::Implemented,
@@ -137,6 +147,12 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
   {"render.environment.time_of_day", "Hora do dia", CapabilityState::Implemented,
    "renderer/time_of_day.cpp + runtime/scene_lights.cpp",
    "Sol por hora, data e latitude, cor por elevação, céu procedural de dia, crepúsculo e noite e fase da lua pela data; sem luz direcional da lua nem eventos de nascer e pôr do sol"},
+  {"render.environment.clouds", "Nuvens (Cloud Layer)", CapabilityState::Implemented,
+   "renderer/cloud_layer.cpp + rhi/shaders/cloud_layer.glsl",
+   "Uma camada 2D com mapa procedural, vento, autossombra em 3 passos e sombra no chão pela luz direcional principal; sem mapa de nuvens importado, sem segunda camada nem nuvens volumétricas"},
+  {"render.environment.weather", "Clima (chuva, neve, relâmpago)", CapabilityState::Planned,
+   "renderer/particles (G5)",
+   "Depende do sistema de partículas do G5, ainda fora desta base; hoje o clima é só a cobertura de nuvens"},
   {"render.environment.celestial", "Sol, lua e estrelas no céu", CapabilityState::Implemented,
    "rhi/shaders/dirt_road_sky.frag",
    "Disco solar com limbo e auréola, lua com fase iluminada pelo sol e estrelas noturnas; lua e estrelas ainda sem órbita astronômica nem cintilação por turbulência real"},

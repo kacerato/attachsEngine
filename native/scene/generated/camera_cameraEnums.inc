@@ -13,7 +13,7 @@ inline constexpr std::array<ComponentEnum, 6> cameraEnums{{
    [](const ComponentValue &value)->u32{return static_cast<u32>(static_cast<const Camera&>(value).background);},
    [](ComponentValue &value,u32 next){static_cast<Camera&>(value).background=static_cast<decltype(static_cast<Camera&>(value).background)>(next);},
    {.group="Ambiente", .help="O que preenche a tela antes da cena (Background Type)", .capability="render.camera.background", .consumer="platform/android/instanced_renderer.cpp → céu ou cor de limpeza"}},
-  {"culling_mask", "Camadas visíveis", cameraCullingMaskOptions,
+  {"culling_mask", "Camadas visíveis", objectLayerOptions,
    [](const ComponentValue &value)->u32{return static_cast<u32>(static_cast<const Camera&>(value).cullingMask);},
    [](ComponentValue &value,u32 next){static_cast<Camera&>(value).cullingMask=static_cast<decltype(static_cast<Camera&>(value).cullingMask)>(next);},
    {.group="Renderização", .help="Culling Mask: só objetos destas camadas aparecem nesta câmera", .capability="render.camera.culling_mask", .consumer="platform/android/instanced_renderer.cpp → visibilidade por camada"}, false, true},

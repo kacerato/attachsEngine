@@ -69,6 +69,13 @@ inline const scene::MaterialParameters &meshMaterial(const SceneObject &e) {
   const auto *m = meshRenderer(e);
   return m ? m->material : defaults;
 }
+// Cena ou prefab anterior ao Mesh Renderer v11: a sombra era dos
+// interruptores do objeto. Passa a ser do renderer, com o mesmo efeito.
+inline void adoptLegacyRendererShadows(SceneObject &e) {
+  const auto *current = meshRenderer(e);
+  if (!current || !current->legacyObjectShadows) return;
+  if (auto *renderer = editMeshRenderer(e)) renderer->adoptLegacyObjectShadows(e.castShadow, e.receiveShadow);
+}
 inline const scene::Light *lightComponent(const SceneObject &e) {
   return static_cast<const scene::Light *>(e.components.find(scene::Light::descriptor));
 }

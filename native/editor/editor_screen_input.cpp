@@ -34,6 +34,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Luz na ordem do Light Inspector da Unity: Geral (Tipo), Emissão, Volume
+  // (alcance e cone), Sombra e Renderização (máscaras).
+  if(&type==&scene::Light::descriptor) {
+    const auto rank=[](std::string_view group){
+      return group=="Geral"?0:group=="Emissão"?1:group=="Volume"?2:group=="Sombra"?3:group=="Renderização"?4:5;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
   if(&type==&scene::EventConnection::descriptor) {
     const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};
@@ -458,28 +465,23 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     const u32 option=widget-widgetId(EditorWidget::ComponentEnumOptionBase);
     if(!component || enumIndex>=component->type().enums.size() || history.isOpen()) return outcome;
     const auto &property=component->type().enums[enumIndex];
+    u32 next=0;
     if(property.flags) {
-      // Máscara: 0 = Nada, 1 = Tudo, 2+i alterna o bit da opção i. A lista fica
-      // aberta para marcar várias camadas, como o LayerMask da Unity.
+      // Máscara: o toque liga ou desliga um bit e a lista continua aberta.
       state.enumPicker=field;
-      const u32 all=scene::componentEnumFlagBits(property),current=property.read(*component);
-      u32 next=current;
-      if(option==0) next=0;
-      else if(option==1) next=all;
-      else if(option-2<property.options.size()) next=current^property.options[option-2].value;
+      u32 all=0;for(const auto &entry:property.options) all|=entry.value;
+      const u32 current=property.read(*component);
+      if(option==kEnumMaskNothing) next=0;
+      else if(option==kEnumMaskEverything) next=all;
+      else if(option<property.options.size()) next=current^property.options[option].value;
       else return outcome;
       if(next==current) return outcome;
-      auto value=*entity;
-      if(scene::setComponentProperty(value.components,component->type().id,property.id,next,
-                                     component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
-        state.status="Esta máscara não é aceita com os valores atuais";return outcome;
-      }
-      outcome.documentChanged=history.applyValues(document,entity->id,value);
-      return outcome;
+    } else {
+      if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+      next=property.options[option].value;
     }
-    if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
     auto value=*entity;
-    if(scene::setComponentProperty(value.components,component->type().id,property.id,property.options[option].value,
+    if(scene::setComponentProperty(value.components,component->type().id,property.id,next,
                                    component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
       state.status="Esta opção não é aceita com os valores atuais";return outcome;
     }

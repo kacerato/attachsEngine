@@ -230,10 +230,10 @@ AE_TEST(environment_profile_v8_reads_with_neutral_grading) {
   profile.values.contrast = 1.2f;
   auto text = profile.serialize();
   // Um arquivo v8 é o atual sem os 31 números da gradação e os 5 dos corpos
-  // celestes (v10), que são os últimos.
-  text.replace(text.find(" 10 "), 4, " 8 ");
+  // celestes (v10) e os 16 das nuvens (v11), que são os últimos.
+  text.replace(text.find(" 11 "), 4, " 8 ");
   auto cut = text.size() - 1;
-  for (u32 removed = 0; removed < 36; ++removed) cut = text.rfind(' ', cut - 1);
+  for (u32 removed = 0; removed < 52; ++removed) cut = text.rfind(' ', cut - 1);
   text = text.substr(0, cut) + "\n";
   resources::EnvironmentProfile parsed;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v8 lido");
@@ -261,6 +261,21 @@ AE_TEST(environment_volume_blend_reaches_the_exact_target_grading) {
 
 #include "scene/environment.h"
 #include <sstream>
+#include <string>
+
+// Linha v15 a partir da atual: sem os 3 interruptores das nuvens (depois da
+// exposição automática, palavras 20..22) e sem os 14 números delas no fim.
+inline std::string withoutClouds(const std::string &text) {
+  std::istringstream in(text);std::vector<std::string> words;std::string word;
+  while (in >> word) words.push_back(word);
+  std::string out;
+  for (usize i = 0; i + 14 < words.size(); ++i) {
+    if (i >= 20 && i <= 22) continue;
+    if (!out.empty()) out += ' ';
+    out += words[i];
+  }
+  return out;
+}
 
 AE_TEST(environment_component_v12_archive_reads_neutral_and_v13_round_trips) {
   scene::Environment authored;
@@ -275,8 +290,8 @@ AE_TEST(environment_component_v12_archive_reads_neutral_and_v13_round_trips) {
   AE_EXPECT_TRUE(reread.values.grading == authored.values.grading && reread.values.contrast == authored.values.contrast,
                  "gradação atravessa a cena");
   // v12: a mesma linha sem os 31 números da gradação e os 5 dos corpos
-  // celestes (v14), que são os últimos.
-  auto text = written.str();
+  // celestes (v14), que são os últimos, depois de tirar as nuvens (v16).
+  auto text = withoutClouds(written.str());
   auto cut = text.size();
   for (u32 removed = 0; removed < 36; ++removed) cut = text.rfind(' ', cut - 1);
   scene::Environment old;

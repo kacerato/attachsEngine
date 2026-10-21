@@ -544,7 +544,7 @@
           "label": "Camadas visíveis",
           "type": "Camera",
           "member": "cullingMask",
-          "options": "cameraCullingMaskOptions",
+          "options": "objectLayerOptions",
           "presentation": {
             "group": "Renderização",
             "help": "Culling Mask: só objetos destas camadas aparecem nesta câmera",

@@ -424,6 +424,7 @@ add_library(aether_renderer STATIC
   renderer/color_grading.cpp
   renderer/time_of_day.cpp
   renderer/procedural_sky.cpp
+  renderer/cloud_layer.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
@@ -946,8 +947,10 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_input.cpp
     ../tests/native/test_runtime_lights.cpp
     ../tests/native/test_lighting_specialization.cpp
+    ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_runtime_environment.cpp
     ../tests/native/test_color_grading.cpp
+    ../tests/native/test_cloud_layer.cpp
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
@@ -1172,10 +1175,21 @@ if(NOT ANDROID)
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
     ../tests/native/test_sky_celestial.cpp
-    ../tests/native/test_time_of_day.cpp)
+    ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  # PK-3/PK-8: Luz e Mesh Renderer como na Unity, sem a suíte inteira.
+  add_executable(aether_lighting_family_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_runtime_lights.cpp ../tests/native/test_lighting_specialization.cpp
+    ../tests/native/test_light_renderer_unity.cpp ../tests/native/test_editor_map_scene.cpp)
+  target_include_directories(aether_lighting_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_compile_definitions(aether_lighting_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
+  target_link_libraries(aether_lighting_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
+  if(MINGW)
+    target_compile_options(aether_lighting_family_tests PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
   # PK-7 Câmera: modelo v4, lente física, máscara, pilha por prioridade e os
   # cenários existentes de câmera virtual, sem o catálogo inteiro.

@@ -96,7 +96,8 @@ AE_TEST(camera_culling_mask_is_a_layer_bitmask) {
   if(!property) return;
   AE_EXPECT_TRUE(scene::componentEnumLabel(*property,0)=="Nada" && scene::componentEnumLabel(*property,~0u)=="Tudo","Nada e Tudo");
   AE_EXPECT_TRUE(scene::componentEnumLabel(*property,1u<<3)=="Camada 3","uma camada mostra o nome");
-  AE_EXPECT_TRUE(scene::componentEnumLabel(*property,0x6u)=="Misto (2)","várias camadas");
+  AE_EXPECT_TRUE(scene::componentEnumLabel(*property,0x6u)=="Camada 1, Camada 2","várias camadas pelos nomes");
+  AE_EXPECT_TRUE(property->options.data()==scene::objectLayerOptions.data(),"mesma lista de camadas da Luz");
   scene::Components components;components.add(scene::Camera::descriptor);
   AE_EXPECT_TRUE(scene::setComponentProperty(components,"astra.camera","culling_mask",0x5u)==scene::ComponentPropertyStatus::Applied,
                  "qualquer combinação de camadas é aceita");
@@ -179,7 +180,7 @@ AE_TEST(camera_reflection_declares_real_consumers) {
   bool mask=false,background=false,focal=false;
   for(const auto &row:rows) {
     if(row.typeId!="astra.camera") continue;
-    mask|=row.propertyId=="culling_mask" && row.domain.find("máscara")!=std::string::npos;
+    mask|=row.propertyId=="culling_mask" && row.domain.find(" + ")!=std::string::npos;
     background|=row.propertyId=="background_type";
     focal|=row.propertyId=="focal_length";
   }

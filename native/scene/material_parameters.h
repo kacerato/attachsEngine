@@ -39,6 +39,14 @@ inline constexpr std::uint8_t MaterialChannelKeep=0,MaterialChannelR=1,MaterialC
 inline constexpr std::uint8_t MaterialOcclusionKeep=0,MaterialOcclusionNone=1,MaterialOcclusionPacked=2,MaterialOcclusionTexture=3;
 inline constexpr std::uint8_t MaterialToggleKeep=0,MaterialToggleOff=1,MaterialToggleOn=2;
 inline constexpr std::uint8_t MaterialAlphaSourceKeep=0,MaterialAlphaSourceBase=1,MaterialAlphaSourceOpaque=2,MaterialAlphaSourceLuminance=3;
+// G3a: de onde vem a rugosidade. `Map` lê o canal escolhido como rugosidade
+// (glTF). As duas de suavidade seguem o Standard da Unity (smoothness = 1 -
+// rugosidade): o canal do mapa metal/rugosidade ou o alfa da textura de cor
+// base. Na suavidade, o fator escalar continua sendo rugosidade e vale como
+// 1 - escala da suavidade: rugosidade = 1 - (1 - fator) * canal. Sem textura o
+// canal vale 1 e a rugosidade é o próprio fator nos três modos.
+inline constexpr std::uint8_t MaterialRoughnessKeep=0,MaterialRoughnessMap=1,MaterialRoughnessSmoothnessMap=2,
+                              MaterialRoughnessSmoothnessBaseAlpha=3;
 // Isolar na prévia do editor: transitório, nunca persistido nem usado em Play.
 inline constexpr std::uint8_t MaterialIsolateNone=0,MaterialIsolateOcclusion=1,MaterialIsolateRoughness=2,MaterialIsolateMetallic=3,
                               MaterialIsolateAlpha=4,MaterialIsolateNormal=5;
@@ -48,18 +56,21 @@ struct MaterialChannels {
   float occlusionStrength=-1; // -1 herda; senão 0..1
   std::uint8_t normalFlipY=MaterialToggleKeep;
   std::uint8_t alphaSource=MaterialAlphaSourceKeep;
+  std::uint8_t roughnessSource=MaterialRoughnessKeep;
   bool overrides() const noexcept {
-    return roughness || metallic || occlusion || occlusionSource || occlusionStrength>=0 || normalFlipY || alphaSource;
+    return roughness || metallic || occlusion || occlusionSource || occlusionStrength>=0 || normalFlipY || alphaSource || roughnessSource;
   }
   friend bool operator==(const MaterialChannels &a,const MaterialChannels &b) {
     return a.roughness==b.roughness && a.metallic==b.metallic && a.occlusion==b.occlusion && a.occlusionSource==b.occlusionSource &&
-           a.occlusionStrength==b.occlusionStrength && a.normalFlipY==b.normalFlipY && a.alphaSource==b.alphaSource;
+           a.occlusionStrength==b.occlusionStrength && a.normalFlipY==b.normalFlipY && a.alphaSource==b.alphaSource &&
+           a.roughnessSource==b.roughnessSource;
   }
 };
 inline bool validMaterialChannels(const MaterialChannels &channels) {
   return channels.roughness<=MaterialChannelA && channels.metallic<=MaterialChannelA && channels.occlusion<=MaterialChannelA &&
          channels.occlusionSource<=MaterialOcclusionTexture && channels.normalFlipY<=MaterialToggleOn &&
-         channels.alphaSource<=MaterialAlphaSourceLuminance && std::isfinite(channels.occlusionStrength) &&
+         channels.alphaSource<=MaterialAlphaSourceLuminance && channels.roughnessSource<=MaterialRoughnessSmoothnessBaseAlpha &&
+         std::isfinite(channels.occlusionStrength) &&
          (channels.occlusionStrength==-1 || (channels.occlusionStrength>=0 && channels.occlusionStrength<=1));
 }
 

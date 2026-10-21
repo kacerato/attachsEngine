@@ -5,7 +5,7 @@
 //   0..7  duas linhas por binding: (a b c 0) e (d e f 0), uv' = (a·u+b·v+c, d·u+e·v+f)
 //   8     força da oclusão, origem (0 nenhuma, 1 metal/rug., 2 textura), canal, índice bindless
 //   9     canal da rugosidade, canal do metal, origem do alfa (0 cor, 1 opaco, 2 luminância), inverter Y
-//   10    dado isolado na prévia
+//   10    dado isolado na prévia, origem da rugosidade (0 canal, 1 suavidade no canal, 2 suavidade no alfa da cor base)
 //   11    lightmap ativo, índice bindless, intensidade, reservado
 //   12    escala UV1 xy, deslocamento zw
 //   13    reservada

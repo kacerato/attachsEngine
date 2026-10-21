@@ -21,8 +21,8 @@ struct EditorComponentHandle : EditorCameraHandle {
 inline std::string_view componentHandleProperty(EditorComponentHandleKind kind) {
   switch(kind) {
     case EditorComponentHandleKind::LightRange:return "range";
-    case EditorComponentHandleKind::LightInnerAngle:return "inner_angle";
-    case EditorComponentHandleKind::LightOuterAngle:return "outer_angle";
+    case EditorComponentHandleKind::LightInnerAngle:return "inner_spot_angle";
+    case EditorComponentHandleKind::LightOuterAngle:return "spot_angle";
     case EditorComponentHandleKind::BoxX:return "box_size.x";
     case EditorComponentHandleKind::BoxY:return "box_size.y";
     case EditorComponentHandleKind::BoxZ:return "box_size.z";
@@ -51,17 +51,19 @@ inline bool componentHandleGeometry(const runtime::SceneGraph &document,EditorEn
     if(kind==EditorComponentHandleKind::LightRange) {
       if(value.kind==scene::LightKind::Point) {local[0]=value.range;direction[0]=1;}
       else {
-        const float angle=value.outerAngle*.01745329252f;
+        const float angle=value.outerHalfAngle()*.01745329252f;
         local[1]=value.range*std::sin(angle);local[2]=value.range*std::cos(angle);
         direction[1]=std::sin(angle);direction[2]=std::cos(angle);
       }
     } else if(kind==EditorComponentHandleKind::LightInnerAngle||kind==EditorComponentHandleKind::LightOuterAngle) {
       if(value.kind!=scene::LightKind::Spot) return false;
-      const float angle=(kind==EditorComponentHandleKind::LightInnerAngle?value.innerAngle:value.outerAngle)*.01745329252f;
+      // A propriedade é a abertura total (Spot Angle); a alça fica na borda,
+      // a meio-ângulo do eixo, e um grau da propriedade move meio grau de arco.
+      const float angle=(kind==EditorComponentHandleKind::LightInnerAngle?value.innerHalfAngle():value.outerHalfAngle())*.01745329252f;
       const float side=kind==EditorComponentHandleKind::LightInnerAngle?-1.f:1.f;
       local[0]=side*value.range*std::sin(angle);local[2]=value.range*std::cos(angle);
       direction[0]=side*std::cos(angle);direction[2]=-std::sin(angle);
-      worldUnits=value.range*.01745329252f;
+      worldUnits=value.range*.01745329252f*.5f;
     } else return false;
   } else {
     const auto &value=static_cast<const scene::Environment&>(*component);
@@ -108,8 +110,8 @@ inline bool applyComponentHandleDelta(EditorEntity &entity,const EditorComponent
   float lower=number->minimum,upper=number->maximum;
   if(&component->type()==&scene::Light::descriptor) {
     const auto &light=static_cast<const scene::Light&>(*component);
-    if(handle.kind==EditorComponentHandleKind::LightInnerAngle) upper=std::min(upper,light.outerAngle);
-    if(handle.kind==EditorComponentHandleKind::LightOuterAngle) lower=std::max(lower,light.innerAngle);
+    if(handle.kind==EditorComponentHandleKind::LightInnerAngle) upper=std::min(upper,light.spotAngle);
+    if(handle.kind==EditorComponentHandleKind::LightOuterAngle) lower=std::max(lower,light.innerSpotAngle);
   }
   const float desired=number->read(*component)+worldDelta/handle.worldUnitsPerProperty;
   if(!std::isfinite(desired)) return false;

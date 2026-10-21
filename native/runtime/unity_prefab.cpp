@@ -32,7 +32,7 @@ bool buildUnityPrefab(const resources::UnityPrefabImport &source,resources::Asse
       }
       if(object.tag!="Untagged"||object.layer)return fail("Tags/camadas Unity exigem mapa explícito do projeto: "+object.name);
       SceneObject value;value.id=mapping.at(object.fileId);value.parent=parent;value.kind=object.renderer?ObjectKind::Mesh:ObjectKind::Folder;
-      assignObjectName(value,object.name);value.active=object.active;value.castShadow=object.castShadow;value.receiveShadow=object.receiveShadow;
+      assignObjectName(value,object.name);value.active=object.active;value.castShadow=object.castShadows!=0;value.receiveShadow=object.receiveShadow;
       std::copy(object.position.begin(),object.position.end(),value.transform.position);std::copy(object.scale.begin(),object.scale.end(),value.transform.scale);
       if(!rotationEulerXYZ(object.rotation.data(),value.transform.rotationDegrees))return fail("Rotação do prefab não representável.");
       if(object.renderer) {
@@ -42,6 +42,7 @@ bool buildUnityPrefab(const resources::UnityPrefabImport &source,resources::Asse
         auto *renderer=static_cast<scene::MeshRenderer*>(value.components.add(scene::MeshRenderer::descriptor));
         if(!renderer)return fail("Componente MeshRenderer nativo indisponível.");
         renderer->enabled=object.rendererEnabled;renderer->asset=meshes.front();
+        renderer->castShadows=object.castShadows;renderer->receiveShadows=object.receiveShadow;
         for(usize slot=1;slot<meshes.size();++slot){scene::MeshSubmesh submesh;submesh.asset=meshes[slot];renderer->submeshes.push_back(submesh);}
         for(usize slot=0;slot<object.materials.size();++slot) {
           std::vector<resources::AssetGuid> materials;

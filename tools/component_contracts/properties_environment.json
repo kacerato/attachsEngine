@@ -853,6 +853,29 @@
           }
         },
         {
+          "id": "override_clouds",
+          "label": "Sobrescrever nuvens",
+          "member": "overrideClouds",
+          "presentation": {
+            "group": "Volume",
+            "help": "Participa da mistura do Cloud Layer, separado do céu",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
           "id": "physical_atmosphere_high_quality",
           "label": "Alta qualidade",
           "member": "values.physicalAtmosphereHighQuality",
@@ -867,6 +890,46 @@
             },
             "capability": "render.environment.physical_atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "clouds",
+          "label": "Nuvens",
+          "member": "values.clouds.enabled",
+          "presentation": {
+            "group": "Nuvens",
+            "help": "Cloud Layer: camada 2D iluminada pelo sol, com vento e sombra",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.clouds",
+            "consumer": "rhi/shaders/cloud_layer.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "cloud_shadows",
+          "label": "Projetar sombras",
+          "member": "values.clouds.castShadows",
+          "presentation": {
+            "group": "Nuvens",
+            "help": "A luz direcional principal passa pelas nuvens antes de chegar ao chão",
+            "visible": {
+              "cpp": "environmentUsesClouds"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.clouds",
+            "consumer": "rhi/shaders/cloud_layer.glsl",
             "invalidates": {
               "cpp": "Invalidate::Draw"
             }
@@ -2414,6 +2477,286 @@
           }
         }
       }
+    },
+    {
+      "name": "environmentCloudNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "group": "Nuvens",
+          "help": {
+            "cpp": "nullptr"
+          },
+          "visible": {
+            "cpp": "environmentUsesClouds"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "capability": "render.environment.clouds",
+          "consumer": "rhi/shaders/cloud_layer.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "cloud_opacity",
+          "label": "Opacidade",
+          "member": "values.clouds.opacity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Opacity: 0 deixa a camada transparente"
+          }
+        },
+        {
+          "id": "cloud_coverage",
+          "label": "Cobertura",
+          "member": "values.clouds.coverage",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Parte do céu com cúmulos; 1 é céu encoberto"
+          }
+        },
+        {
+          "id": "cloud_cirrus",
+          "label": "Cirros",
+          "member": "values.clouds.cirrus",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Véu fino e alto, em faixas"
+          }
+        },
+        {
+          "id": "cloud_altitude",
+          "label": "Altitude",
+          "member": "values.clouds.altitudeMeters",
+          "min": {
+            "cpp": "100"
+          },
+          "max": {
+            "cpp": "20000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "unit": "m",
+            "help": "Altura da camada: perspectiva no céu e onde a sombra cai"
+          }
+        },
+        {
+          "id": "cloud_size",
+          "label": "Tamanho",
+          "member": "values.clouds.sizeMeters",
+          "min": {
+            "cpp": "200"
+          },
+          "max": {
+            "cpp": "100000"
+          },
+          "step": {
+            "cpp": "50"
+          },
+          "presentation": {
+            "unit": "m",
+            "help": "Largura de uma repetição do mapa de nuvens"
+          }
+        },
+        {
+          "id": "cloud_tint.r",
+          "label": "Tom R",
+          "member": "values.clouds.tint[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "cloud_tint.g",
+          "label": "Tom G",
+          "member": "values.clouds.tint[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "cloud_tint.b",
+          "label": "Tom B",
+          "member": "values.clouds.tint[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": ""
+          }
+        },
+        {
+          "id": "cloud_exposure",
+          "label": "Compensação de exposição",
+          "member": "values.clouds.exposureEv",
+          "min": {
+            "cpp": "-8"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "unit": "EV",
+            "help": "Brilho das nuvens relativo ao sol"
+          }
+        },
+        {
+          "id": "cloud_wind_orientation",
+          "label": "Direção do vento",
+          "member": "values.clouds.windOrientationDegrees",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "360"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": "°",
+            "help": "0° sopra para +X do mundo"
+          }
+        },
+        {
+          "id": "cloud_wind_speed",
+          "label": "Velocidade do vento",
+          "member": "values.clouds.windSpeedKmh",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "400"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "presentation": {
+            "unit": "km/h",
+            "help": "Deslocamento das nuvens e das sombras"
+          }
+        },
+        {
+          "id": "cloud_density",
+          "label": "Densidade",
+          "member": "values.clouds.density",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Autossombra: nuvens densas escurecem por dentro"
+          }
+        },
+        {
+          "id": "cloud_ambient_dimmer",
+          "label": "Luz do céu",
+          "member": "values.clouds.ambientDimmer",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Ambient Probe Dimmer: quanto do céu ilumina a nuvem"
+          }
+        },
+        {
+          "id": "cloud_shadow_multiplier",
+          "label": "Força da sombra",
+          "member": "values.clouds.shadowMultiplier",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Shadow Multiplier: escuridão da sombra no chão",
+            "visible": {
+              "cpp": "environmentUsesCloudShadows"
+            }
+          }
+        }
+      ]
     }
   ],
   "field_groups": [
@@ -2424,7 +2767,8 @@
         "environmentBooleans/override_sky",
         "environmentBooleans/override_fog",
         "environmentBooleans/override_post",
-        "environmentBooleans/override_indirect"
+        "environmentBooleans/override_indirect",
+        "environmentBooleans/override_clouds"
       ]
     }
   ]
