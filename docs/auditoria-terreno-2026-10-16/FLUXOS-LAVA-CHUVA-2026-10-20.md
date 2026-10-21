@@ -85,6 +85,23 @@ próxima nota pública; após isso o restante do plano prossegue sem ADB.
 
 ## Referências concretas
 
+Revisão adicional21/10 antes do aparelho: **230/230 cenários integrados**.
+A igualdade estrita do token de prévia descartava malhas concluídas enquanto
+o dedo continuava acrescentando amostras. A publicação agora aceita um prefixo
+verificado do mesmo gesto, com base autoral, cena/revisão/alvo, ponteiro,
+época FX, orçamento e todos os campos das amostras correspondentes. Cancelar
+continua restaurando a geometria aplicada e rejeitando conclusões tardias.
+O teste usa movimento contínuo real sobre terreno planoY0, exige elevação
+publicada antes de Up e verifica receita/histórico/cancelamento íntegros.
+
+Empacotamento: a primeira compilação111 passou, mas continha112 PNGs de origem
+redundantes,209.636.961 bytes além das texturas runtime integrais. O renderer
+carrega catalog.runtimePath; sourcePath participa somente da proveniência/busca.
+O Sync Android agora envia catálogo, texturas runtime e miniaturas; fontes
+continuam no repositório. A auditoria exige ausência de sources/ no APK e compara
+os bytes/hashes de todas as156 entradas runtime. Não houve redimensionamento ou
+alteração dos pixels. APK final e economia real ainda serão auditados.
+
 Unity Shader Graph17.0.4: [Normal Vector](https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Normal-Vector-Node.html)
 e [Transform](https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Transform-Node.html)
 para distinguir espaço e tipo de vetor; [Time](https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Time-Node.html),
@@ -95,6 +112,19 @@ em20/10/2026; orientam capacidades, não autorizam afirmar paridade de editor,
 material proprietário ou comportamento físico.
 
 ## Ainda pendente
+
+Conferência visual adicional21/10: vídeo oficial Unity2019,
+[Build Beautiful Terrains](https://www.youtube.com/watch?v=aExdxF4OKBo), canal
+Unity verificado. Inspecionados146,331s e161,331s e três quadros consecutivos
+pausados em161,331200/161,364533/161,397866s. A sequência curta conserva a
+projeção violeta da forma sobre a superfície inclinada e o Inspector com máscara,
+força e tamanho no mesmo contexto. Entre os trechos há um plano inicial e um
+relevo já esculpido; isso sozinho não mede latência nem independência dos eventos.
+Capturas de estudo ficam privadas em build/terrain-evidence/unity-video.
+Princípios para a aceitação Astra: projeção aderente ao relevo, propriedades
+acessíveis sem sair da ferramenta, base plana e navegação que não concorra com
+pintura. Esta análise cobre trechos específicos, não o vídeo inteiro quadro a
+quadro; também não prova execução equivalente no Android.
 
 Controles globais, simulação dinâmica, três componentes de cena, upload por
 instância/fences, tracks, interações adjacentes, import/rebase da máscara e

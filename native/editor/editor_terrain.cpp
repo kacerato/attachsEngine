@@ -22,6 +22,7 @@
 #include <map>
 #include <numeric>
 #include <thread>
+#include <tuple>
 #include <type_traits>
 #include <unordered_set>
 
@@ -467,6 +468,10 @@ struct EditorSession::TerrainJob {
 };
 struct EditorSession::TerrainPreviewJob {
   std::string lightToken;
+  std::string gestureAuthority;
+  u64 gestureFxEpoch=0;
+  u32 gesturePointer=0,gestureBudgetMiB=0;
+  bool geometricGesture=false;
   resources::TerrainFxLimits fxLimits;resources::TerrainFxSlopeFrame fxFrame;
   resources::TerrainRecipe recipe;
   std::shared_ptr<const resources::TerrainBuild> previous;
@@ -560,6 +565,12 @@ void EditorSession::queueTerrainPreview() {
   const auto key=resources::serializeTerrainRecipe(recipe);
   auto job = std::make_shared<TerrainPreviewJob>();
   job->lightToken=lightToken;
+  job->geometricGesture=terrainGestureActive_;
+  if(job->geometricGesture){
+    job->gestureAuthority=resources::terrainRecipeNonFxKey(state_.terrainDraft);
+    job->gestureFxEpoch=terrainFxEpoch_;job->gesturePointer=terrainGesturePointer_;
+    job->gestureBudgetMiB=state_.terrainFx.budgetMiB;
+  }
   job->fxLimits=terrainFxLimits(state_.terrainFx);
   if(!captureTerrainFxFrame(document_,state_.terrainTarget,job->fxFrame)){state_.terrainMessage="Transformação FX inválida";return;}
   job->recipe = std::move(recipe);
@@ -809,7 +820,26 @@ void EditorSession::refreshTerrainPreview() {
   terrainPreviewRecipe_ = job->key;
   if (!job->error.empty())
     state_.terrainMessage = "Prévia: " + job->error;
-  if (!job->cancel && job->error.empty() && job->lightToken==lightToken) {
+  // A moving finger extends a captured gesture faster than a mesh job finishes.
+  // Accept a verified prefix of that same gesture; otherwise every completed
+  // preview is discarded until the finger stops. Never accept a different base,
+  // target, scene, FX revision, budget, pointer or edited/replaced sample.
+  bool extendsGesture=false;
+  if(job->geometricGesture && terrainGestureActive_ && !terrainGestureOverflow_ &&
+     job->samples && job->samples<=terrainGestureStrokes_.size() &&
+     job->gestureFxEpoch==terrainFxEpoch_ && job->gesturePointer==terrainGesturePointer_ &&
+     job->gestureBudgetMiB==state_.terrainFx.budgetMiB &&
+     job->gestureAuthority==resources::terrainRecipeNonFxKey(state_.terrainDraft)){
+    const auto fields=[](const resources::TerrainStroke &s){return std::tie(
+      s.tool,s.x,s.y,s.z,s.radius,s.strength,s.layer,s.shape,s.hardness,s.rotation,s.aspect,
+      s.gesture,s.verticalAspect,s.depthAspect,s.pitch,s.roll,s.roundness,s.opacity,
+      s.filterRadius,s.application,s.inverted,s.restoreGeometry,s.restoreWeights,
+      s.surfaceDepth,s.lockHeight,s.dimensionsLinked);};
+    const auto first=job->recipe.strokes.end()-job->samples;
+    extendsGesture=std::equal(first,job->recipe.strokes.end(),terrainGestureStrokes_.begin(),
+      [&](const auto &a,const auto &b){return fields(a)==fields(b);});
+  }
+  if (!job->cancel && job->error.empty() && (job->lightToken==lightToken || extendsGesture)) {
     std::string error;
     terrainMaterialCache_ = job->material;
     terrainPreviewCache_ = job->build;

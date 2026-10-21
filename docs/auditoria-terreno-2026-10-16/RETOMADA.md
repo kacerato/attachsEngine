@@ -1,6 +1,6 @@
 # Retomada — 16/10/2026
 
-Checkpoint local21/10: [correntes, lava, chuva e brilho por altura](FLUXOS-LAVA-CHUVA-2026-10-20.md). **229/229 editor,112/112 Core,312/312 GPU,44 shaders,2/2 assets e106 capturas UI**. Quatro fontes originais intactas; catálogo82/156 e atlas646. Corrigidos busca SHA64/cancelamento modal, espaço mundial da refração e índice Android da máscara FX. APK111 em compilação para uma passagem ADB autorizada antes das próximas Docs; depois continuar sem ADB até terminar o plano. Nenhuma nova publicação ou instalação está confirmada neste checkpoint;71 itens/28 linhas preservados.
+Checkpoint local21/10: [correntes, lava, chuva e brilho por altura](FLUXOS-LAVA-CHUVA-2026-10-20.md). **230/230 editor,112/112 Core,312/312 GPU,44 shaders,2/2 assets e106 capturas UI**. Quatro fontes originais intactas; catálogo82/156 e atlas646. Corrigidos busca SHA64/cancelamento modal, espaço mundial da refração e índice Android da máscara FX. APK111 em compilação para uma passagem ADB autorizada antes das próximas Docs; depois continuar sem ADB até terminar o plano. Nenhuma nova publicação ou instalação está confirmada neste checkpoint;71 itens/28 linhas preservados.
 
 Publicação M13 confirmada em20/10: engine `78ff1825` na branch
 `codex/terrain-voxel-generator`, AstraDocs `ce156ff9`, Vercel

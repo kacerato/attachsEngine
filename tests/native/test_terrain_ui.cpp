@@ -690,6 +690,36 @@ AE_TEST(terrain_compact_path_profiles_fit_before_scrolling) {
   }
 }
 
+AE_TEST(terrain_sculpt_continuous_moves_publish_verified_prefix_before_release_and_cancel_atomically) {
+  TerrainUiFixture f(1280,720);resources::TerrainRecipe recipe;recipe.cells=32;recipe.height=0;recipe.base=0;
+  std::string error;AE_EXPECT_TRUE(f.ready && f.session.applyTerrain(recipe,error),error.c_str());
+  AE_EXPECT_TRUE(f.visit(1) && f.tap(id(Widget::TerrainToolBase,u32(resources::TerrainTool::Raise))),"real Raise tool arms the viewport");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(9,4) && f.session.setTerrainNumber(10,.1),"soft brush dimensions authored");
+  f.render();const float a[]{-3,0,0},b[]{3,0,0};
+  const auto pa=editor::projectWorldToScreen(f.session.view(),a),pb=editor::projectWorldToScreen(f.session.view(),b);
+  AE_EXPECT_TRUE(pa.valid && pb.valid && f.router.hitTest(pa.screen).target==ui::UiPointerTarget::Viewport && f.router.hitTest(pb.screen).target==ui::UiPointerTarget::Viewport,"both continuous samples reach the real surface");
+  const auto before=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  const auto history=f.session.history().undoDepth(),publications=f.session.screen().terrainPreviewUpdates;
+  f.time+=1;f.session.handlePointer({76,ui::UiPointerPhase::Down,pa.screen,f.time});
+  ui::UiPoint point=pa.screen;
+  for(u32 i=0;i<100 && f.session.screen().terrainPreviewUpdates==publications;++i){
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    point=i%2?pa.screen:pb.screen;
+    f.session.handlePointer({76,ui::UiPointerPhase::Move,point,f.time+.01*(i+1)});
+    f.render();
+  }
+  AE_EXPECT_TRUE(f.session.screen().terrainPreviewUpdates>publications && f.session.screen().terrainLivePreview,"a completed prefix publishes while samples continue, before Up or a stationary frame");
+  const auto preview=f.session.screen().terrainPreviewBuild;
+  AE_EXPECT_TRUE(preview && std::any_of(preview->field.heights.begin(),preview->field.heights.end(),[](float y){return y>.001f;}),"published preview contains actual elevation");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),before,"visible gesture has not committed authored strokes");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),history,"preview does not add scene history");
+  f.session.handlePointer({76,ui::UiPointerPhase::Cancel,point,f.time+2});
+  for(u32 i=0;i<20;++i){f.render();std::this_thread::sleep_for(std::chrono::milliseconds(1));}
+  AE_EXPECT_TRUE(!f.session.screen().terrainLivePreview,"cancel restores committed geometry and rejects late completions");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),before,"cancel preserves full authored recipe");
+  AE_EXPECT_EQ(f.session.history().undoDepth(),history,"cancel preserves history");
+}
+
 AE_TEST(terrain_path_handles_follow_applied_surface_and_reopen_without_gpu_preview) {
   TerrainUiFixture f(1280,720);AE_EXPECT_TRUE(f.ready,"fixture");
   resources::TerrainRecipe r;r.cells=32;r.height=0;

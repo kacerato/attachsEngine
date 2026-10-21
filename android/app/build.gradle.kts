@@ -145,9 +145,11 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../native/third_party/fidelityfx_fsr1/LICENSE.txt") { into("licenses/fidelityfx_fsr1") }
     from("../../native/third_party/recastnavigation/License.txt") { into("licenses/recastnavigation") }
     from("../../assets/terrain") { include("LICENSE-supplied.txt", "manifest.json"); into("licenses/terrain") }
-    // Original-resolution runtime PNGs and previews. Source PSD archives remain in the repository.
+    // Full-resolution, lossless runtime PNGs and previews. Import source copies
+    // remain in the repository: all runtime reads use catalog.runtimePath.
+    // Shipping sources/*.png again adds ~200 MiB without improving any pixels.
     from("../../assets/terrain/library") {
-        include("catalog.json", "textures/**", "thumbnails/**", "sources/**/*.png")
+        include("catalog.json", "textures/**", "thumbnails/**")
         into("terrain/library")
     }
     if (includeLegacyDemos) {

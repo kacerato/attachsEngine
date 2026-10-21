@@ -42,7 +42,7 @@ with zipfile.ZipFile(apk) as z:
         thumbnail = texture['thumbnail']
         assert z.read('assets/terrain/library/' + thumbnail) == (library / thumbnail).read_bytes(), 'terrain thumbnail differs: ' + thumbnail
     assert len(catalog['materials']) == 82 and len(catalog['textures']) == 156, 'terrain catalog inventory differs'
-    assert not any(name.startswith('assets/terrain/library/sources/') and name.lower().endswith('.psd') for name in z.namelist()), 'source PSD archives must not enter APK'
+    assert not any(name.startswith('assets/terrain/library/sources/') for name in z.namelist()), 'redundant import source copies must not enter APK; exact full-resolution runtime PNGs are checked above'
     atlas = z.read('assets/ui/astra-ui-icons.aeui')
     assert atlas == (root / 'assets/astra-visual/ui/astra-ui-icons.aeui').read_bytes(), 'atlas differs from branch'
     magic, version, width, height, icon_count = struct.unpack_from('<5I', atlas)
