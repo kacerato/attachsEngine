@@ -116,7 +116,7 @@ inline void light(const scene::ComponentValue &value,const EditorEntity &,const 
   if(c.kind==scene::LightKind::Point) {for(u32 axis=0;axis<3;++axis) ring(out,pose,c.range,0,axis);}
   else if(c.kind==scene::LightKind::Spot) {
     const float origin[3]{};
-    for(float angle:{c.innerAngle,c.outerAngle}) {
+    for(float angle:{c.innerHalfAngle(),c.outerHalfAngle()}) {
       const float radius=c.range*std::sin(angle*0.01745329252f),depth=c.range*std::cos(angle*0.01745329252f);
       ring(out,pose,radius,depth,2);
       for(u32 i=0;i<4;++i) {float p[3]{radius*std::cos(i*1.57079632679f),radius*std::sin(i*1.57079632679f),depth};segment(out,pose,origin,p);}

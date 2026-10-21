@@ -2,6 +2,7 @@
 #pragma once
 #include "scene/light.h"
 #include "scene/time_of_day.h"
+#include "scene/lighting_settings.h"
 
 namespace ae::scene {
 // A hora do dia move o sol: só existe no objeto de uma Luz (a direcional).

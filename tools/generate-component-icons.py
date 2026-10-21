@@ -423,6 +423,23 @@ ICONS["lighting/look-presets"] = (
     f'<rect x="24" y="26" width="80" height="58" rx="9" {stroke(4, extra='opacity=".7"')}/>'
     f'<rect x="12" y="42" width="86" height="66" rx="9" {stroke(6)}/>'
     f'<path d="M22 98l22-24 15 15 12-11 19 20" {stroke(5, ACCENT)}/><circle cx="76" cy="62" r="8" {stroke(5, ACCENT)}/>')
+# G3a: auditoria de materiais importados. A esfera com o brilho especular é o
+# material; o selo no canto diz a classe: lista conferida (relatório), visto
+# (convertido por completo), "≈" (aproximado) e "!" (sem conversão).
+MATERIAL_BALL = (
+    f'<circle cx="52" cy="54" r="34" {stroke(6)}/>'
+    f'<path d="M24 62c14 9 42 9 56 0" {stroke(3, extra='opacity=".6"')}/>'
+    f'<path d="M38 38c4-6 10-9 16-10" {stroke(5)}/>')
+MATERIAL_SEAL = f'<circle cx="94" cy="94" r="24" fill="#15191e" {stroke(5, ACCENT)}/>'
+ICONS["assets/material-audit"] = (
+    MATERIAL_BALL + f'<rect x="76" y="70" width="36" height="46" rx="6" fill="#15191e" {stroke(5, ACCENT)}/>'
+    f'<path d="M84 84h20M84 96h20M84 108h12" {stroke(4, ACCENT)}/>')
+ICONS["assets/material-complete"] = MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M83 95l8 8 15-17" {stroke(6, ACCENT)}/>'
+ICONS["assets/material-approximate"] = (
+    MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M81 88c5-5 9-5 13 0s8 5 13 0M81 101c5-5 9-5 13 0s8 5 13 0" {stroke(5, ACCENT)}/>')
+ICONS["assets/material-unconverted"] = (
+    MATERIAL_BALL + MATERIAL_SEAL + f'<path d="M94 80v16" {stroke(6, ACCENT)}/><circle cx="94" cy="107" r="3.5" fill="{ACCENT}"/>')
+
 
 # G4: hora do dia. O arco é o caminho do sol sobre o horizonte; o sol no alto e
 # a lua crescente na outra ponta dizem "dia e noite" sem texto.
@@ -433,6 +450,30 @@ ICONS["lighting/time-of-day"] = (
     f'<path d="M64 18v-6M64 72v-6M40 42h-6M94 42h-6M47 25l-4-4M85 25l4-4" {stroke(4, ACCENT)}/>'
     f'<path d="M108 70a13 13 0 1 1-12-18 10 10 0 0 0 12 18z" {stroke(5)}/>'
     f'<circle cx="20" cy="76" r="5" fill="{INK}" opacity=".7"/>')
+# PK-3: Fonte do sol (Sun Source da janela Lighting). O sol dentro dos cantos
+# de seleção é "esta é a luz escolhida"; os raios paralelos descendo até o chão
+# dizem que ela é direcional, a luz principal da cena.
+ICONS["lighting/sun-source"] = (
+    f'<path d="M18 34V18h16M94 18h16v16M18 66v16h16M110 66v16H94" {stroke(5, ACCENT)}/>'
+    f'<circle cx="64" cy="50" r="15" fill="{ACCENT}"/>'
+    f'<path d="M64 26v-4M64 78v-4M40 50h-4M92 50h-4M47 33l-3-3M81 33l3-3M47 67l-3 3M81 67l3 3" {stroke(4)}/>'
+    f'<path d="M34 92l-8 14M64 92v14M94 92l8 14" {stroke(5, extra='opacity=".75"')}/>'
+    f'<path d="M12 114h104" {stroke(6)}/>')
+# PK-8: Projetar sombras do Mesh Renderer — o bloco iluminado e a sombra dele
+# no chão, na mesma linguagem do ícone de luz direcional.
+ICONS["lighting/shadow-caster"] = (
+    f'<path d="M30 30l18 18M52 20l12 18M76 18l2 20" {stroke(4, ACCENT)}/>'
+    f'<path d="M46 52h34v34H46z" {stroke(6)}/>'
+    f'<path d="M46 86l18 22h48L80 86" fill="{INK}" fill-opacity=".22" {stroke(4, extra='opacity=".8"')}/>'
+    f'<path d="M10 108h108" {stroke(6)}/>')
+# PK-3/PK-8: camadas de renderização — três placas empilhadas, a de cima acesa
+# pela luz: a luz só alcança renderers que dividem uma camada com ela.
+ICONS["lighting/rendering-layers"] = (
+    f'<path d="M64 84l46-20-46-20-46 20z" {stroke(5, extra='opacity=".45"')}/>'
+    f'<path d="M64 98l46-20M64 98L18 78" {stroke(5, extra='opacity=".7"')}/>'
+    f'<path d="M64 66l46-20-46-20-46 20z" fill="{ACCENT}" fill-opacity=".18" {stroke(6, ACCENT)}/>'
+    f'<circle cx="64" cy="12" r="6" fill="{ACCENT}"/><path d="M64 22v8" {stroke(4, ACCENT)}/>'
+    f'<path d="M64 112l46-20M64 112L18 92" {stroke(5, extra='opacity=".45"')}/>')
 
 # G4b: nuvens (Cloud Layer). O sol atrás do cúmulo diz "iluminada pelo sol",
 # os traços à esquerda são o vento e a mancha no chão é a sombra projetada.

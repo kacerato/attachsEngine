@@ -67,7 +67,7 @@ AE_TEST(component_matrix_reports_default_domain_and_invalidation) {
 
   // Propriedade condicional continua sendo propriedade: ela aparece na matriz
   // com o domínio inteiro e a marca de condicional, não sumindo do contrato.
-  const auto *cone = findContract(rows, "astra.render.light", "outer_angle");
+  const auto *cone = findContract(rows, "astra.render.light", "spot_angle");
   AE_EXPECT_TRUE(cone && cone->conditional, "o cone só é visível em spot, mas está no contrato");
 
   const auto *owner = findContract(rows, "astra.physics.collider", "owner");

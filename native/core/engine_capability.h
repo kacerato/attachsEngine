@@ -61,12 +61,20 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 46> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
   {"render.light.punctual", "Luzes pontuais e spot", CapabilityState::Implemented,
-   "renderer/punctual_lights.h (8 por quadro)", ""},
+   "renderer/punctual_lights.h (até 16 por quadro, 8 por objeto)", ""},
+  {"render.light.additional_directional", "Direcionais adicionais (lua, preenchimento)", CapabilityState::Implemented,
+   "renderer/punctual_lights.h + rhi/shaders/dirt_road_shading.glsl", "Sem sombra: só o sol principal tem cascatas, como a luz principal da URP"},
+  {"render.light.layers", "Máscara de culling e camadas de renderização da luz", CapabilityState::Implemented,
+   "renderer/punctual_lights.h (máscara por desenho) + rhi/shaders/dirt_road_vertex.glsl", ""},
+  {"render.light.sun_source", "Fonte do sol explícita (Sun Source)", CapabilityState::Implemented,
+   "scene/lighting_settings.h + renderer/punctual_lights.h", ""},
+  {"render.light.baked", "Luz Mista ou Assada (bake de iluminação)", CapabilityState::Planned,
+   "renderer/lightmap_baker (PK-6)", "Sem bake: toda luz é de tempo real; o modo fica gravado"},
   {"render.light.temperature", "Temperatura de cor em kelvin", CapabilityState::Implemented,
    "scene/light_units.h + runtime/scene_lights.cpp", ""},
   {"render.light.photometric", "Unidades fotométricas (lux, lumen, candela)", CapabilityState::Implemented,
@@ -81,6 +89,8 @@ inline constexpr std::array<EngineCapability, 46> engineCapabilities{{
    "renderer/shadow_cascades.cpp + rhi/shaders/shadow_depth.vert", ""},
   {"render.shadow.punctual", "Sombra de luz pontual ou spot", CapabilityState::Implemented,
    "renderer/shadow_atlas.h", "Atlas em quadtree: spot ocupa um mapa, pontual seis faces"},
+  {"render.shadow.renderer", "Projetar e receber sombra por Mesh Renderer", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp (passes de sombra) + rhi/shaders/dirt_road_shading.glsl", ""},
 
   // --- Ambiente, GI e sondas ----------------------------------------------
   {"render.ambient.hemispheric", "Ambiente hemisférico céu/chão", CapabilityState::Implemented,

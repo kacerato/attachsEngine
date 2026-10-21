@@ -42,9 +42,9 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
   layout(offset=3472) vec4 temporalParameters;
   // PK-5: Color Adjustments (filtro rgb, matiz em graus) e Bloom (tom rgb,
   // espalhamento; brilho máximo). Ver DirtRoadFrameUniform.
-  layout(offset=3600) vec4 postColorAdjust;
-  layout(offset=3616) vec4 postBloomTint;
-  layout(offset=3632) vec4 postBloomDetail;
+  layout(offset=4112) vec4 postColorAdjust;
+  layout(offset=4128) vec4 postBloomTint;
+  layout(offset=4144) vec4 postBloomDetail;
 } environment;
 layout(push_constant) uniform PostPushConstants {
   // z bits: 1 bloom, 2 bicúbica, 4 FSR 1, 8 vetor, 16 cobertura estática,

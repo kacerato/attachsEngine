@@ -1,6 +1,7 @@
 #include "editor/editor_screen.h"
 #include "harness.h"
 #include "editor/editor_session.h"
+#include "resources/unity_material_import.h"
 #include "ui_software_raster.h"
 #include <chrono>
 #include <cstdlib>
@@ -72,6 +73,45 @@ AE_TEST(library_package_editor_import_convert_undo_cold_reload_and_mobile_route)
   const auto altered=session.library().serialize()+"\n";AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.path/LibraryIndexPath,altered),"external index edit");
   AE_EXPECT_TRUE(!session.history().redo(session.document()),"resource redo refuses externally changed index");
   AE_EXPECT_TRUE(session.library().resolve(item,session.assets()).state==resources::LibraryResolutionState::Pending,"failed redo leaves native and catalog states unchanged");
+}
+// G3a: relatório por pacote. Três materiais (completo, aproximado, sem
+// conversão) aparecem como três blocos; tocar num bloco filtra a grade.
+AE_TEST(library_package_material_audit_card_counts_and_filters_by_class) {
+  PackageProject project;
+  EditorSession session;AE_EXPECT_TRUE(session.setProjectDirectory(project.path.string().c_str()),"open project");
+  const std::string header="%YAML 1.1\nMaterial:\n  m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}\n";
+  AE_EXPECT_TRUE(project.add("Metal.mat",header+"  m_Name: Metal\n  m_ShaderKeywords: _METALLICGLOSSMAP\n  m_SavedProperties:\n    m_TexEnvs:\n    - _MetallicGlossMap:\n"
+    "        m_Texture: {fileID: 2800000, guid: 11111111111111111111111111111111, type: 3}\n    m_Floats:\n    - _GlossMapScale: 0.7\n"),"complete");
+  AE_EXPECT_TRUE(project.add("Glass.mat",header+"  m_Name: Glass\n  m_ShaderKeywords: _SPECULARHIGHLIGHTS_OFF\n  m_SavedProperties:\n    m_Floats:\n    - _SpecularHighlights: 0\n"),"approximated");
+  AE_EXPECT_TRUE(project.add("Rock.mat",header+"  m_Name: Rock\n  m_ShaderKeywords: _PARALLAXMAP\n  m_SavedProperties:\n    m_Floats:\n    - _Parallax: 0.02\n"),"unsupported");
+  AE_EXPECT_TRUE(project.add("Notes.txt","not a material\n"),"other item");
+  const auto prepared=project.prepare();AE_EXPECT_TRUE(prepared.accepted,prepared.diagnostic.c_str());
+  std::vector<u8> fontBytes,atlasBytes;ui::UiFont font;ui::UiIconAtlas atlas;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"assets/astra-visual/ui/astra-ui-font.aeuf",fontBytes)&&font.load(fontBytes),"font");
+  AE_EXPECT_TRUE(EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"assets/astra-visual/ui/astra-ui-icons.aeui",atlasBytes)&&atlas.load(atlasBytes),"icons");
+  session.initialize(&font,&atlas);session.setSurface({0,0,655,300},{});
+  std::string error;AE_EXPECT_TRUE(session.importLibraryPackage(prepared,error),error.c_str());
+  const auto &state=session.screen();
+  AE_EXPECT_TRUE(state.libraryMaterialAudit[0]==1&&state.libraryMaterialAudit[1]==1&&state.libraryMaterialAudit[2]==1,"one material per class");
+  session.update();ui::UiDrawList list;ui::UiInputRouter router;
+  list.begin(session.screen().surface,font.metrics(ui::UiFontWeight::Regular));router.beginFrame();buildEditorScreen(session.screen(),ui::defaultTheme(),list,router);
+  ui::UiRect tile{};bool title=false;
+  for(const auto &command:list.commands())if(command.kind==ui::UiPrimitive::Text) {
+    if(list.textOf(command)=="Aproximados")tile=command.bounds;
+    if(list.textOf(command)=="Materiais Unity · 3")title=true;
+  }
+  AE_EXPECT_TRUE(title&&tile.width>0,"audit card visible right after the package import");
+  if(const auto *path=std::getenv("ASTRA_LIBRARY_AUDIT_CAPTURE"))AE_EXPECT_TRUE(capture(path,list,font,atlas),"audit card capture");
+  const ui::UiPoint point{tile.x+tile.width*.5f,tile.y+tile.height*.5f};
+  session.handlePointer({152,ui::UiPointerPhase::Down,point,1});session.handlePointer({152,ui::UiPointerPhase::Up,point,1.05});session.update();
+  AE_EXPECT_EQ(state.libraryAuditFilter,EditorScreenState::LibraryAuditApproximated,"tile filters by class");
+  AE_EXPECT_TRUE(state.libraryRows.size()==1&&state.libraryRows[0].name=="Glass.mat"&&state.libraryRows[0].audit==EditorScreenState::LibraryAuditApproximated,"grid shows only the approximated material");
+  resources::AssetGuid glass{};for(const auto &entry:prepared.package.items)if(entry.path.ends_with("Glass.mat"))glass=entry.id;
+  const auto *item=session.library().item(glass);
+  AE_EXPECT_TRUE(item&&item->conversion!=resources::LibraryConversionState::Unsupported&&item->knownLosses.size()==1&&
+    item->knownLosses[0].starts_with(resources::UnityMaterialApproximationPrefix),"approximation recorded with its reason");
+  session.handlePointer({153,ui::UiPointerPhase::Down,point,2});session.handlePointer({153,ui::UiPointerPhase::Up,point,2.05});session.update();
+  AE_EXPECT_EQ(state.libraryAuditFilter,EditorScreenState::LibraryAuditNone,"same tile clears the filter");
 }
 AE_TEST(library_package_rejects_changed_staging_and_recovers_metadata_with_sources) {
   PackageProject project;EditorSession session;

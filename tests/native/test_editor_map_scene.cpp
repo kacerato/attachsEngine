@@ -64,11 +64,16 @@ AE_TEST(editor_map_mutation_undo_visibility_and_delete_reach_render_state) {
   auto draw=mesh();EditorDocument doc;EditorMapScene scene;EditorHistory history;
   AE_EXPECT_TRUE(scene.import(doc,{&draw,1}),"import");
   const auto id=doc.childrenOf(doc.root())[0];auto value=*doc.find(id);
-  value.transform.position[0]+=10;value.visible=false;value.castShadow=false;
+  value.transform.position[0]+=10;value.visible=false;
+  // PK-8: a sombra é do Mesh Renderer, como na Unity.
+  auto *renderer=runtime::editMeshRenderer(value);AE_EXPECT_TRUE(renderer!=nullptr,"renderer");
+  renderer->castShadows=0;renderer->receiveShadows=false;renderer->renderingLayerMask=0b10u;value.layer=3;
   AE_EXPECT_TRUE(history.applyValues(doc,id,value),"edit");
   std::vector<EditorMapUpdate> out;AE_EXPECT_TRUE(scene.extract(doc,out),"extract");
   AE_EXPECT_EQ(out[0].pose.draw.model[12],50.0f,"geometry moved");
-  AE_EXPECT_TRUE(!out[0].visible && !out[0].castShadow,"visibility and shadows");
+  AE_EXPECT_TRUE(!out[0].visible && !out[0].castsShadow(),"visibility and shadows");
+  AE_EXPECT_TRUE(!out[0].lighting.receiveShadows && out[0].lighting.renderingLayers==0b10u && out[0].lighting.objectLayer==3,
+                 "receive shadows, rendering layer mask and object layer reach the draw");
   AE_EXPECT_TRUE(history.undo(doc),"undo");AE_EXPECT_TRUE(scene.extract(doc,out),"extract undo");
   AE_EXPECT_EQ(out[0].pose.draw.model[12],40.0f,"original geometry restored");
   AE_EXPECT_TRUE(out[0].visible,"visibility restored");

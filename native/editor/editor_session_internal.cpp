@@ -80,6 +80,7 @@ void materialDifferences(const resources::MaterialAsset &a,const resources::Mate
   add(a.channels.roughness!=b.channels.roughness,"ch3.0");add(a.channels.metallic!=b.channels.metallic,"ch3.1");
   add(a.channels.occlusion!=b.channels.occlusion,"ch3.2");
   add(a.channels.normalFlipY!=b.channels.normalFlipY,"ch4");add(a.channels.alphaSource!=b.channels.alphaSource,"ch5");
+  add(a.channels.roughnessSource!=b.channels.roughnessSource,"ch6");
   scene::MeshRenderer pa,pb;pa.material=a.values;pb.material=b.values;
   for(u32 field=0;field<scene::meshRendererNumbers.size();++field)
     add(scene::meshRendererNumbers[field].read(pa)!=scene::meshRendererNumbers[field].read(pb),"num"+std::to_string(field));
@@ -110,6 +111,7 @@ bool copyMaterialChange(const resources::MaterialAsset &before,const resources::
   copy(ch.occlusion,now.occlusion,old.occlusion,"ch3.2");copy(ch.occlusionSource,now.occlusionSource,old.occlusionSource,"ch0");
   copy(ch.occlusionStrength,now.occlusionStrength,old.occlusionStrength,"ch2");
   copy(ch.normalFlipY,now.normalFlipY,old.normalFlipY,"ch4");copy(ch.alphaSource,now.alphaSource,old.alphaSource,"ch5");
+  copy(ch.roughnessSource,now.roughnessSource,old.roughnessSource,"ch6");
   copy(target.occlusionTexture,after.occlusionTexture,before.occlusionTexture,"ch1");
   copy(target.values.enabled,after.values.enabled,before.values.enabled,field.starts_with("num")?std::string(field):"enabled");
   scene::MeshRenderer was,now2,to;was.material=before.values;now2.material=after.values;to.material=target.values;
@@ -144,6 +146,7 @@ std::string materialWidgetField(u32 widget,u32 binding) {
     case EditorWidget::MaterialChannelOcclusion:return "ch3.2";
     case EditorWidget::MaterialNormalFlipCycle:return "ch4";
     case EditorWidget::MaterialAlphaSourceCycle:return "ch5";
+    case EditorWidget::MaterialRoughnessSourceCycle:return "ch6";
     case EditorWidget::TextureSamplingUv:return uv+"set";
     case EditorWidget::TextureSamplingWrap:return uv+"wrap";
     case EditorWidget::TextureSamplingFilter:return uv+"filter";
@@ -168,6 +171,7 @@ std::string materialFieldText(const resources::MaterialAsset &material,std::stri
   }
   if(key=="ch4") {static constexpr const char *labels[]{"Como a fonte","OpenGL","DirectX"};return labels[material.channels.normalFlipY];}
   if(key=="ch5") {static constexpr const char *labels[]{"Como a fonte","Alfa da cor base","Ignorar alfa","Luminância"};return labels[material.channels.alphaSource];}
+  if(key=="ch6") {static constexpr const char *labels[]{"Como a fonte","Rugosidade","Suavidade no canal","Suavidade no alfa da cor"};return labels[material.channels.roughnessSource];}
   if(key.starts_with("uv") && key.size()>4 && key[2]>='0' && static_cast<u32>(key[2]-'0')<scene::MaterialTextureCount) {
     const auto &uv=material.sampling[key[2]-'0'];const auto field=key.substr(4);
     if(field=="set") {static constexpr const char *labels[]{"Herdar","UV 0","UV 1","Mundo"};return labels[uv.uvSet];}

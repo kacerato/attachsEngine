@@ -61,6 +61,9 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=3552) vec4 cloudShape;      // 1/tamanho, altitude, vento x, z
   layout(offset=3568) vec4 cloudTint;       // tom*2^EV, luz do céu
   layout(offset=3584) vec4 cloudShadow;     // força da sombra, reservados
+  // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens (G4b)
+  // para nenhum offset anterior mudar. Mesmo formato de `punctualLights`.
+  layout(offset=3600) vec4 punctualLightsExtra[32];
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -283,7 +286,9 @@ mediump float directionalCascadeShadow(highp vec3 worldPosition, mediump vec3 no
     highp float start=intervalEnd-width;
     visibility=mix(visibility,1.0,smoothstep(start,intervalEnd,viewDepth));
   }
-  return visibility;
+  // Força da sombra da Luz principal (Strength do Light Inspector): abaixo de
+  // 1 a luz do sol vaza pelo oclusor.
+  return mix(1.0,visibility,clamp(environment.shadowParameters.z,0.0,1.0));
 }
 
 // Sol que chega à superfície: sombra das cascatas vezes a das nuvens.

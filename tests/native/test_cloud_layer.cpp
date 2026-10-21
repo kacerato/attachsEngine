@@ -222,7 +222,8 @@ AE_TEST(cloud_volume_recipe_creates_a_global_cloud_layer_above_the_scene_environ
   const auto *component = static_cast<const scene::Environment *>(
       graph.find(created)->components.find(scene::Environment::descriptor));
   AE_EXPECT_TRUE(component && component->values.clouds.enabled && component->overrideClouds && !component->overrideSky &&
-                 !component->overrideFog && !component->overridePost && component->values.priority == 1.0f,
+                 !component->overrideFog && !component->overridePost && !component->overrideExposure && !component->overrideBloom &&
+                 component->values.priority == 1.0f,
                  "só o override das nuvens, acima do Ambiente");
   renderer::SceneEnvironment look;
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(graph, look), "cena resolvida");

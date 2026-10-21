@@ -53,8 +53,8 @@ AE_TEST(scene_light_is_a_component_with_contract_and_survives_the_archive) {
   light->color[0] = .25f;
   light->color[1] = .5f;
   light->color[2] = .75f;
-  light->innerAngle = 10;
-  light->outerAngle = 40;
+  light->innerSpotAngle = 10;
+  light->spotAngle = 40;
   light->unit = scene::LightUnit::LuxCandela;
   light->useColorTemperature = true;
   light->colorTemperature = 3200;
@@ -69,7 +69,7 @@ AE_TEST(scene_light_is_a_component_with_contract_and_survives_the_archive) {
   AE_EXPECT_EQ(back->intensity, 12.f, "intensidade preservada");
   AE_EXPECT_EQ(back->range, 7.f, "alcance preservado");
   AE_EXPECT_EQ(back->color[2], .75f, "cor preservada");
-  AE_EXPECT_EQ(back->outerAngle, 40.f, "cone externo preservado");
+  AE_EXPECT_EQ(back->spotAngle, 40.f, "abertura do spot preservada");
   AE_EXPECT_TRUE(back->unit == scene::LightUnit::LuxCandela, "unidade física preservada");
   AE_EXPECT_TRUE(back->useColorTemperature, "uso de temperatura preservado");
   AE_EXPECT_EQ(back->colorTemperature, 3200.f, "temperatura preservada");
@@ -77,7 +77,7 @@ AE_TEST(scene_light_is_a_component_with_contract_and_survives_the_archive) {
   // Cone interno maior que o externo inverteria a janela e desenharia a borda
   // no lugar errado: recusa na autoria, não no shader.
   auto invalid = *doc.find(id);
-  editLight(invalid)->innerAngle = 60;
+  editLight(invalid)->innerSpotAngle = 60;
   AE_EXPECT_TRUE(!doc.applyEntityValues(id, invalid), "cone interno maior que o externo é recusado");
 }
 
@@ -89,8 +89,14 @@ AE_TEST(light_v1_migrates_without_changing_legacy_brightness) {
   AE_EXPECT_TRUE(light.unit == scene::LightUnit::Engine, "v1 mantém escala interna");
   AE_EXPECT_TRUE(!light.useColorTemperature, "v1 não ganha filtro novo");
   AE_EXPECT_EQ(scene::lightIntensityForShader(light.kind, light.unit, light.intensity,
-                                               light.innerAngle, light.outerAngle),
+                                               light.innerHalfAngle(), light.outerHalfAngle()),
                12.f, "brilho antigo chega igual ao shader");
+  // v1 guardava meio-ângulos e cor linear; a v4 guarda a abertura total e a
+  // cor do seletor, sem mudar o que o shader recebe.
+  AE_EXPECT_EQ(light.spotAngle, 80.f, "meio-cone de 40° vira Spot Angle de 80°");
+  AE_EXPECT_EQ(light.innerSpotAngle, 20.f, "meio-cone interno de 10° vira 20°");
+  AE_EXPECT_TRUE(std::abs(scene::srgbChannelToLinear(light.color[0]) - .25f) < 1e-5f, "cor linear volta igual ao shader");
+  AE_EXPECT_TRUE(light.color[0] > .5f, "e é mostrada em sRGB, como o seletor da Unity");
 }
 
 AE_TEST(physical_light_units_and_temperature_feed_the_runtime_consumer) {
@@ -177,16 +183,18 @@ AE_TEST(punctual_light_budget_is_deterministic_and_reports_what_did_not_fit) {
     lights.push_back(light);
   }
   const float camera[3]{0, 0, 0};
-  std::array<renderer::PunctualLight, renderer::MaximumPunctualLights> selected{};
+  // Orçamento do perfil C (Additional Lights = 8): o span é o teto do quadro.
+  std::array<renderer::PunctualLight, 8> selected{};
   renderer::LightBudgetReport report{};
   const auto accepted = renderer::selectPunctualLights(lights, camera, selected, report);
-  AE_EXPECT_EQ(accepted, renderer::MaximumPunctualLights, "o orçamento enche");
+  AE_EXPECT_EQ(accepted, 8u, "o orçamento enche");
   AE_EXPECT_EQ(report.punctualDropped, 1u, "a que não coube é contada, não sumida");
   // Mais perto da câmera vem primeiro: é o critério, e ele é estável.
   AE_EXPECT_EQ(selected[0].positionRange[0], 0.f, "a mais próxima primeiro");
   AE_EXPECT_EQ(selected[7].positionRange[0], 7.f, "a oitava é a nona mais distante");
 
-  // Duas direcionais: uma vira o sol, a outra é excedente declarado.
+  // Duas direcionais: a mais forte vira o sol (luz principal, com cascatas) e a
+  // outra entra como luz adicional, sem sombra — a lua ou o preenchimento.
   std::vector<renderer::SceneLight> suns;
   renderer::SceneLight sun{};
   sun.objectId = 10;
@@ -197,10 +205,13 @@ AE_TEST(punctual_light_budget_is_deterministic_and_reports_what_did_not_fit) {
   sun.intensity = 9;
   suns.push_back(sun);
   renderer::LightBudgetReport sunReport{};
-  AE_EXPECT_EQ(renderer::selectPunctualLights(suns, camera, selected, sunReport), 0u,
-               "direcional não ocupa vaga pontual");
-  AE_EXPECT_EQ(sunReport.directionalAccepted, 1u, "uma direcional acende");
-  AE_EXPECT_EQ(sunReport.directionalDropped, 1u, "a segunda direcional é declarada excedente");
+  AE_EXPECT_EQ(renderer::selectPunctualLights(suns, camera, selected, sunReport), 1u,
+               "a segunda direcional ocupa uma vaga adicional");
+  AE_EXPECT_EQ(sunReport.directionalAccepted, 2u, "as duas direcionais acendem");
+  AE_EXPECT_EQ(sunReport.directionalDropped, 0u, "nenhuma direcional é descartada");
+  AE_EXPECT_TRUE(selected[0].directional() && selected[0].colorIntensity[0] == 2.f,
+                 "a vaga é a direcional fraca, marcada pelo alcance negativo");
+  AE_EXPECT_TRUE(selected[0].shadow[0] < 0, "direcional adicional não tem sombra");
   const auto *chosen = renderer::selectDirectionalLight(suns);
   AE_EXPECT_TRUE(chosen && chosen->objectId == 11, "a direcional mais forte é a escolhida");
 
@@ -282,9 +293,10 @@ AE_TEST(light_shadow_capability_matrix_is_published_and_honest) {
                  renderer::lightCastsShadow(renderer::LightModality::Spot),
                  "luz local tem passe de sombra: o atlas em quadtree");
 
-  // E a autoria acompanha: o controle de sombra existe na Luz, some na
-  // direcional (cuja sombra é a do sol, com política em Ambiente) e os ajustes
-  // finos só aparecem quando a sombra está ligada.
+  // E a autoria acompanha: desde a Luz v4 o tipo de sombra existe em todas as
+  // modalidades (a do sol também é da Luz, como na Unity); resolução e plano
+  // próximo são de mapa local e somem na direcional; os ajustes finos só
+  // aparecem quando a sombra está ligada.
   const auto mode = std::find_if(scene::Light::descriptor.enums.begin(), scene::Light::descriptor.enums.end(),
                                   [](const auto &property) { return property.id == std::string_view("shadow_mode"); });
   AE_EXPECT_TRUE(mode != scene::Light::descriptor.enums.end(), "a Luz expõe o tipo de sombra");
@@ -292,8 +304,13 @@ AE_TEST(light_shadow_capability_matrix_is_published_and_honest) {
   directional.kind = scene::LightKind::Directional;
   scene::Light lamp;
   lamp.kind = scene::LightKind::Point;
-  AE_EXPECT_TRUE(!mode->presentation.isVisible(directional), "direcional não repete o controle das cascatas");
+  AE_EXPECT_TRUE(mode->presentation.isVisible(directional), "o sol escolhe a própria sombra");
   AE_EXPECT_TRUE(mode->presentation.isVisible(lamp), "pontual escolhe a própria sombra");
+  const auto resolution = std::find_if(scene::Light::descriptor.enums.begin(), scene::Light::descriptor.enums.end(),
+                                        [](const auto &property) { return property.id == std::string_view("shadow_resolution"); });
+  directional.shadowMode = 2;
+  AE_EXPECT_TRUE(resolution != scene::Light::descriptor.enums.end() && !resolution->presentation.isVisible(directional),
+                 "a resolução do sol é a das cascatas da política");
   const auto strength = std::find_if(scene::Light::descriptor.numbers.begin(), scene::Light::descriptor.numbers.end(),
                                       [](const auto &property) { return property.id == std::string_view("shadow_strength"); });
   AE_EXPECT_TRUE(strength != scene::Light::descriptor.numbers.end(), "força da sombra é propriedade");
@@ -324,7 +341,8 @@ AE_TEST(light_changed_during_play_reaches_the_collected_frame) {
   AE_EXPECT_TRUE(runtime::collectSceneLights(play.document(), lights), "coleta do mundo em execução");
   AE_EXPECT_EQ(lights.size(), 1u, "uma luz");
   AE_EXPECT_EQ(lights[0].intensity, 40.f, "o valor escrito por código chega ao quadro");
-  AE_EXPECT_EQ(lights[0].color[0], .2f, "a cor escrita por código chega ao quadro");
+  AE_EXPECT_TRUE(std::abs(lights[0].color[0] - scene::srgbChannelToLinear(.2f)) < 1e-6f,
+                 "a cor sRGB escrita por código chega ao quadro linearizada");
 
   // E o documento autoral continua com o valor autorado.
   play.stop();
@@ -344,10 +362,11 @@ AE_TEST(local_shadow_authoring_reaches_the_frame_slot_and_old_scenes_open_withou
   light->shadowStrength = .8f;
   light->shadowNearPlane = .3f;
   AE_EXPECT_TRUE(doc.applyEntityValues(lamp, values), "sombra autorada");
-  // A direcional com o campo ligado por script não vira pedido de atlas local:
-  // a sombra dela é a das cascatas.
+  // Sombra dura no sol: chega à coleta para as cascatas; o atlas local só
+  // recebe pontuais e spots (o renderer descarta direcionais ali).
   values = *doc.find(sun);
   editLight(values)->shadowMode = 1;
+  editLight(values)->shadowStrength = .6f;
   AE_EXPECT_TRUE(doc.applyEntityValues(sun, values), "direcional aceita o valor");
 
   std::vector<renderer::SceneLight> lights;
@@ -361,7 +380,8 @@ AE_TEST(local_shadow_authoring_reaches_the_frame_slot_and_old_scenes_open_withou
                  "a sombra suave chega à coleta");
   AE_EXPECT_TRUE(pointLight->shadow.resolution == 3 && pointLight->shadow.strength == .8f &&
                  pointLight->shadow.nearPlane == .3f, "resolução, força e plano próximo chegam intactos");
-  AE_EXPECT_TRUE(directional && !directional->shadow.casts(), "direcional nunca pede atlas local");
+  AE_EXPECT_TRUE(directional && directional->shadow.mode == 1 && directional->shadow.strength == .6f,
+                 "a sombra do sol é da Luz: tipo e força chegam às cascatas");
 
   // A vaga que o shader lê sabe de qual luz veio e começa sem tile: é o
   // renderer, depois de montar o atlas, que aponta o tile.
@@ -389,7 +409,7 @@ AE_TEST(local_shadow_authoring_reaches_the_frame_slot_and_old_scenes_open_withou
   std::stringstream current;
   authored.write(current);
   scene::Light again;
-  AE_EXPECT_TRUE(again.read(current, 3), "Luz v3 lida");
+  AE_EXPECT_TRUE(again.read(current, scene::Light::descriptor.version), "Luz atual lida");
   AE_EXPECT_TRUE(again.shadowMode == 2 && again.shadowResolution == 3 && again.shadowStrength == .8f,
                  "a sombra sobrevive ao arquivo");
 }

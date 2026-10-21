@@ -37,7 +37,7 @@ const scene::ComponentNumber *number(const scene::ComponentValue &v,std::string_
 }
 const scene::ComponentTriple *triple(const scene::ComponentValue &v,const AnimationPropertyAddress &a) {
   for(const auto &p:v.type().triples)if(p.id==a.property) {
-    const auto expected=p.kind==scene::ComponentTripleKind::LinearColor?AnimationPropertyKind::LinearColor:
+    const auto expected=scene::componentTripleIsColor(p.kind)?AnimationPropertyKind::LinearColor:
       p.dimensions()==2?AnimationPropertyKind::Vector2:AnimationPropertyKind::Vector3;
     if(a.kind!=expected)return nullptr;
     for(u32 c=0;c<p.dimensions();++c)if(!number(v,p.channels[c]))return nullptr;
@@ -103,7 +103,7 @@ bool writeAnimationProperty(scene::ComponentValue &v,const AnimationPropertyAddr
   } else if(a.kind==AnimationPropertyKind::Enumeration) {
     const auto *value=std::get_if<u32>(&input);if(!value)return fail(error,"Enum incompatível");
     for(const auto &p:v.type().enums)if(p.id==a.property) {
-      if(std::none_of(p.options.begin(),p.options.end(),[&](const auto &option){return option.value==*value;}))return fail(error,"Opção de enum inválida");
+      if(!p.accepts(*value))return fail(error,"Opção de enum inválida");
       p.write(v,*value);return true;
     }
   } else if(values(input,a.kind,components)) {
