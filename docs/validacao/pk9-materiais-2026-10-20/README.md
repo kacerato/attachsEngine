@@ -60,9 +60,28 @@ texturas procedurais próprias e materiais `.mat` URP convertidos pelo importado
 
 ## Custo no aparelho
 
-Primeira medição inválida (o app foi trocado por outra frente durante a rodada) e refeita pendente do aparelho.
-O desenho do custo: materiais Lit sem opções novas continuam nas pipelines especializadas por textura (o código
-PK-9 é eliminado por constante de especialização); só materiais com shader/opções novas vão para a pipeline geral.
+POCO F7, Astra Dev 232 (difere do código entregue só no ramo de teste do Multiplicar e num log de CPU), Play com
+câmera fixa, resolução dinâmica e qualidade travadas, `aether.profile_frames`, 3 janelas de 10 s por variante,
+bateria 36,9→37,7 °C. Variantes do mesmo projeto, só trocando o shader dos 32 materiais da grade:
+
+| Variante | gpu_frame_ms (mediana das janelas) | p90 | fps |
+|---|---|---|---|
+| Lit | 13,20 | 13,62–13,95 | 60 |
+| Complex Lit (verniz ligado) | 13,20 | 13,63–16,66 | 60 |
+| Simple Lit | 13,20 | 13,67–13,88 | 60 |
+| Lit (repetição) | 13,20 | 13,66–14,01 | 60 |
+
+Diferença abaixo de 0,02 ms: a grade cobre pouco da tela e o quadro é dominado pelos outros passes. Isto mostra que
+o PK-9 não pesa nesta cena; não mede o pior caso (um material de verniz cobrindo a tela inteira), que fica pendente.
+Uma rodada anterior foi descartada porque outra frente instalou o APK 220 durante a medição.
+
+## Multiplicar: pendente
+
+No aparelho o cubo Multiplicar fica mais claro em vez de escurecer. Verificado com logs no POCO: o material chega
+com Mistura = Multiplicar, a extensão (linha 13) leva saída 3, a pipeline DST_COLOR/ZERO é criada e é a ligada no
+desenho. Forçar a saída do ramo do Multiplicar para preto **não muda a imagem** (nem no Play nem no editor), então o
+que aparece não vem desse ramo; a próxima etapa é uma captura de quadro (AGI/RenderDoc) para ver qual desenho
+pinta aquela área. A nota do AstraDocs já declara o Multiplicar como pendente.
 
 ## Mudanças por causa da comparação
 
