@@ -7753,7 +7753,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   }
   builder.label(title,assigning?"Atribuir tag":"Tags do projeto",theme.color.text,theme.type.cardName);
   std::string detail=assigning?(state.multi.count>1?std::to_string(state.multi.count)+" objetos selecionados":object?object->name:""):
-                               std::to_string(names.size()-1)+" tags · uma por objeto";
+                               std::to_string(names.size()-runtime::ObjectTags::BuiltinCount)+" tags · uma por objeto";
   builder.label(takeTop(content,26),detail.c_str(),theme.color.textDim,theme.type.caption);
   auto tools=takeTop(content,44),create=takeRight(tools,78);
   builder.list.addRect(deflate(tools,UiInsets::all(3)),theme.color.raised,theme.radius.control);
@@ -7795,7 +7795,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TagNext));
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(!assigning) {
-    const bool removable=authoring && state.tagSelected!="Untagged" && state.document->tags().contains(state.tagSelected);
+    const bool removable=authoring && !runtime::ObjectTags::builtin(state.tagSelected) && state.document->tags().contains(state.tagSelected);
     builder.label(removal,"Excluir tag sem uso",removable?theme.color.text:theme.color.textFaint,theme.type.caption);
     if(removable) builder.router.addRegion(removal,widgetId(EditorWidget::TagDelete));
   }
@@ -11044,7 +11044,7 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   std::vector<Section> sections{
     {EditorProjectSection::Layers,UiIcon::SceneLayers,"Camadas e colisão",std::to_string(layers)+" camada(s)"},
     {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"},
-    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-1)+" no projeto"}};
+    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-runtime::ObjectTags::BuiltinCount)+" no projeto"}};
   if(waterCreationAvailable(state)) sections.push_back({EditorProjectSection::Water,UiIcon::NatureWater,"Água da cena","Superfícies e ondas"});
   if(wide) builder.label(takeTop(rail,30),"PROJETO",theme.color.textMuted,theme.type.label);
   for(const auto &section:sections) {

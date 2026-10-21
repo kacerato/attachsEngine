@@ -5,6 +5,7 @@
 #include "harness.h"
 #include "editor/editor_scene_camera.h"
 #include "runtime/game_view.h"
+#include "runtime/object_tags.h"
 #include "scene/camera.h"
 #include "scene/component_api_csharp.h"
 #include "scene/component_properties.h"
@@ -153,6 +154,18 @@ AE_TEST(camera_main_camera_tag_picks_the_game_camera_like_camera_main) {
   AE_EXPECT_TRUE(editor::resolveSceneCamera(scene.g).entity==player,"MainCamera vence, como Camera.main");
   const auto stack=editor::resolveSceneCameraStack(scene.g);
   AE_EXPECT_TRUE(stack.size()==2 && stack.back().entity==overview,"a ordem de desenho continua sendo a prioridade");
+}
+
+AE_TEST(camera_main_camera_is_a_builtin_tag_like_unity) {
+  runtime::ObjectTags tags;
+  AE_EXPECT_TRUE(tags.contains("MainCamera") && tags.contains("Untagged"),"MainCamera existe em todo projeto");
+  AE_EXPECT_TRUE(!tags.remove("MainCamera"),"tag embutida não se apaga");
+  AE_EXPECT_TRUE(tags.add("Inimigo"),"tag do projeto");
+  std::stringstream text;tags.write(text);
+  AE_EXPECT_TRUE(text.str()=="ASTRA_TAGS 1 1\n\"Inimigo\"\n","embutidas ficam fora do arquivo");
+  runtime::ObjectTags back;AE_EXPECT_TRUE(back.read(text) && back==tags,"ida e volta");
+  std::istringstream legacy("ASTRA_TAGS 1 2\n\"MainCamera\"\n\"Inimigo\"\n");
+  runtime::ObjectTags old;AE_EXPECT_TRUE(old.read(legacy) && old==tags,"catálogo antigo com MainCamera declarada abre igual");
 }
 
 AE_TEST(camera_viewport_rect_measures_from_the_bottom_left) {
