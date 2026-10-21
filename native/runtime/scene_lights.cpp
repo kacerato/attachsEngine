@@ -2,6 +2,7 @@
 #include "runtime/scene_components.h"
 #include "runtime/transform_math.h"
 #include "scene/light.h"
+#include "scene/lighting_settings.h"
 #include "scene/time_of_day.h"
 #include "renderer/time_of_day.h"
 
@@ -10,6 +11,18 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
   std::vector<ObjectId> ids;
   graph.collectSubtree(graph.root(), ids);
   std::vector<renderer::SceneLight> collected;
+  // Fonte do sol: as Configurações de iluminação da cena (a primeira na ordem
+  // da hierarquia, como a cena ativa da Unity tem uma só janela Lighting).
+  ObjectId sunSource = 0;
+  for (auto id : ids) {
+    const auto *object = graph.find(id);
+    if (!object) return false;
+    if (const auto *settings = static_cast<const scene::LightingSettings *>(
+            object->components.find(scene::LightingSettings::descriptor))) {
+      sunSource = settings->sunSource;
+      break;
+    }
+  }
   for (auto id : ids) {
     const auto *object = graph.find(id);
     if (!object) return false;
@@ -30,14 +43,18 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
       entry.position[axis] = world[12 + axis];
       // Coluna 2 é o +Z de mundo do objeto: a frente, pela convenção da Câmera.
       entry.direction[axis] = world[8 + axis];
-      entry.color[axis] = light->color[axis] * temperature[axis];
+      // A cor autoral é sRGB, como o seletor; a iluminação é linear.
+      entry.color[axis] = scene::srgbChannelToLinear(light->color[axis]) * temperature[axis];
     }
     entry.intensity = scene::lightIntensityForShader(light->kind, light->unit, light->intensity,
-                                                     light->innerAngle, light->outerAngle);
+                                                     light->innerHalfAngle(), light->outerHalfAngle());
     entry.range = light->range;
     entry.photometric = light->unit != scene::LightUnit::Engine;
-    entry.innerAngle = light->innerAngle;
-    entry.outerAngle = light->outerAngle;
+    entry.innerAngle = light->innerHalfAngle();
+    entry.outerAngle = light->outerHalfAngle();
+    entry.filter.cullingMask = light->cullingMask;
+    entry.filter.renderingLayers = light->renderingLayers;
+    entry.sunSource = sunSource != 0 && id == sunSource;
     // G4: a rotação já veio do transform, girado por runtime/scene_time_of_day
     // (como um script de ciclo na Unity). Aqui só a curva de cor e intensidade
     // pela elevação e a fase da lua que o céu desenha.
@@ -55,16 +72,15 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
         entry.moonPhase = sun.moonPhase;
       }
     }
-    // Sombra local autoral (G6-B). A direcional projeta pelas cascatas do sol,
-    // com politica em Ambiente, entao ela nunca leva pedido de atlas local.
-    if (light->kind != scene::LightKind::Directional) {
-      entry.shadow.mode = static_cast<u8>(light->shadowMode);
-      entry.shadow.resolution = static_cast<u8>(light->shadowResolution);
-      entry.shadow.strength = light->shadowStrength;
-      entry.shadow.bias = light->shadowBias;
-      entry.shadow.normalBias = light->shadowNormalBias;
-      entry.shadow.nearPlane = light->shadowNearPlane;
-    }
+    // Sombra autoral da luz (v4): pontual e spot pedem tiles no atlas local; a
+    // direcional que for o sol principal usa estes valores nas cascatas, e uma
+    // direcional adicional não projeta (só a luz principal tem cascatas).
+    entry.shadow.mode = static_cast<u8>(light->shadowMode);
+    entry.shadow.resolution = static_cast<u8>(light->shadowResolution);
+    entry.shadow.strength = light->shadowStrength;
+    entry.shadow.bias = light->shadowBias;
+    entry.shadow.normalBias = light->shadowNormalBias;
+    entry.shadow.nearPlane = light->shadowNearPlane;
     collected.push_back(entry);
   }
   out = std::move(collected);

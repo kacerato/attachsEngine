@@ -166,6 +166,7 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
     }
     if(version>=14 && (!(stream>>std::quoted(e.tag)) || !runtime::ObjectTags::validName(e.tag))) return false;
     if(version>=15 && !e.groups.read(stream)) return false;
+    runtime::adoptLegacyRendererShadows(e);
     if(!e.components.registeredWith(registry)) return false;
     if(index==0) {
       if(e.id!=prepared.root() || e.parent!=0 || e.kind!=EditorEntityKind::Folder ||

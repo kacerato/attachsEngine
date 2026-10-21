@@ -288,7 +288,7 @@ void EditorSession::applyLodGroups(const runtime::SceneGraph &graph,std::vector<
     draw.pose.instance.normalColumns[7]=found->dither;
     // Durante a troca, só o nível que sai projeta sombra: as duas sombras
     // somadas escureceriam o chão no meio do fade.
-    if(found->dither<0) draw.castShadow=false;
+    if(found->dither<0) draw.castShadows=0;
   }
 }
 

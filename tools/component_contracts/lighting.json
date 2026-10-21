@@ -23,6 +23,16 @@
       "requirements": {
         "cpp": "timeOfDayRequirements"
       }
+    },
+    {
+      "type": "LightingSettings",
+      "name": "Iluminação da cena",
+      "description": "Fonte do sol: qual luz direcional é o sol da cena",
+      "icon": "lighting/sun-source",
+      "searchTerms": "Lighting Settings Sun Source RenderSettings Iluminação Fonte do sol Sol principal",
+      "consumer": "runtime/scene_lights.cpp → renderer/punctual_lights.h",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/lighting-window.html",
+      "apiName": "LightingSettings"
     }
   ],
   "defaults": {

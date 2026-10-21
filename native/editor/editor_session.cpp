@@ -3202,7 +3202,12 @@ bool EditorSession::commitColorWindow() {
   float rgba[4];pickerLinear(rgba);
   if(state_.colorTarget==0) {
     auto values=*entity;const auto *component=values.components.findInstance(state_.colorInstance);
-    const float rgb[3]{rgba[0],rgba[1],rgba[2]};
+    float rgb[3]{rgba[0],rgba[1],rgba[2]};
+    // Campo sRGB (a cor da Luz, como o Color da Unity): grava o número do
+    // seletor; o motor lineariza ao iluminar.
+    if(component) for(const auto &triple:component->type().triples)
+      if(triple.id==state_.colorProperty && triple.kind==scene::ComponentTripleKind::SrgbColor)
+        for(float &channel:rgb) channel=std::clamp(scene::linearChannelToSrgb(channel),0.f,1.f);
     if(component && scene::setComponentTriple(values.components,component->type().id,state_.colorProperty,rgb,state_.colorInstance)==scene::ComponentPropertyStatus::Applied &&
        history_.applyValues(document_,entity->id,values)) {state_.colorField=0;return true;}
     state_.status="Cor recusada pelo componente";return false;
@@ -5890,14 +5895,17 @@ bool EditorSession::createSceneTemplate(u32 index) {
     if(node.light!=SceneTemplateLight::None) {
       auto *light=static_cast<scene::Light*>(values.components.add(scene::Light::descriptor));
       if(!light) {complete=false;break;}
-      light->kind=node.light==SceneTemplateLight::Directional?scene::LightKind::Directional:
-                  node.light==SceneTemplateLight::Point?scene::LightKind::Point:scene::LightKind::Spot;
+      // A tabela única de padrões primeiro (L-05); o modelo só sobrepõe o que
+      // é dele: unidade física, intensidade, alcance, cor e sombra.
+      scene::applyLightDefault(*light,node.light==SceneTemplateLight::Directional?scene::LightKind::Directional:
+                  node.light==SceneTemplateLight::Point?scene::LightKind::Point:scene::LightKind::Spot);
       // Lux para a direcional, lúmen para as locais: as unidades fotométricas
       // que o componente já consome.
       light->unit=node.light==SceneTemplateLight::Directional?scene::LightUnit::LuxCandela:scene::LightUnit::LuxLumen;
       light->intensity=node.lightIntensity;
       if(node.lightRange>0) light->range=node.lightRange;
-      std::copy(node.color,node.color+3,light->color);
+      // As cores do modelo foram calibradas em linear; a Luz guarda sRGB.
+      for(u32 channel=0;channel<3;++channel) light->color[channel]=scene::linearChannelToSrgb(node.color[channel]);
       if(node.shadows) light->shadowMode=2;
     }
     if(!history_.applyValues(document_,id,values)) {complete=false;break;}
@@ -6960,6 +6968,9 @@ void EditorSession::refreshMaterialSlotView() {
     static constexpr const char *alphaSources[]{"Alfa da cor base","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
     view.alphaSourceLabel=alphaSources[pick(edited.alphaSource,sharedChannels.alphaSource)];
     view.alphaSourceOrigin=originOf(edited.alphaSource,sharedChannels.alphaSource);
+    static constexpr const char *roughnessSources[]{"Rugosidade no canal","Rugosidade no canal","Suavidade no canal (1 − canal)","Suavidade no alfa da cor base"};
+    view.roughnessSourceLabel=roughnessSources[std::min<unsigned>(pick(edited.roughnessSource,sharedChannels.roughnessSource),3u)];
+    view.roughnessSourceOrigin=originOf(edited.roughnessSource,sharedChannels.roughnessSource);
     static constexpr const char *isolates[]{"Desligado","Oclusão","Rugosidade","Metal","Alfa","Normal"};
     view.isolateLabel=isolates[std::min<unsigned>(state_.materialIsolate,5u)];
   }
@@ -7071,6 +7082,9 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
   static constexpr const char *alphaSources[]{"Como a fonte","Alfa da cor base","Ignorar alfa (opaco)","Luminância da cor base"};
   view.alphaSourceLabel=alphaSources[std::min<unsigned>(channels.alphaSource,3u)];
   view.alphaSourceOrigin=channels.alphaSource?project:each;
+  static constexpr const char *roughnessSources[]{"Como a fonte","Rugosidade no canal","Suavidade no canal (1 − canal)","Suavidade no alfa da cor base"};
+  view.roughnessSourceLabel=roughnessSources[std::min<unsigned>(channels.roughnessSource,3u)];
+  view.roughnessSourceOrigin=channels.roughnessSource?project:each;
   view.isolateLabel="Desligado";
   // Texturas e a amostragem do binding aberto no seletor.
   for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) {

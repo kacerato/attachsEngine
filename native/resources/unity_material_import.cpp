@@ -1,6 +1,7 @@
 #include "resources/unity_material_import.h"
 #include "scene/mesh_renderer.h"
 #include <charconv>
+#include <cmath>
 #include <map>
 #include <sstream>
 #include <algorithm>
@@ -111,12 +112,33 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   std::set<std::string> activeKeywords;std::istringstream keywordStream(keywords);std::string keyword;
   while(keywordStream>>keyword) activeKeywords.insert(keyword);
   const auto active=[&](const char *name) {return activeKeywords.contains(name);};
-  for(const auto *name:{"_SPECULARHIGHLIGHTS_OFF","_GLOSSYREFLECTIONS_OFF","_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A","_METALLICGLOSSMAP","_PARALLAXMAP","_DETAIL_MULX2"})
+  for(const auto *name:{"_PARALLAXMAP","_DETAIL_MULX2"})
     if(active(name)) result.unsupported.push_back(std::string("Variante de shader sem conversor equivalente: ")+name);
   const auto color=colors.contains("_Color")?colors["_Color"]:std::array<float,4>{1,1,1,1};
   std::copy_n(color.data(),3,asset.values.baseColor);
-  if(color[3]!=1) result.unsupported.push_back("Alfa multiplicado pela cor do material ainda não possui consumidor Astra.");
-  asset.values.roughness=1-get("_Glossiness",.5f);asset.values.metallic=get("_Metallic",0);
+  // Standard.shader (UnityStandardInput.cginc, MetallicGloss): com
+  // _METALLICGLOSSMAP o metálico é o R do mapa e a suavidade o A dele (ou o alfa
+  // do albedo), vezes _GlossMapScale; sem mapa, _Metallic e _Glossiness (ou o
+  // alfa do albedo vezes _GlossMapScale). _Metallic é [Gamma]: o Inspector
+  // grava sRGB e o shader recebe linear, como a Astra.
+  const bool metallicMap=active("_METALLICGLOSSMAP")&&textures.contains("_MetallicGlossMap")&&textures["_MetallicGlossMap"].unityGuid.valid();
+  const bool albedoSmoothness=active("_SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A");
+  if(active("_METALLICGLOSSMAP")&&!metallicMap) result.unsupported.push_back("_METALLICGLOSSMAP ativo sem textura _MetallicGlossMap.");
+  if(get("_SmoothnessTextureChannel",albedoSmoothness?1.f:0.f)!=(albedoSmoothness?1.f:0.f))
+    result.unsupported.push_back("_SmoothnessTextureChannel diverge da keyword efetiva do shader.");
+  const auto linearFromGamma=[](float value) {
+    return value<=.04045f?value/12.92f:std::pow((value+.055f)/1.055f,2.4f);
+  };
+  const float glossScale=std::clamp(get("_GlossMapScale",1),0.f,1.f);
+  if(metallicMap) {
+    asset.values.metallic=1;asset.channels.metallic=scene::MaterialChannelR;
+  } else asset.values.metallic=linearFromGamma(std::clamp(get("_Metallic",0),0.f,1.f));
+  if(albedoSmoothness) {
+    asset.values.roughness=1-glossScale;asset.channels.roughnessSource=scene::MaterialRoughnessSmoothnessBaseAlpha;
+  } else if(metallicMap) {
+    asset.values.roughness=1-glossScale;asset.channels.roughness=scene::MaterialChannelA;
+    asset.channels.roughnessSource=scene::MaterialRoughnessSmoothnessMap;
+  } else asset.values.roughness=1-std::clamp(get("_Glossiness",.5f),0.f,1.f);
   asset.values.normalScale=get("_BumpScale",1);asset.surface.alphaCutoff=get("_Cutoff",.5f);
   const bool emission=active("_EMISSION");
   if(emission&&colors.contains("_EmissionColor")) {
@@ -127,21 +149,41 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   }
   const bool alphaTest=active("_ALPHATEST_ON"),alphaBlend=active("_ALPHABLEND_ON"),premultiplied=active("_ALPHAPREMULTIPLY_ON");
   const u32 effectiveMode=alphaTest?1:alphaBlend?2:premultiplied?3:0;
+  // No modo opaco o alfa não chega à tela; nos outros a Astra não multiplica
+  // alfa da cor do material.
+  if(color[3]!=1&&effectiveMode!=0) result.unsupported.push_back("Alfa multiplicado pela cor do material ainda não possui consumidor Astra.");
   if(static_cast<u32>(alphaTest)+alphaBlend+premultiplied>1) result.unsupported.push_back("Keywords alfa simultâneas e incoerentes.");
   if(floats.contains("_Mode")&&get("_Mode",0)!=effectiveMode) result.unsupported.push_back("_Mode diverge das keywords alfa efetivas do shader.");
   if(premultiplied) result.unsupported.push_back("Alfa premultiplicado ainda não possui consumidor equivalente.");
   if(alphaTest) asset.surface.alphaMode=scene::MaterialAlphaMask;
   else if(alphaBlend) asset.surface.alphaMode=scene::MaterialAlphaBlend;
-  asset.channels.alphaSource=effectiveMode==0?scene::MaterialAlphaSourceOpaque:scene::MaterialAlphaSourceBase;
+  // Com a suavidade no alfa do albedo o Standard usa só _Color.a como alfa;
+  // _Color.a diferente de 1 fora do opaco já foi recusado acima.
+  asset.channels.alphaSource=(effectiveMode==0||albedoSmoothness)?scene::MaterialAlphaSourceOpaque:scene::MaterialAlphaSourceBase;
+  // Forward Rendering Options. Os dois desligados: superfície sem brilho
+  // dielétrico (especular 0, KHR_materials_specular). Um só: a Astra não separa
+  // brilho direto de reflexo do ambiente e mantém os dois.
+  const bool noHighlights=active("_SPECULARHIGHLIGHTS_OFF")||get("_SpecularHighlights",1)==0;
+  const bool noReflections=active("_GLOSSYREFLECTIONS_OFF")||get("_GlossyReflections",1)==0;
+  if(noHighlights&&noReflections) {
+    asset.values.specular=0;
+    if(metallicMap||asset.values.metallic>0)
+      result.approximations.push_back("Brilho e reflexos desligados: a parte metálica continua refletindo o ambiente na Astra.");
+  } else if(noHighlights) result.approximations.push_back("Só Specular Highlights desligado: a Astra mantém o brilho direto do sol e das luzes.");
+  else if(noReflections) result.approximations.push_back("Só Glossy Reflections desligado: a Astra reflete a sonda do céu em vez da cor especular média.");
   const float expectedSrc=alphaBlend?5.f:1.f,expectedDst=(alphaBlend||premultiplied)?10.f:0.f,expectedDepth=(alphaBlend||premultiplied)?0.f:1.f;
   for(const auto &[name,expected,fallback]:std::array<std::tuple<const char*,float,float>,3>{{{"_SrcBlend",expectedSrc,1},{"_DstBlend",expectedDst,0},{"_ZWrite",expectedDepth,1}}})
     if(get(name,fallback)!=expected) result.unsupported.push_back(std::string("Estado de blend/profundidade personalizado ou incoerente: ")+name);
   for(auto &[property,texture]:textures) {
-    if(!texture.unityGuid.valid()) continue;
+    // "<noninit>" é o nome que a Unity 5 deixava em propriedade sem nome; o
+    // shader nunca a amostra (MapMagic 2, Demo/Stones.mat).
+    if(!texture.unityGuid.valid()||property=="<noninit>") continue;
     if(property=="_EmissionMap"&&!emission) continue;
     if(property=="_BumpMap"&&!active("_NORMALMAP")) continue;
+    if(property=="_MetallicGlossMap"&&!metallicMap) continue;
     if(property=="_MainTex") texture.binding=0;
     else if(property=="_BumpMap") texture.binding=1;
+    else if(property=="_MetallicGlossMap") texture.binding=2;
     else if(property=="_EmissionMap") texture.binding=3;
     else if(property=="_OcclusionMap") {texture.binding=scene::MaterialOcclusionTextureBinding;asset.channels.occlusionSource=scene::MaterialOcclusionTexture;
       asset.channels.occlusion=scene::MaterialChannelG;asset.channels.occlusionStrength=get("_OcclusionStrength",1);}
@@ -151,11 +193,8 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     texture.sampling=textures.contains("_MainTex")?textures["_MainTex"].sampling:scene::MaterialSampling{};
     texture.sampling.uvSet=scene::MaterialUv0;result.textures.push_back(texture);
   }
-  for(const auto &[key,value]:floats) {
-    if((key=="_DetailNormalMapScale"&&textures["_DetailNormalMap"].unityGuid.valid())||
-       (key=="_SpecularHighlights"&&value==0)||(key=="_GlossyReflections"&&value==0)||
-       (key=="_SmoothnessTextureChannel"&&value!=0)) result.unsupported.push_back("Propriedade sem conversão equivalente: "+key);
-  }
+  if(textures["_DetailNormalMap"].unityGuid.valid()&&floats.contains("_DetailNormalMapScale"))
+    result.unsupported.push_back("Propriedade sem conversão equivalente: _DetailNormalMapScale");
   if(!asset.valid()) return fail("Material possui valores fora do contrato nativo (cor, emissão, escala, metálico ou UV).");
   out=std::move(result);return true;
 }

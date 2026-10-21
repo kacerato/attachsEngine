@@ -33,6 +33,7 @@ std::string MaterialAsset::serialize() const {
       << static_cast<unsigned>(channels.occlusion) << ' ' << static_cast<unsigned>(channels.occlusionSource) << ' ' << channels.occlusionStrength
       << ' ' << static_cast<unsigned>(channels.normalFlipY) << ' ' << static_cast<unsigned>(channels.alphaSource) << ' '
       << scene::materialTextureToken(occlusionTexture);
+  out << ' ' << static_cast<unsigned>(channels.roughnessSource);
   out << '\n';
   return out.str();
 }
@@ -79,6 +80,12 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
       return false;
     candidate.channels = {static_cast<std::uint8_t>(roughness), static_cast<std::uint8_t>(metallic), static_cast<std::uint8_t>(occlusion),
                           static_cast<std::uint8_t>(source), strength, static_cast<std::uint8_t>(flip), static_cast<std::uint8_t>(alpha)};
+  }
+  // v7 (G3a): origem da rugosidade. Antes dela tudo era rugosidade herdada.
+  if (version >= 7) {
+    unsigned roughnessSource = 0;
+    if (!(in >> roughnessSource) || roughnessSource > 255) return false;
+    candidate.channels.roughnessSource = static_cast<std::uint8_t>(roughnessSource);
   }
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;

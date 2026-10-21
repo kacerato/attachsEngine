@@ -37,7 +37,9 @@ inline void materialUvTransformEntry(const MaterialOverride &value,float out[Mat
 //             própria), canal da oclusão (0..3), índice bindless da textura
 //   linha 9:  canal da rugosidade, canal do metal, origem do alfa (0 cor base,
 //             1 opaco, 2 luminância), inversão Y do normal (0/1)
-//   linha 10: dado isolado na prévia (MaterialIsolate*)
+//   linha 10: dado isolado na prévia (MaterialIsolate*), origem da rugosidade
+//             (0 canal como rugosidade, 1 canal como suavidade, 2 alfa da cor
+//             base como suavidade)
 //   linha 11: lightmap ativo, índice bindless, intensidade, reservado
 //   linha 12: lightmap escala UV1 xy e deslocamento zw
 //   linha 13: reservada
@@ -69,7 +71,9 @@ inline void materialExtensionEntry(const MaterialOverride &value,u32 effectiveFl
   row[2]=static_cast<float>(channels.alphaSource==scene::MaterialAlphaSourceKeep?0u:channels.alphaSource-1u);
   row[3]=channels.normalFlipY==scene::MaterialToggleOn?1.0f:0.0f;
   row+=4;
-  row[0]=static_cast<float>(value.isolate);row[1]=row[2]=row[3]=0;
+  row[0]=static_cast<float>(value.isolate);
+  row[1]=static_cast<float>(channels.roughnessSource==scene::MaterialRoughnessKeep?0u:channels.roughnessSource-1u);
+  row[2]=row[3]=0;
   row+=4;
   row[0]=lightmapSlot==MaterialExtensionNoTexture?0.0f:1.0f;
   row[1]=lightmapSlot==MaterialExtensionNoTexture?0.0f:static_cast<float>(lightmapSlot);

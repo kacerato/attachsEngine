@@ -180,11 +180,13 @@ void setImportedLight(EditorEntity &values, const ImportNodeRecord &node) {
   light->kind = static_cast<scene::LightKind>(node.lightKind);
   light->unit = scene::LightUnit::LuxCandela;
   light->useColorTemperature = false;
-  std::copy(node.lightColor, node.lightColor + 3, light->color);
+  // KHR_lights_punctual guarda cor linear e meio-ângulos de cone; a Luz guarda
+  // a cor do seletor (sRGB) e as aberturas totais, como a Unity.
+  for (u32 channel = 0; channel < 3; ++channel) light->color[channel] = scene::linearChannelToSrgb(node.lightColor[channel]);
   light->intensity = node.lightIntensity;
   light->range = node.lightRange;
-  light->innerAngle = node.lightInnerAngle;
-  light->outerAngle = node.lightOuterAngle;
+  light->innerSpotAngle = node.lightInnerAngle * 2.0f;
+  light->spotAngle = node.lightOuterAngle * 2.0f;
   if (!light->valid()) values.components.remove(scene::Light::descriptor);
 }
 

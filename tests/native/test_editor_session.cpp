@@ -3323,7 +3323,7 @@ AE_TEST(component_volume_handles_use_effective_pose_schema_and_single_undo) {
                  "alcance óptico ignora escala do objeto");
   auto changed=*document.find(lightId);
   AE_EXPECT_TRUE(applyComponentHandleDelta(changed,outerHandle,-100),"cone externo limitado pelo interno");
-  AE_EXPECT_EQ(static_cast<const scene::Light*>(changed.components.findInstance(lightInstance))->outerAngle,20.f,
+  AE_EXPECT_EQ(static_cast<const scene::Light*>(changed.components.findInstance(lightInstance))->spotAngle,21.8f,
                "cone externo não cruza o interno");
 
   const auto volumeId=history.createEntity(document,document.root(),EditorEntityKind::Folder,"Volume");

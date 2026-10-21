@@ -12,6 +12,29 @@
           "id": "enabled",
           "label": "Renderizar",
           "member": "enabled"
+        },
+        {
+          "id": "receive_shadows",
+          "label": "Receber sombras",
+          "member": "receiveShadows",
+          "presentation": {
+            "group": "Iluminação",
+            "help": "Sombras do sol e das luzes locais escurecem esta malha",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.shadow.renderer",
+            "consumer": "rhi/shaders/dirt_road_shading.glsl → visibilidade de sombra",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "animation_safe": {
+            "cpp": "true"
+          }
         }
       ],
       "defaults": {
@@ -28,6 +51,13 @@
       "type": "MeshRenderer",
       "properties": [
         "meshRendererBooleans/enabled"
+      ]
+    },
+    {
+      "name": "mesh_renderer_MeshRenderer_fields1",
+      "type": "MeshRenderer",
+      "properties": [
+        "meshRendererBooleans/receive_shadows"
       ]
     }
   ]

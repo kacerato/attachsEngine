@@ -36,6 +36,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){for(u32 i=0;i<std::size(order);++i) if(order[i]==group) return i;return u32(std::size(order));};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Luz na ordem do Light Inspector da Unity: Geral (Tipo), Emissão, Volume
+  // (alcance e cone), Sombra e Renderização (máscaras).
+  if(&type==&scene::Light::descriptor) {
+    const auto rank=[](std::string_view group){
+      return group=="Geral"?0:group=="Emissão"?1:group=="Volume"?2:group=="Sombra"?3:group=="Renderização"?4:5;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Conexão de evento lê como frase: primeiro o gatilho, depois a resposta.
   if(&type==&scene::EventConnection::descriptor) {
     const auto rank=[](std::string_view group){return group=="Quando"?0:group=="Então"?1:2;};
@@ -460,9 +467,23 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     const u32 option=widget-widgetId(EditorWidget::ComponentEnumOptionBase);
     if(!component || enumIndex>=component->type().enums.size() || history.isOpen()) return outcome;
     const auto &property=component->type().enums[enumIndex];
-    if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+    u32 next=0;
+    if(property.flags) {
+      // Máscara: o toque liga ou desliga um bit e a lista continua aberta.
+      state.enumPicker=field;
+      u32 all=0;for(const auto &entry:property.options) all|=entry.value;
+      const u32 current=property.read(*component);
+      if(option==kEnumMaskNothing) next=0;
+      else if(option==kEnumMaskEverything) next=all;
+      else if(option<property.options.size()) next=current^property.options[option].value;
+      else return outcome;
+      if(next==current) return outcome;
+    } else {
+      if(option>=property.options.size() || property.options[option].value==property.read(*component)) return outcome;
+      next=property.options[option].value;
+    }
     auto value=*entity;
-    if(scene::setComponentProperty(value.components,component->type().id,property.id,property.options[option].value,
+    if(scene::setComponentProperty(value.components,component->type().id,property.id,next,
                                    component->instanceId())!=scene::ComponentPropertyStatus::Applied) {
       state.status="Esta opção não é aceita com os valores atuais";return outcome;
     }

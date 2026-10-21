@@ -995,6 +995,7 @@ void buildCurveEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
 
 
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
+std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 value);
 // Inspectors focados (Unity 6000.0 Manual/InspectorFocused) numa janela sobre
 // o viewport: uma aba por Inspector, cada um preso ao seu objeto ou
 // componente; o cabeçalho mostra o caminho completo (o tooltip da aba na
@@ -2311,13 +2312,14 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   // paginada. Cada linha mostra a textura efetiva no alcance e de onde ela vem.
   static constexpr const char *bindingNames[scene::MaterialTextureCount]{"Mapa: cor","Mapa: normal","Mapa: metal/rug.","Mapa: emissão"};
   static constexpr const char *surfaceNames[]{"Alfa","Corte alfa","Faces"};
-  static constexpr const char *channelNames[]{"Oclusão","Textura de oclusão","Força da oclusão","Canais","Mapa normal","Origem do alfa","Isolar na prévia"};
+  static constexpr const char *channelNames[]{"Oclusão","Textura de oclusão","Força da oclusão","Canais","Mapa normal","Origem do alfa","Origem da rugosidade","Isolar na prévia"};
   const u32 textureRows=scene::MaterialTextureCount;
   // R4: três linhas de superfície (alfa, corte, faces) depois das texturas.
   const u32 surfaceRows=3;
-  // R4: sete linhas de oclusão, canais, normal, alfa e isolamento.
-  // Isolar na prévia vale para um slot de objeto; o recurso sozinho não tem prévia.
-  const u32 channelRows=assetMode?6:7;
+  // R4: oito linhas de oclusão, canais, normal, alfa, rugosidade (G3a) e
+  // isolamento. Isolar na prévia vale para um slot de objeto; o recurso sozinho
+  // não tem prévia.
+  const u32 channelRows=assetMode?7:8;
   const u32 count=textureRows+surfaceRows+channelRows+static_cast<u32>(scene::meshRendererNumbers.size());
   const auto search=editorSearchKey(query);
   std::vector<u32> matches;
@@ -2401,13 +2403,14 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
       }
       static constexpr EditorWidget channelWidgets[]{EditorWidget::MaterialOcclusionSourceCycle,EditorWidget::MaterialOcclusionTexture,
           EditorWidget::MaterialOcclusionStrengthDown,EditorWidget::MaterialChannelRoughness,EditorWidget::MaterialNormalFlipCycle,
-          EditorWidget::MaterialAlphaSourceCycle,EditorWidget::MaterialIsolateCycle};
+          EditorWidget::MaterialAlphaSourceCycle,EditorWidget::MaterialRoughnessSourceCycle,EditorWidget::MaterialIsolateCycle};
       std::string value,origin;
       switch(kind) {
       case 0: value=view.occlusionLabel;origin=view.occlusionOrigin;break;
       case 1: value=view.occlusionTextureLabel;origin="vale quando a oclusão é textura própria";break;
       case 4: value=view.normalFlipLabel;origin=view.normalFlipOrigin;break;
       case 5: value=view.alphaSourceLabel;origin=view.alphaSourceOrigin;break;
+      case 6: value=view.roughnessSourceLabel;origin=view.roughnessSourceOrigin;break;
       default: value=view.isolateLabel;origin="só na prévia do editor; não é salvo";break;
       }
       const bool different=mixed("ch"+std::to_string(kind));
@@ -4533,12 +4536,17 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     builder.label(takeTop(content,28),j.kind==scene::JointKind::Hinge?"Limites/alvo: graus · velocidade: graus/s":j.kind==scene::JointKind::SixDOF?"Translação: u · rotação: graus":"Âncoras locais aos corpos",theme.color.textMuted,theme.type.caption);
   }
   if(mesh && !searching) {
-    auto tabs=takeTop(content,36);const float width=tabs.width/3;
-    for(u32 i=0;i<3;++i) {
-      auto tab=deflate(takeLeft(tabs,width),UiInsets::all(2));const bool selected=builder.state.meshTab==i;
+    // As seções do Mesh Renderer da Unity 6: Materiais, Iluminação (Cast e
+    // Receive Shadows), Sondas e Configurações adicionais; Lightmap fica à
+    // parte porque é o binding externo de cada slot.
+    auto tabs=takeTop(content,36);const float width=tabs.width/4;
+    const char *names[]{"Geometria","Material","Iluminação","Lightmap"};
+    const EditorWidget actions[]{EditorWidget::MeshGeometryTab,EditorWidget::MeshMaterialTab,EditorWidget::MeshLightingTab,
+                                 EditorWidget::InspectorMeshLightmap};
+    const u32 tabValue[]{0,1,3,2};
+    for(u32 i=0;i<4;++i) {
+      auto tab=deflate(takeLeft(tabs,width),UiInsets::all(2));const bool selected=builder.state.meshTab==tabValue[i];
       builder.list.addRect(tab,selected?theme.color.accent:theme.color.raised,theme.radius.control);
-      const char *names[]{"Geometria","Material","Lightmap"};
-      const EditorWidget actions[]{EditorWidget::MeshGeometryTab,EditorWidget::MeshMaterialTab,EditorWidget::InspectorMeshLightmap};
       builder.label(tab,names[i],selected?theme.color.accentInk:theme.color.textDim,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(tab,widgetId(actions[i]));
     }
@@ -4573,7 +4581,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   // As abas refletidas repetiriam esses nomes sem acrescentar controles.
   const auto groups=mesh?std::vector<std::string_view>{}:constantForce?
     std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component);
-  std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":"Geometria"}:std::string_view{builder.state.componentGroup};
+  std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":builder.state.meshTab==3?"Iluminação":"Geometria"}:
+      std::string_view{builder.state.componentGroup};
   if(constantForce) {if(group=="Torque mundo") group="Força mundo";else if(group=="Torque local") group="Força local";}
   if(!groups.empty() && std::find(groups.begin(),groups.end(),group)==groups.end()) group=groups.front();
   if(groups.size()>1 && !searching && !stacked) {
@@ -4704,6 +4713,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     // Lightmap é uma rota própria. Propriedades sem grupo do material e da
     // geometria não podem inflar essa rota nem esconder o binding principal.
     if(mesh&&builder.state.meshTab==2&&!searching) return p.group=="Lightmap";
+    if(mesh&&builder.state.meshTab==3&&!searching)
+      return p.group=="Iluminação"||p.group=="Configurações adicionais";
     if(constantForce&&!searching) return group=="Força mundo"?(p.group=="Força mundo"||p.group=="Torque mundo"):
       (p.group=="Força local"||p.group=="Torque local");
     return searching||p.group.empty()||p.group==group;
@@ -4744,7 +4755,6 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   if(entry.type==&scene::UiCanvas::descriptor && !searching && group=="Canvas")fields.push_back({3,widgetId(EditorWidget::GuiCanvasEdit)});
   if(mesh && !builder.state.meshTab && !searching) {
     fields.push_back({3,widgetId(EditorWidget::MeshChoose)});
-    fields.push_back({3,widgetId(EditorWidget::ToggleCastShadow)});
   } else {
     if(mesh && builder.state.meshTab==1 && !searching) fields.push_back({3,widgetId(EditorWidget::MaterialRestore)});
     // Ajustar escolhe a primitiva que contém a malha; com a forma Malha a forma
@@ -5006,6 +5016,23 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const auto rank=[](const Field &field){return field.kind==1?0:field.kind==4?1:2;};
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
+  if(mesh&&state.meshTab==3&&!searching) {
+    // Ordem e seções do Mesh Renderer da Unity 6: Iluminação (Projetar e
+    // Receber sombras), Sondas e Configurações adicionais (camadas).
+    const auto order=[&](const Field &field)->int{
+      const std::string_view id=field.kind==1?entry.type->enums[field.index].id:
+                                field.kind==0?entry.type->booleans[field.index].id:std::string_view{};
+      return id=="cast_shadows"?0:id=="receive_shadows"?1:id=="rendering_layer_mask"?6:7;
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return order(a)<order(b);});
+    std::vector<Field> sectioned;int last=-1;
+    for(const auto &field:fields) {
+      const int position=order(field),section=position<2?0:2;
+      if(section!=last) {sectioned.push_back({41,static_cast<u32>(section)});last=section;}
+      sectioned.push_back(field);
+    }
+    fields=std::move(sectioned);
+  }
   if(mesh&&state.meshTab==2&&!searching) {
     // Compor controles de um mesmo recurso evita sete linhas escalares. Os
     // endereços individuais continuam os do schema e dos widgets já existentes.
@@ -5103,6 +5130,17 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       builder.router.addRegion(button,widgetId(EditorWidget::ComponentFieldResetBase)+index+(f.kind<<8)+(f.index<<12)+(f.slot<<20));
     }
     const auto hit=slot;
+    if(f.kind==41) {
+      // Cabeçalho de seção da aba Iluminação do Mesh Renderer.
+      const char *titles[]{"Iluminação","Sondas","Configurações adicionais"};
+      const UiIcon icons[]{UiIcon::LightingShadowCaster,UiIcon::LightingLightmap,UiIcon::LightingRenderingLayers};
+      const u32 section=std::min<u32>(f.index,2);
+      auto line=deflate(slot,UiInsets{2,10,2,4});
+      builder.list.addImage(centred(takeLeft(line,22),18,18),static_cast<UiImageId>(icons[section]),theme.color.accent);
+      builder.label(deflate(line,UiInsets{6,0,0,0}),titles[section],theme.color.text,theme.type.cardName);
+      builder.list.addRect({slot.x+2,slot.bottom()-2,slot.width-4,1},theme.color.line);
+      continue;
+    }
     if(f.kind==30||f.kind==31) {
       // Curva ou gradiente do componente: miniatura do valor; o toque abre o
       // editor de curva/gradiente do projeto com bibliotecas e histórico.
@@ -5337,8 +5375,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     } else if(f.kind==1) {
       const auto &property=entry.type->enums[f.index];
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
-      const char *label="Valor inválido";
-      for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+      std::string label=property.flags?componentMaskLabel(*builder.state.document,property,property.read(*component)):"Valor inválido";
+      if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
       if(builder.mixed(multiKey(component->instanceId(),property.id))) label="\xE2\x80\x94";
       // Aparência de lista suspensa: o toque abre as opções, não cicla às cegas.
       const bool editable=property.presentation.isEditable(*component);
@@ -5443,11 +5481,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         }
       }
       builder.router.addRegion(title,widgetId(EditorWidget::ComponentTripleBase)+index+(f.index<<8));
-      if(triple.kind==scene::ComponentTripleKind::LinearColor) {
+      if(scene::componentTripleIsColor(triple.kind)) {
         u32 color=0xff000000u;
         for(u32 axis=0;axis<3;++axis) for(const auto &p:entry.type->numbers) if(p.id==triple.channels[axis]) {
-          const float linear=std::clamp(p.read(*component),0.f,1.f);
-          const float srgb=linear<=.0031308f?12.92f*linear:1.055f*std::pow(linear,1.f/2.4f)-.055f;
+          const float value=std::clamp(p.read(*component),0.f,1.f);
+          const float srgb=triple.kind==scene::ComponentTripleKind::SrgbColor?value:std::clamp(scene::linearChannelToSrgb(value),0.f,1.f);
           color|=static_cast<u32>(srgb*255.f+.5f)<<(16-8*axis);
         }
         const auto swatch=takeLeft(title,24);
@@ -5475,7 +5513,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         builder.list.addRect(body,theme.color.silhouette,theme.radius.control);
         const char *axisLabels[3]={"X","Y","Z"};const char *colorLabels[3]={"R","G","B"};
         const UiColor colors[3]={theme.color.axisX,theme.color.axisY,theme.color.axisZ};
-        builder.label(takeLeft(body,13),triple.kind==scene::ComponentTripleKind::LinearColor?colorLabels[axis]:axisLabels[axis],colors[axis],theme.type.caption,UiAlign::Center);
+        builder.label(takeLeft(body,13),scene::componentTripleIsColor(triple.kind)?colorLabels[axis]:axisLabels[axis],colors[axis],theme.type.caption,UiAlign::Center);
         char value[32];std::snprintf(value,sizeof(value),"%.4g",static_cast<double>(property.read(*component)));
         const bool mixedChannel=builder.mixed(multiKey(component->instanceId(),property.id));
         builder.label(body,mixedChannel?"\xE2\x80\x94":value,mixedChannel?theme.color.textDim:theme.color.text,theme.type.caption,UiAlign::Center);
@@ -7147,8 +7185,36 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
   }
 }
 
+// Texto de uma máscara de bits no campo fechado. Camadas de objeto usam os
+// nomes do projeto (Configurações › Camadas); as demais, os rótulos da opção.
+std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 value) {
+  if(property.options.data()!=scene::objectLayerOptions.data()) return scene::componentEnumLabel(property,value);
+  if(value==scene::kAllObjectLayers) return "Tudo";
+  if(!value) return "Nada";
+  std::string names;u32 count=0;
+  for(u32 layer=0;layer<runtime::GameplayLayers::kCount;++layer) if(value&(1u<<layer)) {
+    const auto name=document.layers().named(layer)?std::string(document.layers().name(layer)):"Camada "+std::to_string(layer);
+    if(count<3) names+=(count?", ":"")+name;
+    ++count;
+  }
+  return count>3?"Misto ("+std::to_string(count)+")":names;
+}
+// Opções visíveis no seletor de máscara: como no LayerMask da Unity, só as
+// camadas de objeto com nome no projeto. Tudo/Nada continuam cobrindo as 32.
+bool componentMaskOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option,u32) {
+  if(property.options.data()!=scene::objectLayerOptions.data()) return true;
+  return document.layers().named(option);
+}
+std::string componentMaskOptionName(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option) {
+  if(property.options.data()==scene::objectLayerOptions.data() && document.layers().named(option))
+    return std::string(document.layers().name(option));
+  return property.options[option].name;
+}
+
 // Lista de opções de um campo de enumeração, aberta sobre a tela. A opção
-// atual vem marcada; tocar fora fecha sem mudar nada.
+// atual vem marcada; tocar fora fecha sem mudar nada. Numa máscara cada linha
+// liga ou desliga o próprio bit e a lista fica aberta, com Nada e Tudo no
+// topo, como o menu de LayerMask da Unity.
 void buildEnumPicker(ScreenBuilder &builder) {
   const auto &theme=builder.theme;const auto &state=builder.state;
   const u32 index=state.enumPicker&0xffu,field=(state.enumPicker>>8)&0xffffu;
@@ -7160,6 +7226,42 @@ void buildEnumPicker(ScreenBuilder &builder) {
   builder.list.addRect(state.surface,withAlpha(theme.color.voidBlack,.5f));
   builder.router.addBlocker(state.surface);
   builder.router.addRegion(state.surface,widgetId(EditorWidget::ComponentEnumPickerClose));
+  if(property.flags) {
+    u32 shown=0;
+    for(u32 i=0;i<property.options.size();++i) shown+=componentMaskOptionShown(*state.document,property,i,current)?1u:0u;
+    const float height=std::min(state.surface.height-24,52+44+(2+shown)*40.f);
+    const UiRect sheet=centred(state.surface,std::min(360.f,state.surface.width-24),height);
+    builder.list.addRect(sheet,theme.color.surface,theme.radius.card);
+    builder.list.addBorder(sheet,theme.color.line,1,theme.radius.card);
+    builder.router.addBlocker(sheet);
+    auto content=deflate(sheet,UiInsets::all(8));
+    auto title=takeTop(content,36);
+    builder.label(takeTop(title,20),property.name,theme.color.text,theme.type.cardName);
+    builder.label(title,componentMaskLabel(*state.document,property,current),theme.color.accent,theme.type.caption);
+    // Nada e Tudo: atalhos de máscara, lado a lado.
+    auto quick=deflate(takeTop(content,44),UiInsets{0,4,0,4});
+    const auto quickButton=[&](UiRect rect,const char *text,bool on,u32 code) {
+      rect=deflate(rect,UiInsets{2,0,2,0});
+      builder.list.addRect(rect,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      builder.label(rect,text,on?theme.color.accent:theme.color.text,theme.type.body,UiAlign::Center);
+      builder.router.addRegion(rect,widgetId(EditorWidget::ComponentEnumOptionBase)+code);
+    };
+    u32 all=0;for(const auto &option:property.options) all|=option.value;
+    quickButton(takeLeft(quick,quick.width*.5f),"Nada",current==0,kEnumMaskNothing);
+    quickButton(quick,"Tudo",(current&all)==all,kEnumMaskEverything);
+    builder.list.pushClip(content);
+    for(u32 i=0;i<property.options.size() && content.height>=36;++i) {
+      if(!componentMaskOptionShown(*state.document,property,i,current)) continue;
+      auto row=deflate(takeTop(content,40),UiInsets{0,2,0,2});
+      const bool on=(current&property.options[i].value)==property.options[i].value;
+      builder.list.addRect(row,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      builder.checkbox(takeLeft(row,36),on,0,true);
+      builder.label(row,componentMaskOptionName(*state.document,property,i),on?theme.color.text:theme.color.textDim,theme.type.body);
+      builder.router.addRegion(row,widgetId(EditorWidget::ComponentEnumOptionBase)+i);
+    }
+    builder.list.popClip();
+    return;
+  }
   const float rows=static_cast<float>(property.options.size());
   const float height=std::min(state.surface.height-24,52+rows*44);
   const UiRect sheet=centred(state.surface,std::min(360.f,state.surface.width-24),height);
@@ -7886,10 +7988,9 @@ void buildObjectFields(ScreenBuilder &builder,UiRect &content,const EditorEntity
     }
     return;
   }
-  // 0 nome, 1 visível, 2 sombra projetada (só com malha: sem desenho não há
-  // sombra), 3 camada, 4 informação.
+  // 0 nome, 1 visível, 3 camada, 4 informação. A sombra (antiga linha 2) é
+  // do Mesh Renderer desde a v11, como na Unity: aba Iluminação dele.
   std::vector<u32> kinds{0,1};
-  if(meshRenderer(entity)) kinds.push_back(2);
   kinds.push_back(3);if(entity.id!=state.document->root()) kinds.push_back(5);kinds.push_back(7);kinds.push_back(6);kinds.push_back(4);
   const u32 rows=static_cast<u32>(kinds.size());
   const u32 perPage=std::max(1u,static_cast<u32>(std::max(0.0f,content.height-30)/36));
@@ -11209,11 +11310,48 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
       const auto body=deflate(row,UiInsets{0,3,0,3});
       const bool warn=line.rfind("Conversão",0)==0||line.rfind("Limite",0)==0||line.find("ausente")!=std::string::npos||line.find("recus")!=std::string::npos||line.find("Binding")!=std::string::npos;
       list.addRect(body,theme.color.silhouette,theme.radius.control);
-      list.addImage({body.x+8,body.y+(body.height-16)*.5f,16,16},static_cast<UiImageId>(warn?UiIcon::UiWarning:UiIcon::UiInfo),warn?theme.color.warning:theme.color.textDim);
+      const bool approximation=line.rfind("Aproximação",0)==0;
+      list.addImage({body.x+6,body.y+(body.height-20)*.5f,20,20},static_cast<UiImageId>(approximation?UiIcon::AssetsMaterialApproximate:warn?UiIcon::UiWarning:UiIcon::UiInfo),
+        approximation?theme.color.text:warn?theme.color.warning:theme.color.textDim);
       list.pushClip(body);builder.label({body.x+30,body.y,std::max(0.f,body.width-36),body.height},fitMiddle(list,line,std::max(0.f,body.width-40),theme.type.caption),theme.color.textDim,theme.type.caption);list.popClip();
     }
     list.popClip();
     if(!wide)return;
+  }
+  // G3a: auditoria dos materiais Unity do pacote. Três blocos (completos,
+  // aproximados, sem conversão) com o ícone da classe e a contagem; tocar num
+  // bloco filtra a grade por ele, e o detalhe de cada material lista o motivo.
+  const u32 auditTotal=state.libraryMaterialAudit[0]+state.libraryMaterialAudit[1]+state.libraryMaterialAudit[2];
+  if(auditTotal) {
+    auto card=takeTop(content,116);takeTop(content,8);
+    list.addRect(card,theme.color.surface,theme.radius.card);
+    auto inner=deflate(card,UiInsets::all(8));
+    auto header=takeTop(inner,30);
+    list.addImage({header.x+2,header.y+1,28,28},static_cast<UiImageId>(UiIcon::AssetsMaterialAudit),theme.color.text);
+    builder.label({header.x+34,header.y,std::max(0.f,header.width-34),header.height},
+      "Materiais Unity · "+std::to_string(auditTotal),theme.color.text,theme.type.cardName);
+    takeTop(inner,4);
+    static constexpr const char *auditNames[]{"Completos","Aproximados","Sem conversão"};
+    static constexpr UiIcon auditIcons[]{UiIcon::AssetsMaterialComplete,UiIcon::AssetsMaterialApproximate,UiIcon::AssetsMaterialUnconverted};
+    const float tileWidth=(inner.width-16)/3;
+    for(u32 kind=0;kind<3;++kind) {
+      const UiRect tile{inner.x+float(kind)*(tileWidth+8),inner.y,tileWidth,inner.height};
+      const bool chosen=state.libraryAuditFilter==kind+1,empty=!state.libraryMaterialAudit[kind];
+      // O ícone leva a cor própria (selo lima); a faixa à esquerda dá o tom da
+      // classe: acento, neutro ou aviso.
+      const auto tone=kind==0?theme.color.accent:kind==1?theme.color.textDim:theme.color.warning;
+      list.addRect(tile,chosen?withAlpha(theme.color.accent,.16f):theme.color.raised,theme.radius.control);
+      if(chosen)list.addBorder(tile,theme.color.accent,1,theme.radius.control);
+      if(!empty)list.addRect({tile.x,tile.y+8,3,tile.height-16},tone,1.5f);
+      list.addImage({tile.x+10,tile.y+(tile.height-36)*.5f,36,36},static_cast<UiImageId>(auditIcons[kind]),empty?theme.color.textFaint:theme.color.text);
+      const UiRect text{tile.x+54,tile.y+4,std::max(0.f,tile.width-58),tile.height-8};
+      list.pushClip(tile);
+      builder.label({text.x,text.y,text.width,text.height*.6f},std::to_string(state.libraryMaterialAudit[kind]),
+        empty?theme.color.textFaint:theme.color.text,theme.type.title);
+      builder.label({text.x,text.y+text.height*.58f,text.width,text.height*.42f},auditNames[kind],theme.color.textMuted,theme.type.caption);
+      list.popClip();
+      if(!empty||chosen)router.addRegion(tile,widgetId(EditorWidget::LibraryAuditBase)+kind);
+    }
   }
   // Cartões em grade, rolando pelo dedo; só os visíveis recebem toque.
   const u32 columns=content.width>=560?2u:1u;const float gap=8,cardHeight=72;
@@ -11248,6 +11386,11 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     const UiRect badge{card.right()-34,card.y+10,24,24};
     list.addRect(badge,registered?withAlpha(theme.color.accent,.22f):refused?withAlpha(theme.color.warning,.22f):theme.color.silhouette,12);
     list.addImage({badge.x+4,badge.y+4,16,16},static_cast<UiImageId>(registered?UiIcon::UiCheck:refused?UiIcon::UiWarning:UiIcon::AssetsImport),registered?theme.color.accent:refused?theme.color.warning:theme.color.textDim);
+    // G3a: material que converte com aproximação leva o selo "≈" ao lado.
+    if(item.audit==EditorScreenState::LibraryAuditApproximated) {
+      const UiRect approx{badge.x-28,badge.y,24,24};list.addRect(approx,theme.color.silhouette,12);
+      list.addImage({approx.x+2,approx.y+2,20,20},static_cast<UiImageId>(UiIcon::AssetsMaterialApproximate),theme.color.text);
+    }
     router.addRegion(card,widgetId(EditorWidget::LibraryItemBase)+i);
     const UiRect details{card.right()-44,card.bottom()-40,40,36};
     if(item.projectAsset!=~0u) {

@@ -185,7 +185,8 @@ inline std::string componentCSharpApi() {
       return text+"</summary>\n";
     };
     for(const auto &triple:type.triples) {
-      out+=doc(triple.name,{},triple.kind==ComponentTripleKind::LinearColor?"Cor linear RGB":"");
+      out+=doc(triple.name,{},triple.kind==ComponentTripleKind::LinearColor?"Cor linear RGB":
+                 triple.kind==ComponentTripleKind::SrgbColor?"Cor sRGB, como o seletor; o motor converte para linear":"");
       const std::string vectorType=triple.dimensions()==2?"Vector2":"Vector3";
       out+="    public "+vectorType+" "+pascal(triple.id)+"\n    {\n        get => new(";
       for(u32 axis=0;axis<triple.dimensions();++axis) out+=std::string(axis?", ":"")+"Component.GetFloat(\""+std::string(triple.channels[axis])+"\")";
@@ -205,6 +206,8 @@ inline std::string componentCSharpApi() {
     }
     for(const auto &p:type.enums) {
       const std::string enumName=pascal(p.id)+"Option";
+      // Máscara de bits vira um enum [Flags] do C#, como LayerMask na Unity.
+      if(p.flags) out+="    [System.Flags]\n";
       out+="    public enum "+enumName+" : uint\n    {\n";
       std::vector<std::string> used;
       for(const auto &option:p.options) {

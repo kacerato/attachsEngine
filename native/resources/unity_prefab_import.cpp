@@ -77,8 +77,8 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
       if(object.type!="MeshRenderer"||value.renderer||!flag(object.value,"m_Enabled",value.rendererEnabled)||!flag(object.value,"m_ReceiveShadows",value.receiveShadow))
         return fail(diagnostic,"MeshRenderer Unity inválido ou duplicado.");
       i64 shadows=0;const auto *cast=object.value.get("m_CastShadows");
-      if(!cast||!cast->integer(shadows)||shadows<0||shadows>1)return fail(diagnostic,"ShadowCastingMode Unity especial exige conversão de render; não equivale ao bool nativo.");
-      value.castShadow=shadows!=0;value.renderer=true;
+      if(!cast||!cast->integer(shadows)||shadows<0||shadows>3)return fail(diagnostic,"ShadowCastingMode Unity fora de Off/On/TwoSided/ShadowsOnly.");
+      value.castShadows=static_cast<u32>(shadows);value.renderer=true;
       const auto *materials=object.value.get("m_Materials");
       if(!materials||materials->kind!=Node::Kind::Sequence||materials->elements.empty()||materials->elements.size()>256)
         return fail(diagnostic,"Materiais de MeshRenderer Unity ausentes ou acima do limite.");

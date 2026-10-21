@@ -8,7 +8,10 @@ struct UnityPrefabObject {
   std::string name,tag;
   std::array<float,3> position{},scale{1,1,1};
   std::array<float,4> rotation{0,0,0,1};
-  bool active=true,renderer=false,rendererEnabled=true,castShadow=true,receiveShadow=true;
+  bool active=true,renderer=false,rendererEnabled=true,receiveShadow=true;
+  // ShadowCastingMode da Unity: 0 Off, 1 On, 2 TwoSided, 3 ShadowsOnly — os
+  // mesmos valores do Projetar sombras do Mesh Renderer da Astra.
+  u32 castShadows=1;
   u32 layer=0;
   UnityObjectReference mesh;
   std::vector<UnityObjectReference> materials;
