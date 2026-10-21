@@ -929,6 +929,7 @@ if(NOT ANDROID)
     ../tests/native/test_joint_break.cpp
     ../tests/native/test_physics_queries.cpp
     ../tests/native/test_virtual_cameras.cpp
+    ../tests/native/test_camera_pk7.cpp
     ../tests/native/test_navigation_mesh.cpp
     ../tests/native/test_navigation_scene.cpp
     ../tests/native/test_audio_mixer.cpp
@@ -1206,6 +1207,16 @@ if(NOT ANDROID)
     target_compile_options(aether_probe_family_tests PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
+  # PK-7 Câmera: modelo v4, lente física, máscara, pilha por prioridade e os
+  # cenários existentes de câmera virtual, sem o catálogo inteiro.
+  add_executable(aether_camera_tests ../tests/native/family_base_main.cpp
+    ../tests/native/test_camera_pk7.cpp ../tests/native/test_virtual_cameras.cpp ../tests/native/test_camera_ray_contract.cpp)
+  target_include_directories(aether_camera_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  if(MINGW)
+    target_compile_options(aether_camera_tests PRIVATE -Wa,-mbig-obj)
+  endif()
+  target_link_libraries(aether_camera_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   add_executable(aether_rig_authoring_tests ../tests/native/family_base_main.cpp ../tests/native/test_rig_authoring.cpp)
   target_include_directories(aether_rig_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_rig_authoring_tests PRIVATE aether_core aether_assets aether_runtime)

@@ -51,7 +51,7 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
   previewSceneEnvironment_=sceneEnvironmentVolumes_.empty()?sceneEnvironment_:
       renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,view.frustum.cameraPosition,
                                         view.environmentLayerMask);
-  if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_))
+  if((editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) || !view.postProcessing)
     previewSceneEnvironment_.exposureMode=renderer::ExposureMode::Fixed;
   renderer::SharedEnvironmentMap selected;
   if(previewSceneEnvironment_.active && previewSceneEnvironment_.environmentMap.valid()) {
@@ -266,12 +266,12 @@ bool InstancedRenderer::prepareCameraPreview() {
   frame.postViewport[2]=frame.postViewport[3]=1;
   // O primeiro alvo guarda a cena linear/HDR. A segunda etapa usa este mesmo
   // UBO para neblina, AO, bloom, gradação e tonemap.
-  frame.scenePost[2]=hdrSceneColor_?1.0f:0.0f;
+  frame.scenePost[2]=hdrSceneColor_&&pendingPreview_.hdr?1.0f:0.0f;
   const auto &mapDescription=previewEnvironmentMap_?previewEnvironmentMap_->description:
       previewEnvironmentUsesPrimary_?dirtRoadResources_.environmentMapDescription():
                                      dirtRoadResources_.packagedEnvironmentMapDescription();
   const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
-  const bool editorPost=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+  const bool editorPost=(!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&pendingPreview_.postProcessing;
   const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
       ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
   if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
@@ -317,6 +317,10 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,0,1,&before,0,nullptr,0,nullptr);
   VkClearValue clear[4]{};clear[0].color={{.028f,.032f,.039f,1}};clear[1].depthStencil={1,0};
+  // Background Type da câmera: cor sólida limpa com a cor; sem limpeza, preto.
+  if(view.background==1) clear[0].color={{view.backgroundColor[0],view.backgroundColor[1],view.backgroundColor[2],1}};
+  else if(view.background==2) clear[0].color={{0,0,0,1}};
+  const float viewAspect=view.projectionAspect>0?view.projectionAspect:static_cast<float>(view.width)/view.height;
   VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass=previewRenderPass_;begin.framebuffer=previewFramebuffer_;begin.renderArea.extent={view.width,view.height};
   begin.clearValueCount=temporalMasksActive_?4u:2u;begin.pClearValues=clear;
@@ -346,7 +350,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
                                 0, 1, &set, 0, nullptr);
       }
       DirtRoadPushConstants push{};
-      push.cameraFrame[0] = static_cast<float>(view.width)/view.height;
+      push.cameraFrame[0] = viewAspect;
       push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch;
       push.cameraFrame[3] = timeSeconds;
       push.surfaceTransform[0]=surfaceTransform.xx;push.surfaceTransform[1]=surfaceTransform.xy;
@@ -414,7 +418,8 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     if(view.materialGeometry) break;
     if(view.isolatedObjects && (i>=authoredDrawIdentities_.size() ||
        !std::binary_search(view.isolatedObjects->begin(),view.isolatedObjects->end(),authoredDrawIdentities_[i].objectId))) continue;
-    if(!authoredVisibility_.empty()&&!authoredVisibility_[i]) continue;
+    // Visibilidade autoral com a Culling Mask DESTA câmera, não a da principal.
+    if(!authoredVisibility_.empty()&&!authoredVisibleIn(i,view.cullingMask)) continue;
     const auto &record=dirtRoadResources_.draws()[i];
     auto material=dirtRoadResources_.materials()[record.materialIndex];
     if(i<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[i]);
@@ -425,11 +430,11 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   }
   // The authored camera preview must draw the same environment background as
   // the game camera. Leaving the clear color here hid both HDRI and atmosphere.
-  if(skyPipeline_) {
+  if(skyPipeline_ && view.background==0) {
     DirtRoadPushConstants sky{};
     const float ortho=renderer::isOrthographic(view.frustum)?view.frustum.orthographicHalfHeight:0.0f;
     std::memcpy(&sky.textureIndices[3],&ortho,sizeof(ortho));
-    sky.cameraFrame[0]=static_cast<float>(view.width)/view.height;
+    sky.cameraFrame[0]=viewAspect;
     sky.cameraFrame[1]=camera.yaw;sky.cameraFrame[2]=camera.pitch;sky.cameraFrame[3]=timeSeconds;
     sky.materialFactors[0]=camera.roll;sky.materialFactors[3]=1.0f/view.frustum.tangentHalfVertical;
     sky.surfaceTransform[0]=sky.surfaceTransform[3]=1.0f;
@@ -464,7 +469,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   }
 
   const bool previewGrading=prepareColorGrading(1,previewSceneEnvironment_,
-      previewSceneEnvironment_.active&&previewSceneEnvironment_.post);
+      view.postProcessing&&previewSceneEnvironment_.active&&previewSceneEnvironment_.post);
   VkRenderPassBeginInfo postBegin{};postBegin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   postBegin.renderPass=previewPostRenderPass_;postBegin.framebuffer=previewPostFramebuffer_;
   postBegin.renderArea.extent={view.width,view.height};
@@ -473,25 +478,29 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipeline_);
   vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipelineLayout_,0,1,&previewPostSet_,0,nullptr);
   PostPushConstants post{};
-  const bool authoredPost=previewSceneEnvironment_.active&&previewSceneEnvironment_.post;
+  // Pós da câmera desligado: nada de bloom, vinheta, nitidez nem gradação;
+  // sobra só a exposição e o tom de exibição, como na vista principal.
+  const bool previewEffects=view.postProcessing;
+  const bool authoredPost=previewEffects&&previewSceneEnvironment_.active&&previewSceneEnvironment_.post;
   post.texelFlags[0]=1.0f/view.width;post.texelFlags[1]=1.0f/view.height;
-  post.texelFlags[2]=(authoredPost?previewSceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
+  post.texelFlags[2]=previewEffects&&(authoredPost?previewSceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
   if(previewGrading) post.texelFlags[2]+=65536.0f;
-  post.texelFlags[3]=(renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
+  post.texelFlags[3]=view.antialiasing==1?0.0f:view.antialiasing==2?1.0f:
+                     (renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
                       renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Temporal)?1.0f:0.0f;
   post.bloom[0]=authoredPost?previewSceneEnvironment_.bloomThreshold:renderingPolicy_.post.bloomThreshold;
   post.bloom[1]=authoredPost?previewSceneEnvironment_.bloomIntensity:renderingPolicy_.post.bloomIntensity;
-  post.bloom[2]=renderingPolicy_.post.sharpen;
-  post.bloom[3]=authoredPost?(previewSceneEnvironment_.vignette?previewSceneEnvironment_.vignetteIntensity:0.0f):
+  post.bloom[2]=previewEffects?renderingPolicy_.post.sharpen:0.0f;
+  post.bloom[3]=!previewEffects?0.0f:authoredPost?(previewSceneEnvironment_.vignette?previewSceneEnvironment_.vignetteIntensity:0.0f):
       (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
-  post.grade[0]=authoredPost?previewSceneEnvironment_.contrast:renderingPolicy_.post.contrast;
-  post.grade[1]=authoredPost?previewSceneEnvironment_.saturation:renderingPolicy_.post.saturation;
+  post.grade[0]=!previewEffects?1.0f:authoredPost?previewSceneEnvironment_.contrast:renderingPolicy_.post.contrast;
+  post.grade[1]=!previewEffects?1.0f:authoredPost?previewSceneEnvironment_.saturation:renderingPolicy_.post.saturation;
   post.grade[2]=(previewColor_.format()==VK_FORMAT_B8G8R8A8_SRGB ||
                  previewColor_.format()==VK_FORMAT_R8G8B8A8_SRGB)?0.0f:1.0f;
   post.grade[3]=static_cast<float>(packSurfaceTransform(rhi::SurfaceTransform{}));
   post.sourceTransform[0]=post.sourceTransform[1]=1.0f;
   post.sourceTransform[2]=renderer::isOrthographic(view.frustum)?-1.0f:1.0f/view.frustum.tangentHalfVertical;
-  post.sourceTransform[3]=static_cast<float>(view.width)/view.height;
+  post.sourceTransform[3]=viewAspect;
   post.currentCamera[0]=post.previousCamera[0]=camera.yaw;
   post.currentCamera[1]=post.previousCamera[1]=camera.pitch;
   post.previousCamera[2]=post.previousCamera[3]=camera.roll;

@@ -14,7 +14,7 @@
 
 InstancedRenderer::PostBloomState InstancedRenderer::postBloomState() const {
   // Mesma decisão que o passe principal toma para o bit de bloom.
-  const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+  const bool postEffectsEnabled=viewPostEnabled();
   const auto look=sceneEnvironment_.active?sceneEnvironment_:
       (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
