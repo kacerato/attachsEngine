@@ -265,7 +265,7 @@ void main() {
            (1.0-moonCoverage*aboveHorizon);
   }
   // Nuvens por cima de tudo: escondem sol, lua e estrelas como no Cloud Layer.
-  if(environment.cloudParameters.x>0.0 && visibleDirection.y>0.0) {
+  if(environment.cloudParameters.x>0.0 && visibleDirection.y>-0.002) {
     vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
     // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
     // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,
@@ -287,7 +287,7 @@ void main() {
       float skyLuminance=dot(diffuseSky,vec3(0.2126,0.7152,0.0722));
       skyAmbient=mix(vec3(skyLuminance),diffuseSky,0.6)*1.1;
     }
-    color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient);
+    color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient,pixelAngle);
   }
   if(environment.scenePost.z<0.5)
     color=astraToneMap(color*environment.parameters.x*exp2(environment.scenePost.x),environment.scenePost.y);

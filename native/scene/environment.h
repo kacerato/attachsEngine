@@ -44,7 +44,7 @@ public:
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 16) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 17) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -115,6 +115,8 @@ public:
     }
     for (const auto &property : descriptor.numbers) {
       if(version<16 && property.id.starts_with("cloud_")) continue;
+      // v17: espessura da camada. Cena v16 fica com o padrão (nuvens com volume).
+      if(version<17 && property.id=="cloud_thickness") continue;
       if(version<14 && (property.id.starts_with("sun_glare") || property.id.starts_with("moon_") ||
                         property.id.starts_with("star_"))) continue;
       if(version<13 && property.id.starts_with("grading_")) continue;
@@ -305,7 +307,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 16,
+  "astra.render.environment", 17,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

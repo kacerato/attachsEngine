@@ -4633,6 +4633,13 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("cloud_shadow_multiplier");
         set => Component.SetFloat("cloud_shadow_multiplier", value);
     }
+    /// <summary>Espessura (m). Altura dos cúmulos acima da base: base reta, topo alto; 0 é folha plana</summary>
+    /// <remarks>Faixa válida: 0 a 5000.</remarks>
+    public float CloudThickness
+    {
+        get => Component.GetFloat("cloud_thickness");
+        set => Component.SetFloat("cloud_thickness", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {

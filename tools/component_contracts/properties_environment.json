@@ -2755,6 +2755,24 @@
               "cpp": "environmentUsesCloudShadows"
             }
           }
+        },
+        {
+          "id": "cloud_thickness",
+          "label": "Espessura",
+          "member": "values.clouds.thicknessMeters",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "5000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "unit": "m",
+            "help": "Altura dos cúmulos acima da base: base reta, topo alto; 0 é folha plana"
+          }
         }
       ]
     }

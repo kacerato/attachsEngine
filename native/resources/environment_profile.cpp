@@ -80,7 +80,8 @@ std::string EnvironmentProfile::serialize() const {
      <<' '<<clouds.cirrus<<' '<<clouds.altitudeMeters<<' '<<clouds.sizeMeters;
   writeColor(out,clouds.tint);
   out<<' '<<clouds.exposureEv<<' '<<clouds.windOrientationDegrees<<' '<<clouds.windSpeedKmh
-     <<' '<<clouds.density<<' '<<clouds.ambientDimmer<<' '<<clouds.shadowMultiplier;
+     <<' '<<clouds.density<<' '<<clouds.ambientDimmer<<' '<<clouds.shadowMultiplier
+     <<' '<<clouds.thicknessMeters;
   out<<'\n';
   return out.str();
 }
@@ -143,6 +144,8 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
        !(in>>clouds.exposureEv>>clouds.windOrientationDegrees>>clouds.windSpeedKmh>>clouds.density>>
          clouds.ambientDimmer>>clouds.shadowMultiplier)) return false;
   }
+  // v12: espessura da camada.
+  if(version>=12 && !(in>>candidate.values.clouds.thicknessMeters)) return false;
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }

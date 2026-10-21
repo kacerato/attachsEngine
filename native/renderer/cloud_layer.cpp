@@ -133,7 +133,19 @@ CloudLayerRows packCloudLayer(const CloudLayer &clouds, bool environmentActive, 
   for (u32 channel = 0; channel < 3; ++channel) rows.tint[channel] = clouds.tint[channel] * exposure;
   rows.tint[3] = clouds.ambientDimmer;
   rows.shadow[0] = clouds.castShadows ? clouds.shadowMultiplier : 0.0f;
+  rows.shadow[1] = clouds.thicknessMeters;
   return rows;
+}
+
+float cloudShellDistance(float heightMeters, float viewSine) noexcept {
+  // Em quilômetros, como o shader: |R²y²| ~ 4e7 cabe no float com folga.
+  const double r = CloudPlanetRadiusMeters * 0.001, h = std::max(heightMeters, 0.0f) * 0.001;
+  const double y = std::clamp(static_cast<double>(viewSine), -1.0, 1.0);
+  const double c = 2.0 * r * h + h * h;
+  const double root = std::sqrt(r * r * y * y + c);
+  // t = -R y + sqrt(...) reescrito como c / (R y + sqrt(...)) para y >= 0.
+  const double t = y >= 0.0 ? c / (r * y + root) : root - r * y;
+  return static_cast<float>(t * 1000.0);
 }
 
 float cloudSkyOcclusion(const CloudLayer &clouds) noexcept {

@@ -31,7 +31,7 @@ float cloudLayerAlpha(const CloudLayer &clouds, float cumulus, float cirrus, flo
 //   parameters  opacidade (0 sem nuvens), cobertura, cirros, densidade
 //   shape       1/tamanho, altitude, deslocamento do vento x, z (m, < tamanho)
 //   tint        tom * 2^exposição, atenuação do ambiente
-//   shadow      força da sombra (0 sem sombra), reservados
+//   shadow      força da sombra (0 sem sombra), espessura m, reservados
 // O vento entra como deslocamento já reduzido ao tamanho do mapa (o mapa se
 // repete), calculado em double: o ponto flutuante do shader não perde precisão
 // depois de horas de Play.
@@ -42,6 +42,14 @@ struct CloudLayerRows final {
   float shadow[4]{};
 };
 CloudLayerRows packCloudLayer(const CloudLayer &clouds, bool environmentActive, double timeSeconds) noexcept;
+
+// A camada é uma casca esférica concêntrica ao planeta (raio da Terra), como
+// as nuvens do HDRP: a distância até ela cresce até ~sqrt(2Rh) no horizonte
+// (160 km a 2 km de altura) em vez de ir ao infinito como num plano, e o
+// tamanho aparente das nuvens diminui até virar uma faixa densa lá embaixo.
+// Forma estável (sem cancelamento perto do zênite); o shader usa a mesma.
+inline constexpr float CloudPlanetRadiusMeters = 6371000.0f;
+float cloudShellDistance(float heightMeters, float viewSine) noexcept;
 
 // Quanto do céu a camada esconde (0..1): o ambiente do céu passa ao cinza do
 // encoberto nessa proporção, como a sonda de ambiente do HDRP que vê as nuvens.

@@ -125,23 +125,23 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   scene::Environment authored;
   auto &clouds = authored.values.clouds;
   clouds.enabled = true;clouds.castShadows = false;clouds.coverage = 0.8f;clouds.cirrus = 0.1f;
-  clouds.altitudeMeters = 3500.0f;clouds.sizeMeters = 9000.0f;clouds.tint[2] = 0.75f;
+  clouds.altitudeMeters = 3500.0f;clouds.thicknessMeters = 1500.0f;clouds.sizeMeters = 9000.0f;clouds.tint[2] = 0.75f;
   clouds.exposureEv = -0.5f;clouds.windOrientationDegrees = 135.0f;clouds.windSpeedKmh = 60.0f;
   clouds.density = 0.9f;clouds.ambientDimmer = 0.4f;clouds.shadowMultiplier = 0.3f;
   authored.overrideClouds = false;
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 16u, "Ambiente v16");
-  AE_EXPECT_TRUE(reread.read(in, 16), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 17u, "Ambiente v17");
+  AE_EXPECT_TRUE(reread.read(in, 17), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
-  // exposição automática) e sem os 14 números do fim.
+  // exposição automática) e sem os 15 números do fim (14 da v16, espessura da v17).
   auto parts = tokens(out.str());
   AE_EXPECT_TRUE(parts.size() > 40, "texto completo");
   std::vector<std::string> legacy(parts.begin(), parts.begin() + 20);
-  legacy.insert(legacy.end(), parts.begin() + 23, parts.end() - 14);
+  legacy.insert(legacy.end(), parts.begin() + 23, parts.end() - 15);
   scene::Environment old;std::istringstream oldIn(join(legacy));oldIn.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(oldIn, 15), "cena v15 abre");
   AE_EXPECT_TRUE(!old.values.clouds.enabled && old.values.clouds == renderer::CloudLayer{} && old.overrideClouds,
@@ -166,10 +166,10 @@ AE_TEST(cloud_layer_round_trips_in_environment_profile_v11) {
   resources::EnvironmentProfile reread;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, reread), "perfil v11 relido");
   AE_EXPECT_TRUE(reread.values.clouds == profile.values.clouds, "nuvens no perfil compartilhado");
-  // v10: troca a versão e corta as 16 palavras das nuvens.
+  // v10: troca a versão e corta as 17 palavras das nuvens (v11 e v12).
   auto parts = tokens(text);
   parts[1] = "10";
-  parts.resize(parts.size() - 16);
+  parts.resize(parts.size() - 17);
   resources::EnvironmentProfile old;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(join(parts), old), "perfil v10 abre");
   AE_EXPECT_TRUE(old.values.clouds == renderer::CloudLayer{}, "perfil antigo sem nuvens");
@@ -230,4 +230,34 @@ AE_TEST(cloud_volume_recipe_creates_a_global_cloud_layer_above_the_scene_environ
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(graph, look), "cena resolvida");
   AE_EXPECT_TRUE(look.clouds.enabled && look.sky == renderer::SkyModel::PhysicalAtmosphere,
                  "céu físico da cena com as nuvens do volume");
+}
+
+AE_TEST(cloud_layer_follows_the_planet_curvature_and_v16_scenes_get_volume) {
+  // Casca esférica: zênite na altitude, horizonte a ~sqrt(2Rh), não no infinito.
+  AE_EXPECT_TRUE(std::abs(renderer::cloudShellDistance(2000.0f, 1.0f) - 2000.0f) < 0.5f, "zênite: a própria altitude");
+  const float horizon = renderer::cloudShellDistance(2000.0f, 0.0f);
+  const float expected = std::sqrt(2.0f * renderer::CloudPlanetRadiusMeters * 2000.0f);
+  AE_EXPECT_TRUE(std::abs(horizon - expected) / expected < 0.01f, "horizonte: ~160 km a 2 km de altura");
+  const float plane30 = 2000.0f / std::sin(30.0f * 0.0174533f);
+  AE_EXPECT_TRUE(std::abs(renderer::cloudShellDistance(2000.0f, 0.5f) - plane30) / plane30 < 0.01f,
+                 "30° acima do horizonte a curvatura quase não pesa");
+  float previous = 0.0f;
+  for (float sine = 1.0f; sine >= 0.0f; sine -= 0.05f) {
+    const float distance = renderer::cloudShellDistance(2000.0f, sine);
+    AE_EXPECT_TRUE(distance > previous, "mais rasante, mais longe");
+    previous = distance;
+  }
+  // Base e topo: a camada tem espessura, e a espessura vai para a GPU.
+  renderer::CloudLayer clouds;clouds.enabled = true;clouds.thicknessMeters = 1200.0f;
+  AE_EXPECT_EQ(renderer::packCloudLayer(clouds, true, 0.0).shadow[1], 1200.0f, "espessura no bloco");
+  clouds.thicknessMeters = 6000.0f;
+  AE_EXPECT_TRUE(!clouds.valid(), "espessura acima de 5 km recusada");
+  // Cena v16: o mesmo texto sem o último número. Ganha a espessura padrão.
+  scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.thicknessMeters = 300.0f;
+  std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
+  auto parts = tokens(out.str());parts.pop_back();
+  scene::Environment old;std::istringstream in(join(parts));in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(in, 16), "cena v16 abre");
+  AE_EXPECT_TRUE(old.values.clouds.enabled && old.values.clouds.thicknessMeters == renderer::CloudLayer{}.thicknessMeters,
+                 "v16 mantém as nuvens e recebe a espessura padrão");
 }

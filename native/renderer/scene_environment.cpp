@@ -84,6 +84,7 @@ void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
     out.coverage=mix(out.coverage,target.coverage,amount);
     out.cirrus=mix(out.cirrus,target.cirrus,amount);
     out.altitudeMeters=mix(out.altitudeMeters,target.altitudeMeters,amount);
+    out.thicknessMeters=mix(out.thicknessMeters,target.thicknessMeters,amount);
     out.sizeMeters=mix(out.sizeMeters,target.sizeMeters,amount);
     mixColor(out.tint,target.tint,amount);
     out.exposureEv=mix(out.exposureEv,target.exposureEv,amount);
