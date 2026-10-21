@@ -133,6 +133,9 @@ inline const CreationComponent spot[]{{light,spotLight}};
 // Ambiente global (prioridade 2, só nuvens e neblina) + Clima, com Chuva e
 // Neve como filhos já ligados. Caixa larga emitindo para baixo, Mundo como
 // espaço de simulação (a gota não anda com a câmera) e prewarm para já chover.
+// Proporções calibradas por frames da Unity (docs/validacao/g4c-clima-2026-10-21/
+// referencia-unity): gota de ~0,6 m de traço, fina e translúcida como a da
+// Pixagon (Rain Storm, 1:38); floco pequeno e opaco como o da Synty (3:51).
 inline constexpr std::string_view weatherType="astra.environment.weather",particleType="astra.effects.particle_system";
 inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",true},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
@@ -143,15 +146,15 @@ inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{
 inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",40.f},
   {particleType,"shape_box_y",40.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
-  {particleType,"start_speed",14.f},{particleType,"start_size",.03f},{particleType,"gravity_modifier",.3f},
+  {particleType,"start_speed",14.f},{particleType,"start_size",.018f},{particleType,"gravity_modifier",.3f},
   {particleType,"max_particles",6000.f},{particleType,"emission_rate",1800.f},{particleType,"render_mode",u32{1}},
   {particleType,"stretch_velocity_scale",.045f},{particleType,"stretch_length_scale",1.f},
   {particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},{particleType,"start_color_b",.88f},
-  {particleType,"start_color_a",.45f}};
+  {particleType,"start_color_a",.32f}};
 inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
   {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
-  {particleType,"start_lifetime",7.f},{particleType,"start_speed",1.2f},{particleType,"start_size",.07f},
+  {particleType,"start_lifetime",7.f},{particleType,"start_speed",1.2f},{particleType,"start_size",.045f},
   {particleType,"gravity_modifier",.03f},{particleType,"max_particles",6000.f},{particleType,"emission_rate",0.f},
   {particleType,"start_color_a",.9f},{particleType,"noise_enabled",true},{particleType,"noise_strength",.8f},
   {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
