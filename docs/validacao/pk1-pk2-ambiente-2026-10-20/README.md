@@ -70,11 +70,17 @@ As pranchas lado a lado (`prancha-*.png`) e o julgamento estão na seção de va
 Vila devolvida a cada troca (md5 `2e2e996841f1f0eb5af1572c68dec3fc` conferido no aparelho).
 
 ### Não testado no aparelho
-- A neblina com o céu limpo (correção do `eaf0818d`) e a troca de opções pela janela Iluminação (o 220 ignorava o toque
-  nos seletores fora do workspace Cena — corrigido e coberto por teste de host). O POCO ficou disputado: o 221 e o 240
-  foram substituídos por APKs do PK-9 (230/232) segundos depois da instalação.
-- Material do céu criado no aparelho, Gradiente/Cor no aparelho, Criar › Volume no aparelho.
+- Material do céu criado no aparelho, fonte Gradiente/Cor no aparelho e Criar › Volume no aparelho (cobertos pelos
+  testes de host e pelas capturas de UI do host).
 
 ### Depois do merge do G2 (`887c2964`)
-- Nativa 1615/1615, família de ambiente 58/58, gerenciada 523 verdes. APK 510 compilado e instalado às 15:40,
-  mas o aparelho estava com a tela bloqueada: as capturas com o 510 não foram feitas (Vila devolvida, md5 ok).
+- Nativa 1615/1615, família de ambiente 58/58, gerenciada 523 verdes.
+- POCO com Astra Dev **423087** (`0.3.0-dev.423087-ambiente`, versionCode por minutos desde 2026-01-01; conferido
+  com dumpsys antes e depois), trava `astra-poco.lock`, 21/10 16:50–16:56:
+  - `08-janela-ceu-procedural.png`: aba Céu na ordem do Skybox/Procedural (Material do céu, Shader, Sol, Tamanho,
+    Convergência, Espessura, Tom, Chão).
+  - `09-janela-neblina-migrada.png`: cena antiga migrada para Exponencial + "Acompanhar o céu".
+  - `10-seletor-modo-de-cor-na-janela.png`: o seletor abre dentro da janela Iluminação (correção do toque).
+  - `11-modo-de-cor-cor.png` e `prancha-03b-neblina-vermelha-depois.png`: com Modo de cor = Cor, a neblina tinge a
+    geometria e o céu fica limpo, como na Unity.
+  - Vila devolvida (md5 `2e2e996841f1f0eb5af1572c68dec3fc`).
