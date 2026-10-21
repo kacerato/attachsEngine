@@ -223,8 +223,8 @@ bool loadTerrainSurfaceCatalog(std::string_view text,
         const auto &sourceRole=*d.child(*roles,roleIndex);const auto key=d.keyOf(sourceRole);
         if(sourceRole.kind!=Kind::String)return fail("Invalid terrain texture source role description");
         const auto role=key=="albedo"?0:key=="normal"?1:key=="height"?2:key=="ao"?3:
-          (key=="smoothness" || key=="roughness")?4:key=="metallic"?5:key=="emission"?6:7;
-        if(role<7)t.roleMask|=1u<<role;
+          (key=="smoothness" || key=="roughness")?4:key=="metallic"?5:key=="emission"?6:key=="stream_normal_foam"?7:key=="lava_distortion_heat_crust"?8:key=="rain_drop_shape_direction_phase"?9:10;
+        if(role<10)t.roleMask|=1u<<role;
       }
     }
 

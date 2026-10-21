@@ -1301,7 +1301,7 @@ EditorTextEdit EditorSession::pendingTextEdit() const {
   if(state_.creatingScript) {edit.purpose=EditorTextPurpose::ScriptName;return edit;}
   if(state_.searchingCode) {edit.purpose=EditorTextPurpose::CodeSearch;edit.text=state_.codeQuery;return edit;}
   if(state_.searchingLibrary) {edit.purpose=EditorTextPurpose::LibrarySearch;edit.text=state_.libraryQuery;return edit;}
-  if(state_.editingTerrainCatalogSearch) {edit.purpose=EditorTextPurpose::TerrainCatalogSearch;edit.text=state_.renameText;return edit;}
+  if(state_.editingTerrainCatalogSearch) {edit.purpose=EditorTextPurpose::TerrainCatalogSearch;edit.text=state_.platformDraft;return edit;}
   if(state_.searchingConsole) {edit.purpose=EditorTextPurpose::ConsoleSearch;edit.text=state_.consoleQuery;return edit;}
   if(state_.searchingTextures) {edit.purpose=EditorTextPurpose::TextureSearch;edit.text=state_.textureQuery;return edit;}
   if(state_.goingToLine) {edit.purpose=EditorTextPurpose::CodeLine;return edit;}
@@ -1907,7 +1907,7 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     state_.status=std::to_string(matches.size())+" ocorrências";close();return true;
   }
   if(edit.purpose==EditorTextPurpose::TerrainCatalogSearch) {
-    if(text.size()>63 || text.find('\0')!=text.npos)return false;
+    if(text.size()>128 || text.find('\0')!=text.npos)return false;
     state_.terrainCatalogQuery=text;state_.terrainCatalogPage=0;state_.terrainScroll=0;
     close();return true;
   }
@@ -1935,10 +1935,10 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
   }
   std::string value(text);
   if(edit.purpose==EditorTextPurpose::Number) {
-    if(edit.field>=terrainSnowNumberBase && edit.field<terrainSnowNumberBase+96) {
+    if(edit.field>=terrainSnowNumberBase && edit.field<terrainSnowNumberBase+192) {
       NumericExpressionContext context;context.current=state_.numericCurrent;double number=0;std::string reason;
       if(!evaluateNumericExpression(value,context,number,&reason)||!setTerrainNumber(256+edit.field-terrainSnowNumberBase,number)) {
-        state_.numericError=true;state_.status=reason.empty()?"Valor de neve fora do limite":reason;return false;
+        state_.numericError=true;state_.status=reason.empty()?"Valor do terreno fora do limite":reason;return false;
       }
       close();return true;
     }

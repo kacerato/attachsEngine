@@ -3,6 +3,8 @@
 #include "editor/editor_screen.h"
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_fx_controller.h"
+#include "editor/editor_terrain_modules_controls.h"
+#include "editor/editor_terrain_snow_controls.h"
 #include "resources/terrain_surface_catalog.h"
 #include "renderer/authoring_geometry.h"
 #include "scene/import_link.h"
@@ -84,6 +86,10 @@ int main(int argc,char **argv){
   view.rect=layout.viewport;const float camera[3]{0,18,-28};view.frustum=renderer::buildPerspectiveFrustum(camera,0,std::atan2(18.f,28.f),view.rect.width/std::max(1.f,view.rect.height),{});
   list.begin(state.surface,font.metrics(ui::UiFontWeight::Regular));router.beginFrame();return editor::buildEditorScreen(state,editor::editorTheme(),list,router);
  };
+ const bool searchOnly=argc>4 && std::string_view(argv[4])=="search";
+ const bool searchRequested=searchOnly || (argc>4 && std::string_view(argv[4])=="all");
+ const bool materialOnly=argc>4 && std::string_view(argv[4])=="material";
+ const bool materialRequested=materialOnly || (argc>4 && std::string_view(argv[4])=="all");
  const Scenario scenarios[]{
   {"fx-edit",0,editor::EditorGizmoMode::Translate},{"fx-paint",1,editor::EditorGizmoMode::Translate},
   {"fx-transform-move",2,editor::EditorGizmoMode::Translate},{"fx-transform-rotate",2,editor::EditorGizmoMode::Rotate},{"fx-transform-scale",2,editor::EditorGizmoMode::Scale},
@@ -91,7 +97,7 @@ int main(int argc,char **argv){
   {"fx-applied-paint",1,editor::EditorGizmoMode::Translate,false,false},
   {"fx-applied-navigation",0,editor::EditorGizmoMode::Translate,true,false}};
  std::ofstream report(output/("workflow-"+std::to_string(width)+"x"+std::to_string(height)+".tsv"));report<<"scenario\ttool_widgets\tgizmo_hit_pixels\tcanvas_hit_pixels\theader\tinstances\n";
- for(const auto &scenario:scenarios){
+ if(!materialOnly && !searchOnly)for(const auto &scenario:scenarios){
   state.terrainFx.mode=scenario.mode;state.tool=scenario.tool;state.terrainBrushArmed=false;state.terrainFx.recipePending=scenario.pending;state.terrainFx.cursorVisible=scenario.mode==1;state.navigation=scenario.navigation?editor::EditorNavigationMode::Pan:editor::EditorNavigationMode::Orbit;
   auto layout=render();std::set<u32> tools;u32 gizmoPixels=0,canvasPixels=0,cursorSegments=0;bool header=false,canvasDrawn=false,banner=false;
   const auto canvas=state.terrainFx.canvas;
@@ -118,5 +124,53 @@ int main(int argc,char **argv){
   if(!check(capturePpm(output/(std::string(scenario.name)+"-"+std::to_string(width)+"x"+std::to_string(height)+".ppm"),image),"write full UI raster"))return 6;
   report<<scenario.name<<'\t'<<tools.size()<<'\t'<<gizmoPixels<<'\t'<<canvasPixels<<'\t'<<header<<'\t'<<built.emitted<<'\n';
  }
- std::printf("%ux%u: eight full production UI scenarios; real terrain selection/material publication; software UI raster only, no 3D render claim\n",width,height);return report?0:7;
+ const struct MaterialScenario {const char *name;u32 view,field,column;} materialScenarios[]{
+  {"material-stream",330,368,1},{"material-lava",340,390,1},{"material-rain",350,429,0},{"material-spec-height",351,431,0}};
+ const auto originalDraft=state.terrainDraft;
+ if(materialRequested)for(const auto &scenario:materialScenarios){
+  state.terrainDraft=originalDraft;state.terrainMaterialView=scenario.view;state.terrainScroll=0;state.terrainFx.mode=0;state.terrainFx.recipePending=true;state.terrainFx.cursorVisible=false;state.terrainBrushArmed=false;state.navigation=editor::EditorNavigationMode::Orbit;
+  auto &flow=state.terrainDraft.surface.flow;
+  if(scenario.view==351){state.terrainDraft.fx={};state.terrainFx.bitmap.reset();flow.specularFade=true;}
+  else {
+   for(u32 y=0;y<64;++y)for(u32 x=0;x<64;++x){const auto at=(y*64+x)*4;state.terrainDraft.fx.seedPixels[at+2]=u8(x*255/63);state.terrainDraft.fx.seedPixels[at+3]=u8(y*255/63);}
+   const auto *source=scenario.view==350?editor::terrainRainPreset(*catalog):editor::terrainFlowPreset(*catalog,scenario.view==340,0);
+   if(!check(source!=nullptr,"actual original material source present"))return 5;
+   auto &map=editor::terrainFlowMap(state.terrainDraft.surface,scenario.view);map.texture=source->identity;map.channel=scenario.view==330?resources::TerrainSurfaceChannel::NormalRG:resources::TerrainSurfaceChannel::RGB;map.linear=true;
+   if(scenario.view==330)flow.streams=true;else if(scenario.view==340)flow.lava=true;else{flow.puddles=true;flow.rainDrops=true;flow.rainIntensityScale[0]=.7f;}
+   if(!check(editor::TerrainFxEditorController::prepareBitmap(state.terrainDraft.fx,{},nullptr,state.terrainFx.bitmap,error),error.c_str()))return 5;
+  }
+  auto materialBuild=std::make_shared<resources::TerrainBuild>();
+  if(!check(resources::updateTerrain(state.terrainDraft,retained.get(),*materialBuild,error),error.c_str()))return 5;
+  state.terrainPreviewBuild=std::move(materialBuild);
+  const auto layout=render();bool back=false,first=false,pbr=false,tools=false;
+  const auto fieldId=editor::terrainSnowSliderBase+scenario.field-256+scenario.column*0x100;
+  for(float y=1;y<float(height);y+=2)for(float x=1;x<float(width);x+=2){const auto hit=router.hitTest({x,y});
+   back=back || hit.widgetId==editor::widgetId(editor::terrainModuleAction(61));first=first || hit.widgetId==fieldId;
+   pbr=pbr || hit.widgetId==editor::widgetId(editor::EditorWidget::TerrainMaterialLibrary) || hit.widgetId==editor::widgetId(editor::EditorWidget::TerrainLayerBase);
+   tools=tools || hit.widgetId==editor::widgetId(editor::EditorWidget::ToolSelect) || hit.widgetId==editor::widgetId(editor::EditorWidget::ToolMove) || hit.widgetId==editor::widgetId(editor::EditorWidget::ToolRotate) || hit.widgetId==editor::widgetId(editor::EditorWidget::ToolScale) || (hit.widgetId>=editor::widgetId(editor::EditorWidget::GizmoAxisBase) && hit.widgetId<editor::widgetId(editor::EditorWidget::GizmoAxisBase)+6);
+  }
+  if(!check(back&&first&&!pbr&&!tools&&!layout.viewport.isEmpty(),"material context preserves Back and first effectful bar without unrelated PBR/gizmo"))return 5;
+  if(!check(state.selection==root&&state.document->find(root)==entity,"material draft keeps actual published terrain selection"))return 5;
+  std::vector<ui::UiInstance> instances;const auto built=ui::buildUiInstances(list,font,icons,65536,instances);if(!check(!built.dropped&&!built.missingGlyphRuns,"material UI instances complete"))return 6;
+  test::UiSoftwareTarget image;image.resize(width,height,.098f,.11f,.13f);test::rasterizeUi(instances,font,icons,image);
+  if(!check(capturePpm(output/(std::string(scenario.name)+"-"+std::to_string(width)+"x"+std::to_string(height)+".ppm"),image),"write pending material full UI raster"))return 6;
+  report<<scenario.name<<'\t'<<0<<'\t'<<0<<'\t'<<0<<'\t'<<back<<'\t'<<built.emitted<<'\n';
+ }
+
+ if(searchRequested){
+  const auto*source=editor::terrainFlowPreset(*catalog,false,0);if(!check(source&&source->id.size()==64,"real Stream source SHA64"))return 5;
+  state.terrainTab=2;state.terrainMaterialView=380;state.terrainScroll=0;state.terrainCatalogPage=0;state.terrainCatalogRoleFilter=8;state.terrainCatalogQuery=source->id;state.terrainCatalogPackageFilter.clear();
+  state.terrainDraft.surface.flow.streamNormal.texture=source->identity;state.terrainDraft.surface.flow.streamNormal.channel=resources::TerrainSurfaceChannel::NormalRG;state.terrainDraft.surface.flow.streamNormal.linear=true;
+  state.terrainFx.mode=0;state.terrainFx.cursorVisible=false;state.editingTerrainCatalogSearch=true;state.platformTextInput=false;state.platformDraft=source->id;
+  render();bool shaVisible=false;for(const auto&command:list.commands())if(command.kind==ui::UiPrimitive::Text&&list.textOf(command)==source->id&&!command.clip.isEmpty())shaVisible=true;
+  const float modalWidth=std::min(560.f,state.surface.width-16),modalHeight=std::min(320.f,state.surface.height-16);
+  const float x=state.surface.x+(state.surface.width-modalWidth)*.5f+8,y=state.surface.y+(state.surface.height-modalHeight)*.5f+8+40,w=modalWidth-16,h=modalHeight-16-40;
+  const ui::UiPoint cancel{x+w*3.5f/5,y+h*.9f},apply{x+w*4.5f/5,y+h*.9f};
+  if(!check(shaVisible&&router.hitTest(cancel).widgetId==editor::widgetId(editor::EditorWidget::NameCancel)&&router.hitTest(apply).widgetId==editor::widgetId(editor::EditorWidget::NameApply),"source SHA is drawn and actual Cancel/Apply centers hit above Terrain"))return 5;
+  std::vector<ui::UiInstance>instances;const auto built=ui::buildUiInstances(list,font,icons,65536,instances);if(!check(!built.dropped&&!built.missingGlyphRuns,"search modal UI instances complete"))return 6;
+  test::UiSoftwareTarget image;image.resize(width,height,.098f,.11f,.13f);test::rasterizeUi(instances,font,icons,image);
+  if(!check(capturePpm(output/("stream-search-sha-"+std::to_string(width)+"x"+std::to_string(height)+".ppm"),image),"write actual full editor search modal"))return 6;
+  report<<"stream-search-sha\t0\t0\t0\t1\t"<<built.emitted<<'\n';
+ }
+ std::printf("%ux%u: %u full production UI scenarios; real terrain selection; software UI raster only, no 3D render claim\n",width,height,searchOnly?1u:materialOnly?4u:materialRequested?13u:8u);return report?0:7;
 }

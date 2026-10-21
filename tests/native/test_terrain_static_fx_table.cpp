@@ -24,7 +24,7 @@ AE_TEST(static_fx_publication_refuses_missing_snapshot_and_unimplemented_flags){
  b=original;b.surface.flow.wetness=b.surface.flow.puddles=false;b.surface.flow.wetnessMaskSnow=true;b.staticFx.enabled=false;b.staticFx.textureIndex=renderer::InvalidMapTexture;AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"maskSnow alone still requires actual snapshot");
  b=original;b.staticFx.domain[2]+=1;AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"domain mismatch rejected");
  b=original;b.staticFx.rgbaSha256[0]='Z';AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"noncanonical hash rejected");
- for(bool resources::TerrainFlowSettings::*field:{&resources::TerrainFlowSettings::streams,&resources::TerrainFlowSettings::lava,&resources::TerrainFlowSettings::dynamicFlows,&resources::TerrainFlowSettings::rainDrops,&resources::TerrainFlowSettings::globalWetness,&resources::TerrainFlowSettings::tracksEnabled,&resources::TerrainFlowSettings::specularFade}){b=original;b.surface.flow.*field=true;AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"unimplemented enabled flag rejected");}
+ for(bool resources::TerrainFlowSettings::*field:{&resources::TerrainFlowSettings::dynamicFlows,&resources::TerrainFlowSettings::globalWetness,&resources::TerrainFlowSettings::tracksEnabled}){b=original;b.surface.flow.*field=true;AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"unimplemented enabled flag rejected");}
  b=original;b.surface.flow.streamNormal.texture={71,3};AE_EXPECT_TRUE(!renderer::diagnoseStaticTerrainFlowPublication(b,error),"even disabled authoring references must resolve");
 }
 AE_TEST(static_fx_table_missing_descriptor_is_atomic){

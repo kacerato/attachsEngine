@@ -4,6 +4,7 @@
 #include "renderer/water_authoring_geometry.h"
 #include "renderer/spatial_render_chunks.h"
 #include "renderer/terrain_surface_table.h"
+#include "renderer/terrain_surface_texture_relocation.h"
 #include <map>
 
 #include "rhi/shaders/editor_grid_spirv.h"
@@ -5122,9 +5123,12 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
       if(!(materials[m].flags&renderer::MapMaterialTerrain))return false;
       for(auto &t:surface.textures) {
         if(t.textureIndex>=textures.size() || !textures[t.textureIndex] || textures[t.textureIndex]->srgb==t.linear)return false;
-        t.textureIndex+=textureOffset;
       }
-      std::vector<float> part;u32 unused=0;std::string reason;
+      std::string reason;
+      if(!renderer::offsetTerrainSurfaceSourceTextureIndices(surface,textureOffset,textures.size(),reason)) {
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] %s",reason.c_str());return false;
+      }
+      std::vector<float> part;u32 unused=0;
       if(!renderer::appendTerrainSurfaceTable(surface,slots,part,unused,reason)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] %s",reason.c_str());return false;
       }

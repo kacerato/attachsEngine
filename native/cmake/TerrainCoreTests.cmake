@@ -23,6 +23,9 @@ function(aether_add_terrain_core_tests)
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_flow_coverage.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_static_fx_import.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_static_fx_table.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_streams_lava_table.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_rain_specular_table.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/../tests/native/test_terrain_surface_texture_relocation.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_asset.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/resources/terrain_fx_field.cpp

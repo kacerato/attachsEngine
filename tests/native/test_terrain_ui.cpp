@@ -1916,3 +1916,177 @@ AE_TEST(terrain_fx_desktop_context_keeps_first_controls_and_root_back_without_pb
   AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(63))) && f.session.setTerrainNumber(349,.62),"contextual porosity retains explicit layer selection");
   AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[1].snowPorosity,.62f,"selected material receives the shared authoring value");
 }
+
+AE_TEST(terrain_stream_ui_real_source_packed_controls_all_groups_and_independent_layers) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(120)),"open real Streams material context");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+112+0x100,point),"Stream maximum is visible at zero scroll on compact screen");
+  AE_EXPECT_TRUE(!f.tap(fx(137)),"missing mask/source cannot enable consumer");
+  AE_EXPECT_TRUE(f.tap(fx(133)) && f.tap(fx(143)),"explicit original Stream preset resolves actual catalog identity");
+  const auto *source=editor::terrainFlowPreset(*f.session.screen().terrainCatalog,false,0);
+  AE_EXPECT_TRUE(source && f.session.screen().terrainDraft.surface.flow.streamNormal.texture==source->identity,"source identity comes from catalog metadata");
+  AE_EXPECT_TRUE(f.tap(fx(135)) && f.textureThumbnail(source->id) && f.tap(fx(136)),"actual source thumbnail is shown in real picker");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(416,.8) && f.session.setTerrainNumber(417,.7) && f.session.setTerrainNumber(419,.6) && f.session.setTerrainNumber(423,.1) && f.session.setTerrainNumber(427,.9),"logical raw RG and foam B transforms are authorable");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainSnowAction(105))),"map residency override remains available on real packed source");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.flow.streamNormal.textureResidency.mode,resources::TerrainTextureResidencyMode::Cap,"packed source uses existing author residency policy");
+  AE_EXPECT_TRUE(!f.session.setTerrainNumber(420,.4) && !f.session.setTerrainNumber(424,.4) && !f.session.setTerrainNumber(428,.4),"reserved Stream alpha controls cannot mutate through exact entry");
+  AE_EXPECT_TRUE(f.tap(fx(145)) && f.tap(fx(20)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(25)) && f.tap(fx(6)) && f.tap(fx(24)) && f.tap(fx(2)),"explicit FX creation and independent B painting");
+  f.render();ui::UiPoint paint;AE_EXPECT_TRUE(f.point(fx(90),paint),"actual bitmap reached for Stream B gesture");
+  f.time+=1;f.session.handlePointer({83,ui::UiPointerPhase::Down,paint,f.time});paint.x+=4;
+  f.session.handlePointer({83,ui::UiPointerPhase::Move,paint,f.time+.1});f.session.handlePointer({83,ui::UiPointerPhase::Up,paint,f.time+.2});
+  const auto painted=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.session.history().undo(f.session.document()) && f.session.history().redo(f.session.document()),"actual independent B gesture supports editor history");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),painted,"history restores full B checkpoint authoring");
+  AE_EXPECT_TRUE(f.tap(fx(120)) && f.tap(fx(137)),"actual painted mask unlocks Stream material consumer");
+  AE_EXPECT_TRUE(f.slide(368,.6f,1) && f.tap(editor::terrainSnowNumberBase+113) && f.session.completeTextEdit(f.session.pendingTextEdit(),"3.5",true),"Stream maximum bar and precise contrast use real input");
+  AE_EXPECT_TRUE(f.tap(fx(123)),"open phase/refraction group");
+  for(const auto field:{370u,371u,372u,373u})AE_EXPECT_TRUE(f.session.setTerrainNumber(field,.2),"all four Stream flow parameters have real authoring gates");
+  AE_EXPECT_TRUE(f.tap(fx(124)) && f.slide(374,.4f) && f.session.setTerrainNumber(375,9) && f.tap(fx(141)) && f.session.setTerrainNumber(385,.6),"foam and normal response authoring");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainModuleAction(63))) && f.session.setTerrainNumber(385,1.3),"per-material foam retains selected layer routing");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[0].flow.foam,.6f,"previous material foam is independent");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.layers[1].flow.foam,1.3f,"selected material foam changes");
+  AE_EXPECT_TRUE(f.tap(fx(125)) && f.tap(fx(139)),"height window consumer enabled");
+  for(u32 i=0;i<4;++i)AE_EXPECT_TRUE(f.session.setTerrainNumber(381+i,std::array<double,4>{-10,0,100,200}[i]),"all four world height values are authorable");
+  AE_EXPECT_TRUE(f.slide(381,1) && f.slide(382,0),"height bars keep ordered neighbors without rejected dead motion");
+  AE_EXPECT_TRUE(f.tap(fx(126)) && f.session.setTerrainNumber(376,-32) && f.session.setTerrainNumber(377,0),"signed and zero UV repeats are retained");
+  const auto &flow=f.session.screen().terrainDraft.surface.flow;
+  AE_EXPECT_TRUE(flow.streams && !flow.lava && !flow.globalStreams && !flow.rainDrops,"only actual selected consumers enabled");
+  AE_EXPECT_EQ(flow.streamNormalFoam[2],0.f,"reserved Stream vector component preserved");
+  AE_EXPECT_EQ(flow.streamUvScales[2],70.f,"reserved source UV remains unchanged");
+  AE_EXPECT_EQ(flow.streamNormal.channel,resources::TerrainSurfaceChannel::NormalRG,"Stream fixed RG/B role preserves required NormalRG provenance metadata");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply publishes original packed Stream plus real painted B field");
+  const auto root=f.session.screen().terrainTarget;
+  if(!root || !f.session.openTerrain(root)){std::fprintf(stderr,"Stream reopen: root=%u view=%u message=%s status=%s\n",root,f.session.screen().terrainMaterialView,f.session.screen().terrainMessage.c_str(),f.session.screen().status.c_str());AE_EXPECT_TRUE(false,"reopen actual Stream material artifact");}
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"Stream source, all authored properties and B checkpoint survive actual publication");
+}
+AE_TEST(terrain_flow_packed_picker_metadata_filters_queries_and_identity_selection) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(120)) && f.tap(fx(133)) && f.session.setTerrainNumber(416,.7) && f.tap(fx(135)),"open actual Stream packed source picker");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,8u,"new Stream source purpose comes from explicit typed metadata");
+  const auto *stream=editor::terrainFlowPreset(*f.session.screen().terrainCatalog,false,0);
+  AE_EXPECT_TRUE(stream && (stream->roleMask&(1u<<7)) && f.textureThumbnail(stream->id),"actual raw-packed source is discoverable with real thumbnail");
+  AE_EXPECT_TRUE(f.catalogQuery(stream->id) && f.tap(fx(150)),"filtered first slot selects the stable catalog identity");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.flow.streamNormal.texture,stream->identity,"query selection uses filtered identity rather than unfiltered index");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.flow.streamNormal.factor,.7f,"source replacement preserves authored map transforms");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(2))) && f.tap(id(editor::terrainCatalogAction(2))),"explicit Todos remains selectable after Lava purpose");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"user override All is preserved");
+  AE_EXPECT_TRUE(f.tap(fx(136)) && f.tap(fx(135)),"reopen same source context");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"saved Todos override wins over default purpose");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogQuery,stream->id,"independent source query survives Back and reentry");
+  AE_EXPECT_TRUE(f.tap(fx(136)) && f.tap(fx(145)) && f.tap(fx(121)) && f.tap(fx(134)) && f.tap(fx(135)),"open independent Lava purpose");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,9u,"new Lava picker selects actual RG/B/A role");
+  AE_EXPECT_TRUE(f.session.screen().terrainCatalogQuery.empty(),"Stream search does not leak into Lava context");
+  const auto *lava=editor::terrainFlowPreset(*f.session.screen().terrainCatalog,true,1);
+  AE_EXPECT_TRUE(lava && (lava->roleMask&(1u<<8)) && f.catalogQuery(lava->id) && f.tap(fx(150)),"actual second Lava original is selectable by filtered identity");
+  const auto &map=f.session.screen().terrainDraft.surface.flow.lavaDiffuse;
+  AE_EXPECT_TRUE(map.texture==lava->identity && map.linear && map.channel==resources::TerrainSurfaceChannel::RGB,"new source is raw linear with explicit immutable packing purpose");
+}
+AE_TEST(terrain_lava_ui_all_consumed_properties_raw_alpha_and_actual_apply_reopen) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(25)) && f.tap(fx(7)) && f.tap(fx(24)) && f.tap(fx(2)),"create real FX bitmap and select independent Lava A painting");
+  f.render();ui::UiPoint painted;
+  AE_EXPECT_TRUE(f.point(fx(90),painted),"actual bitmap region is available for the A stroke");
+  f.time+=1;f.session.handlePointer({84,ui::UiPointerPhase::Down,painted,f.time});painted.x+=4;
+  f.session.handlePointer({84,ui::UiPointerPhase::Move,painted,f.time+.1});f.session.handlePointer({84,ui::UiPointerPhase::Up,painted,f.time+.2});
+  bool alpha=false;const auto bitmap=f.session.screen().terrainFx.bitmap;
+  if(bitmap)for(usize i=3;i<bitmap->pixels.size();i+=4)alpha=alpha || bitmap->pixels[i]>0;
+  AE_EXPECT_TRUE(alpha,"authored static amount A contains actual painted nonzero bytes");
+  AE_EXPECT_TRUE(f.tap(fx(121)) && f.tap(fx(143)) && f.tap(fx(138)),"real painted mask and original source enable Lava");
+  AE_EXPECT_TRUE(f.slide(390,.2f,1) && f.slide(391,.8f,2) && f.session.setTerrainNumber(398,3.5),"material contrast, maximum and emission controls");
+  AE_EXPECT_TRUE(f.tap(fx(128)) && f.session.setTerrainNumber(392,.4) && f.session.setTerrainNumber(393,.2) && f.tap(fx(132)),"Lava flow and nested distortion group");
+  for(u32 field=394;field<=397;++field)AE_EXPECT_TRUE(f.session.setTerrainNumber(field,.2),"all source distortion/crust parameters authorable");
+  AE_EXPECT_TRUE(f.tap(fx(129)),"three source color groups");
+  for(u32 field=403;field<=411;++field)AE_EXPECT_TRUE(f.session.setTerrainNumber(field,1.2),"every consumed RGB is editable");
+  AE_EXPECT_TRUE(f.tap(fx(130)) && f.tap(fx(140)),"actual world height filter");
+  for(u32 i=0;i<4;++i)AE_EXPECT_TRUE(f.session.setTerrainNumber(412+i,std::array<double,4>{-10,0,100,200}[i]),"all four Lava world heights editable");
+  AE_EXPECT_TRUE(f.tap(fx(131)) && f.session.setTerrainNumber(399,-10) && f.session.setTerrainNumber(400,0) && f.tap(fx(142)) && f.session.setTerrainNumber(401,.8) && f.session.setTerrainNumber(402,2),"UV and real stochastic consumer properties");
+  AE_EXPECT_TRUE(f.tap(fx(127)) && f.tap(fx(134)),"return from UV to General and open actual Lava packed source");
+  if(!f.tap(fx(144))){std::fprintf(stderr,"Lava source2: view=%u scroll=%g message=%s status=%s\n",f.session.screen().terrainMaterialView,double(f.session.screen().terrainScroll),f.session.screen().terrainMessage.c_str(),f.session.screen().status.c_str());AE_EXPECT_TRUE(false,"second actual Lava original is reachable");}
+  if(!f.tap(fx(146))){std::fprintf(stderr,"Lava invert: view=%u scroll=%g message=%s status=%s\n",f.session.screen().terrainMaterialView,double(f.session.screen().terrainScroll),f.session.screen().terrainMessage.c_str(),f.session.screen().status.c_str());AE_EXPECT_TRUE(false,"Lava inversion is reachable after second source selection");}
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(420,.7),"consumed Lava alpha factor is authorable after inversion");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(424,.1),"consumed Lava alpha minimum is authorable after inversion");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(428,.9),"consumed Lava alpha maximum is authorable after inversion");
+  const auto &flow=f.session.screen().terrainDraft.surface.flow;
+  AE_EXPECT_EQ(flow.lavaDisplacementScale,1.f,"unsupported geometry displacement value is preserved without fake control");
+  AE_EXPECT_EQ(flow.lavaEdgeColor[3],1.f,"reserved color alpha preserved");
+  AE_EXPECT_TRUE(!flow.globalStreams && !flow.rainDrops && !flow.specularFade,"unsupported groups remain off");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply uses real V4 material and static FX bridge");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root && f.session.openTerrain(root),"reopen actual source artifact");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"all consumed and reserved Flow values survive actual publication and reimport");
+}
+
+AE_TEST(terrain_specular_height_ui_requires_no_fx_or_texture_and_roundtrips_actual_source) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(161)),"Spec-only is discoverable directly from Paint root");
+  f.render();ui::UiPoint point;
+  AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+175,point),"first world-height slider is visible before scrolling on compact layout");
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.fx.enabled && f.tap(fx(163)),"actual Spec-only consumer enables without creating a mask");
+  AE_EXPECT_TRUE(f.session.setTerrainNumber(431,-5) && f.tap(editor::terrainSnowNumberBase+176) && f.session.completeTextEdit(f.session.pendingTextEdit(),"25",true),"signed world-height precise authoring");
+  AE_EXPECT_TRUE(f.slide(431,1) && f.slide(432,0),"ordered endpoints permit the real coincident interval");
+  AE_EXPECT_EQ(f.session.screen().terrainDraft.surface.flow.specularFades[0],f.session.screen().terrainDraft.surface.flow.specularFades[1],"coincident endpoints are not falsely forbidden");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply publishes actual Spec-only material with no FX descriptor");
+  f.render();AE_EXPECT_TRUE(!f.point(fx(2),point) && !f.point(id(Widget::TerrainSculpt),point),"missing FX authoring cannot expose a pretend active paint tool");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root && f.session.openTerrain(root),"reopen actual Spec-only artifact");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"Spec-only source roundtrip retains values without inventing an FX map");
+  AE_EXPECT_TRUE(!f.session.screen().terrainDraft.fx.enabled,"Spec-only still has no authored FX bitmap after reopen");
+}
+AE_TEST(terrain_rain_ui_real_packed_source_requires_puddles_preserves_all_roles_and_roundtrips) {
+  TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+  AE_EXPECT_TRUE(f.ready && f.visit(2) && f.tap(fx(0)) && f.tap(fx(160)),"Rain is a real material subcontext");
+  f.render();ui::UiPoint point;AE_EXPECT_TRUE(f.point(editor::terrainSnowSliderBase+173,point),"Rain intensity visible at zero scroll");
+  AE_EXPECT_TRUE(!f.tap(fx(162)),"missing puddle/source disables Rain enable");
+  AE_EXPECT_TRUE(f.tap(fx(164)) && f.tap(fx(166)) && f.tap(fx(165)),"explicit original Rain source and actual picker");
+  const auto *rain=editor::terrainRainPreset(*f.session.screen().terrainCatalog);
+  AE_EXPECT_TRUE(rain && (rain->roleMask&(1u<<9)) && f.textureThumbnail(rain->id),"real Rain metadata purpose and thumbnail are present");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,10u,"Rain purpose is raw RGBA, not filtered Normal");
+  AE_EXPECT_TRUE(f.catalogQuery(rain->id) && f.tap(fx(170)),"actual filtered texture identity selected");
+  AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(2))),"explicit All override remains accessible");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"All remains a user choice");
+  AE_EXPECT_TRUE(f.tap(fx(167)) && f.tap(fx(165)),"leave and reenter Rain picker");
+  AE_EXPECT_EQ(f.session.screen().terrainCatalogRoleFilter,0u,"saved All choice survives source context");
+  AE_EXPECT_TRUE(f.tap(fx(167)) && f.tap(fx(168)),"raw source inversion is effectful");
+  for(u32 channel=0;channel<4;++channel){
+    AE_EXPECT_TRUE(f.session.setTerrainNumber(417+channel,.8) && f.session.setTerrainNumber(421+channel,.05) && f.session.setTerrainNumber(425+channel,.95),"R shape, GB normal direction and A phase transforms are all editable");
+  }
+  AE_EXPECT_TRUE(f.tap(fx(167)) && !f.tap(fx(162)),"source alone cannot bypass missing real puddles");
+  AE_EXPECT_TRUE(f.tap(fx(101)) && f.tap(fx(23)) && f.tap(fx(10)) && f.tap(fx(25)) && f.tap(fx(5)) && f.tap(fx(24)) && f.tap(fx(2)),"Rain to actual Puddles create-source route prepares real G mask");
+  f.render();AE_EXPECT_TRUE(f.point(fx(90),point),"actual G bitmap reached");
+  f.time+=1;f.session.handlePointer({82,ui::UiPointerPhase::Down,point,f.time});point.x+=4;
+  f.session.handlePointer({82,ui::UiPointerPhase::Move,point,f.time+.1});f.session.handlePointer({82,ui::UiPointerPhase::Up,point,f.time+.2});
+  AE_EXPECT_TRUE(f.tap(fx(101)) && f.tap(fx(111)) && f.tap(fx(20)) && f.tap(fx(160)) && f.tap(fx(162)),"real painted puddle consumer unlocks Rain");
+  AE_EXPECT_TRUE(f.slide(429,.7f) && f.session.setTerrainNumber(430,-64) && f.session.setTerrainNumber(430,0),"intensity and signed/zero repeat frequency remain source-faithful");
+  AE_EXPECT_TRUE(f.tap(fx(101)) && f.tap(fx(111)),"attempting to remove required puddles receives explicit editor handling");
+  AE_EXPECT_TRUE(f.session.screen().terrainDraft.surface.flow.puddles && f.text("Desligue as ondulações"),"dependency refusal is explained without silently disabling Rain");
+  const auto &flow=f.session.screen().terrainDraft.surface.flow;
+  AE_EXPECT_EQ(flow.sourceRainMode,resources::TerrainFlowRainMode::None,"unconsumed source enum is preserved without fake UI");
+  AE_EXPECT_EQ(flow.rainIntensityScale[2],0.f,"reserved Rain vector Z preserved");
+  AE_EXPECT_EQ(flow.rainIntensityScale[3],0.f,"reserved Rain vector W preserved");
+  const auto expected=resources::serializeTerrainRecipe(f.session.screen().terrainDraft);
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainGenerate),false) && f.finish(),"Apply publishes actual Rain packed source over G mask");
+  const auto root=f.session.screen().terrainTarget;
+  AE_EXPECT_TRUE(root && f.session.openTerrain(root),"reopen actual Rain material artifact");
+  AE_EXPECT_EQ(resources::serializeTerrainRecipe(f.session.screen().terrainDraft),expected,"Rain source/transforms/intensity and FX checkpoint survive actual source reimport");
+}
+
+AE_TEST(terrain_catalog_search_accepts_complete_source_sha_and_custom_keyboard_without_name_capacity_changes) {
+ TerrainUiFixture f;const auto fx=[](u32 a){return id(editor::terrainFxAction(a));};
+ AE_EXPECT_TRUE(f.ready&&f.visit(2)&&f.tap(fx(0))&&f.tap(fx(120))&&f.tap(fx(133))&&f.tap(fx(135)),"open actual packed source picker");
+ const auto*source=editor::terrainFlowPreset(*f.session.screen().terrainCatalog,false,0);AE_EXPECT_TRUE(source&&source->id.size()==64,"actual source identifier is complete SHA64");
+ AE_EXPECT_TRUE(f.catalogQuery(source->id),"native text commit accepts complete source SHA");
+ AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(0))),"reopen source SHA search");
+ AE_EXPECT_EQ(f.session.pendingTextEdit().text,source->id,"reopen preserves all64 bytes without rename buffer truncation");
+ const auto modalTap=[&](Widget widget){f.render();const auto surface=f.session.screen().surface;for(float y=surface.y+2;y<surface.bottom();y+=4)for(float x=surface.x+2;x<surface.right();x+=4)if(f.router.hitTest({x,y}).widgetId==id(widget)){f.time+=1;f.session.handlePointer({95,ui::UiPointerPhase::Down,{x,y},f.time});f.session.handlePointer({95,ui::UiPointerPhase::Up,{x,y},f.time+.1});return true;}return false;};
+ AE_EXPECT_TRUE(modalTap(Widget::NameBackspace),"custom keyboard backspace applies to dedicated search draft");
+ const auto shortened=f.session.pendingTextEdit().text;AE_EXPECT_EQ(shortened,source->id.substr(0,63),"custom keyboard updates full source draft");
+ AE_EXPECT_TRUE(modalTap(Widget::NameCancel),"cancel custom search edit");AE_EXPECT_EQ(f.session.screen().terrainCatalogQuery,source->id,"cancel preserves authored query");
+ AE_EXPECT_EQ(f.session.pendingTextEdit().purpose,editor::EditorTextPurpose::None,"Cancel closes the actual foreground search modal");
+ AE_EXPECT_TRUE(f.tap(id(editor::terrainCatalogAction(0))),"open for explicit search budget");
+ AE_EXPECT_TRUE(!f.session.completeTextEdit(f.session.pendingTextEdit(),std::string(129,'a'),true),"129-byte query is refused rather than truncated");
+ AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),std::string(128,'a'),true),"full128-byte search budget is supported");
+}

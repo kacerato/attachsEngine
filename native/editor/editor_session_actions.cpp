@@ -2596,6 +2596,16 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if (state_.renameEntity != kInvalidEntity || state_.editingHierarchySearch || state_.editingCreationSearch || state_.editingComponentSearch || state_.editingPropertySearch || state_.editingMeshSearch || state_.editingReferenceSearch || state_.editingGlobalSearch || state_.editingTerrainCatalogSearch || state_.namingLayout || state_.presetNaming || state_.viewNaming || state_.editingInputActionName || state_.editingInputContext || state_.editingTagName || state_.editingTagSearch || state_.editingGroupName || state_.editingPhysicsLayerName || state_.editingAnimatorName) {
     if(routing.tapped) {
       const auto key=routing.widgetId;
+      if(state_.editingTerrainCatalogSearch){
+        auto&draft=state_.platformDraft;
+        if(key==widgetId(EditorWidget::NameCancel))completeTextEdit(pendingTextEdit(),{},false);
+        else if(key==widgetId(EditorWidget::NameClear))draft.clear();
+        else if(key==widgetId(EditorWidget::NameShift))state_.renameUppercase=!state_.renameUppercase;
+        else if(key==widgetId(EditorWidget::NameBackspace)&&!draft.empty()){auto n=draft.size();do{--n;}while(n&&(static_cast<unsigned char>(draft[n])&0xc0)==0x80);draft.resize(n);}
+        else if(key>=widgetId(EditorWidget::NameKeyBase)&&key<widgetId(EditorWidget::NameKeyBase)+40&&draft.size()<128){const char*keys=state_.renameUppercase?"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-. ":"abcdefghijklmnopqrstuvwxyz0123456789_-. ";draft.push_back(keys[key-widgetId(EditorWidget::NameKeyBase)]);}
+        else if(key==widgetId(EditorWidget::NameApply))completeTextEdit(pendingTextEdit(),draft,true);
+        return true;
+      }
       auto n=std::strlen(state_.renameText);
       if(key==widgetId(EditorWidget::NameCancel)) {completeTextEdit(pendingTextEdit(),{},false);}
       else if(key==widgetId(EditorWidget::NameClear)) state_.renameText[0]=0;

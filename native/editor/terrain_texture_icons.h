@@ -156,6 +156,10 @@ inline ui::UiIcon terrainTextureIcon(std::string_view sourceCatalogId) {
   if(sourceCatalogId=="d50025b7383cf6e46ff9e52f7b35fbddca12bc890b88a0b78a1746c47fecceb4")return ui::UiIcon::ZzzTerrainTextureTexture149;
   if(sourceCatalogId=="d241affd312f0293581aa3b08fc833b94411dc794e62938065af9c445c4f2725")return ui::UiIcon::ZzzTerrainTextureTexture150;
   if(sourceCatalogId=="583bf4deb5371d01e8c6609fa4afb84a4ac139af70452dd16dbaebc5dac73422")return ui::UiIcon::ZzzTerrainTextureTexture151;
+  if(sourceCatalogId=="36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25")return ui::UiIcon::ZzzzzTerrainTextureTexture152;
+  if(sourceCatalogId=="6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d")return ui::UiIcon::ZzzzzTerrainTextureTexture153;
+  if(sourceCatalogId=="1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c")return ui::UiIcon::ZzzzzTerrainTextureTexture154;
+  if(sourceCatalogId=="12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7")return ui::UiIcon::ZzzzzTerrainTextureTexture155;
   return ui::UiIcon::AssetsTexture;
 }
 }

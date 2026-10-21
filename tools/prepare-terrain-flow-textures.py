@@ -14,10 +14,10 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 PREFIX = "Packages/com.jbooth.microsplat.streams/Textures/"
 SOURCES = (
-    ("microsplat_def_streamfoam.png", "04426e150438d48e19ee055632fedf02", (512, 512), "RGB", {"normal": "RG/linear/normal-filtered", "foam": "B/linear"}),
-    ("microsplat_def_raindrops.tga", "aca95408547244a2b8760b8425b5b0fc", (256, 256), "RGBA", {"drop_shape_lifetime": "R/linear", "ripple_direction": "GB/linear", "phase": "A/linear"}),
-    ("microsplat_def_lava_01.tga", "a6a8d659d589c4119a3afbd07e10a776", (1024, 1024), "RGBA", {"normal_distortion": "RG/linear", "heat_interpolation": "B/linear", "crust_darkening": "A/linear"}),
-    ("microsplat_def_lava_02.tga", "2d2978ad3535f45649b30977cb570eb8", (1024, 1024), "RGBA", {"normal_distortion": "RG/linear", "heat_interpolation": "B/linear", "crust_darkening": "A/linear"}),
+    ("microsplat_def_streamfoam.png", "04426e150438d48e19ee055632fedf02", (512, 512), "RGB", {"normal": "RG/linear/raw-packed", "foam": "B/linear", "stream_normal_foam": "RGB/linear/raw-packed"}),
+    ("microsplat_def_raindrops.tga", "aca95408547244a2b8760b8425b5b0fc", (256, 256), "RGBA", {"drop_shape_lifetime": "R/linear", "ripple_direction": "GB/linear", "phase": "A/linear", "rain_drop_shape_direction_phase": "RGBA/linear/raw-packed"}),
+    ("microsplat_def_lava_01.tga", "a6a8d659d589c4119a3afbd07e10a776", (1024, 1024), "RGBA", {"normal_distortion": "RG/linear", "heat_interpolation": "B/linear", "crust_darkening": "A/linear", "lava_distortion_heat_crust": "RGBA/linear/raw-packed"}),
+    ("microsplat_def_lava_02.tga", "2d2978ad3535f45649b30977cb570eb8", (1024, 1024), "RGBA", {"normal_distortion": "RG/linear", "heat_interpolation": "B/linear", "crust_darkening": "A/linear", "lava_distortion_heat_crust": "RGBA/linear/raw-packed"}),
 )
 
 
@@ -73,6 +73,16 @@ def prepare(package: Path, output: Path):
         if same_id:
             for key, value in record.items():
                 if key in same_id[0] and same_id[0][key] != value:
+                    if key == 'source_roles':
+                        old_roles = same_id[0][key]
+                        corrected = dict(old_roles)
+                        if name == 'microsplat_def_streamfoam.png' and corrected.get('normal') == 'RG/linear/normal-filtered':
+                            corrected['normal'] = 'RG/linear/raw-packed'
+                        typed = 'stream_normal_foam' if name == 'microsplat_def_streamfoam.png' else 'rain_drop_shape_direction_phase' if name == 'microsplat_def_raindrops.tga' else 'lava_distortion_heat_crust'
+                        if typed in value and typed not in corrected:
+                            corrected[typed] = value[typed]
+                        if corrected == value:
+                            continue # Explicit metadata correction; source/runtime bytes unchanged.
                     raise ValueError(f"Existing record conflicts at {key}: {name}")
             record = dict(same_id[0], **record)
         records.append(record)

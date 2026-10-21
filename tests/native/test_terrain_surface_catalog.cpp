@@ -30,16 +30,23 @@ AE_TEST(terrain_surface_catalog_committed_inventory_and_all_materials) {
   AE_EXPECT_TRUE(loadTerrainSurfaceCatalog(text, c, e), e.c_str());
   AE_EXPECT_EQ(c.materials.size(), size_t(82),
                "actual committed material inventory");
-  AE_EXPECT_EQ(c.textures.size(), size_t(152),
+  AE_EXPECT_EQ(c.textures.size(), size_t(156),
                "actual committed texture inventory");
   std::set<AssetGuid> identities;
+  size_t streams=0,lava=0,rain=0;
   for (auto &t : c.textures) {
+    streams+=(t.roleMask&(1u<<7))!=0;
+    lava+=(t.roleMask&(1u<<8))!=0;
+    rain+=(t.roleMask&(1u<<9))!=0;
     AE_EXPECT_TRUE(identities.insert(t.identity).second,
                    "texture imports keep distinct GUIDs");
     AE_EXPECT_EQ(t.sourceHash.size(), size_t(64), "original hash retained");
     AE_EXPECT_EQ(t.runtimeHash.size(), size_t(64), "runtime hash retained");
     AE_EXPECT_TRUE(t.width > 0 && t.height > 0, "original dimensions retained");
   }
+  AE_EXPECT_EQ(streams,size_t(1),"one original Stream raw-packed source");
+  AE_EXPECT_EQ(lava,size_t(2),"both original Lava raw-packed sources");
+  AE_EXPECT_EQ(rain,size_t(1),"one original Rain RGBA source");
   for (auto &m : c.materials) {
     AE_EXPECT_EQ(m.layer.identity,
                  assetGuidFromSeed("astra.terrain.catalog.material:" + m.id),

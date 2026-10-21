@@ -13,6 +13,7 @@ const uint terrainModuleRows=3u,terrainModuleLayerRows=2u,terrainGeoRows=14u,ter
 const uint terrainClusterHeaderRows=2u,terrainClusterRows=terrainClusterHeaderRows+terrainNoiseRows,terrainVariantRows=36u;
 const uint terrainResampleHeaderRows=2u,terrainResampleRows=terrainResampleHeaderRows+terrainNoiseRows;
 float terrainNoise(vec2 p);
+vec2 terrainPbrRefractionUv=vec2(0);
 #ifndef TERRAIN_SURFACE_CAMERA_POSITION
 #define TERRAIN_SURFACE_CAMERA_POSITION frame.cameraPositionNear.xyz
 #endif
@@ -223,7 +224,7 @@ TerrainPBRResult terrainPbrLayer(uint row,vec3 localPosition,vec3 worldPosition,
     // XZ, so omitting the other axes cannot make derivatives divergent.
     if(options.y<.5&&axis!=1u)continue;
     vec2 projected=axis==0u?p.zy:axis==1u?p.xz:p.xy;
-    vec2 uv=terrainPbrUv(projected,transform,blend.x);
+    vec2 uv=terrainPbrUv(projected,transform,blend.x)+terrainPbrRefractionUv;
     uint maps=row+5u;
     vec4 albedo=terrainPbrColor(maps,terrainPbrFetch(maps,uv,1.0));
     uint normalRow=maps+5u;
@@ -263,7 +264,7 @@ void terrainPbrResample(inout TerrainPBRResult layer,uint layerRow,uint resample
   for(uint axis=0u;axis<3u;++axis){
     if(projection.y<.5&&axis!=1u)continue;
     vec2 projected=axis==0u?p.zy:axis==1u?p.xz:p.xy;
-    vec2 uv=terrainPbrUv(projected,transform,blend.x)*options.w;
+    vec2 uv=terrainPbrUv(projected,transform,blend.x)*options.w+terrainPbrRefractionUv;
     if(options.x>.5)farColor+=terrainPbrColor(maps,terrainPbrFetch(maps,uv,1.0))*axes[axis];
     if(options.y>.5)farNormal+=terrainPbrMappedNormal(maps+5u,uv,worldPosition,n)*axes[axis];
     if(options.z>.5)farHeight+=terrainPbrScalar(maps+10u,terrainPbrFetch(maps+10u,uv,height.z))*axes[axis];
@@ -378,7 +379,7 @@ TerrainPBRResult terrainPbrCluster(uint layerRow,uint clusterRow,uint resampleRo
       uint maps=cluster.x>.5?variantRow+1u:layerRow+5u;
       vec2 shifted=coordinates+transform.yz+plan.shift[contribution]*tile;
       float angle=blend.x+transform.w;
-      vec2 uv=terrainPbrRotate(shifted/max(tile,vec2(.0001)),angle);
+      vec2 uv=terrainPbrRotate(shifted/max(tile,vec2(.0001)),angle)+terrainPbrRefractionUv;
       vec2 ux=terrainPbrRotate(dx/max(tile,vec2(.0001)),angle),uy=terrainPbrRotate(dy/max(tile,vec2(.0001)),angle);
       result.color+=terrainPbrColor(maps,terrainPbrFetchGrad(maps,uv,ux,uy,1.0))*weight;
       result.normalWorld+=terrainPbrMappedNormalGrad(maps+5u,uv,ux,uy,px,py,n)*weight;
@@ -522,6 +523,8 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
 #endif
   vec3 localPosition=vec3(vUv0.x,vUv1.x,vUv0.y)*terrainSurfaceRows[offset+1u].x;
   uint moduleRoot=terrainSurfaceRows[offset+1u].y>.5?uint(terrainSurfaceRows[offset+1u].y+.5)-1u:0u;
+  terrainPbrRefractionUv=vec2(0);
+  TerrainFlowSamples flowSamples=terrainPbrPrepareFlow(moduleRoot,localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)));
   TerrainModuleSamples moduleSamples;if(moduleRoot!=0u)moduleSamples=terrainPbrSampleModules(moduleRoot,localPosition,worldPosition);
   TerrainPBRResult layers[4];float amounts[4];float peak=-1e20;
   // Current control storage is RGBA. Higher catalog layers require additional
@@ -544,17 +547,37 @@ TerrainPBRResult terrainPBRSurface(vec3 worldPosition,vec3 worldNormal) {
 
   float sum=0;
   for(uint i=0u;i<supported;++i){uint row=offset+2u+i*40u;if(terrainSurfaceRows[row].x<.5)continue;vec4 blend=terrainSurfaceRows[row+2u],height=terrainSurfaceRows[row+3u];if(blend.z>.5){float h=amounts[i]+layers[i].height*height.y;amounts[i]*=pow(clamp((h-peak+height.x)/max(height.x,.0001),0.0,1.0),max(blend.w,.0001));}sum+=amounts[i];}
-  if(sum<1e-8){result.valid=true;result.color=vec4(0,0,0,1);return result;}
+  bool emptyWeights=sum<1e-8;float sampleSum=max(sum,1e-8);
+  // Refraction is a uniform authored capability; no coverage branch encloses
+  // texture derivatives. Keep the first evaluation's color/height/weights.
+  if(flowSamples.streamRow!=0u&&terrainSurfaceRows[flowSamples.streamRow+1u].x!=0.0){
+    float earlyHeight=0;for(uint i=0u;i<supported;++i)if(terrainSurfaceRows[offset+2u+i*40u].x>.5)earlyHeight+=layers[i].height*amounts[i]/sampleSum;
+    terrainPbrRefractionUv=terrainPbrStreamRefraction(flowSamples,earlyHeight,worldPosition.y);
+    for(uint i=0u;i<supported;++i){uint row=offset+2u+i*40u;if(terrainSurfaceRows[row].x<.5)continue;
+      uint advanced=0u,resampleRow=0u,clusterRow=0u;
+      if(header.z>.5){advanced=uint(header.z+.5)-1u;uint features=uint(terrainSurfaceRows[advanced+1u].w+.5),directory=uint(terrainSurfaceRows[advanced].w+.5)+i*terrainAdvancedLayerRows;
+        if((features&terrainFeatureM07)!=0u)resampleRow=uint(terrainSurfaceRows[directory+1u].z+.5);if((features&terrainFeatureM08)!=0u)clusterRow=uint(terrainSurfaceRows[directory+1u].w+.5);}
+      bool useCluster=clusterRow!=0u&&(terrainSurfaceRows[clusterRow].x>.5||terrainSurfaceRows[clusterRow].y>.5);TerrainPBRResult refracted;
+      if(useCluster)refracted=terrainPbrCluster(row,clusterRow,resampleRow,localPosition,worldPosition,worldNormal);
+      else{refracted=terrainPbrLayer(row,localPosition,worldPosition,worldNormal);if(resampleRow!=0u)terrainPbrResample(refracted,row,resampleRow,localPosition,worldPosition,worldNormal);}
+      if(header.z>.5)terrainPbrApplyNoises(refracted,advanced,i,localPosition,worldPosition,terrainPbrGeometricNormal(terrainSurfaceRows[row],worldPosition,worldNormal),terrainSurfaceRows[row].z);
+      if(moduleRoot!=0u)terrainPbrApplyModules(refracted,moduleRoot,i,moduleSamples,terrainPbrGeometricNormal(terrainSurfaceRows[row],worldPosition,worldNormal));
+      refracted.color=layers[i].color;refracted.height=layers[i].height;layers[i]=refracted;
+    }
+    terrainPbrRefractionUv=vec2(0);
+  }
+  if(emptyWeights){result.valid=true;result.color=vec4(0,0,0,1);return result;}
   result.normalWorld=vec3(0);result.roughness=0;result.metallic=0;result.occlusion=0;result.valid=true;
   for(uint i=0u;i<supported;++i){if(terrainSurfaceRows[offset+2u+i*40u].x<.5)continue;float w=amounts[i]/sum;result.color+=layers[i].color*w;result.normalWorld+=layers[i].normalWorld*w;result.roughness+=layers[i].roughness*w;result.metallic+=layers[i].metallic*w;result.occlusion+=layers[i].occlusion*w;result.emission+=layers[i].emission*w;result.height+=layers[i].height*w;}
   float flowSnowClearing=0.0;
-  if(moduleRoot!=0u)flowSnowClearing=terrainPbrApplyStaticFx(result,moduleRoot,localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),amounts,supported,sum);
+  if(moduleRoot!=0u)flowSnowClearing=terrainPbrApplyStaticFx(result,moduleRoot,localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),amounts,supported,sum,flowSamples);
   if(moduleRoot!=0u&&terrainSurfaceRows[moduleRoot+1u].w>.5){
     uint snow=uint(terrainSurfaceRows[moduleRoot+1u].w+.5)-1u,controls=uint(terrainSurfaceRows[snow+13u].w+.5);float participation=0.0,porosity=0.0;
     for(uint i=0u;i<supported;++i){float w=amounts[i]/sum;participation+=terrainSurfaceRows[controls+i].x*w;porosity+=terrainSurfaceRows[controls+i].y*w;}
     result.normalWorld=terrainPbrSafeNormal(result.normalWorld,worldNormal);
     terrainPbrApplySnow(result,snow,terrainSurfaceRows[moduleRoot+2u],localPosition,worldPosition,terrainPbrSafeNormal(worldNormal,vec3(0,1,0)),participation,porosity,flowSnowClearing);
   }
+  if(moduleRoot!=0u)terrainPbrApplySpecularHeight(result,moduleRoot,worldPosition.y);
   float variation=clamp(vUv1.y<0.0?-vUv1.y-1.0:vUv1.y,0.0,1.0);
   result.color.rgb*=1.0+variation*(terrainNoise(vUv0*.11)-.5)*.6;
   result.normalWorld=terrainPbrSafeNormal(result.normalWorld,worldNormal);result.roughness=clamp(result.roughness,.07,1.0);result.metallic=clamp(result.metallic,0.0,1.0);result.occlusion=clamp(result.occlusion,0.0,1.0);return result;

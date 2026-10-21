@@ -24,9 +24,12 @@ inline bool validTerrainStaticFxBinding(const TerrainStaticFxBinding &fx,
 inline bool diagnoseStaticTerrainFlowPublication(const TerrainSurfaceBinding &binding,std::string &error) {
   if(!validTerrainStaticFxBinding(binding.staticFx,binding.terrainDomain,error))return false;
   const auto &flow=binding.surface.flow;
-  if((flow.wetness||flow.puddles||flow.wetnessMaskSnow)&&!binding.staticFx.enabled){error="Static Flow requires an immutable RecipeFX snapshot.";return false;}
+  if((flow.wetness||flow.puddles||flow.streams||flow.lava||flow.wetnessMaskSnow)&&!binding.staticFx.enabled){error="Static Flow requires an immutable RecipeFX snapshot.";return false;}
   resources::TerrainFlowConsumerCapabilities caps;
   caps.wetness=caps.puddles=caps.heightWetness=caps.distanceWetness=caps.snowClearing=true;
+  caps.streams=caps.lava=caps.streamHeightFilter=caps.lavaHeightFilter=true;
+  caps.lavaStochastic=true;caps.rain=caps.specularFade=true;
+  if(flow.rainDrops&&!flow.puddles){error="Rain ripples require enabled puddles, matching the source keyword dependency.";return false;}
   caps.staticControlProvided=binding.staticFx.enabled;
   std::vector<resources::TerrainSurfaceDiagnostic> diagnostics;
   return resources::diagnoseTerrainFlowPublication(binding.surface,[&](resources::AssetGuid identity){

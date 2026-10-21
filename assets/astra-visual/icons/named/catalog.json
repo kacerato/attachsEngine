@@ -4849,6 +4849,64 @@
       "append_after_brand": true,
       "concept": "TerrainWetness",
       "label": "Umidade"
+    },
+    "zzzzz-terrain-texture/texture-152": {
+      "category": "zzzzz-terrain-texture",
+      "name": "texture-152",
+      "label": "microsplat_def_streamfoam",
+      "raster": "../../../terrain/library/thumbnails/36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "append_after_brand": true,
+      "source_catalog_id": "36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25",
+      "generator": "tools/generate-terrain-texture-thumbnails.py"
+    },
+    "zzzzz-terrain-texture/texture-153": {
+      "category": "zzzzz-terrain-texture",
+      "name": "texture-153",
+      "label": "microsplat_def_raindrops",
+      "raster": "../../../terrain/library/thumbnails/6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "append_after_brand": true,
+      "source_catalog_id": "6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d",
+      "generator": "tools/generate-terrain-texture-thumbnails.py"
+    },
+    "zzzzz-terrain-texture/texture-154": {
+      "category": "zzzzz-terrain-texture",
+      "name": "texture-154",
+      "label": "microsplat_def_lava_01",
+      "raster": "../../../terrain/library/thumbnails/1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "append_after_brand": true,
+      "source_catalog_id": "1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c",
+      "generator": "tools/generate-terrain-texture-thumbnails.py"
+    },
+    "zzzzz-terrain-texture/texture-155": {
+      "category": "zzzzz-terrain-texture",
+      "name": "texture-155",
+      "label": "microsplat_def_lava_02",
+      "raster": "../../../terrain/library/thumbnails/12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7.png",
+      "dark_ui_ready": true,
+      "force_opaque": true,
+      "append_after_brand": true,
+      "source_catalog_id": "12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7",
+      "generator": "tools/generate-terrain-texture-thumbnails.py"
+    },
+    "zzzzzz-terrain-fx/rain": {
+      "source": "vector/zzzzzz-terrain-fx/rain.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainRain",
+      "label": "Chuva e ondulações"
+    },
+    "zzzzzz-terrain-fx/specular-height": {
+      "source": "vector/zzzzzz-terrain-fx/specular-height.svg",
+      "generator": "tools/generate-terrain-flow-icons.py",
+      "append_after_brand": true,
+      "concept": "TerrainSpecularHeight",
+      "label": "Brilho por altura"
     }
   },
   "unmapped": []

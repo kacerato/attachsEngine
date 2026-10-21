@@ -11,12 +11,12 @@ class FlowIcons(unittest.TestCase):
    command=[sys.executable,str(ROOT/'tools/generate-terrain-flow-icons.py'),'--output',str(output)]
    subprocess.run(command,check=True,capture_output=True)
    manifest=json.loads((output/'manifest.json').read_text(encoding='utf-8'))
-   self.assertEqual(len(manifest['icons']),4)
+   self.assertEqual(len(manifest['icons']),6)
    header=active[0].read_text(encoding='utf-8')
    for offset,item in enumerate(manifest['icons'],1):
     existing=re.search(r'\b'+item['enum']+r'\s*=\s*(\d+)',header)
     self.assertEqual(item['predicted_id'],int(existing.group(1)) if existing else manifest['published_count']+offset)
-   self.assertEqual({i['concept'] for i in manifest['icons']},{'TerrainWetness','TerrainPuddle','TerrainStream','TerrainLava'})
+   self.assertEqual({i['concept'] for i in manifest['icons']},{'TerrainWetness','TerrainPuddle','TerrainStream','TerrainLava','TerrainRain','TerrainSpecularHeight'})
    for item in manifest['icons']:
     png=output/f"named/{item['key']}.png";svg=output/f"vector/{item['key']}.svg"
     with Image.open(png) as image:

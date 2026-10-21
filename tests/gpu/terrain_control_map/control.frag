@@ -16,7 +16,7 @@ vec4 vColor;
 #define EMISSIVE_MAP textures[3]
 #ifdef TEST_PBR
 #define TERRAIN_SURFACE_CAMERA_POSITION ((test.mode==45u||test.mode==46u||test.mode==77u||test.mode==81u||test.mode==82u||test.mode==83u||test.mode==86u||test.mode==152u||test.mode==168u||test.mode==179u)?vec3(worldPosition.x,15.0,worldPosition.z):vec3(0,(test.mode==33u||test.mode==35u||test.mode==62u||test.mode==69u||test.mode==76u||test.mode==84u||test.mode==106u||test.mode==153u)?100.0:0.0,0))
-#define TERRAIN_SURFACE_TIME_SECONDS 0.0
+#define TERRAIN_SURFACE_TIME_SECONDS (test.mode==288u?.125:test.mode==279u?.25:((test.mode==272u||test.mode==273u||test.mode==274u)?1.0:0.0))
 #define TERRAIN_SURFACE_PBR
 #define TERRAIN_SURFACE_MAP(index) textures[index]
 #endif
@@ -47,7 +47,45 @@ void main() {
   if(test.mode==145u)position.y=-.5;
   if(test.mode==189u)position.y=uv.y;
   if(test.mode==235u)position.y=.00005;
+  if(test.mode>=255u&&test.mode<=257u||test.mode>=261u&&test.mode<=263u||test.mode==278u||test.mode==279u||test.mode>=271u&&test.mode<=274u)normal=normalize(vec3(.2,.979795897,0));
+  if(test.mode==297u||test.mode==301u)position.y=1.5;
+  if(test.mode==298u)position.y=2.5;
+  if(test.mode==300u)position.y=.00005;
+  // Old Flow fixtures authored identity LOCAL XZ but used world XZ scaled2/3.
+  // Make geometry consistent without changing UVs, source normals or pixels.
+  if(test.mode>=252u&&test.mode<=283u)position.xz=uv;
+  if(test.mode>=302u&&test.mode<=309u){
+    vec3 local=vec3(uv.x*2.0,-.2041241452319315*uv.x*2.0,uv.y*3.0);
+    vec3 localNormal=normalize(vec3(.2,.9797958971132712,0));
+    mat3 transform=mat3(1);
+    if(test.mode==303u)transform=mat3(vec3(0,0,-1),vec3(0,1,0),vec3(1,0,0));
+    if(test.mode==304u)transform=mat3(vec3(2,0,0),vec3(0,3,0),vec3(0,0,.5));
+    if(test.mode==305u)transform=mat3(vec3(1,0,0),vec3(0,.8660254037844386,.5),vec3(0,-.5,.8660254037844386));
+    if(test.mode==306u){local.y=0;localNormal=vec3(0,1,0);transform=mat3(vec3(0,1,0),vec3(-1,0,0),vec3(0,0,1));}
+    if(test.mode==307u)transform=mat3(vec3(0,0,1),vec3(0,1,0),vec3(-1,0,0));
+    if(test.mode==308u)transform=mat3(vec3(0,0,-2),vec3(0,3,0),vec3(.5,0,0));
+    if(test.mode==309u){local.y=-.5*local.x+.25*local.z;localNormal=normalize(vec3(.5,1,-.25));transform=mat3(vec3(1.5,0,0),vec3(0,.8660254037844386,.5),vec3(0,-.25,.4330127018922193));}
+    position=transform*local;normal=normalize(transpose(inverse(transform))*localNormal);
+    vUv0=local.xz;vUv1.x=local.y;
+    uint offset=uint(aetherMaterialRow(14u).z+.5)-1u,root=uint(terrainSurfaceRows[offset+1u].y+.5)-1u;
+    TerrainFlowSamples prepared=terrainPbrPrepareFlow(root,local,position,normal);
+    outColor=vec4(prepared.flowDir*.25+.5,0,1);return;
+  }
+  if(test.mode==310u||test.mode==311u){
+    position.y=test.mode==310u?5.0:1.5;
+    uint offset=uint(aetherMaterialRow(14u).z+.5)-1u,root=uint(terrainSurfaceRows[offset+1u].y+.5)-1u;
+    vec3 local=vec3(vUv0.x,vUv1.x,vUv0.y)*terrainSurfaceRows[offset+1u].x;
+    TerrainFlowSamples prepared=terrainPbrPrepareFlow(root,local,position,normal);
+    vec2 refract=terrainPbrStreamRefraction(prepared,0.0,position.y);
+    outColor=vec4(vec2(.5)+refract*2.0,0,1);return;
+  }
   TerrainPBRResult pbr=terrainPBRSurface(position,normal);
+  if(test.mode>=284u&&test.mode<=295u){outColor=vec4(pbr.normalWorld*.5+.5,1);return;}
+  if(test.mode>=296u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}
+  if(test.mode==253u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}
+  if(test.mode==267u||test.mode==277u){outColor=vec4(pbr.emission,1);return;}
+  if(test.mode>=271u&&test.mode<=274u){outColor=vec4(pbr.normalWorld*.5+.5,1);return;}
+  if(test.mode>=261u&&test.mode<=263u||test.mode==278u||test.mode==279u){outColor=vec4(vec3(pbr.roughness),1);return;}
   if(test.mode==239u||test.mode==241u){outColor=vec4(pbr.roughness,pbr.metallic,pbr.occlusion,1);return;}
   if(test.mode==235u){outColor=vec4(vec3((1.0-pbr.color.g)*100000.0),1);return;}
   if(test.mode==212u||test.mode==213u||test.mode==220u||test.mode==221u||test.mode==236u||test.mode==237u){outColor=vec4(pbr.normalWorld*.5+.5,1);return;}

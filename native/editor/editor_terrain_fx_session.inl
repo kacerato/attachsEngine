@@ -29,19 +29,60 @@ bool EditorSession::handleTerrainFxInput(const ui::UiPointerEvent &event,const u
       (event.phase==ui::UiPointerPhase::Down && id!=terrainFxActionBase+90 && routing.target!=ui::UiPointerTarget::Viewport))) {
     cancel();state_.terrainMessage="Gesto FX cancelado · autoria preservada";
   }
-  if(routing.tapped && id>=terrainFxActionBase && (id<terrainFxActionBase+90 || (id>=terrainFxActionBase+100 && id<=terrainFxActionBase+115))) {
+  if(routing.tapped && id>=terrainFxActionBase && (id<terrainFxActionBase+90 || (id>=terrainFxActionBase+100 && id<=terrainFxActionBase+175))) {
     const auto action=id-terrainFxActionBase;if(state_.terrainBusy || isPlaying())return true;
     cancel();state_.terrainBrushArmed=false;terrainGestureActive_=false;terrainGestureStrokes_.clear();clearTerrainPreview();++terrainFxEpoch_;
     if(action==0){if(!loadTerrainCatalog())return true;initializeTerrainSurface(state_.terrainDraft);state_.terrainTab=2;state_.terrainMaterialView=300;fxUi.mode=0;++terrainFxEpoch_;fxUi.bitmap.reset();
       if(state_.terrainDraft.fx.enabled && terrainFxController_.refresh(state_.terrainDraft.fx,{},error,terrainFxLimits(fxUi)))fxUi.bitmap=terrainFxController_.bitmap();
     }
     else if(action==24 || action==25){state_.terrainMaterialView=action==24?306:307;}
+    else if(action>=120 && action<=175){
+      const auto view=state_.terrainMaterialView;auto recipe=state_.terrainDraft;auto &flow=recipe.surface.flow;bool changed=false;
+      if(action==160 || action==161){if(!loadTerrainCatalog())return true;initializeTerrainSurface(state_.terrainDraft);state_.terrainTab=2;state_.terrainMaterialView=action==160?350:351;fxUi.mode=0;}
+      else if(action==162){if(!flow.rainDrops && (!flow.puddles || !flow.rainDropTexture.texture.valid())){state_.terrainMessage="Ondulações requerem poças ligadas e fonte Rain real";return true;}flow.rainDrops=!flow.rainDrops;changed=true;}
+      else if(action==163){flow.specularFade=!flow.specularFade;changed=true;}
+      else if(action==164)state_.terrainMaterialView=362;
+      else if(action==165)state_.terrainMaterialView=382;
+      else if(action==166){if(!state_.terrainCatalog)return true;const auto *preset=terrainRainPreset(*state_.terrainCatalog);if(!preset){state_.terrainMessage="Fonte Rain original indisponível no catálogo";return true;}flow.rainDropTexture.texture=preset->identity;flow.rainDropTexture.channel=resources::TerrainSurfaceChannel::RGB;flow.rainDropTexture.linear=true;changed=true;}
+      else if(action==167)state_.terrainMaterialView=view==382?362:350;
+      else if(action==168 && view==362){flow.rainDropTexture.invert=!flow.rainDropTexture.invert;changed=true;}
+      else if(action>=170 && action<=175 && view==382){const auto source=terrainCatalogResolve(state_,action-170,false);if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()){state_.terrainMessage="Resultado mudou · selecione novamente";return true;}flow.rainDropTexture.texture=state_.terrainCatalog->textures[source].identity;flow.rainDropTexture.channel=resources::TerrainSurfaceChannel::RGB;flow.rainDropTexture.linear=true;changed=true;}
+      else if(action==120 || action==121){if(!loadTerrainCatalog())return true;initializeTerrainSurface(state_.terrainDraft);state_.terrainTab=2;state_.terrainMaterialView=action==120?330:340;fxUi.mode=0;}
+      else if(action>=122 && action<=126){state_.terrainMaterialView=330+action-122;fxUi.mode=0;}
+      else if(action>=127 && action<=131){constexpr u32 views[]{340,341,343,344,345};state_.terrainMaterialView=views[action-127];fxUi.mode=0;}
+      else if(action==132)state_.terrainMaterialView=342;
+      else if(action==133 || action==134)state_.terrainMaterialView=action==133?360:361;
+      else if(action==135 && terrainFlowMapView(view))state_.terrainMaterialView=terrainFlowLava(view)?381:380;
+      else if(action==136 && terrainFlowPicker(view))state_.terrainMaterialView=terrainFlowLava(view)?361:360;
+      else if(action==137 || action==138){
+        auto &enabled=action==137?flow.streams:flow.lava;const auto &map=action==137?flow.streamNormal:flow.lavaDiffuse;
+        if(!enabled && (!recipe.fx.enabled || !map.texture.valid())){state_.terrainMessage="Máscara FX e fonte packed real são necessárias";return true;}
+        enabled=!enabled;changed=true;
+      } else if(action==139){flow.heightDampStreams=!flow.heightDampStreams;changed=true;}
+      else if(action==140){flow.heightDampLava=!flow.heightDampLava;changed=true;}
+      else if(action==141){flow.perTexFoam=!flow.perTexFoam;changed=true;}
+      else if(action==142){flow.lavaStochastic=!flow.lavaStochastic;changed=true;}
+      else if(action==143 || action==144){
+        if(!state_.terrainCatalog)return true;const auto *preset=terrainFlowPreset(*state_.terrainCatalog,terrainFlowLava(view),action-143);
+        if(!preset){state_.terrainMessage="Fonte original não está disponível no catálogo";return true;}
+        auto &map=terrainFlowMap(recipe.surface,view);map.texture=preset->identity;map.channel=terrainFlowLava(view)?resources::TerrainSurfaceChannel::RGB:resources::TerrainSurfaceChannel::NormalRG;map.linear=true;changed=true;
+      } else if(action==145){state_.terrainMaterialView=terrainFlowLava(view)?340:332;}
+      else if(action==146 && terrainFlowMapView(view)){auto &map=terrainFlowMap(recipe.surface,view);map.invert=!map.invert;changed=true;}
+      else if(action==147 && terrainFlowMapView(view))state_.terrainMaterialView=terrainFlowLava(view)?360:361;
+      else if(action>=150 && action<=155 && terrainFlowPicker(view)){
+        const auto source=terrainCatalogResolve(state_,action-150,false);
+        if(!state_.terrainCatalog || source>=state_.terrainCatalog->textures.size()){state_.terrainMessage="Resultado mudou · selecione novamente";return true;}
+        auto &map=terrainFlowMap(recipe.surface,view);map.texture=state_.terrainCatalog->textures[source].identity;map.channel=terrainFlowLava(view)?resources::TerrainSurfaceChannel::RGB:resources::TerrainSurfaceChannel::NormalRG;map.linear=true;changed=true;
+      }
+      if(changed){if(!resources::validTerrainRecipe(recipe,error)){state_.terrainMessage=error;return true;}state_.terrainDraft=std::move(recipe);queueTerrainPreview();}
+    }
     else if(action>=100 && action<=104){constexpr u32 views[]{310,320,311,312,313};state_.terrainMaterialView=views[action-100];fxUi.mode=0;}
     else if(action>=110 && action<=115){
       auto recipe=state_.terrainDraft;auto &flow=recipe.surface.flow;
       if((action==110 && !flow.wetness) || (action==111 && !flow.puddles) || (action==115 && !flow.wetnessMaskSnow)) {
         if(!recipe.fx.enabled){state_.terrainMessage="Crie ou importe uma máscara FX antes de ligar o material";return true;}
       }
+      if(action==111 && flow.puddles && flow.rainDrops){state_.terrainMessage="Desligue as ondulações antes de desligar poças";return true;}
       if(action==110)flow.wetness=!flow.wetness;else if(action==111)flow.puddles=!flow.puddles;
       else if(action==112)flow.heightWetness=!flow.heightWetness;else if(action==113)flow.distanceWetness=!flow.distanceWetness;
       else if(action==114)flow.perTexPorosity=!flow.perTexPorosity;else flow.wetnessMaskSnow=!flow.wetnessMaskSnow;

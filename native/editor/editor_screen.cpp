@@ -243,7 +243,7 @@ void buildNameWindow(ScreenBuilder &builder) {
     const auto modal=centred(state.surface,std::min(560.0f,state.surface.width-16),std::min(320.0f,state.surface.height-16));
     list.addRect(modal,theme.color.surface,theme.radius.control);
     auto content=deflate(modal,UiInsets::all(8));
-    builder.label(takeTop(content,40),state.renameText,theme.color.text,theme.type.body,UiAlign::Center);
+    builder.label(takeTop(content,40),state.editingTerrainCatalogSearch?std::string_view(state.platformDraft):std::string_view(state.renameText),theme.color.text,theme.type.body,UiAlign::Center);
     const char *keys=state.renameUppercase?"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-. ":"abcdefghijklmnopqrstuvwxyz0123456789_-. ";
     const float cw=content.width/10, ch=content.height/5;
     for(u32 i=0;i<40;++i) {
@@ -11477,7 +11477,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   if(state.animatorOpen) buildAnimatorEditor(builder,layout);
   // A busca global fica sob o teclado interno, que edita o campo dela.
   if(state.globalSearch) buildGlobalSearch(builder);
-  buildNameWindow(builder);
+  if(!state.terrainOpen)buildNameWindow(builder);
   if(state.componentReorder && state.document) {
     const auto *entity=state.document->find(state.selection);
     const auto *value=entity&&state.componentReorder<=entity->components.size()?entity->components.at(state.componentReorder-1):nullptr;
@@ -11618,6 +11618,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     buildTerrainViewport(state,theme,list,router,layout.viewport);
     buildTerrainSurface(state,theme,list,router,terrainPanelRect(state));
   }
+  // Terrain must remain below the text modal, including its hit regions.
+  if(state.terrainOpen)buildNameWindow(builder);
   buildNumericWindow(builder);
   if(state.pickerAdvanced && state.referenceInstance) buildAdvancedReferencePicker(builder);
   if(state.gradientField) buildGradientEditor(builder,layout);

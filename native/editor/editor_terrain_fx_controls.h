@@ -3,6 +3,7 @@
 #include "ui/ui_theme.h"
 #include <memory>
 #include "resources/terrain_fx_asset.h"
+#include "editor/editor_terrain_streams_lava_controls.h"
 namespace ae::editor {
 struct TerrainFxEditorBitmap;
 struct TerrainFxUiState {
@@ -18,7 +19,7 @@ struct TerrainFxUiState {
 constexpr u32 terrainFxActionBase=0xEC002000;
 inline EditorWidget terrainFxAction(u32 action){return EditorWidget(terrainFxActionBase+action);}
 inline bool terrainStaticFlowView(u32 view){return (view>=310 && view<=313) || view==320;}
-inline bool terrainFxView(u32 view){return (view>=300 && view<=303) || view==306 || view==307 || terrainStaticFlowView(view);}
+inline bool terrainFxView(u32 view){return (view>=300 && view<=303) || view==306 || view==307 || terrainStaticFlowView(view) || terrainFlowModuleView(view);}
 inline bool terrainStaticFlowField(u32 field){return field>=336 && field<=349;}
 template<class State>bool terrainStaticFlowNumberAvailable(const State &s,u32 field){
   const auto view=s.terrainMaterialView;

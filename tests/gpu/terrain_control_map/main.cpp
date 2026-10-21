@@ -570,10 +570,10 @@ int main(int argc, char **argv) {
     vkDestroyShaderModule(f.device, frag, nullptr);
   }
   auto expectPixel = [&](uint32_t x, std::array<uint8_t, 4> expected,
-                         const char *label) {
+                         const char *label,int tolerance=3) {
     auto *p = static_cast<uint8_t *>(readback.mapped) + (16 * width + x) * 4;
     for (size_t c = 0; c < 4; ++c)
-      if (std::abs(int(p[c]) - int(expected[c])) > 3) {
+      if (std::abs(int(p[c]) - int(expected[c])) > tolerance) {
         std::fprintf(stderr, "%s at x=%u got RGBA %u,%u,%u,%u\n", label, x,
                      p[0], p[1], p[2], p[3]);
         std::fflush(stderr);
@@ -586,8 +586,8 @@ int main(int argc, char **argv) {
     qi.queryType=VK_QUERY_TYPE_TIMESTAMP;qi.queryCount=2;
     check(vkCreateQueryPool(f.device,&qi,nullptr,&timestamps),"create GPU timestamp queries");
   }
-  std::array<std::vector<uint8_t>,252> modePixels;
-  for (uint32_t mode = 0; mode < 252; ++mode) {
+  std::array<std::vector<uint8_t>,312> modePixels;
+  for (uint32_t mode = 0; mode < 312; ++mode) {
     if(mode==189&&argc!=3)continue;
     if (mode == 29 || mode==50) {
       auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
@@ -919,6 +919,50 @@ int main(int argc, char **argv) {
         if(mode==246)flow.wetnessParams={.5f,.6f,0,0};
         if(mode==247||mode==249){auto &snow=binding.surface.snow;snow.mode=TerrainSnowMode::Simple;snow.amount=.5f;snow.parameters={0,0,1,0};snow.heightAngleRange={-100,-50,0,1};mapSlot(snow.diffuse,0,TerrainSurfaceChannel::RGB);mapSlot(snow.height,3,TerrainSurfaceChannel::A);snow.height.factor=0;mapSlot(snow.normal,7,TerrainSurfaceChannel::NormalGA);snow.normal.factor=0;mapSlot(snow.smoothness,3,TerrainSurfaceChannel::R);snow.smoothness.factor=0;mapSlot(snow.ao,3,TerrainSurfaceChannel::R);if(mode==247)flow.wetnessMaskSnow=true;}
       }
+      if(mode>=252){
+        binding.staticFx.textureIndex=12;binding.staticFx.width=binding.staticFx.height=1;
+        auto &f=binding.surface.flow;f.wetness=f.puddles=f.wetnessMaskSnow=false;f.streams=mode<=263||mode>=278;f.lava=!f.streams;
+        f.streamMaximum=1;f.streamBlend=1;f.streamFlowParams={0,.5f,.3f,.2f};f.streamTint={.5f,.5f,.5f,1};f.globalPorosity=.6f;
+        mapSlot(f.streamNormal,7,TerrainSurfaceChannel::NormalRG);mapSlot(f.lavaDiffuse,7,TerrainSurfaceChannel::RGB);
+        f.lavaParams={4,1,.5f,.275f};f.lavaParams2={.05f,.017f,.15f,0};f.lavaColorLow={1,0,0,1};f.lavaColorHighlight={0,1,0,1};f.lavaEdgeColor={.1f,.2f,.3f,1};f.lavaEmissiveMultiplier=2;
+        if(mode==254)f.streamTint={.25f,.5f,1,1};
+        if(mode==256||mode==257){f.perTexFoam=true;layer.flow.foam=mode==256?0:2;}
+        if(mode==258){f.heightDampStreams=true;f.streamFades={1,2,3,4};}
+        if(mode==259)f.streamMaximum=0;
+        if(mode==260)layer.maps[2].factor=.5f;
+        if(mode==261||mode==262||mode==263||mode==278||mode==279){mapSlot(f.streamNormal,8,TerrainSurfaceChannel::NormalRG);mapSlot(layer.maps[4],8,TerrainSurfaceChannel::R);layer.maps[4].factor=1;f.streamFlowParams={mode==261?0.f:2.f,.5f,.8f,mode==263?1.f:0.f};f.streamUvScales={3,3,70,70};}
+        if(mode==278||mode==279)mapSlot(f.streamNormal,4,TerrainSurfaceChannel::NormalRG); // Real nonlinear R/G strip; roughness remains gradient8.
+        if(mode==265)f.lavaParams2[3]=.5f;
+        if(mode==266)f.lavaParams[0]=1;
+        if(mode==268)f.lavaParams[1]=0;
+        if(mode==269)layer.maps[2].factor=.9f;
+        if(mode==270){f.heightDampLava=true;f.lavaFades={1,2,3,4};}
+        if(mode==271||mode==272||mode==273||mode==274){mapSlot(f.lavaDiffuse,8,TerrainSurfaceChannel::RGB);f.lavaUvScale={3,3,0,0};if(mode==273||mode==274){f.lavaStochastic=true;f.lavaStochasticContrast=mode==273?.5f:2;f.lavaStochasticSize=.8f;}}
+        if(mode==275){f.lava=true;f.puddles=true;f.puddleParams={1,1,0,0};f.lavaParams[1]=0;f.lava=false;f.streams=false;f.puddles=true;}
+        if(mode==276){f.puddles=true;f.puddleParams={1,1,0,0};f.lavaParams[1]=0;}
+        if(mode==277){f.lavaEmissiveMultiplier=0;}
+        if(mode==280||mode==281){f.streamMaximum=mode==280?.25f:.75f;}
+        if(mode==282||mode==283){
+          f.streams=f.lava=true;f.lavaParams[1]=mode==282?1:0;
+          auto &snow=binding.surface.snow;snow.mode=TerrainSnowMode::Simple;snow.amount=.5f;snow.parameters={0,0,1,0};snow.heightAngleRange={-100,-50,0,1};
+          mapSlot(snow.diffuse,0,TerrainSurfaceChannel::RGB);mapSlot(snow.height,3,TerrainSurfaceChannel::A);snow.height.factor=0;mapSlot(snow.normal,7,TerrainSurfaceChannel::NormalGA);snow.normal.factor=0;mapSlot(snow.smoothness,3,TerrainSurfaceChannel::R);snow.smoothness.factor=0;mapSlot(snow.ao,3,TerrainSurfaceChannel::R);
+        }
+      }
+      if(mode>=284&&mode<=301){
+        auto &f=binding.surface.flow;f.wetness=f.streams=f.lava=f.wetnessMaskSnow=false;f.puddles=true;f.puddleParams={2.5f,1,0,0};
+        f.rainDrops=mode!=284;f.rainIntensityScale={mode==285?0.f:mode==287?.5f:1.f,3,0,0};mapSlot(f.rainDropTexture,0,TerrainSurfaceChannel::RGB);
+        if(mode==289)f.puddleParams[1]=0;
+        if(mode==290)f.rainDropTexture.factor=0;
+        if(mode==291){f.rainDropTexture.colorRemapMin[1]=f.rainDropTexture.colorRemapMax[1]=.5f;f.rainDropTexture.colorRemapMin[2]=f.rainDropTexture.colorRemapMax[2]=.5f;}
+        if(mode==292||mode==293){mapSlot(f.rainDropTexture,8,TerrainSurfaceChannel::RGB);f.rainIntensityScale[1]=mode==292?3:9;}
+        if(mode==294)f.rainDropTexture.invert=true;
+        if(mode>=296){
+          f.specularFade=true;f.specularFades={1,2,0,0};layer.maps[5].factor=.6f;
+          if(mode!=301){f.rainDrops=f.puddles=false;binding.staticFx={};f.streamNormal.texture=f.lavaDiffuse.texture=f.rainDropTexture.texture={};}
+          if(mode==299||mode==300)f.specularFades={0,0,0,0};
+        }
+      }
+      if(mode==310||mode==311){auto &f=binding.surface.flow;f.streams=true;f.lava=f.rainDrops=f.specularFade=f.wetness=f.puddles=false;f.heightDampStreams=true;f.streamFades={1,2,3,4};f.streamMaximum=f.streamBlend=1;f.streamFlowParams={2,.5f,.8f,0};mapSlot(f.streamNormal,0,TerrainSurfaceChannel::NormalRG);}
       binding.surface.layers.push_back(layer);
       if (mode == 13 || mode == 15) {
         auto second = layer;
@@ -960,10 +1004,11 @@ int main(int argc, char **argv) {
       require(
           appendTerrainSurfaceTable(binding, slots, published, offset, error),
           error.c_str());
-      if(mode==48||mode==110||mode==181||mode==218||mode==248){
+      if(mode==48||mode==110||mode==181||mode==218||mode==248||mode==281||mode==295){
         require(relocateTerrainSurfaceTable(published,3,error),error.c_str());
         published.insert(published.begin(),12,0.f);offset+=3;
       }
+      if(mode>=296&&mode<=300){auto root=ae::u32(published[5])-1,dir=ae::u32(published[root*4+12])-1,snapshot=ae::u32(published[dir*4+2]);require(published[snapshot*4]==-1&&published[snapshot*4+3]==0,"spec-only placeholder has no valid texture slot or enabled flag");}
       require(published.size() * sizeof(float) <= 16384,
               "surface table fixture fits storage");
       std::memcpy(surfaceRows.mapped, published.data(),
@@ -1030,6 +1075,58 @@ int main(int argc, char **argv) {
     require(bool(evidence), "write real GPU evidence PPM");
     evidence.flush();
     modePixels[mode].assign(rgba,rgba+width*height*4);
+    if(mode==310||mode==311){expectPixel(16,mode==310?std::array<uint8_t,4>{128,128,0,255}:std::array<uint8_t,4>{155,100,0,255},"Refraction height fade uses same world metre domain as coverage, while depth uses material height");continue;}
+    if(mode>=302&&mode<=309){
+      const std::array<std::array<uint8_t,4>,8> expected{{
+        {145,128,0,255},{145,128,0,255},{139,128,0,255},{146,181,0,255},{128,128,0,255},{150,128,0,255},{139,128,0,255},{143,142,0,255}}};
+      expectPixel(16,expected[mode-302],"WORLD source direction is pulled back once into LOCAL Flow phases, with finite vertical fallback");continue;
+    }
+    if(mode>=284){
+      const auto byte=[](double x){return uint8_t(std::lround(std::clamp(x,0.0,1.0)*255));};
+      const auto rainNormal=[&](double intensity,double time){
+        double sum=0;const double frequencies[]{1,.85,.93,1.13},offsets[]{0,.2,.45,.7};
+        for(int i=0;i<4;++i){double phase=(time*frequencies[i]+offsets[i])*1.6;phase-=std::floor(phase);double life=1+phase;life-=std::floor(life);double weight=intensity-i*.25;
+          double amount=std::clamp(.2+weight*.8-life,0.0,1.0)*std::sin(std::clamp(life*9.0,0.0,3.0)*3.14159265359)*std::clamp(weight*4.0,0.0,1.0);sum-=amount;}
+        double xy=sum/std::sqrt(1+2*sum*sum)*intensity*intensity,length=std::sqrt(1+2*xy*xy);
+        return std::array<uint8_t,4>{byte(xy/length*.5+.5),byte(1/length*.5+.5),byte(xy/length*.5+.5),255};
+      };
+      if(mode==284||mode==285||mode==289||mode==290||mode==291||mode==294)expectPixel(16,{128,255,128,255},"Disabled rain, zero intensity/puddle/shape or neutral GB leaves actual normal unchanged");
+      else if(mode==286||mode==287||mode==288||mode==295)expectPixel(16,rainNormal(mode==287?.5:1,mode==288?.125:0),"RGBA lifetime four phase source ripple math reaches actual world normal including relocation");
+      else if(mode==292){} // Spatial UV baseline, actual gradient shape and direction.
+      else if(mode==293)require(modePixels[293]!=modePixels[292],"Rain frequency changes actual packed texture samples");
+      else if(mode==296||mode==299)expectPixel(16,{255,0,64,255},"Spec-only below/coincident height works without any FX texture");
+      else if(mode==297||mode==300)expectPixel(16,{230,77,64,255},"Specular fade scales metallic and smoothness with linear or short source interval");
+      else if(mode==298)expectPixel(16,{204,153,64,255},"Spec-only above range preserves roughness metallic and AO");
+      else if(mode==301)expectPixel(16,{138,77,255,255},"Height specular fade consumes final wet material while preserving AO");
+      continue;
+    }
+    if(mode>=252){
+      const auto byte=[](double v){return uint8_t(std::lround(std::clamp(v,0.0,1.0)*255));};
+      if(mode==282)expectPixel(16,{102,153,0,255},"Combined Stream Lava records clear Snow before mask with independent maximum");
+      else if(mode==283)expectPixel(16,{218,218,218,255},"Stream clearing survives zero Lava and prevents Snow layer");
+      else if(mode==252)expectPixel(16,{218,218,218,255},"Stream B amount reaches source nested water BRDF");
+      else if(mode==253)expectPixel(16,{138,0,179,255},"Stream coverage roughness AO independent from RG normal");
+      else if(mode==254)expectPixel(16,{153,218,255,255},"Stream tint is a real source multiplier");
+      else if(mode==255)expectPixel(16,{221,221,221,255},"Raw B foam responds to slope and global foam strength");
+      else if(mode==256)expectPixel(16,{218,218,218,255},"Per-layer foam zero preserves wet BRDF");
+      else if(mode==257)expectPixel(16,{223,223,223,255},"Per-layer foam2 survives serialization table and shading");
+      else if(mode==258||mode==259||mode==268||mode==269||mode==270)expectPixel(16,{255,255,255,255},"Height window or amount zero disables visual coverage");
+      else if(mode==260)expectPixel(16,{254,254,254,255},"Stream subtracts actual material height before contrast");
+      else if(mode==261){} // Amplitude baseline.
+      else if(mode==278)expectPixel(16,{163,163,163,255},"Nonlinear normal source phase0 gives derived refraction offset .432",2);
+      else if(mode==262||mode==263){require(modePixels[mode]!=modePixels[mode==263?262:261],"Source refraction amplitude or depth damping changes real material samples");}
+      else if(mode==279){require(modePixels[279]!=modePixels[278],"Source time changes nonlinear normal samples and actual refraction");expectPixel(16,{127,127,127,255},"Nonlinear normal source phase.125 gives derived refraction offset .216",2);}
+      else if(mode==264)expectPixel(16,{102,153,0,255},"Lava raw B heat interpolates authored low and high");
+      else if(mode==265)expectPixel(16,{61,92,0,255},"Lava raw A crust darkens actual heat color");
+      else if(mode==266)expectPixel(16,{71,92,112,255},"Partial lava blend retains base and authored edge color");
+      else if(mode==267)expectPixel(16,{204,255,0,255},"Lava emission multiplier reaches actual HDR output");
+      else if(mode==271){} // Static lava normal baseline.
+      else if(mode==272||mode==273||mode==274){require(modePixels[mode]!=modePixels[mode==272?271:mode==273?272:273],"Lava time and real three-sample stochastic size/contrast alter sampled normal");}
+      else if(mode==275||mode==276)expectPixel(16,{239,239,239,255},"Independent puddles survive enabled Lava with zero amount");
+      else if(mode==277)expectPixel(16,{0,0,0,255},"Zero lava emission multiplier is consumed");
+      else if(mode==280||mode==281){double amount=.6*(mode==280?.25:.75);auto c=byte(1-.4*amount*amount);expectPixel(16,{c,c,c,255},"Stream maximum applied once to surface coverage including relocation");}
+      continue;
+    }
     if(mode>=238){
       const auto byte=[](double value){return uint8_t(std::lround(std::clamp(value,0.0,1.0)*255));};
       double amount=mode==240||mode==241?.4:mode==242?.75:mode==243?.1:mode==245?.05:mode==246?.5:mode==250?0:mode==251?1:.2;

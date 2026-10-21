@@ -1017,7 +1017,9 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_fx_recipe.cpp ../tests/native/test_terrain_fx_persistence.cpp
     ../tests/native/test_terrain_surface_v4.cpp ../tests/native/test_terrain_flow_coverage.cpp
     ../tests/native/test_terrain_fx_editor.cpp ../tests/native/test_terrain_static_fx_import.cpp
-    ../tests/native/test_terrain_static_fx_pipeline.cpp ../tests/native/test_terrain_static_fx_table.cpp)
+    ../tests/native/test_terrain_static_fx_pipeline.cpp ../tests/native/test_terrain_static_fx_table.cpp
+    ../tests/native/test_terrain_streams_lava_table.cpp ../tests/native/test_terrain_rain_specular_table.cpp
+    ../tests/native/test_terrain_surface_texture_relocation.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
   add_executable(aether_texture_publication_tests EXCLUDE_FROM_ALL

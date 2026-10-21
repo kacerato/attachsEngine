@@ -29,6 +29,30 @@ template <class State>
 TerrainControlRange terrainControlRange(const State &s, unsigned field) {
   const auto &r = s.terrainDraft;
   TerrainControlRange range{0, 1, 0, true, false};
+  if(terrainFlowField(field)) {
+    if(!terrainFlowNumberAvailable(s,field))return {0,1,0,false};
+    const auto &flow=r.surface.flow;
+    if(field==429)return {0,1,0,true};
+    if(field==430)return {-512,512,0,true};
+    if(field==431){const float high=flow.specularFades[1];return {std::min(-2048.f,high),std::min(2048.f,high),0,true};}
+    if(field==432){const float low=flow.specularFades[0];return {std::max(-2048.f,low),std::max(2048.f,low),0,true};}
+    if((field>=381 && field<=384) || (field>=412 && field<=415)){
+      const auto &fades=field>=412?flow.lavaFades:flow.streamFades;const u32 i=field>=412?field-412:field-381;
+      const float low=i?fades[i-1]:std::min(-2048.f,fades[0]),high=i<3?fades[i+1]:std::max(2048.f,fades[3]);return {low,high,0,true};
+    }
+    if(field==368 || field==374 || field==391)return {0,1,0,true};
+    if(field==385)return {0,2,0,true};
+    if(field==369 || field==390)return {0,64,0,true,true};
+    if(field==375 || field==397)return {0,32,0,true,true};
+    if(field==376 || field==377 || field==399 || field==400)return {-128,128,0,true};
+    if(field==371 || field==373 || field==393 || field==395)return {-2,2,0,true};
+    if(field==370 || field==372 || field==392 || field==394 || field==396)return {-4,4,0,true};
+    if(field==402)return {.0001f,8,0,true,true};
+    if(field==401 || field==398 || field==416)return {0,8,0,true,true};
+    if((field>=378 && field<=380) || (field>=403 && field<=411))return {0,4,0,true};
+    if(field>=417 && field<=420)return {0,4,0,true};
+    return {-1,2,0,true};
+  }
   if(terrainStaticFlowField(field)) {
     if(!terrainStaticFlowNumberAvailable(s,field))return {0,1,0,false};
     const auto &flow=r.surface.flow;

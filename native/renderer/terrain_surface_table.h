@@ -57,9 +57,11 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   const bool snow=binding.surface.snow.mode!=resources::TerrainSnowMode::Off;
   if(snow&&(binding.surface.snow.useGlobalLevel||binding.surface.snow.useGlobalHeight)){error="Snow global flags require an authored runtime controller; no controller source is available.";return false;}
   const auto &flow=binding.surface.flow;
-  const bool fx=flow.wetness||flow.puddles||flow.wetnessMaskSnow;
+  const bool streams=flow.streams,lava=flow.lava,rain=flow.rainDrops,specularFade=flow.specularFade;
+  const bool needsSnapshot=flow.wetness||flow.puddles||streams||lava||flow.wetnessMaskSnow;
+  const bool fx=needsSnapshot||specularFade;
   if(!diagnoseStaticTerrainFlowPublication(binding,error))return false;
-  if(fx&&(!binding.staticFx.enabled||binding.staticFx.textureIndex>=slots.size()||slots[binding.staticFx.textureIndex]==InvalidMapTexture||slots[binding.staticFx.textureIndex]>=16777216u)){
+  if(fx&&binding.staticFx.enabled&&(binding.staticFx.textureIndex>=slots.size()||slots[binding.staticFx.textureIndex]==InvalidMapTexture||slots[binding.staticFx.textureIndex]>=16777216u)){
     error="Static FX requires an immutable snapshot with a valid GPU descriptor.";return false;
   }
   const bool modules=geo||globals||snow||fx;
@@ -81,10 +83,12 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   const bool curve=geo&&binding.surface.geo.curveEnabled;
   const usize snowRow=curveRow+(curve?GeoCurveRows:0),snowLayers=snowRow+SnowRows;
   const usize fxDirectory=snowRow+(snow?SnowRows+binding.surface.layers.size():0);
-  const usize fxSnapshot=fxDirectory+3,fxWetness=fxSnapshot+3,fxPuddles=fxWetness+4,fxLayers=fxPuddles+1;
-  const usize rows=advanced?(modules?(fx?fxLayers+binding.surface.layers.size():fxDirectory):clusterEnd):baseRows;
+  const usize fxEntries=3+(streams?1:0)+(lava?1:0)+(rain?1:0)+(specularFade?1:0);
+  const usize fxSnapshot=fxDirectory+fxEntries,fxWetness=fxSnapshot+3,fxPuddles=fxWetness+4,fxLayers=fxPuddles+1;
+  const usize streamRow=fxLayers+binding.surface.layers.size(),lavaRow=streamRow+(streams?11:0),rainRow=lavaRow+(lava?14:0),specularRow=rainRow+(rain?7:0);
+  const usize rows=advanced?(modules?(fx?specularRow+(specularFade?2:0):fxDirectory):clusterEnd):baseRows;
   if(table.size()%4 || table.size()/4+rows>TerrainSurfaceMaximumRows) {
-    error="Tabela de materiais do terreno excede o orçamento.";return false;
+    error="Tabela de materiais do terreno excede o orÃƒÆ’Ã‚Â§amento.";return false;
   }
   std::vector<float> next(rows*4,0.f);
   next[0]=float(binding.surface.layers.size());next[1]=1;next[4]=binding.localMetersPerUv;
@@ -99,7 +103,7 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
           return t.identity==map.texture && t.normal==normal && t.linear==(normal || map.linear) && (t.normalChannel==packing || (t.normalChannel==0&&(packing==5||packing==6))) && t.residencyCap==cap && t.clampSampling==clampSampling;
         });
         if(entry==binding.textures.end() || entry->textureIndex>=slots.size() || slots[entry->textureIndex]==InvalidMapTexture) {
-          error="Mapa PBR do terreno sem textura ou descritor válido.";return false;
+          error="Mapa PBR do terreno sem textura ou descritor vÃƒÆ’Ã‚Â¡lido.";return false;
         }
         if(slots[entry->textureIndex]>=16777216u){error="Descritor PBR fora do intervalo exato da GPU.";return false;}
         data[0]=float(slots[entry->textureIndex]);
@@ -199,15 +203,15 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
   if(modules){
     const usize absoluteBase=table.size()/4;next[5]=float(absoluteBase+moduleRoot+1);
     float *root=next.data()+moduleRoot*4;
-    root[0]=fx?3:(snow?2:1);root[1]=geo?float(absoluteBase+geoRow):0;root[2]=globals?float(absoluteBase+globalRow):0;root[3]=float(absoluteBase+moduleLayers);
+    root[0]=fx?(rain||specularFade?5:streams||lava?4:3):(snow?2:1);root[1]=geo?float(absoluteBase+geoRow):0;root[2]=globals?float(absoluteBase+globalRow):0;root[3]=float(absoluteBase+moduleLayers);
     root[4]=float(absoluteBase+rows);root[5]=curve?float(absoluteBase+curveRow):0;root[6]=curve?float(GeoCurveSamples):0;
     root[7]=snow?float(absoluteBase+snowRow+1):0;
     std::copy(binding.terrainDomain.begin(),binding.terrainDomain.end(),root+8);
     if(fx){
-      root[12]=float(absoluteBase+fxDirectory+1);root[13]=3;root[14]=1;root[15]=float(absoluteBase+rows);
+      root[12]=float(absoluteBase+fxDirectory+1);root[13]=float(fxEntries);root[14]=1;root[15]=float(absoluteBase+rows);
       for(usize n=0;n<3;++n){float *entry=next.data()+(fxDirectory+n)*4;entry[0]=float(n+1);entry[1]=1;entry[2]=float(absoluteBase+(n==0?fxSnapshot:n==1?fxWetness:fxPuddles));entry[3]=float(n==0?3:n==1?4:1);}
       float *snapshot=next.data()+fxSnapshot*4;
-      snapshot[0]=float(slots[binding.staticFx.textureIndex]);snapshot[1]=float(binding.staticFx.width);snapshot[2]=float(binding.staticFx.height);snapshot[3]=1;
+      snapshot[0]=binding.staticFx.enabled?float(slots[binding.staticFx.textureIndex]):-1.f;snapshot[1]=binding.staticFx.enabled?float(binding.staticFx.width):0;snapshot[2]=binding.staticFx.enabled?float(binding.staticFx.height):0;snapshot[3]=float((binding.staticFx.enabled?1:0)+(streams?2:0)+(lava?4:0));
       std::copy(binding.terrainDomain.begin(),binding.terrainDomain.end(),snapshot+4);
       snapshot[8]=float(absoluteBase+fxLayers);snapshot[9]=float(binding.surface.layers.size());snapshot[11]=float(absoluteBase+rows);
       float *wet=next.data()+fxWetness*4;
@@ -217,6 +221,35 @@ inline bool appendTerrainSurfaceTable(const TerrainSurfaceBinding &binding,
       std::copy(flow.distanceWetnessParams.begin(),flow.distanceWetnessParams.end(),wet+12);
       float *puddle=next.data()+fxPuddles*4;puddle[0]=flow.puddles?1:0;puddle[1]=flow.puddleParams[0];puddle[2]=flow.puddleParams[1];puddle[3]=float((flow.perTexPorosity?1:0)|(flow.wetnessMaskSnow?2:0));
       for(usize n=0;n<binding.surface.layers.size();++n){next[(fxLayers+n)*4]=binding.surface.layers[n].snowPorosity;next[(fxLayers+n)*4+1]=binding.surface.layers[n].flow.foam;}
+      const auto writeRawFlowMap=[&](resources::TerrainSurfaceMap map,float *out){map.channel=resources::TerrainSurfaceChannel::RGB;map.linear=true;return writeMap(map,false,out);};
+      usize entry=3;
+      if(streams){
+        float *directory=next.data()+(fxDirectory+entry++)*4;directory[0]=4;directory[1]=1;directory[2]=float(absoluteBase+streamRow);directory[3]=11;
+        float *out=next.data()+streamRow*4;out[0]=float(1+(flow.heightDampStreams?2:0)+(flow.perTexFoam?4:0));out[1]=flow.streamMaximum;out[2]=flow.streamBlend;
+        std::copy(flow.streamFlowParams.begin(),flow.streamFlowParams.end(),out+4);
+        std::copy(flow.streamNormalFoam.begin(),flow.streamNormalFoam.end(),out+8);
+        std::copy(flow.streamUvScales.begin(),flow.streamUvScales.end(),out+12);
+        std::copy(flow.streamTint.begin(),flow.streamTint.end(),out+16);
+        std::copy(flow.streamFades.begin(),flow.streamFades.end(),out+20);
+        if(!writeRawFlowMap(flow.streamNormal,out+24))return false;
+      }
+      if(lava){
+        float *directory=next.data()+(fxDirectory+entry++)*4;directory[0]=5;directory[1]=1;directory[2]=float(absoluteBase+lavaRow);directory[3]=14;
+        float *out=next.data()+lavaRow*4;out[0]=float(1+(flow.heightDampLava?2:0)+(flow.lavaStochastic?4:0));out[1]=flow.lavaStochasticContrast;out[2]=flow.lavaStochasticSize;out[3]=flow.lavaEmissiveMultiplier;
+        std::copy(flow.lavaParams.begin(),flow.lavaParams.end(),out+4);std::copy(flow.lavaParams2.begin(),flow.lavaParams2.end(),out+8);
+        std::copy(flow.lavaEdgeColor.begin(),flow.lavaEdgeColor.end(),out+12);std::copy(flow.lavaColorLow.begin(),flow.lavaColorLow.end(),out+16);std::copy(flow.lavaColorHighlight.begin(),flow.lavaColorHighlight.end(),out+20);
+        std::copy(flow.lavaUvScale.begin(),flow.lavaUvScale.end(),out+24);std::copy(flow.lavaFades.begin(),flow.lavaFades.end(),out+28);out[32]=flow.lavaDisplacementScale;
+        if(!writeRawFlowMap(flow.lavaDiffuse,out+36))return false;
+      }
+      if(rain){
+        float *directory=next.data()+(fxDirectory+entry++)*4;directory[0]=6;directory[1]=1;directory[2]=float(absoluteBase+rainRow);directory[3]=7;
+        float *out=next.data()+rainRow*4;out[0]=1;std::copy(flow.rainIntensityScale.begin(),flow.rainIntensityScale.end(),out+4);
+        if(!writeRawFlowMap(flow.rainDropTexture,out+8))return false;
+      }
+      if(specularFade){
+        float *directory=next.data()+(fxDirectory+entry++)*4;directory[0]=7;directory[1]=1;directory[2]=float(absoluteBase+specularRow);directory[3]=2;
+        float *out=next.data()+specularRow*4;out[0]=1;std::copy(flow.specularFades.begin(),flow.specularFades.end(),out+4);
+      }
     }
     for(usize i=0;i<binding.surface.layers.size();++i){const auto &layer=binding.surface.layers[i];float *out=next.data()+(moduleLayers+i*ModuleLayerRows)*4;
       out[0]=layer.geoParticipation;out[1]=layer.geoHeightFilterEnabled?1.f:0.f;out[2]=layer.geoHeightThreshold;out[3]=layer.geoHeightStrength;
@@ -333,26 +366,60 @@ inline bool relocateTerrainSurfaceTable(std::vector<float> &part,u32 destination
     const float *root=part.data()+moduleRoot*4;
     const bool curve=root[6]!=0;
     const usize snowRow=curveRow+(curve?GeoCurveRows:0),snowLayers=snowRow+SnowRows;
-    if(root[0]!=(fx?3.f:(snow?2.f:1.f))||root[1]!=(geo?float(geoRow):0.f)||root[2]!=(globals?float(globalRow):0.f)||root[3]!=float(moduleLayers)||root[4]!=float(rows)||
-      root[5]!=(curve?float(curveRow):0.f)||root[6]!=(curve?float(GeoCurveSamples):0.f)||root[7]!=(snow?float(snowRow+1):0.f)||rows!=snowRow+(snow?SnowRows+count:0)+(fx?11+count:0)||(!geo&&curve))return fail();
+    usize entries=3;bool streams=false,lava=false,rain=false,specularFade=false;
+    if(fx){
+      if(!integer(root[13])||root[13]<3||root[13]>7)return fail();entries=usize(root[13]);
+      const usize directory=snowRow+(snow?SnowRows+count:0);
+      if(directory+entries>rows)return fail();
+      float previous=3;for(usize n=3;n<entries;++n){const float type=part[(directory+n)*4];if(type<=previous)return fail();previous=type;if(type==4)streams=true;else if(type==5)lava=true;else if(type==6)rain=true;else if(type==7)specularFade=true;else return fail();}
+      if(entries!=3+(streams?1:0)+(lava?1:0)+(rain?1:0)+(specularFade?1:0))return fail();
+    }
+    if(root[0]!=(fx?(rain||specularFade?5.f:streams||lava?4.f:3.f):(snow?2.f:1.f))||root[1]!=(geo?float(geoRow):0.f)||root[2]!=(globals?float(globalRow):0.f)||root[3]!=float(moduleLayers)||root[4]!=float(rows)||
+      root[5]!=(curve?float(curveRow):0.f)||root[6]!=(curve?float(GeoCurveSamples):0.f)||root[7]!=(snow?float(snowRow+1):0.f)||rows!=snowRow+(snow?SnowRows+count:0)+(fx?entries+8+count+(streams?11:0)+(lava?14:0)+(rain?7:0)+(specularFade?2:0):0)||(!geo&&curve))return fail();
     if(snow){const float *s=part.data()+snowRow*4;if(s[0]!=1||!integer(s[1])||s[1]<1||s[1]>2||!integer(s[2])||s[2]>4095||s[3]!=float(rows)||s[55]!=float(snowLayers))return fail();
       pointers.push_back(moduleRoot*4+7);pointers.push_back(snowRow*4+3);pointers.push_back(snowRow*4+55);}
     if(fx){
-      const usize directory=snowRow+(snow?SnowRows+count:0),snapshot=directory+3,wet=snapshot+3,puddle=wet+4,controls=puddle+1;
-      if(root[12]!=float(directory+1)||root[13]!=3||root[14]!=1||root[15]!=float(rows))return fail();
+      const usize directory=snowRow+(snow?SnowRows+count:0),snapshot=directory+entries,wet=snapshot+3,puddle=wet+4,controls=puddle+1,streamRow=controls+count,lavaRow=streamRow+(streams?11:0),rainRow=lavaRow+(lava?14:0),specularRow=rainRow+(rain?7:0);
+      if(root[12]!=float(directory+1)||root[13]!=float(entries)||root[14]!=1||root[15]!=float(rows))return fail();
       pointers.push_back(moduleRoot*4+12);pointers.push_back(moduleRoot*4+15);
       for(usize n=0;n<3;++n){const float *entry=part.data()+(directory+n)*4;
         if(entry[0]!=float(n+1)||entry[1]!=1||entry[2]!=float(n==0?snapshot:n==1?wet:puddle)||entry[3]!=float(n==0?3:n==1?4:1))return fail();
         pointers.push_back((directory+n)*4+2);
       }
       const float *record=part.data()+snapshot*4;
-      if(!integer(record[0])||record[0]>=16777216||!integer(record[1])||record[1]<1||record[1]>2048||!integer(record[2])||record[2]<1||record[2]>2048||record[3]!=1||record[8]!=float(controls)||record[9]!=float(count)||record[10]!=0||record[11]!=float(rows))return fail();
+      if(!integer(record[3])||record[3]>7||(u32(record[3])&6)!=u32((streams?2:0)+(lava?4:0))||record[8]!=float(controls)||record[9]!=float(count)||record[10]!=0||record[11]!=float(rows))return fail();
+      const bool snapshotProvided=(u32(record[3])&1)!=0;
+      if(snapshotProvided){if(!integer(record[0])||record[0]>=16777216||!integer(record[1])||record[1]<1||record[1]>2048||!integer(record[2])||record[2]<1||record[2]>2048)return fail();}
+      else if(record[0]!=-1||record[1]!=0||record[2]!=0||streams||lava)return fail();
       for(usize n=0;n<4;++n)if(record[4+n]!=root[8+n])return fail();
       for(usize n=0;n<16;++n)if(!std::isfinite(part[wet*4+n]))return fail();
       const float *w=part.data()+wet*4,*p=part.data()+puddle*4;
       for(usize n=0;n<3;++n)if(w[n]!=0&&w[n]!=1)return fail();
       if(w[3]<0||w[3]>1||(w[0]==1&&(w[4]<0||w[5]<w[4]||w[5]>1||(w[2]==1&&(w[14]<=0||w[13]<0||w[13]>1||w[15]<0||w[15]>1))))||!integer(p[0])||p[0]>1||!std::isfinite(p[1])||(p[0]==1&&p[1]<0)||!std::isfinite(p[2])||(p[0]==1&&(p[2]<0||p[2]>1))||!integer(p[3])||p[3]>3)return fail();
+      if(!snapshotProvided&&(w[0]!=0||p[0]!=0||(u32(p[3])&2)!=0))return fail();
+      if(rain&&p[0]!=1)return fail();
       for(usize n=0;n<count;++n){const float *layer=part.data()+(controls+n)*4;if(!std::isfinite(layer[0])||layer[0]<0||layer[0]>1||!std::isfinite(layer[1])||layer[1]<0||layer[1]>2||layer[2]!=0||layer[3]!=0)return fail();}
+      usize entry=3;
+      const auto typedRecord=[&](usize type,usize start,usize length,usize mapOffset){
+        const float *d=part.data()+(directory+entry)*4;
+        if(d[0]!=float(type)||d[1]!=1||d[2]!=float(start)||d[3]!=float(length))return false;
+        for(usize n=0;n<length*4;++n)if(!std::isfinite(part[start*4+n]))return false;
+        const float *r=part.data()+start*4;
+        if(!integer(r[0])||r[0]<1||r[0]>7||(u32(r[0])&1)==0||!integer(r[mapOffset*4])||r[mapOffset*4]>=16777216||r[mapOffset*4+1]!=float(resources::TerrainSurfaceChannel::RGB))return false;
+        if(type==4){if(r[1]<0||r[1]>1||r[2]<0||r[2]>65536||r[3]!=0)return false;}
+        else if(type==5){if(r[1]<0||r[1]>64||r[2]<.0001f||r[2]>65536||r[3]<0||r[3]>65536)return false;}
+        else if(type==6){if(r[0]!=1||r[1]!=0||r[2]!=0||r[3]!=0||r[4]<0||r[4]>1)return false;}
+        pointers.push_back((directory+entry)*4+2);++entry;return true;
+      };
+      if(streams&&!typedRecord(4,streamRow,11,6))return fail();
+      if(lava&&!typedRecord(5,lavaRow,14,9))return fail();
+      if(rain&&!typedRecord(6,rainRow,7,2))return fail();
+      if(specularFade){
+        const float *d=part.data()+(directory+entry)*4,*r=part.data()+specularRow*4;
+        if(d[0]!=7||d[1]!=1||d[2]!=float(specularRow)||d[3]!=2||r[0]!=1||r[1]!=0||r[2]!=0||r[3]!=0)return fail();
+        for(usize n=4;n<8;++n)if(!std::isfinite(r[n]))return fail();if(r[5]<r[4])return fail();
+        pointers.push_back((directory+entry)*4+2);++entry;
+      }
       pointers.push_back(snapshot*4+8);pointers.push_back(snapshot*4+11);
     }
     if(geo&&((part[geoRow*4+7]>.5)!=curve))return fail();

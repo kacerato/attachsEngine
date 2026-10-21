@@ -45,7 +45,7 @@ int main(int argc, char **argv) {
   const std::string_view scenario = argc > 5 ? argv[5] : "lod";
   if (scenario != "lod") {
     if (scenario != "library" && scenario != "layer" && scenario != "maps" &&
-        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off" && scenario!="catalog-search" && scenario!="catalog-empty" && scenario!="map-source" && scenario!="noise-search" && scenario!="global-search" && !scenario.starts_with("snow-") && !scenario.starts_with("fx-") && scenario!="quality" && scenario!="pbr-normal-source" && scenario!="geo-normal-source" && scenario!="global-normal-source" && scenario!="normal-noise-source" && scenario!="variant-normal-source" && scenario!="anti-normal-source")
+        scenario != "paint" && scenario != "noise" && scenario != "noise-source" && scenario != "normal" && scenario != "anti-tile" && scenario != "resample" && scenario != "resample-noise" && scenario != "cluster" && scenario != "variant" && scenario != "variant-maps" && scenario != "cluster-source" && scenario != "variant-picker" && scenario!="geo" && scenario!="geo-range" && scenario!="geo-layer" && scenario!="geo-curve" && scenario!="geo-tangents" && scenario!="geo-axis" && scenario!="geo-albedo-map" && scenario!="geo-normal-map" && scenario!="geo-source" && scenario!="global" && scenario!="global-tint" && scenario!="global-normal" && scenario!="global-saom" && scenario!="global-emission" && scenario!="global-saom-maps" && scenario!="global-normal-map" && scenario!="global-source" && scenario!="geo-curve-signed" && scenario!="geo-curve-empty" && scenario!="geo-curve-single" && scenario!="geo-tangents-signed" && scenario!="geo-fontes" && scenario!="global-empty" && scenario!="geo-curve-off" && scenario!="geo-off" && scenario!="catalog-search" && scenario!="catalog-empty" && scenario!="map-source" && scenario!="noise-search" && scenario!="global-search" && !scenario.starts_with("snow-") && !scenario.starts_with("fx-") && !scenario.starts_with("stream-") && !scenario.starts_with("lava-") && !scenario.starts_with("rain-") && !scenario.starts_with("spec-") && scenario!="quality" && scenario!="pbr-normal-source" && scenario!="geo-normal-source" && scenario!="global-normal-source" && scenario!="normal-noise-source" && scenario!="variant-normal-source" && scenario!="anti-normal-source")
       return 2;
     state.terrainTab = 2;
     state.terrainMaterialView = (scenario == "library" || scenario=="catalog-search" || scenario=="catalog-empty") ? 1u
@@ -154,7 +154,7 @@ int main(int argc, char **argv) {
     if(scenario=="noise-search" || scenario=="global-search")state.terrainCatalogQuery=catalog->textures.back().identity.text();
     // Preview fixtures construct the state directly. Mirror a fresh picker
     // entry, while routed tests separately verify saved-context overrides.
-    if(scenario.starts_with("fx-")) {
+      if(scenario.starts_with("fx-")) {
       state.terrainMaterialView=scenario=="fx-mode"?306:scenario=="fx-channel"?307:scenario=="fx-brush"?301:scenario=="fx-filter"?302:scenario=="fx-budget"?303:300;
       state.terrainFx.mode=scenario=="fx-paint"?1:0;
       if(scenario=="fx-budget")state.terrainFx.resolution=2048;
@@ -171,6 +171,37 @@ int main(int argc, char **argv) {
       auto &flow=state.terrainDraft.surface.flow;
       if(scenario=="fx-wetness-empty"){state.terrainDraft.fx={};state.terrainFx.bitmap.reset();}
       else {flow.wetness=true;flow.puddles=scenario=="fx-puddle";flow.heightWetness=scenario=="fx-wet-height";flow.distanceWetness=scenario=="fx-wet-distance";flow.perTexPorosity=scenario=="fx-porosity";}
+    }
+    if(scenario.starts_with("stream-") || scenario.starts_with("lava-")) {
+      const bool lava=scenario.starts_with("lava-");
+      const auto suffix=scenario.substr(lava?5:7);
+      const u32 view=suffix=="main" || suffix=="empty"?(lava?340:330):suffix=="flow"?(lava?341:331):suffix=="foam"?332:suffix=="height"?(lava?344:333):suffix=="uv"?(lava?345:334):suffix=="map"?(lava?361:360):suffix=="source"?(lava?381:380):suffix=="distortion"?342:suffix=="colors"?343:0;
+      if(!view)return 2;state.terrainMaterialView=view;state.terrainFx.mode=0;
+      auto &flow=state.terrainDraft.surface.flow;
+      const auto *original=editor::terrainFlowPreset(*catalog,lava,0);if(!original){std::fprintf(stderr,"missing original packed Flow catalog source\n");return 3;}
+      auto &map=editor::terrainFlowMap(state.terrainDraft.surface,view);
+      if(suffix!="empty") {
+        resources::TerrainFxAsset fx;fx.enabled=true;fx.width=fx.height=64;const double size=state.terrainDraft.size;fx.domain={-size*.5,-size*.5,size,size};
+        resources::TerrainFxStroke stroke;stroke.identity=1;stroke.gesture=1;stroke.channel=lava?resources::TerrainFxChannel::Lava:resources::TerrainFxChannel::Stream;stroke.target=.8;stroke.sampleSeconds=.2;stroke.radiusMeters=size*.25;fx.strokes.push_back(stroke);
+        std::string error;std::shared_ptr<const editor::TerrainFxEditorBitmap> bitmap;if(!editor::TerrainFxEditorController::prepareBitmap(fx,{},nullptr,bitmap,error))return 4;
+        state.terrainDraft.fx=std::move(fx);state.terrainFx.bitmap=std::move(bitmap);map.texture=original->identity;map.channel=lava?resources::TerrainSurfaceChannel::RGB:resources::TerrainSurfaceChannel::NormalRG;map.linear=true;
+        if(lava){flow.lava=true;flow.heightDampLava=true;flow.lavaStochastic=true;}else{flow.streams=true;flow.heightDampStreams=true;flow.perTexFoam=true;}
+      }
+    }
+    if(scenario.starts_with("rain-") || scenario.starts_with("spec-")) {
+      const bool spec=scenario.starts_with("spec-");
+      if(spec){if(scenario!="spec-height" && scenario!="spec-coincident")return 2;state.terrainMaterialView=351;state.terrainDraft.fx={};state.terrainDraft.surface.flow.specularFade=true;if(scenario=="spec-coincident")state.terrainDraft.surface.flow.specularFades={25,25,0,0};}
+      else {
+        if(scenario!="rain-main" && scenario!="rain-empty" && scenario!="rain-map" && scenario!="rain-source")return 2;
+        state.terrainMaterialView=scenario=="rain-map"?362:scenario=="rain-source"?382:350;
+        if(scenario!="rain-empty"){
+          const auto *original=editor::terrainRainPreset(*catalog);if(!original)return 3;
+          auto &flow=state.terrainDraft.surface.flow;flow.puddles=true;flow.rainDrops=true;flow.rainIntensityScale[0]=.7f;flow.rainDropTexture.texture=original->identity;flow.rainDropTexture.channel=resources::TerrainSurfaceChannel::RGB;flow.rainDropTexture.linear=true;
+          resources::TerrainFxAsset fx;fx.enabled=true;fx.width=fx.height=64;const double size=state.terrainDraft.size;fx.domain={-size*.5,-size*.5,size,size};
+          resources::TerrainFxStroke stroke;stroke.identity=1;stroke.gesture=1;stroke.channel=resources::TerrainFxChannel::Puddle;stroke.target=.8;stroke.sampleSeconds=.2;stroke.radiusMeters=size*.25;fx.strokes.push_back(stroke);
+          std::string error;std::shared_ptr<const editor::TerrainFxEditorBitmap> bitmap;if(!editor::TerrainFxEditorController::prepareBitmap(fx,{},nullptr,bitmap,error))return 4;state.terrainDraft.fx=std::move(fx);state.terrainFx.bitmap=std::move(bitmap);
+        }
+      }
     }
     if(editor::terrainCatalogSearchView(state.terrainMaterialView))state.terrainCatalogRoleFilter=editor::terrainCatalogDefaultRole(state.terrainMaterialView,state.terrainMapRole);
     state.terrainMessage = "Materiais originais · confira a prévia e aplique";
@@ -203,7 +234,7 @@ int main(int argc, char **argv) {
   } else {
     const bool compactModule=(panel.height<400 || editor::terrainFxView(state.terrainMaterialView)) && state.terrainMaterialView!=0;
     if(compactModule) {
-      for(u32 action:(scenario.starts_with("fx-")?std::vector<u32>{61}:std::vector<u32>{61,62,63})) if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action)))) return 4;
+      for(u32 action:((scenario.starts_with("fx-") || scenario.starts_with("stream-") || scenario.starts_with("lava-") || scenario.starts_with("rain-") || scenario.starts_with("spec-"))?std::vector<u32>{61}:std::vector<u32>{61,62,63})) if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action)))) return 4;
     } else if (!reachable.contains(
             editor::widgetId(editor::EditorWidget::TerrainMaterialLibrary)) ||
         !reachable.contains(
@@ -289,6 +320,21 @@ int main(int argc, char **argv) {
   if(scenario=="global-saom-maps")for(u32 field:{222u,223u,224u})if(!requireField(field))return 4;
   if(scenario=="geo-curve-empty" && !reachable.contains(editor::widgetId(editor::terrainModuleAction(42)))) return 4;
   if(scenario=="geo-fontes")for(u32 action:{1u,2u,3u,4u,9u,10u,11u})if(!reachable.contains(editor::widgetId(editor::terrainModuleAction(action))))return 4;
+  if(scenario.starts_with("rain-") || scenario.starts_with("spec-")) {
+    const auto view=state.terrainMaterialView;
+    for(u32 field=416;field<=432;++field)if(editor::terrainFlowNumberAvailable(state,field) && !requireSnowField(field))return 4;
+    if(view==382 && (state.terrainCatalogRoleFilter!=10 || !reachable.contains(editor::terrainFxActionBase+170)))return 4;
+    if(view==350 || view==351){state.terrainScroll=0;render();bool first=false;const auto content=editor::terrainContentRect(state,panel);const auto slider=editor::terrainSnowSliderBase+(view==350?173:175);for(float y=content.y;y<content.bottom();y+=4)for(float x=content.x;x<content.right();x+=4)first=first || router.hitTest({x,y}).widgetId==slider;if(!first)return 4;}
+    if(view==351 && state.terrainDraft.fx.enabled)return 4;
+  }
+  if(scenario.starts_with("stream-") || scenario.starts_with("lava-")) {
+    const auto view=state.terrainMaterialView;
+    for(u32 field=368;field<=428;++field)if(editor::terrainFlowNumberAvailable(state,field) && !requireSnowField(field))return 4;
+    if(view==380 || view==381){if(state.terrainCatalogRoleFilter!=(view==380?8u:9u) || !reachable.contains(editor::terrainFxActionBase+150))return 4;}
+    if(view==330 || view==340){state.terrainScroll=0;render();bool first=false;const auto content=editor::terrainContentRect(state,panel);const auto slider=editor::terrainSnowSliderBase+(view==330?112:134)+0x100;for(float y=content.y;y<content.bottom();y+=4)for(float x=content.x;x<content.right();x+=4)first=first || router.hitTest({x,y}).widgetId==slider;if(!first)return 4;}
+    if(view==360 || view==361)for(u32 action:{103u,104u,105u})if(!reachable.contains(editor::widgetId(editor::terrainSnowAction(action))))return 4;
+    if(view==360)for(u32 field:{420u,424u,428u})if(reachable.contains(editor::terrainSnowNumberBase+field-256))return 4;
+  }
   if(scenario.starts_with("fx-")) {
     if(!editor::terrainStaticFlowView(state.terrainMaterialView)){
       if(panel.height<400){if(!reachable.contains(editor::terrainFxActionBase+24) || !reachable.contains(editor::terrainFxActionBase+25))return 4;}

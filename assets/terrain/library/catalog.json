@@ -2924,6 +2924,121 @@
       },
       "packing": "channels-preserved",
       "normal_ga_raw_preserved": false
+    },
+    {
+      "id": "36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25",
+      "guid": "04426e150438d48e19ee055632fedf02",
+      "source": "sources/36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25.png",
+      "source_path": "Packages/com.jbooth.microsplat.streams/Textures/microsplat_def_streamfoam.png",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25",
+      "runtime": "textures/36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25.png",
+      "runtime_sha256": "a802c61cfce1e22f2c85d4e18162a67f2b82382754241a069001be026cfe923c",
+      "runtime_id": "a802c61cfce1e22f2c85d4e18162a67f2b82382754241a069001be026cfe923c",
+      "dimensions": [
+        512,
+        512
+      ],
+      "source_mode": "RGB",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/36c7dafbeb8063adabd0e6dbe33050473ed26f2d717659fe2e17d569c9024f25.png",
+      "profiles": {},
+      "source_roles": {
+        "normal": "RG/linear/raw-packed",
+        "foam": "B/linear",
+        "stream_normal_foam": "RGB/linear/raw-packed"
+      },
+      "packing": "channels-preserved",
+      "color_space": "linear",
+      "raw_channels_preserved": true
+    },
+    {
+      "id": "6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d",
+      "guid": "aca95408547244a2b8760b8425b5b0fc",
+      "source": "sources/6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d.tga",
+      "source_path": "Packages/com.jbooth.microsplat.streams/Textures/microsplat_def_raindrops.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d",
+      "runtime": "textures/6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d.png",
+      "runtime_sha256": "00d0bbdfd576245dfae7331876c2b9540205e01ab88141785e52c339af0a2f30",
+      "runtime_id": "00d0bbdfd576245dfae7331876c2b9540205e01ab88141785e52c339af0a2f30",
+      "dimensions": [
+        256,
+        256
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/6bfc4b0da37610c32e499bd387ccffd2724890a6db15cdabcf8344b5963ba17d.png",
+      "profiles": {},
+      "source_roles": {
+        "drop_shape_lifetime": "R/linear",
+        "ripple_direction": "GB/linear",
+        "phase": "A/linear",
+        "rain_drop_shape_direction_phase": "RGBA/linear/raw-packed"
+      },
+      "packing": "channels-preserved",
+      "color_space": "linear",
+      "raw_channels_preserved": true
+    },
+    {
+      "id": "1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c",
+      "guid": "a6a8d659d589c4119a3afbd07e10a776",
+      "source": "sources/1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c.tga",
+      "source_path": "Packages/com.jbooth.microsplat.streams/Textures/microsplat_def_lava_01.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c",
+      "runtime": "textures/1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c.png",
+      "runtime_sha256": "831764830969e1e893bfb04cd2278ce33fc3cd381ea057799e35e6c4e900409f",
+      "runtime_id": "831764830969e1e893bfb04cd2278ce33fc3cd381ea057799e35e6c4e900409f",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/1870d43c24fb49bb7550c22f496a23ed81ed60b63c4c0936a7d8d69dc486289c.png",
+      "profiles": {},
+      "source_roles": {
+        "normal_distortion": "RG/linear",
+        "heat_interpolation": "B/linear",
+        "crust_darkening": "A/linear",
+        "lava_distortion_heat_crust": "RGBA/linear/raw-packed"
+      },
+      "packing": "channels-preserved",
+      "color_space": "linear",
+      "raw_channels_preserved": true
+    },
+    {
+      "id": "12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7",
+      "guid": "2d2978ad3535f45649b30977cb570eb8",
+      "source": "sources/12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7.tga",
+      "source_path": "Packages/com.jbooth.microsplat.streams/Textures/microsplat_def_lava_02.tga",
+      "package": "MicroSplat - Terrain Collection v3.9.41.unitypackage",
+      "archive_sha256": "071cbf56ceebf0dc9e2edd8e1bec2ed8219315772808fa9d78406305949a6772",
+      "source_sha256": "12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7",
+      "runtime": "textures/12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7.png",
+      "runtime_sha256": "71fd06126d566044f8eb14c5f6229f764032f12f8ca79a64b48e78c213d7f518",
+      "runtime_id": "71fd06126d566044f8eb14c5f6229f764032f12f8ca79a64b48e78c213d7f518",
+      "dimensions": [
+        1024,
+        1024
+      ],
+      "source_mode": "RGBA",
+      "runtime_mode": "RGBA",
+      "thumbnail": "thumbnails/12768441ddd7ce7e1fc71abb0a1c00246f8945a514f6563a1fd16b095ca503b7.png",
+      "profiles": {},
+      "source_roles": {
+        "normal_distortion": "RG/linear",
+        "heat_interpolation": "B/linear",
+        "crust_darkening": "A/linear",
+        "lava_distortion_heat_crust": "RGBA/linear/raw-packed"
+      },
+      "packing": "channels-preserved",
+      "color_space": "linear",
+      "raw_channels_preserved": true
     }
   ],
   "materials": [

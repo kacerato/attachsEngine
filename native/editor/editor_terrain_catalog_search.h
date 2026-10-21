@@ -10,11 +10,12 @@ inline EditorWidget terrainCatalogAction(u32 action) {return EditorWidget(terrai
 inline bool terrainCatalogMaterialScope(u32 view) {return view==1 || (view>=80 && view<=82);}
 inline bool terrainCatalogSearchView(u32 view) {
   return terrainCatalogMaterialScope(view) || view==190 || terrainNoisePicker(view) ||
-    (view>=90 && view<=92) || (view>=220 && view<=227) || view==150 || view==151 || (view>=180 && view<=183);
+    (view>=90 && view<=92) || (view>=220 && view<=227) || view==150 || view==151 || (view>=180 && view<=183) || terrainFlowPicker(view);
 }
 // A new picker starts from an unequivocal authored role. Saved context,
 // including an explicit All selection, always wins over this default.
 inline u32 terrainCatalogDefaultRole(u32 view,u32 mapRole) {
+  if(terrainFlowPicker(view))return terrainFlowRain(view)?10:terrainFlowLava(view)?9:8;
   if((view==190 || (view>=90 && view<=92)) && mapRole==1)return 2;
   if(view==151 || view==181 || view==222 || view==225)return 2;
   if(terrainNoisePicker(view) && terrainNoiseNormal(view))return 2;
@@ -76,11 +77,11 @@ inline std::vector<u32> terrainCatalogComputeIndices(const EditorScreenState &s,
   }
   if(!word.empty())words.push_back(editorSearchKey(word));
   const auto matches=[&](std::string text){u8 rank=0;return editorSearchWords(editorSearchKey(text),words,rank);};
-  const auto role=std::min(s.terrainCatalogRoleFilter,7u);
+  const auto role=std::min(s.terrainCatalogRoleFilter,10u);
   const auto materialAllowed=[&](const resources::TerrainCatalogMaterial &m){return
     (s.terrainCatalogPackageFilter.empty() || m.package==s.terrainCatalogPackageFilter) &&
-    (!role || m.layer.maps[role-1].texture.valid() ||
-      std::any_of(m.layer.cluster.variants.begin(),m.layer.cluster.variants.end(),[&](const auto &v){return v.maps[role-1].texture.valid();}));};
+    (!role || (role<=7 && (m.layer.maps[role-1].texture.valid() ||
+      std::any_of(m.layer.cluster.variants.begin(),m.layer.cluster.variants.end(),[&](const auto &v){return v.maps[role-1].texture.valid();}))));};
   if(material) {
     for(u32 i=0;i<c.materials.size();++i){const auto &m=c.materials[i];
       if(materialAllowed(m) && matches(m.id+" "+m.layer.name+" "+m.package+" "+m.sourcePath))result.push_back(i);}
@@ -91,7 +92,7 @@ inline std::vector<u32> terrainCatalogComputeIndices(const EditorScreenState &s,
       bool allowed=!role || (t.roleMask&(1u<<(role-1)));
       // Legacy textures lack source_roles. Derive only their actual authored
       // map roles; never infer role/packing or origin from file names.
-      if(!allowed && t.roleMask==0)for(const auto &m:c.materials){
+      if(!allowed && t.roleMask==0 && role<=7)for(const auto &m:c.materials){
         allowed=m.layer.maps[role-1].texture==t.identity;
         for(const auto &v:m.layer.cluster.variants)allowed=allowed || v.maps[role-1].texture==t.identity;
         if(allowed)break;

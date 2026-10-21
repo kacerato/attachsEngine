@@ -75,6 +75,7 @@ template<class State> bool terrainSnowMeasuredPreview(const State &s){
 }
 template<class Surface> auto *terrainCurrentAuthoredMap(Surface &surface,u32 layer,u32 view,u32 role){
   using Pointer=decltype(&surface.snow.diffuse);
+  if(terrainFlowMapView(view))return &terrainFlowMap(surface,view);
   if(terrainSnowMapView(view))return &terrainSnowMap(surface.snow,terrainSnowMapRole(view));
   if(layer>=surface.layers.size())return Pointer(nullptr);
   if(view==3)return &surface.layers[layer].maps[std::min(role,6u)];

@@ -40,7 +40,7 @@ class TerrainFlowAssets(unittest.TestCase):
                     self.assertEqual(png.tobytes(), source.convert("RGBA").tobytes())
                 with Image.open(output / record["thumbnail"]) as thumb:
                     self.assertEqual(thumb.size, (160, 160))
-            self.assertEqual(records[0]["source_roles"], {"normal": "RG/linear/normal-filtered", "foam": "B/linear"})
+            self.assertEqual(records[0]["source_roles"], {"normal": "RG/linear/raw-packed", "foam": "B/linear", "stream_normal_foam": "RGB/linear/raw-packed"})
             self.assertEqual(records[1]["source_roles"]["ripple_direction"], "GB/linear")
             self.assertEqual(records[2]["source_roles"]["crust_darkening"], "A/linear")
             def snapshot():

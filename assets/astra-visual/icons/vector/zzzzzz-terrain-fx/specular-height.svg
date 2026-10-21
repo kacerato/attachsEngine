@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="384" height="384">
+  <title>Brilho por altura</title>
+  <g fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="15,83 15,14"/>
+    <polyline points="7,24 15,14 23,24"/>
+    <polyline points="29,79 84,79"/>
+    <polyline points="29,62 68,62"/>
+    <polyline points="29,45 49,45"/>
+    <polyline points="68,12 72,26 86,30 72,34 68,48 64,34 50,30 64,26 68,12"/>
+    <polyline points="83,48 83,57"/>
+    <polyline points="79,52 87,52"/>
+  </g>
+</svg>

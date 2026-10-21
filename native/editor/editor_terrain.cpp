@@ -44,6 +44,7 @@ std::array<std::vector<u8>, 4> textures() {
 double number(const EditorScreenState &s, u32 i) {
   const auto &r = s.terrainDraft;
   const auto &b = s.terrainBrush;
+  if(terrainFlowField(i)){if(const auto *v=terrainFlowNumber(r.surface,b.layer,s.terrainMaterialView,i))return *v;}
   if(terrainStaticFlowField(i)){
     if(i==343)return s.terrainDraft.surface.flow.distanceWetnessParams[0]+s.terrainDraft.surface.flow.distanceWetnessParams[2];
     if(const auto *v=terrainStaticFlowNumber(s.terrainDraft.surface,b.layer,i))return *v;
@@ -1000,6 +1001,12 @@ bool EditorSession::openTerrain(EditorEntityId target) {
   return true;
 }
 bool EditorSession::setTerrainNumber(u32 field, double value) {
+  if(terrainFlowField(field)) {
+    if(!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) || !terrainFlowNumberAvailable(state_,field) || terrainFxController_.active())return false;
+    auto recipe=state_.terrainDraft;auto *target=terrainFlowNumber(recipe.surface,state_.terrainBrush.layer,state_.terrainMaterialView,field);if(!target)return false;*target=float(value);
+    std::string error;if(!resources::validTerrainRecipe(recipe,error)){state_.terrainMessage=error;return false;}
+    state_.terrainDraft=std::move(recipe);state_.terrainMessage="Fluxo estático ajustado · prévia antes de aplicar";queueTerrainPreview();return true;
+  }
   if(terrainStaticFlowField(field)) {
     if(!state_.terrainOpen || state_.terrainBusy || !std::isfinite(value) || !terrainStaticFlowNumberAvailable(state_,field) || terrainFxController_.active())return false;
     auto recipe=state_.terrainDraft;auto &distance=recipe.surface.flow.distanceWetnessParams;
@@ -1822,8 +1829,8 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
   }
   if (!state_.terrainOpen)
     return false;
-  if(handleTerrainFxInput(event,routing))return true;
   TerrainCatalogContextGuard catalogContext(state_);
+  if(handleTerrainFxInput(event,routing))return true;
   if (routing.tapped && (id == widgetId(EditorWidget::NavigationOrbit) ||
                          id == widgetId(EditorWidget::NavigationPan) ||
                          id == widgetId(EditorWidget::NavigationZoom))) {
@@ -2214,7 +2221,7 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     return true;
   }
   const bool terrainControl = (id >= base && id < base + 0x2000) ||
-      (id >= terrainFxActionBase && id <= terrainFxActionBase + 115);
+      (id >= terrainFxActionBase && id <= terrainFxActionBase + 175);
   if(id>=terrainSnowSliderBase && id<terrainSnowSliderBase+0x300 && !state_.terrainBusy) {
     const auto encoded=id-terrainSnowSliderBase,field=256+encoded%0x100,column=encoded/0x100;
     const auto range=terrainControlRange(state_,field);if(!range.enabled)return true;
@@ -2371,9 +2378,9 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     } else state_.terrainMessage=error;
     return true;
   }
-  if(id>=terrainSnowNumberBase && id<terrainSnowNumberBase+96) {
+  if(id>=terrainSnowNumberBase && id<terrainSnowNumberBase+192) {
     const auto field=256+id-terrainSnowNumberBase;
-    if(!terrainStaticFlowNumberAvailable(state_,field) && !terrainFxNumberAvailable(state_,field) && !terrainSnowNumberAvailable(state_,field))return true;
+    if(!terrainFlowNumberAvailable(state_,field) && !terrainStaticFlowNumberAvailable(state_,field) && !terrainFxNumberAvailable(state_,field) && !terrainSnowNumberAvailable(state_,field))return true;
     state_.numericField=id;state_.numericEntity=state_.terrainTarget;state_.numericInstance=0;state_.numericProperty.clear();
     state_.numericCurrent=number(state_,field);std::snprintf(state_.numericText,sizeof(state_.numericText),"%.9g",state_.numericCurrent);
     state_.numericReplace=true;state_.numericError=false;return true;
@@ -2388,10 +2395,10 @@ bool EditorSession::handleTerrainInput(const ui::UiPointerEvent &event,
     if(!terrainCatalogSearchView(state_.terrainMaterialView))return true;
     if(action==0) {
       state_.editingTerrainCatalogSearch=true;
-      std::snprintf(state_.renameText,sizeof(state_.renameText),"%s",state_.terrainCatalogQuery.c_str());return true;
+      state_.platformDraft=state_.terrainCatalogQuery;return true;
     }
     if(action==1)state_.terrainCatalogQuery.clear();
-    else if(action==2)state_.terrainCatalogRoleFilter=(state_.terrainCatalogRoleFilter+1)%8;
+    else if(action==2)state_.terrainCatalogRoleFilter=terrainFlowPicker(state_.terrainMaterialView)?(terrainFlowRain(state_.terrainMaterialView)?(state_.terrainCatalogRoleFilter==10?0:10):(state_.terrainCatalogRoleFilter==8?9:state_.terrainCatalogRoleFilter==9?0:8)):(state_.terrainCatalogRoleFilter+1)%8;
     else if(action==3) {
       const auto packages=terrainCatalogPackages(state_);
       const auto found=std::find(packages.begin(),packages.end(),state_.terrainCatalogPackageFilter);

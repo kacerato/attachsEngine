@@ -51,6 +51,9 @@ std::string terrainMaterialContext(const EditorScreenState &s) {
     if(view==206)return "Neve · Altura e inclinação";if(view==207)return "Neve · Ruído normal";if(view==208)return "Neve · Distância";
     if(view==209)return "Neve · Brilho";if(view==245)return "Neve · Transmissão SSS";return "Neve · Luz de borda";
   }
+  if(view==351)return "Brilho por altura";
+  if(terrainFlowRain(view))return view==382?"Chuva · Fonte packed":view==362?"Chuva · Dados packed":"Chuva";
+  if(terrainFlowModuleView(view))return terrainFlowPicker(view)?(terrainFlowLava(view)?"Lava · Fonte packed":"Corrente · Fonte packed"):terrainFlowMapView(view)?(terrainFlowLava(view)?"Lava · Dados packed":"Corrente · Dados packed"):terrainFlowLava(view)?"Lava":"Corrente";
   if(terrainStaticFlowView(view))return view==320?"FX · Poças por altura":view==311?"Umidade · Altura mundial":view==312?"Umidade · Distância":view==313?"FX · Porosidade do material":"FX · Umidade estática";
   if(terrainFxView(view))return view==306?"Modo da pintura":view==307?"Canal da máscara":"Pintura FX";
   if(view==240)return "Qualidade · Texturas";
@@ -92,7 +95,7 @@ bool compactTerrainModule(const EditorScreenState &s,const UiRect &area) {
   return (compact(area) || terrainFxView(s.terrainMaterialView)) && s.terrainTab==2 && s.terrainMaterialView!=0 && !s.terrainBusy && s.terrainBrush.layer<s.terrainDraft.surface.layers.size();
 }
 bool compactTerrainFx(const EditorScreenState &s,const UiRect &area) {
-  return compact(area) && compactTerrainModule(s,area) && terrainFxView(s.terrainMaterialView) && !terrainStaticFlowView(s.terrainMaterialView);
+  return compact(area) && compactTerrainModule(s,area) && terrainFxView(s.terrainMaterialView) && !terrainStaticFlowView(s.terrainMaterialView) && !terrainFlowModuleView(s.terrainMaterialView);
 }
 float baseContentHeight(const EditorScreenState &s) {
   constexpr float padding = 12;
@@ -198,8 +201,16 @@ float baseContentHeight(const EditorScreenState &s) {
 }
 float contentHeight(const EditorScreenState &s) {
   const bool deep=compactTerrainModule(s,terrainPanelRect(s));
+  if(s.terrainTab==2 && terrainFlowModuleView(s.terrainMaterialView)){
+    const auto view=s.terrainMaterialView;float height=330;
+    if(view==350)height=330;if(view==351)height=250;
+    if(view==330)height=390;if(view==331)height=220;if(view==332)height=390;if(view==333 || view==344)height=360;if(view==334)height=140;
+    if(view==340)height=280;if(view==341)height=220;if(view==342)height=300;if(view==343)height=700;if(view==345)height=s.terrainDraft.surface.flow.lavaStochastic?360:210;
+    if(terrainFlowMapView(view))height=((terrainFlowLava(view) || terrainFlowRain(view))?1232:1000)+186;if(terrainFlowPicker(view))height=400;
+    return height+(deep?0:274);
+  }
   if(s.terrainTab==2 && terrainStaticFlowView(s.terrainMaterialView))return (deep?0.f:274.f)+(s.terrainMaterialView==311?390.f:s.terrainMaterialView==312?370.f:270.f);
-  if(s.terrainTab==2 && terrainFxView(s.terrainMaterialView))return (deep?0.f:274.f)+(s.terrainMaterialView==300?360.f:s.terrainMaterialView==301?350.f:s.terrainMaterialView==302?290.f:260.f);
+  if(s.terrainTab==2 && terrainFxView(s.terrainMaterialView))return (deep?0.f:274.f)+(s.terrainMaterialView==300?424.f:s.terrainMaterialView==301?350.f:s.terrainMaterialView==302?290.f:260.f);
   if(s.terrainTab==2 && terrainSnowView(s.terrainMaterialView)) {
     const auto view=s.terrainMaterialView;float height=700;
     if(view==200)height=520;if(view==201)height=552;if(view==202)height=520;if(view==203)height=340;
@@ -219,7 +230,7 @@ float contentHeight(const EditorScreenState &s) {
   const bool search=s.terrainTab==2 && terrainCatalogSearchView(s.terrainMaterialView);
   return baseContentHeight(s)+(search?64.f:0.f)+(search && !terrainCatalogCount(s,terrainCatalogMaterialScope(s.terrainMaterialView))?32.f:0.f)+
     (s.terrainTab==2 && s.terrainMaterialView==3?44.f:0.f)+
-    (s.terrainTab==2 && !deep?40.f:0.f)+(s.terrainTab==2 && s.terrainMaterialView==0?40.f:0.f)+(s.terrainTab==2 && terrainCurrentAuthoredMap(s)?186.f:0.f);
+    (s.terrainTab==2 && !deep?40.f:0.f)+(s.terrainTab==2 && s.terrainMaterialView==0?72.f:0.f)+(s.terrainTab==2 && terrainCurrentAuthoredMap(s)?186.f:0.f);
 }
 } // namespace
 UiRect terrainPanelRect(const EditorScreenState &s) {
@@ -495,7 +506,13 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     const auto &layer=s.terrainDraft.surface.layers[current];
     if(!terrainFxView(s.terrainMaterialView))button({selected.x,selected.y,32,32},"<",terrainModuleAction(62));
     if(!terrainFxView(s.terrainMaterialView))button({selected.right()-32,selected.y,32,32},">",terrainModuleAction(63));
-    if(terrainStaticFlowView(s.terrainMaterialView)) {
+    if(terrainFlowRain(s.terrainMaterialView) || s.terrainMaterialView==351) {
+      const char *names[]{"Chuva","Brilho","Poças"};const u32 actions[]{160,161,101};const UiIcon icons[]{UiIcon::ZzzzzzTerrainFxRain,UiIcon::ZzzzzzTerrainFxSpecularHeight,UiIcon::ZzzzTerrainFxPuddle};
+      for(u32 i=0;i<3;++i)button({selected.x+selected.width*i/3,selected.y,selected.width/3,32},names[i],terrainFxAction(actions[i]),i==0?terrainFlowRain(s.terrainMaterialView):i==1?s.terrainMaterialView==351:false,true,icons[i]);
+    } else if(terrainFlowModuleView(s.terrainMaterialView)) {
+      const char *names[]{"Corrente","Lava","Máscara FX"};const u32 actions[]{120,121,20};const UiIcon icons[]{UiIcon::ZzzzTerrainFxStream,UiIcon::ZzzzTerrainFxLava,UiIcon::None};
+      for(u32 i=0;i<3;++i)button({selected.x+selected.width*i/3,selected.y,selected.width/3,32},names[i],terrainFxAction(actions[i]),i==0?!terrainFlowLava(s.terrainMaterialView):i==1?terrainFlowLava(s.terrainMaterialView):false,true,icons[i]);
+    } else if(terrainStaticFlowView(s.terrainMaterialView)) {
       const char *names[]{"Umidade","Poças","Máscara FX"};const u32 actions[]{100,101,20};
       for(u32 i=0;i<3;++i)button({selected.x+selected.width*i/3,selected.y,selected.width/3,32},names[i],terrainFxAction(actions[i]),i==0?s.terrainMaterialView>=310 && s.terrainMaterialView<=313:i==1?s.terrainMaterialView==320:false,true,i==0?UiIcon::ZzzzTerrainFxWetness:i==1?UiIcon::ZzzzTerrainFxPuddle:UiIcon::None);
     } else if(terrainFxView(s.terrainMaterialView)) {
@@ -517,7 +534,20 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     auto contexts=take(outer,32);
     const auto view=s.terrainMaterialView;
     const char *pbrRoles[]{"Cor base","Normal","Altura","AO","Rugosidade","Metálico","Emissão"};
-    if(terrainStaticFlowView(view)) {
+    if(terrainFlowPicker(view)){
+      button({contexts.x,contexts.y,32,32},"<",terrainCatalogAction(6),false,s.terrainCatalogPage>0);
+      button({contexts.right()-32,contexts.y,32,32},">",terrainCatalogAction(7),false,(s.terrainCatalogPage+1)*6<terrainCatalogCount(s,false));
+      button({contexts.x+32,contexts.y,contexts.width-64,32},"Voltar aos dados packed",terrainFxAction(terrainFlowRain(view)?167:136));
+    } else if(terrainFlowMapView(view)){
+      button({contexts.x,contexts.y,contexts.width/2,32},"Parâmetros",terrainFxAction(terrainFlowRain(view)?167:145));button({contexts.x+contexts.width/2,contexts.y,contexts.width/2,32},"Escolher fonte",terrainFxAction(terrainFlowRain(view)?165:135));
+    } else if(terrainFlowRain(view) || view==351) {
+      button({contexts.x,contexts.y,contexts.width/2,32},"Ondulações",terrainFxAction(160),terrainFlowRain(view));
+      button({contexts.x+contexts.width/2,contexts.y,contexts.width/2,32},"Brilho por altura",terrainFxAction(161),view==351);
+    } else if(terrainFlowModuleView(view)){
+      const char *stream[]{"Geral","Fluxo","Espuma","Altura","UV"};const char *lava[]{"Geral","Fluxo","Cor","Altura","UV"};
+      const bool molten=terrainFlowLava(view);const u32 active=molten?(view==340?0:view==341 || view==342?1:view==343?2:view==344?3:4):view-330;
+      for(u32 i=0;i<5;++i)button({contexts.x+contexts.width*i/5,contexts.y,contexts.width/5,32},molten?lava[i]:stream[i],terrainFxAction((molten?127:122)+i),active==i);
+    } else if(terrainStaticFlowView(view)) {
       const char *names[]{"Umidade","Altura","Distância","Porosidade"};const u32 actions[]{100,102,103,104};
       for(u32 i=0;i<4;++i)button({contexts.x+contexts.width*i/4,contexts.y,contexts.width/4,32},names[i],terrainFxAction(actions[i]),view==310+i);
     } else if(terrainFxView(view)) {
@@ -986,21 +1016,76 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     button({moreModules.x+moreModules.width/2,moreModules.y,moreModules.width/2,40},"Qualidade",terrainSnowAction(100),s.terrainMaterialView==240,true,UiIcon::ZzTerrainSnowResidency);
 
     }
-    if(s.terrainMaterialView==0)button(row(40),"Máscara FX · autoria independente",terrainFxAction(0),terrainFxView(s.terrainMaterialView));
+    if(s.terrainMaterialView==0){button(row(40),"Máscara FX · autoria independente",terrainFxAction(0),terrainFxView(s.terrainMaterialView));button(row(32),"Brilho por altura",terrainFxAction(161),false,true,UiIcon::ZzzzzzTerrainFxSpecularHeight);}
     if(terrainCatalogSearchView(s.terrainMaterialView)) {
       terrainCatalogRecordVisible(s);
       auto search=row(32);
       button({search.x,search.y,search.width-44,32},s.terrainCatalogQuery.empty()?("Buscar · "+std::to_string(terrainCatalogCount(s,terrainCatalogMaterialScope(s.terrainMaterialView)))+(terrainCatalogMaterialScope(s.terrainMaterialView)?" materiais":" texturas")):s.terrainCatalogQuery,terrainCatalogAction(0),false,true,UiIcon::AssetsSearch);
       button({search.right()-44,search.y,44,32},"Limpar",terrainCatalogAction(1),false,!s.terrainCatalogQuery.empty());
       auto filters=row(32);
-      const char *roles[]{"Todos","Cor","Normal","Altura","AO","Rugos.","Metal","Emissão"};
-      button({filters.x,filters.y,filters.width*.45f,32},std::string("Papel: ")+roles[std::min(s.terrainCatalogRoleFilter,7u)],terrainCatalogAction(2));
+      const char *roles[]{"Todos","Cor","Normal","Altura","AO","Rugos.","Metal","Emissão","RG/B","RG/B/A","Chuva RGBA"};
+      button({filters.x,filters.y,filters.width*.45f,32},std::string(terrainFlowPicker(s.terrainMaterialView)?"Packed: ":"Papel: ")+roles[std::min(s.terrainCatalogRoleFilter,10u)],terrainCatalogAction(2));
       button({filters.x+filters.width*.45f,filters.y,filters.width*.55f,32},s.terrainCatalogPackageFilter.empty()?"Todos os pacotes":terrainCatalogPackageName(s.terrainCatalogPackageFilter),terrainCatalogAction(3));
       const auto count=terrainCatalogCount(s,terrainCatalogMaterialScope(s.terrainMaterialView));
       if(!s.terrainCatalog)hint("Acervo indisponível · volte e abra novamente");
       else if(!count)hint("Sem resultados · limpe a busca ou ajuste os filtros");
     }
-    if(terrainStaticFlowView(s.terrainMaterialView)) {
+    if(terrainFlowModuleView(s.terrainMaterialView)) {
+      const auto view=s.terrainMaterialView;const bool lava=terrainFlowLava(view),rain=terrainFlowRain(view);const auto &flow=r.surface.flow;
+      const auto &map=terrainFlowMap(r.surface,view);const bool enabled=lava?flow.lava:flow.streams;
+      const resources::TerrainCatalogTexture *source=nullptr;if(s.terrainCatalog)for(const auto &entry:s.terrainCatalog->textures)if(entry.identity==map.texture){source=&entry;break;}
+      const auto sourceButton=[&](u32 action){button(row(40),source?terrainNoiseSourceName(*source):"Selecionar fonte packed",terrainFxAction(action),false,true,source?terrainTextureIcon(source->id):UiIcon::AssetsTexture);};
+      const auto presets=[&]{if(!s.terrainCatalog)return;if(rain){if(const auto *preset=terrainRainPreset(*s.terrainCatalog))button(row(40),"Usar "+terrainNoiseSourceName(*preset),terrainFxAction(166),false,true,terrainTextureIcon(preset->id));return;}for(u32 i=0;i<(lava?2u:1u);++i){const auto *preset=terrainFlowPreset(*s.terrainCatalog,lava,i);if(preset)button(row(40),"Usar "+terrainNoiseSourceName(*preset),terrainFxAction(143+i),false,true,terrainTextureIcon(preset->id));}};
+      if(!moduleCompact && !terrainFlowPicker(view) && !terrainFlowMapView(view)){
+        auto nav=row(32);const char *stream[]{"Geral","Fluxo","Espuma","Altura","UV"};const char *molten[]{"Geral","Fluxo","Cor","Altura","UV"};for(u32 i=0;i<5;++i)button({nav.x+nav.width*i/5,nav.y,nav.width/5,32},lava?molten[i]:stream[i],terrainFxAction((lava?127:122)+i));
+      }
+      if(terrainFlowPicker(view)){
+        if(!moduleCompact){button(row(32),"Voltar aos dados packed",terrainFxAction(terrainFlowRain(view)?167:136));auto pager=row(32);button({pager.x,pager.y,40,32},"<",terrainCatalogAction(6),false,s.terrainCatalogPage>0);button({pager.right()-40,pager.y,40,32},">",terrainCatalogAction(7),false,(s.terrainCatalogPage+1)*6<terrainCatalogCount(s,false));}
+        const auto catalog=terrainFilteredCatalog(s);if(catalog)for(u32 i=0;i<6 && usize(s.terrainCatalogPage)*6+i<catalog->textures.size();++i){const auto &entry=catalog->textures[usize(s.terrainCatalogPage)*6+i];textureResult(entry,terrainFxAction((rain?170:150)+i),map.texture==entry.identity);}
+      } else if(terrainFlowMapView(view)){
+        hint(rain?"RGBA linear · R forma · GB direção · A fase":lava?"Dados lineares · RG/B/A · sem normal mips":"Dados lineares · RG normal / B espuma");
+        sourceButton(rain?165:135);presets();button(row(32),map.invert?"Inversão ligada":"Inversão desligada",terrainFxAction(rain?168:146),map.invert);
+        field("Fator geral",map.factor,416);
+        const char *rainNames[]{"Forma/vida · R","Direção · G","Direção · B","Fase · A"};
+        const char *streamNames[]{"Normal · R","Normal · G","Espuma · B","Reservado"};const char *lavaNames[]{"Distorção · R","Distorção · G","Calor visual · B","Crosta · A"};
+        for(u32 group=0;group<3;++group){label(group==0?"FATORES PACKED":group==1?"REMAP MÍNIMO":"REMAP MÁXIMO");for(u32 channel=0;channel<((lava || rain)?4u:3u);++channel){const auto fieldId=417+group*4+channel;field(rain?rainNames[channel]:lava?lavaNames[channel]:streamNames[channel],group==0?map.colorFactor[channel]:group==1?map.colorRemapMin[channel]:map.colorRemapMax[channel],fieldId);}}
+        button(row(32),"Voltar aos parâmetros",terrainFxAction(rain?167:145));
+      } else if(view==350){
+        const bool ready=flow.puddles && map.texture.valid();auto state=row(32);
+        button({state.x,state.y,state.width*.4f,32},!flow.puddles?"Sem poças":!map.texture.valid()?"Sem fonte":flow.rainDrops?(flow.rainIntensityScale[0]==0?"Intensidade 0":"Ligada"):"Desligada",terrainFxAction(162),flow.rainDrops,ready);
+        button({state.x+state.width*.4f,state.y,state.width*.3f,32},"Fonte",terrainFxAction(164));button({state.x+state.width*.7f,state.y,state.width*.3f,32},"Poças",terrainFxAction(101));
+        field("Intensidade",flow.rainIntensityScale[0],429);field("Repetições no terreno",flow.rainIntensityScale[1],430);
+        hint("Ondulações só nas áreas G de poças.");presets();
+      } else if(view==351){
+        button(row(32),flow.specularFade?"Brilho por altura ligado":"Brilho por altura desligado",terrainFxAction(163),flow.specularFade);
+        field("Altura inicial mundial (m)",flow.specularFades[0],431);field("Altura final mundial (m)",flow.specularFades[1],432);
+        hint("Modula metálico e suavidade.","Não apaga toda reflexão · sem máscara FX.");
+      } else if(view==330 || view==340){
+        const bool ready=r.fx.enabled && map.texture.valid();auto state=row(32);
+        button({state.x,state.y,state.width*.4f,32},!r.fx.enabled?"Sem máscara":!map.texture.valid()?"Sem fonte":enabled?"Ligado":"Desligado",terrainFxAction(lava?138:137),enabled,ready);
+        button({state.x+state.width*.4f,state.y,state.width*.3f,32},"Fonte",terrainFxAction(lava?134:133));button({state.x+state.width*.7f,state.y,state.width*.3f,32},"Máscara",terrainFxAction(r.fx.enabled?20:23));
+        if(lava){fields("Contraste",flow.lavaParams[0],390,"Máximo",flow.lavaParams[1],391);field("Emissão HDR",flow.lavaEmissiveMultiplier,398);presets();hint("A é quantidade · B calor visual, não °C.");}
+        else {fields("Máximo",flow.streamMaximum,368,"Contraste",flow.streamBlend,369);field("Tinta · R",flow.streamTint[0],378);field("Tinta · G",flow.streamTint[1],379);field("Tinta · B",flow.streamTint[2],380);hint("B é quantidade · direção vem da geometria.");}
+      } else if(view==331){
+        fields("Refração",flow.streamFlowParams[0],370,"Fase (1/s)",flow.streamFlowParams[1],371);fields("Ciclo UV",flow.streamFlowParams[2],372,"Fator altura",flow.streamFlowParams[3],373);hint("Refração ≠0: segunda avaliação PBR.");
+      } else if(view==332){
+        field("Normal das poças",flow.streamNormalFoam[0],374);field("Força de espuma",flow.streamNormalFoam[1],375);
+        button(row(32),flow.perTexFoam?"Espuma por camada":"Espuma uniforme",terrainFxAction(141),flow.perTexFoam);
+        if(flow.perTexFoam && s.terrainBrush.layer<r.surface.layers.size()){
+          auto layer=row(32);button({layer.x,layer.y,32,32},"<",terrainModuleAction(62));button({layer.right()-32,layer.y,32,32},">",terrainModuleAction(63));text({layer.x+32,layer.y,layer.width-64,32},materialDisplayName(r.surface.layers[s.terrainBrush.layer].name),theme.color.text,true,UiAlign::Center);
+          field("Espuma do material",r.surface.layers[s.terrainBrush.layer].flow.foam,385);
+        }
+        sourceButton(133);
+      } else if(view==333 || view==344){
+        const auto &fades=lava?flow.lavaFades:flow.streamFades;button(row(32),(lava?flow.heightDampLava:flow.heightDampStreams)?"Filtro de altura ligado":"Filtro de altura desligado",terrainFxAction(lava?140:139),lava?flow.heightDampLava:flow.heightDampStreams);
+        const char *names[]{"Entrada: início (m)","Entrada: fim (m)","Saída: início (m)","Saída: fim (m)"};for(u32 i=0;i<4;++i)field(names[i],fades[i],(lava?412:381)+i);hint("Alturas mundiais · janela linear.");
+      } else if(view==334 || view==345){
+        fields("UV X",lava?flow.lavaUvScale[0]:flow.streamUvScales[0],lava?399:376,"UV Y",lava?flow.lavaUvScale[1]:flow.streamUvScales[1],lava?400:377);hint("Repetições no domínio · zero e sinal válidos.");
+        if(lava){button(row(32),flow.lavaStochastic?"Estocástico ligado":"Estocástico desligado",terrainFxAction(142),flow.lavaStochastic);if(flow.lavaStochastic){field("Contraste estocástico",flow.lavaStochasticContrast,401);field("Tamanho estocástico",flow.lavaStochasticSize,402);}hint(flow.lavaStochastic?"3 contribuições · 12 amostras packed.":"Ative para misturar três contribuições.");}
+      } else if(view==341){fields("Amplitude UV",flow.lavaParams[2],392,"Fase (1/s)",flow.lavaParams[3],393);button(row(40),"Distorção e crosta",terrainFxAction(132));hint("Direção geométrica · duas fases de fluxo.");}
+      else if(view==342){field("Tamanho da distorção",flow.lavaParams2[0],394);field("Taxa de distorção (1/s)",flow.lavaParams2[1],395);field("Escala UV da distorção",flow.lavaParams2[2],396);field("Força de crosta",flow.lavaParams2[3],397);}
+      else if(view==343){const char *groups[]{"BORDA","CALOR BAIXO","CALOR ALTO"};const char *channels[]{"R","G","B"};for(u32 group=0;group<3;++group){label(groups[group]);const auto &color=group==0?flow.lavaEdgeColor:group==1?flow.lavaColorLow:flow.lavaColorHighlight;for(u32 c=0;c<3;++c)field(channels[c],color[c],403+group*3+c);}}
+    } else if(terrainStaticFlowView(s.terrainMaterialView)) {
       const auto view=s.terrainMaterialView;const auto &flow=r.surface.flow;const bool ready=r.fx.enabled;
       if(!moduleCompact){auto nav=row(32);const char *names[]{"Umidade","Poças","Altura","Distância","Porosidade","Máscara"};const u32 actions[]{100,101,102,103,104,20};for(u32 i=0;i<6;++i)button({nav.x+nav.width*i/6,nav.y,nav.width/6,32},names[i],terrainFxAction(actions[i]));}
       if(view==310 || view==320){
@@ -1065,7 +1150,9 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         list.popClip();
         auto links=row(32);const char *names[]{fxUi.erase?"Apagar":"Pintar","Pincel","Filtros","Configurar"};const u32 actions[]{8,21,22,23};for(u32 i=0;i<4;++i)button({links.x+links.width*i/4,links.y,links.width/4,32},names[i],terrainFxAction(actions[i]));
         auto material=row(32);button({material.x,material.y,material.width/2,32},"Umidade",terrainFxAction(100),false,true,UiIcon::ZzzzTerrainFxWetness);button({material.x+material.width/2,material.y,material.width/2,32},"Poças",terrainFxAction(101),false,true,UiIcon::ZzzzTerrainFxPuddle);
-        hint("Bitmap real do canal · material em Umidade/Poças.");
+        auto flows=row(32);button({flows.x,flows.y,flows.width/2,32},"Corrente",terrainFxAction(120),false,true,UiIcon::ZzzzTerrainFxStream);button({flows.x+flows.width/2,flows.y,flows.width/2,32},"Lava",terrainFxAction(121),false,true,UiIcon::ZzzzTerrainFxLava);
+        auto weather=row(32);button({weather.x,weather.y,weather.width/2,32},"Chuva",terrainFxAction(160),false,true,UiIcon::ZzzzzzTerrainFxRain);button({weather.x+weather.width/2,weather.y,weather.width/2,32},"Brilho",terrainFxAction(161),false,true,UiIcon::ZzzzzzTerrainFxSpecularHeight);
+        hint("Bitmap real do canal · material nos módulos.");
       } else if(s.terrainMaterialView==301){
         fields("Fluxo",fxUi.brush.flow,322,"Falloff",fxUi.brush.falloff,323);
         fields("Dureza",fxUi.brush.hardness,324,"Opacidade",fxUi.brush.opacity,325);
@@ -2089,7 +2176,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     button({action.x, action.y, action.width * .5f, action.height},
            fxContext?"Pintar FX":s.terrainTab == 2 ? "Pintar" : "Esculpir",
            fxContext?terrainFxAction(2):EditorWidget::TerrainSculpt,
-           fxContext?s.terrainFx.mode==1:s.terrainBrushArmed);
+           fxContext?s.terrainFx.mode==1:s.terrainBrushArmed, !fxContext || r.fx.enabled);
     button({action.x + action.width * .5f, action.y, action.width * .5f,
             action.height},
            "Navegar", EditorWidget::TerrainNavigate, fxContext?s.terrainFx.mode==0:!s.terrainBrushArmed);

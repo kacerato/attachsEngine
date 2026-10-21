@@ -22,7 +22,7 @@ with zipfile.ZipFile(apk) as z:
     native = z.read('lib/arm64-v8a/libaether_android.so')
     assert native[:4] == b'\x7fELF' and native[18:20] == b'\xb7\x00', 'ARM64 ELF required'
     assert native == args.native.read_bytes(), 'packaged native runtime differs from this build'
-    assert b'AETERRAIN8' in native, 'revision 8 terrain recipe with full material authoring missing'
+    assert b'AETERRAIN9' in native, 'revision 9 terrain recipe with independent FX authoring missing'
     # Optimized literal comparisons need not retain AETERRAIN1 as contiguous ELF bytes.
     # Legacy compatibility is checked by the host migration test and device reopen flow.
     assert 'Terreno e voxel'.encode() in native, 'terrain menu missing'
@@ -41,7 +41,7 @@ with zipfile.ZipFile(apk) as z:
         original_bytes += len(packaged)
         thumbnail = texture['thumbnail']
         assert z.read('assets/terrain/library/' + thumbnail) == (library / thumbnail).read_bytes(), 'terrain thumbnail differs: ' + thumbnail
-    assert len(catalog['materials']) == 82 and len(catalog['textures']) == 146, 'terrain catalog inventory differs'
+    assert len(catalog['materials']) == 82 and len(catalog['textures']) == 156, 'terrain catalog inventory differs'
     assert not any(name.startswith('assets/terrain/library/sources/') and name.lower().endswith('.psd') for name in z.namelist()), 'source PSD archives must not enter APK'
     atlas = z.read('assets/ui/astra-ui-icons.aeui')
     assert atlas == (root / 'assets/astra-visual/ui/astra-ui-icons.aeui').read_bytes(), 'atlas differs from branch'
@@ -97,8 +97,8 @@ with zipfile.ZipFile(apk) as z:
     result = dict(apk=str(apk), bytes=apk.stat().st_size, sha256=sha(apk.read_bytes()), native_sha256=sha(native),
                   atlas_sha256=sha(atlas), atlas_icon_count=icon_count, terrain_authoring_icons=terrain_icons,
                   terrain_materials=len(catalog['materials']), terrain_original_textures=len(catalog['textures']), terrain_original_bytes=original_bytes,
-                  managed=managed, checks=['ZIP CRC', 'ARM64 ELF', 'AETERRAIN8 recipe marker', 'native library equality',
-                  'terrain creation menu', 'four embedded terrain textures', '82 catalog materials and 146 original runtime textures with thumbnails and exact hashes', 'current UI atlas', 'terrain license and provenance',
+                  managed=managed, checks=['ZIP CRC', 'ARM64 ELF', 'AETERRAIN9 recipe marker', 'native library equality',
+                  'terrain creation menu', 'four embedded terrain textures', '82 catalog materials and 156 original runtime textures with thumbnails and exact hashes', 'current UI atlas', 'terrain license and provenance',
                   'twenty terrain authoring icons and matching runtime enum',
                   'managed assembly equality', 'no Vulkan debug validation layer'],
                   elf_load_alignment=elf_alignment,

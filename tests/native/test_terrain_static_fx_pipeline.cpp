@@ -50,9 +50,9 @@ AE_TEST(terrain_static_fx_corrupt_glb_hash_and_cache_metadata_are_rejected){
  AE_EXPECT_TRUE(!readImportCache(cache,"fx-corrupt",rejected),"changed cache snapshot is rejected");
 }
 AE_TEST(terrain_static_fx_export_refuses_unavailable_consumer_before_replacing_output){
- auto recipe=painted();recipe.surface.flow.streams=true;TerrainBuild build;std::string error;
+ auto recipe=painted();recipe.surface.flow.dynamicFlows=true;TerrainBuild build;std::string error;
  AE_EXPECT_TRUE(updateTerrain(recipe,nullptr,build,error),error.c_str());std::vector<u8> output{4,3,2,1};
- AE_EXPECT_TRUE(!writeTerrainGlb(build,originals(),{},output,error),"Streams flag cannot publish without its visual consumer");
+ AE_EXPECT_TRUE(!writeTerrainGlb(build,originals(),{},output,error),"Dynamic flows cannot publish without a real dynamic producer");
  AE_EXPECT_EQ(output,std::vector<u8>({4,3,2,1}),"previous source survives rejected publication");
  recipe=painted();recipe.fx.enabled=false;AE_EXPECT_TRUE(updateTerrain(recipe,nullptr,build,error),error.c_str());
  AE_EXPECT_TRUE(!writeTerrainGlb(build,originals(),{},output,error),"Wetness cannot publish without the enabled pixel producer");
@@ -86,4 +86,11 @@ AE_TEST(terrain_static_fx_2048_original_survives_real_glb_decode_and_cold_cache)
  GltfImport cold;AE_EXPECT_TRUE(readImportCache(cache,"fx-2048",cold),"cold full-resolution cache load");
  const auto &restored=cold.terrainSurfaces[0].staticFx;
  AE_EXPECT_TRUE(cold.textures[restored.textureIndex]->mipChain==recipe.fx.seedPixels&&restored.identity==fx.identity,"no hidden downsize or identity drift on cold reload");
+}
+
+AE_TEST(terrain_specular_only_glb_and_cache_need_no_fx_snapshot){
+ auto recipe=painted();recipe.fx.enabled=false;recipe.surface.flow.wetness=recipe.surface.flow.puddles=false;recipe.surface.flow.specularFade=true;recipe.surface.flow.specularFades={0,100,17,-19};
+ TerrainBuild build;std::string error;std::vector<u8> glb;AE_EXPECT_TRUE(updateTerrain(recipe,nullptr,build,error),error.c_str());AE_EXPECT_TRUE(writeTerrainGlb(build,originals(),{},glb,error),error.c_str());GltfImport model;AE_EXPECT_TRUE(importGlb(glb,{},{},model),model.diagnostic.c_str());
+ AE_EXPECT_TRUE(!model.terrainSurfaces.empty(),"actual imported surface exists");const auto &binding=model.terrainSurfaces[0];AE_EXPECT_TRUE(binding.surface.flow.specularFade&&!binding.staticFx.enabled&&binding.staticFx.textureIndex==renderer::InvalidMapTexture,"specular-only import keeps absent FX rather than inventing source");
+ std::vector<u8> cache;AE_EXPECT_TRUE(writeImportCache(model,"spec-only",cache),"actual cache writer accepts independent spec consumer");GltfImport cold;AE_EXPECT_TRUE(readImportCache(cache,"spec-only",cold),"cold cache reader keeps spec-only");AE_EXPECT_EQ(cold.terrainSurfaces[0].surface.flow.specularFades,recipe.surface.flow.specularFades,"reserved fields persist cold");AE_EXPECT_EQ(cold.terrainSurfaces[0].staticFx.textureIndex,renderer::InvalidMapTexture,"cache never creates a phantom FX descriptor");
 }
