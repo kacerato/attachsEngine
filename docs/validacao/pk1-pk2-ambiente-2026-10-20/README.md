@@ -32,12 +32,14 @@ As pranchas lado a lado (`prancha-*.png`) e o julgamento estão na seção de va
 
 ## Migração
 
-- Ambiente `astra.render.environment` **v16 → v17**: 4 enums + GUID do Material do céu depois de `override_clouds`, 16 números no fim.
+- Ambiente `astra.render.environment` **v17 → v18** (depois do merge do G2, que ocupou a v17): 4 enums + GUID do
+  Material do céu depois de `override_clouds`, 16 números no fim (depois de PostExtra).
   Cena antiga: espessura 1, disco High Quality se havia disco, ambiente do céu, neblina exponencial que acompanha o céu.
 - Documento (`runtime/environment_migration.cpp`, ao abrir): com sol fotométrico, a escala antiga `sol/2` vai para
   Exposição do céu (1,3 × escala) e EV do HDRI (+log2 escala); "Ambiente ×" → Intensidade; "Exposição ×" → +log2 EV;
   "Rotação do céu" → rotação do HDRI; a raiz volta ao neutro. Idempotente.
-- Perfil de ambiente **v11 → v12** (21 palavras no fim); cabeçalho `ASTRA_SKYBOX_MATERIAL 12` para o material do céu.
+- Perfil de ambiente **v12 → v13** (21 palavras no fim); cabeçalho `ASTRA_SKYBOX_MATERIAL 13` para o material do céu.
+- "Exposição ×" da raiz migra para a Exposure do G2: EV100 fixo menor (modo Fixa) ou compensação (automática).
 - Formato da cena (`AETHER_EDITOR 17`) não mudou.
 
 ## Limites declarados
@@ -72,3 +74,7 @@ Vila devolvida a cada troca (md5 `2e2e996841f1f0eb5af1572c68dec3fc` conferido no
   nos seletores fora do workspace Cena — corrigido e coberto por teste de host). O POCO ficou disputado: o 221 e o 240
   foram substituídos por APKs do PK-9 (230/232) segundos depois da instalação.
 - Material do céu criado no aparelho, Gradiente/Cor no aparelho, Criar › Volume no aparelho.
+
+### Depois do merge do G2 (`887c2964`)
+- Nativa 1615/1615, família de ambiente 58/58, gerenciada 523 verdes. APK 510 compilado e instalado às 15:40,
+  mas o aparelho estava com a tela bloqueada: as capturas com o 510 não foram feitas (Vila devolvida, md5 ok).
