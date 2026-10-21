@@ -91,7 +91,7 @@ void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
     out.density=mix(out.density,target.density,amount);
     out.ambientDimmer=mix(out.ambientDimmer,target.ambientDimmer,amount);
     out.shadowMultiplier=mix(out.shadowMultiplier,target.shadowMultiplier,amount);
-    if(amount>=.5f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
+    if(amount>0.0f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
   }
   out.opacity=mix(from,to,amount);
   out.enabled=out.opacity>0.0f;
@@ -120,7 +120,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.aerosolScaleHeightKm=mix(result.aerosolScaleHeightKm,target.aerosolScaleHeightKm,amount);
     result.atmosphereHeightKm=mix(result.atmosphereHeightKm,target.atmosphereHeightKm,amount);
     result.groundAlbedo=mix(result.groundAlbedo,target.groundAlbedo,amount);
-    if(amount>=.5f) {
+    if(amount>0.0f) {
       result.sky=target.sky;
       // Resources are selected discretely with the sky group. Never take an
       // HDRI from a volume overriding only fog/post, nor blend radiance using
@@ -138,7 +138,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.fogStart=mix(result.fogStart,target.fogStart,amount);
     result.fogBaseHeight=mix(result.fogBaseHeight,target.fogBaseHeight,amount);
     result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
-    if(amount>=.5f) result.fog=target.fog;
+    if(amount>0.0f) result.fog=target.fog;
   }
   if(overrides&EnvironmentOverrideClouds) mixClouds(result.clouds,target.clouds,amount);
   if(overrides&EnvironmentOverrideIndirect) {
@@ -147,7 +147,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
   }
   // Cada override de pós é independente, como no Volume da Unity. Escolhas
   // discretas (modo, curva, chaves) trocam no meio da mistura.
-  const bool discrete=amount>=.5f;
+  const bool discrete=amount>0.0f;
   if(overrides&EnvironmentOverridePost) {
     if(discrete) {result.post=target.post;result.toneMapper=target.toneMapper;}
   }
@@ -169,6 +169,9 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
   if(overrides&EnvironmentOverrideBloom) {
     result.bloomThreshold=mix(result.bloomThreshold,target.bloomThreshold,amount);
     result.bloomIntensity=mix(result.bloomIntensity,target.bloom?target.bloomIntensity:0.0f,amount);
+    result.bloomScatter=mix(result.bloomScatter,target.bloomScatter,amount);
+    mixColor(result.bloomTint,target.bloomTint,amount);
+    result.bloomClamp=mix(result.bloomClamp,target.bloomClamp,amount);
     if(discrete) result.bloom=target.bloom;
   }
   if(overrides&EnvironmentOverrideVignette) {
@@ -178,6 +181,9 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
   if(overrides&EnvironmentOverrideColorAdjustments) {
     result.contrast=mix(result.contrast,target.contrast,amount);
     result.saturation=mix(result.saturation,target.saturation,amount);
+    result.postExposure=mix(result.postExposure,target.postExposure,amount);
+    mixColor(result.colorFilter,target.colorFilter,amount);
+    result.hueShift=mix(result.hueShift,target.hueShift,amount);
   }
   if(overrides&EnvironmentOverrideColorGrading) mixGrading(result.grading,target.grading,amount);
   if(overrides&EnvironmentOverrideFilmGrain) {
@@ -206,6 +212,7 @@ SceneEnvironment defaultSceneViewEnvironment() {
   result.exposureCompensation=-0.15f;
   result.bloomThreshold=1.15f;
   result.bloomIntensity=0.08f;
+  result.bloomScatter=0.0f; // o raio de 2 texels de antes: a Scene View não muda
   result.contrast=1.06f;
   result.saturation=1.04f;
   result.vignetteIntensity=0.08f;

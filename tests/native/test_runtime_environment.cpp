@@ -9,8 +9,11 @@
 #include "scene/component_schema.h"
 #include "scene/component_properties.h"
 #include "scene/environment.h"
+#include "environment_legacy_lines.h"
 
 #include <cmath>
+#include <iomanip>
+#include <locale>
 #include <sstream>
 
 using namespace ae;
@@ -306,13 +309,18 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
   AE_EXPECT_TRUE(result.environmentMap==local.environment.environmentMap&&result.hdriRotationDegrees==-70&&
                  result.hdriExposureEv==-1,"panorama troca com sua orientação e exposição");
   volumes[1].weight=.25f;result=renderer::resolveSceneEnvironment(volumes,camera);
+  // VolumeParameter.Interp da Unity: o que não interpola troca assim que t > 0.
+  AE_EXPECT_TRUE(result.environmentMap==local.environment.environmentMap&&result.hdriRotationDegrees==-70,
+                 "qualquer influência troca o mapa junto com sua orientação");
+  volumes[1].weight=0.0f;result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.environmentMap==base.environment.environmentMap&&result.hdriRotationDegrees==30,
-                 "peso abaixo do limiar conserva o mapa anterior e sua orientação");
+                 "peso zero conserva o mapa anterior e sua orientação");
 }
 
 // Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
 static bool newerThanV12(std::string_view id) {
-  return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity";
+  return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity"||
+         scene::environmentNumberSinceV17(id);
 }
 
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
@@ -378,8 +386,9 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
   // v7..v12 acrescentaram no fim: 11 de exposição (v12; eram 9 na v7) + energia
-  // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10) e 16 das nuvens (v11).
-  fields[1]="6";fields.resize(fields.size()-64);
+  // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11)
+  // e 10 de Color Adjustments/Bloom (v12).
+  fields[1]="6";fields.resize(fields.size()-74);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;
@@ -408,7 +417,8 @@ AE_TEST(auto_exposure_v15_scene_migrates_to_hdrp_histogram_in_ev100) {
      <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" - 1 1";
   for(const auto &property:scene::Environment::descriptor.numbers)
-    if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")) old<<' '<<property.read(source);
+    if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")&&!scene::environmentNumberSinceV17(property.id))
+      old<<' '<<property.read(source);
   scene::Environment restored;
   std::istringstream input(old.str());
   AE_EXPECT_TRUE(restored.read(input,15),"cena v15 relida");
@@ -492,12 +502,12 @@ AE_TEST(physical_atmosphere_volume_blends_scalars_and_selects_quality_discretely
   auto result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_EQ(result.physicalSkyIntensity,1.5f,"intensidade mistura com o peso do volume");
   AE_EXPECT_EQ(result.aerosolDensity,2.0f,"aerossóis misturam continuamente");
-  AE_EXPECT_TRUE(!result.physicalAtmosphereHighQuality,
-                 "qualidade discreta não oscila antes da metade da mistura");
+  AE_EXPECT_TRUE(result.physicalAtmosphereHighQuality,
+                 "qualidade discreta troca com qualquer influência (t > 0, como na Unity)");
   volumes[1].weight=.75f;result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_EQ(result.physicalSkyIntensity,2.5f,"intensidade acompanha a influência atualizada");
   AE_EXPECT_TRUE(result.physicalAtmosphereHighQuality,
-                 "qualidade discreta troca a partir da metade da mistura");
+                 "qualidade discreta continua trocada com mais peso");
 }
 
 AE_TEST(physical_atmosphere_ground_irradiance_is_finite_and_cached_by_inputs) {
@@ -614,4 +624,67 @@ AE_TEST(scene_environment_singular_local_transform_is_rejected_without_partial_p
   std::vector<renderer::SceneEnvironmentVolume> sentinel(1);
   AE_EXPECT_TRUE(!runtime::collectSceneEnvironmentVolumes(document,sentinel),"publicação recusa inversa singular");
   AE_EXPECT_EQ(sentinel.size(),usize(1),"falha não publica coleção parcial");
+}
+
+AE_TEST(tonemapping_follows_unity_options_and_reinhard_migrates_to_neutral) {
+  // URP/HDRP 17 Tonemapping: None, Neutral, ACES. AgX fica como extra.
+  const auto *tone=[]{for(const auto &e:scene::environmentEnums) if(std::string_view(e.id)=="tone_mapper") return &e;return static_cast<const scene::ComponentEnum*>(nullptr);}();
+  AE_EXPECT_TRUE(tone&&tone->options.size()==4&&tone->options[0].value==3&&tone->options[1].value==4&&
+                 tone->options[2].value==1&&tone->options[3].value==2,"menu None, Neutral, ACES, AgX");
+  AE_EXPECT_TRUE(renderer::SceneEnvironment{}.toneMapper==renderer::ToneMapper::Aces,"ACES do Default Volume Profile do HDRP");
+  scene::Environment source;source.values.toneMapper=renderer::ToneMapper::Reinhard;
+  std::ostringstream out;out.imbue(std::locale::classic());source.write(out);
+  scene::Environment restored;
+  std::istringstream input(environment_legacy::componentAsV16(out.str()));input.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(restored.read(input,16)&&restored.values.toneMapper==renderer::ToneMapper::Neutral,
+                 "Reinhard antigo abre como Neutral");
+}
+
+AE_TEST(color_adjustments_and_bloom_detail_round_trip_blend_and_migrate) {
+  const renderer::SceneEnvironment world{};
+  AE_EXPECT_TRUE(world.postExposure==0&&world.hueShift==0&&world.colorFilter[0]==1&&world.colorFilter[2]==1&&
+                 world.bloomScatter==.7f&&world.bloomClamp==65472.0f&&world.bloomTint[1]==1,
+                 "padrões do Color Adjustments e do Bloom da Unity");
+  scene::Environment authored;
+  authored.values.postExposure=.75f;authored.values.hueShift=-40;
+  authored.values.colorFilter[0]=.9f;authored.values.colorFilter[1]=.8f;authored.values.colorFilter[2]=.6f;
+  authored.values.bloomScatter=.3f;authored.values.bloomClamp=20;
+  authored.values.bloomTint[0]=1;authored.values.bloomTint[1]=.7f;authored.values.bloomTint[2]=.4f;
+  authored.values.toneMapper=renderer::ToneMapper::None;
+  std::ostringstream out;out.imbue(std::locale::classic());out<<std::setprecision(9);authored.write(out);
+  scene::Environment back;std::istringstream in(out.str());in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(back.read(in,scene::Environment::descriptor.version),"cena relida");
+  AE_EXPECT_TRUE(back.values.postExposure==.75f&&back.values.hueShift==-40&&back.values.colorFilter[2]==.6f&&
+                 back.values.bloomScatter==.3f&&back.values.bloomClamp==20&&back.values.bloomTint[2]==.4f&&
+                 back.values.toneMapper==renderer::ToneMapper::None,"campos novos atravessam a cena");
+  scene::Environment old;std::istringstream oldIn(environment_legacy::componentAsV16(out.str()));
+  oldIn.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(oldIn,16)&&old.values.postExposure==0&&old.values.hueShift==0&&
+                 old.values.colorFilter[0]==1&&old.values.bloomScatter==0&&old.values.bloomClamp==65472.0f,
+                 "cena antiga: sem filtro, sem giro, bloom com o raio de antes");
+
+  resources::EnvironmentProfile profile;profile.guid=resources::assetGuidFromSeed("perfil-ajustes");
+  profile.name="Ajustes";profile.values=authored.values;profile.values.active=true;
+  resources::EnvironmentProfile reread;
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(),reread)&&
+                 reread.values.hueShift==-40&&reread.values.bloomTint[1]==.7f&&
+                 reread.values.toneMapper==renderer::ToneMapper::None,"perfil v12 guarda os campos novos");
+  resources::EnvironmentProfile legacy;profile.values.toneMapper=renderer::ToneMapper::Aces; // None não existia na v11
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(environment_legacy::profileAsV11(profile.serialize()),legacy)&&
+                 legacy.values.bloomScatter==0&&legacy.values.hueShift==0,"perfil v11 abre neutro");
+
+  renderer::SceneEnvironmentVolume base;base.stableId=1;base.environment.active=true;
+  auto look=base;look.stableId=2;look.environment.priority=1;look.weight=.5f;
+  look.environment.postExposure=2;look.environment.hueShift=90;look.environment.colorFilter[0]=0;
+  look.environment.bloomScatter=.1f;look.environment.bloomTint[2]=0;
+  look.overrides=renderer::EnvironmentOverrideColorAdjustments;
+  std::array volumes{base,look};const float camera[3]{};
+  auto result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.postExposure==1&&result.hueShift==45&&result.colorFilter[0]==.5f&&
+                 result.bloomScatter==world.bloomScatter&&result.bloomTint[2]==1,
+                 "Color Adjustments mistura pelo peso; o Bloom desmarcado herda");
+  volumes[1].overrides=renderer::EnvironmentOverrideBloom;
+  result=renderer::resolveSceneEnvironment(volumes,camera);
+  AE_EXPECT_TRUE(result.postExposure==0&&std::abs(result.bloomScatter-.4f)<1e-6f&&result.bloomTint[2]==.5f,
+                 "Bloom mistura espalhamento e tom; os ajustes de cor herdam");
 }

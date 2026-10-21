@@ -4010,6 +4010,18 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
+    /// <summary>Filtro de cor. Cor linear RGB</summary>
+    public Vector3 ColorFilter
+    {
+        get => new(Component.GetFloat("color_filter.r"), Component.GetFloat("color_filter.g"), Component.GetFloat("color_filter.b"));
+        set => Component.SetVector3("color_filter", value);
+    }
+    /// <summary>Tom do bloom. Cor linear RGB</summary>
+    public Vector3 BloomTint
+    {
+        get => new(Component.GetFloat("bloom_tint.r"), Component.GetFloat("bloom_tint.g"), Component.GetFloat("bloom_tint.b"));
+        set => Component.SetVector3("bloom_tint", value);
+    }
     /// <summary>Tom do céu. Cor linear RGB</summary>
     public Vector3 SkyZenith
     {
@@ -4327,14 +4339,14 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("ground_albedo");
         set => Component.SetFloat("ground_albedo", value);
     }
-    /// <summary>Limite mínimo (EV100). EV100 mais baixo que a medição pode atingir: a noite não vira dia</summary>
+    /// <summary>Limite mínimo (EV). EV100 mais baixo que a medição pode atingir: a noite não vira dia</summary>
     /// <remarks>Faixa válida: -16 a 24.</remarks>
     public float ExposureLimitMin
     {
         get => Component.GetFloat("exposure_limit_min");
         set => Component.SetFloat("exposure_limit_min", value);
     }
-    /// <summary>Limite máximo (EV100). EV100 mais alto: limita o escurecimento de cenas muito claras</summary>
+    /// <summary>Limite máximo (EV). EV100 mais alto: limita o escurecimento de cenas muito claras</summary>
     /// <remarks>Faixa válida: -16 a 24.</remarks>
     public float ExposureLimitMax
     {
@@ -4376,7 +4388,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("exposure_speed_light_to_dark");
         set => Component.SetFloat("exposure_speed_light_to_dark", value);
     }
-    /// <summary>Exposição fixa (EV100). EV100 da câmera: maior escurece</summary>
+    /// <summary>Exposição fixa (EV). EV100 da câmera: maior escurece</summary>
     /// <remarks>Faixa válida: -16 a 24.</remarks>
     public float ExposureFixed
     {
@@ -4600,6 +4612,34 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("cloud_shadow_multiplier");
         set => Component.SetFloat("cloud_shadow_multiplier", value);
     }
+    /// <summary>Pós-exposição (EV). Clareia ou escurece depois da exposição e antes do tonemap</summary>
+    /// <remarks>Faixa válida: -16 a 16.</remarks>
+    public float PostExposure
+    {
+        get => Component.GetFloat("post_exposure");
+        set => Component.SetFloat("post_exposure", value);
+    }
+    /// <summary>Giro de matiz (°). Gira todas as cores no círculo de matiz</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float HueShift
+    {
+        get => Component.GetFloat("hue_shift");
+        set => Component.SetFloat("hue_shift", value);
+    }
+    /// <summary>Espalhamento. Quanto o brilho se espalha em volta das luzes</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float BloomScatter
+    {
+        get => Component.GetFloat("bloom_scatter");
+        set => Component.SetFloat("bloom_scatter", value);
+    }
+    /// <summary>Brilho máximo. Corta pixels mais claros que isto antes do bloom</summary>
+    /// <remarks>Faixa válida: 0 a 65472.</remarks>
+    public float BloomClamp
+    {
+        get => Component.GetFloat("bloom_clamp");
+        set => Component.SetFloat("bloom_clamp", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {
@@ -4654,7 +4694,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("override_fog");
         set => Component.SetBool("override_fog", value);
     }
-    /// <summary>Sobrescrever Tonemapping. Este volume decide o Tonemapping e a chave geral do pós</summary>
+    /// <summary>Sobrescrever Tonemapping. Este volume decide a curva de Tonemapping e a chave geral do pós</summary>
     public bool OverridePost
     {
         get => Component.GetBool("override_post");
@@ -4746,7 +4786,8 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     }
     public enum ToneMapperOption : uint
     {
-        Reinhard = 0,
+        Nenhum = 3,
+        Neutro = 4,
         ACES = 1,
         AgX = 2,
     }

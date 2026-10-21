@@ -40,7 +40,7 @@ inline constexpr std::array<ComponentBoolean, 22> environmentBooleans{{
   {"override_post", "Sobrescrever Tonemapping",
    [](const ComponentValue &value)->bool{return static_cast<const Environment&>(value).overridePost;},
    [](ComponentValue &value,bool next){static_cast<Environment&>(value).overridePost=next;},
-   {.group="Tonemapping", .unit="", .help="Este volume decide o Tonemapping e a chave geral do pós", .visible=nullptr, .editable=nullptr, .capability="render.environment.volumes", .consumer="renderer/scene_environment.cpp", .invalidates=Invalidate::Policy}},
+   {.group="Tonemapping", .unit="", .help="Este volume decide a curva de Tonemapping e a chave geral do pós", .visible=nullptr, .editable=nullptr, .capability="render.environment.volumes", .consumer="renderer/scene_environment.cpp", .invalidates=Invalidate::Policy}},
   {"override_indirect", "Sobrescrever luz indireta",
    [](const ComponentValue &value)->bool{return static_cast<const Environment&>(value).overrideIndirect;},
    [](ComponentValue &value,bool next){static_cast<Environment&>(value).overrideIndirect=next;},

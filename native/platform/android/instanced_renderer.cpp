@@ -177,8 +177,13 @@ struct DirtRoadFrameUniform {
   float cloudShape[4]{};           // 1/tamanho, altitude m, vento x, z (m, já no tamanho)
   float cloudTint[4]{};            // tom*2^EV, luz do céu
   float cloudShadow[4]{};          // força da sombra, reservados
+  // PK-5: Color Adjustments e Bloom completos da Unity (post_process_common.glsl).
+  float postColorAdjust[4]{1,1,1,0}; // filtro de cor rgb, giro de matiz em graus
+  float postBloomTint[4]{1,1,1,0};   // tom rgb, espalhamento 0..1
+  float postBloomDetail[4]{65472,0,0,0}; // brilho máximo antes do bloom, reservados
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 3600);
+static_assert(sizeof(DirtRoadFrameUniform) == 3648);
+static_assert(offsetof(DirtRoadFrameUniform, postColorAdjust) == 3600);
 static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
 static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
 static_assert(offsetof(DirtRoadFrameUniform, skyParameters) == 3520);
@@ -1700,6 +1705,17 @@ bool applySceneEnvironmentLook(
   // (instanced_auto_exposure.inl) já traz compensação, adaptação e limites.
   frame.scenePost[0]=look.active&&look.post&&postEnabled&&!look.automaticExposure()?
       look.fixedBrighteningEv():0.0f;
+  // Post Exposure soma depois da exposição (fixa ou medida) e não entra na
+  // medição: o histograma lê a cena antes de scenePost.x, como na Unity.
+  const bool authoredLook=look.active&&look.post&&postEnabled;
+  if(authoredLook) frame.scenePost[0]+=look.postExposure;
+  for(u32 channel=0;channel<3;++channel) {
+    frame.postColorAdjust[channel]=authoredLook?look.colorFilter[channel]:1.0f;
+    frame.postBloomTint[channel]=authoredLook?look.bloomTint[channel]:1.0f;
+  }
+  frame.postColorAdjust[3]=authoredLook?look.hueShift:0.0f;
+  frame.postBloomTint[3]=authoredLook?look.bloomScatter:0.0f;
+  frame.postBloomDetail[0]=authoredLook?look.bloomClamp:65472.0f;
   frame.scenePost[1]=look.active&&look.post&&postEnabled?
       static_cast<float>(look.toneMapper):static_cast<float>(renderer::ToneMapper::Aces);
   frame.scenePost[3]=look.active&&look.post&&postEnabled?1.0f:0.0f;

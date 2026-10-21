@@ -10,8 +10,9 @@
 namespace ae::renderer {
 
 enum class SkyModel : u32 { Hdri = 0, Atmosphere = 1, PhysicalAtmosphere = 2 };
-// Neutral was the historical name for Reinhard, not Unity's Neutral curve.
-enum class ToneMapper : u32 { Reinhard = 0, Neutral = Reinhard, Aces = 1, AgX = 2 };
+// Tonemapping da Unity (URP/HDRP 17): None, Neutral e ACES. AgX fica como
+// extra. Reinhard (0) é só o legado: cenas antigas migram para Neutral.
+enum class ToneMapper : u32 { Reinhard = 0, Aces = 1, AgX = 2, None = 3, Neutral = 4 };
 enum class EnvironmentVolumeShape : u32 { Global = 0, Box = 1, Sphere = 2 };
 // Override Exposure do Volume do HDRP 17 (Exposure.cs). Só os modos que a Astra
 // executa: Curve Mapping e Physical Camera não têm consumidor e ficam de fora.
@@ -239,6 +240,16 @@ struct SceneEnvironment final {
   float bloomIntensity = 0.10f;
   float contrast = 1.0f;
   float saturation = 1.0f;
+  // Color Adjustments da Unity: Post Exposure (EV, depois da exposição e antes
+  // do tonemap), Color Filter (multiplica a cor HDR) e Hue Shift (graus).
+  float postExposure = 0.0f;
+  float colorFilter[3]{1.0f, 1.0f, 1.0f};
+  float hueShift = 0.0f;
+  // Bloom da Unity: Scatter (0 a 1, quanto o brilho se espalha), Tint e Clamp
+  // (brilho máximo que entra no bloom; o padrão da Unity é 65472).
+  float bloomScatter = 0.7f;
+  float bloomTint[3]{1.0f, 1.0f, 1.0f};
+  float bloomClamp = 65472.0f;
   float vignetteIntensity = 0.18f;
   float filmGrainIntensity = 0.05f;
   float ambientOcclusionRadius = 1.0f;
@@ -262,7 +273,7 @@ struct SceneEnvironment final {
   CloudLayer clouds{};
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid() || !clouds.valid() ||
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 4 || !grading.valid() || !clouds.valid() ||
         static_cast<u32>(exposureMode) > 2 || static_cast<u32>(exposureMetering) > 2 ||
         static_cast<u32>(exposureAdaptation) > 1) return false;
     const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
@@ -278,8 +289,14 @@ struct SceneEnvironment final {
                           physicalSkyIntensity, airDensity, aerosolDensity, aerosolAnisotropy,
                           planetRadiusKm, observerHeightKm, rayleighScaleHeightKm,
                           aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo,
-                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity};
+                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity,
+                          postExposure, hueShift, bloomScatter, bloomClamp};
     for (float value : scalars) if (!std::isfinite(value)) return false;
+    for (const float *color : {colorFilter, bloomTint})
+      for (u32 channel = 0; channel < 3; ++channel)
+        if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f) return false;
+    if (postExposure < -16.0f || postExposure > 16.0f || hueShift < -180.0f || hueShift > 180.0f ||
+        bloomScatter < 0.0f || bloomScatter > 1.0f || bloomClamp < 0.0f || bloomClamp > 65472.0f) return false;
     for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
       for (u32 channel = 0; channel < 3; ++channel)
         if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f)

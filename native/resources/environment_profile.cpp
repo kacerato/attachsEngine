@@ -83,6 +83,9 @@ std::string EnvironmentProfile::serialize() const {
   writeColor(out,clouds.tint);
   out<<' '<<clouds.exposureEv<<' '<<clouds.windOrientationDegrees<<' '<<clouds.windSpeedKmh
      <<' '<<clouds.density<<' '<<clouds.ambientDimmer<<' '<<clouds.shadowMultiplier;
+  // v12: Color Adjustments e Bloom completos, no fim da linha.
+  out<<' '<<values.postExposure;writeColor(out,values.colorFilter);out<<' '<<values.hueShift
+     <<' '<<values.bloomScatter;writeColor(out,values.bloomTint);out<<' '<<values.bloomClamp;
   out<<'\n';
   return out.str();
 }
@@ -98,7 +101,9 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
        candidate.values.vignette))
     return false;
   if(version>=2 && !(in>>candidate.values.filmGrain)) return false;
-  if(!(in>>candidate.values.ambientOcclusion>>sky>>tone) || sky>(version>=3?2u:1u)||tone>(version>=5?2u:1u)) return false;
+  if(!(in>>candidate.values.ambientOcclusion>>sky>>tone) || sky>(version>=3?2u:1u)||
+     tone>(version>=12?4u:version>=5?2u:1u)) return false;
+  if(version<12 && tone==static_cast<u32>(renderer::ToneMapper::Reinhard)) tone=static_cast<u32>(renderer::ToneMapper::Neutral);
   if(version>=3 && !(in>>candidate.values.physicalAtmosphereHighQuality)) return false;
   candidate.values.active=true;candidate.values.priority=0;
   candidate.values.sky=static_cast<renderer::SkyModel>(sky);
@@ -156,6 +161,11 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
        !(in>>clouds.exposureEv>>clouds.windOrientationDegrees>>clouds.windSpeedKmh>>clouds.density>>
          clouds.ambientDimmer>>clouds.shadowMultiplier)) return false;
   }
+  if(version>=12) {
+    auto &x=candidate.values;
+    if(!(in>>x.postExposure)||!readColor(in,x.colorFilter)||!(in>>x.hueShift>>x.bloomScatter)||
+       !readColor(in,x.bloomTint)||!(in>>x.bloomClamp)) return false;
+  } else candidate.values.bloomScatter=0; // perfil antigo: o raio de bloom de antes
   if(version<12) renderer::migrateLegacyExposure(v,version>=7,legacyAuto,legacyCenter);
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
@@ -224,6 +234,10 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       normalized.sunGlare==expected.sunGlare&&normalized.moonPhase==expected.moonPhase&&
       normalized.moonSizeDegrees==expected.moonSizeDegrees&&
       normalized.moonIntensity==expected.moonIntensity&&normalized.starIntensity==expected.starIntensity&&
-      normalized.clouds==expected.clouds;
+      normalized.clouds==expected.clouds&&
+      normalized.postExposure==expected.postExposure&&normalized.hueShift==expected.hueShift&&
+      std::equal(std::begin(normalized.colorFilter),std::end(normalized.colorFilter),expected.colorFilter)&&
+      normalized.bloomScatter==expected.bloomScatter&&normalized.bloomClamp==expected.bloomClamp&&
+      std::equal(std::begin(normalized.bloomTint),std::end(normalized.bloomTint),expected.bloomTint);
 }
 } // namespace ae::resources

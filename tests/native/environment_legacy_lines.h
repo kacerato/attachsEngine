@@ -34,12 +34,13 @@ inline std::string componentBeforeExposure(const std::string &line,bool keepClou
   constexpr size_t header=18,exposureTokens=10,cloudTokens=3;
   const size_t numbersAt=header+exposureTokens+cloudTokens;
   std::vector<std::string> out(tokens.begin(),tokens.begin()+header);
+  if(out[7]=="3"||out[7]=="4") out[7]="1"; // None/Neutral não existiam: ACES
   out.push_back("0");out.push_back("0");
   if(keepClouds) out.insert(out.end(),tokens.begin()+header+exposureTokens,tokens.begin()+numbersAt);
   const auto &numbers=ae::scene::Environment::descriptor.numbers;
   for(size_t i=0;i<numbers.size()&&numbersAt+i<tokens.size();++i) {
     const std::string_view id=numbers[i].id;
-    if(id=="exposure_fixed"||(!keepClouds&&id.starts_with("cloud_"))) continue;
+    if(id=="exposure_fixed"||ae::scene::environmentNumberSinceV17(id)||(!keepClouds&&id.starts_with("cloud_"))) continue;
     out.push_back(tokens[numbersAt+i]);
   }
   return join(out);
@@ -54,6 +55,7 @@ inline std::string profileBeforeExposure(std::string text,bool keepClouds) {
   const bool newline=!text.empty()&&text.back()=='\n';
   if(newline) text.pop_back();
   auto cut=[&](size_t count) {size_t at=text.size();for(size_t i=0;i<count;++i) at=text.rfind(' ',at-1);return at;};
+  text=text.substr(0,cut(10)); // os 10 do fim são da v12 (Color Adjustments e Bloom completos)
   const size_t tailStart=cut(53),exposureStart=cut(64);
   text=text.substr(0,exposureStart)+" 0 -8 8 0.05 0.95 0.18 2 3 0"+text.substr(tailStart);
   if(!keepClouds) text=text.substr(0,cut(16));

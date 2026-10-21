@@ -818,7 +818,7 @@
           "member": "overridePost",
           "presentation": {
             "group": "Tonemapping",
-            "help": "Este volume decide o Tonemapping e a chave geral do pós",
+            "help": "Este volume decide a curva de Tonemapping e a chave geral do pós",
             "visible": {
               "cpp": "nullptr"
             },
@@ -2645,6 +2645,256 @@
           }
         }
       }
+    },
+    {
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "name": "environmentPostExtraNumbers",
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "consumer": "rhi/shaders/post_process_common.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "post_exposure",
+          "label": "Pós-exposição",
+          "member": "values.postExposure",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "EV",
+            "help": "Clareia ou escurece depois da exposição e antes do tonemap",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.r",
+          "label": "Filtro R",
+          "member": "values.colorFilter[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.g",
+          "label": "Filtro G",
+          "member": "values.colorFilter[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.b",
+          "label": "Filtro B",
+          "member": "values.colorFilter[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "hue_shift",
+          "label": "Giro de matiz",
+          "member": "values.hueShift",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "°",
+            "help": "Gira todas as cores no círculo de matiz",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "bloom_scatter",
+          "label": "Espalhamento",
+          "member": "values.bloomScatter",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Quanto o brilho se espalha em volta das luzes",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.r",
+          "label": "Tom R",
+          "member": "values.bloomTint[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.g",
+          "label": "Tom G",
+          "member": "values.bloomTint[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.b",
+          "label": "Tom B",
+          "member": "values.bloomTint[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_clamp",
+          "label": "Brilho máximo",
+          "member": "values.bloomClamp",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "65472"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Corta pixels mais claros que isto antes do bloom",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        }
+      ]
     },
     {
       "name": "environmentCloudNumbers",
