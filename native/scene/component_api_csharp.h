@@ -205,14 +205,6 @@ inline std::string componentCSharpApi() {
            "\");\n        set => Component.SetBool(\""+std::string(p.id)+"\", value);\n    }\n";
     }
     for(const auto &p:type.enums) {
-      if(p.flags) {
-        // Máscara de bits (Camera.cullingMask da Unity): um uint, bit i = opção i.
-        out+=doc(p.name,{},p.presentation.help?p.presentation.help:"");
-        out+="    /// <remarks>Máscara de bits; 0 = nada, 0xFFFFFFFF = tudo.</remarks>\n";
-        out+="    public uint "+pascal(p.id)+"\n    {\n        get => Component.GetEnum(\""+std::string(p.id)+
-             "\");\n        set => Component.SetEnum(\""+std::string(p.id)+"\", value);\n    }\n";
-        continue;
-      }
       const std::string enumName=pascal(p.id)+"Option";
       // Máscara de bits vira um enum [Flags] do C#, como LayerMask na Unity.
       if(p.flags) out+="    [System.Flags]\n";

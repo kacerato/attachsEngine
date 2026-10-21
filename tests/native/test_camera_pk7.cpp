@@ -105,7 +105,7 @@ AE_TEST(camera_culling_mask_is_a_layer_bitmask) {
   AE_EXPECT_TRUE(scene::setComponentProperty(components,"astra.camera","background_type",7u)==scene::ComponentPropertyStatus::InvalidValue,
                  "enum comum continua recusando valor fora das opções");
   const auto api=scene::componentCSharpApi();
-  AE_EXPECT_TRUE(api.find("public uint CullingMask")!=std::string::npos,"C# expõe a máscara como uint (Camera.cullingMask)");
+  AE_EXPECT_TRUE(api.find("public CullingMaskOption CullingMask")!=std::string::npos,"C# expõe a máscara como [Flags] enum, como a Luz");
   AE_EXPECT_TRUE(api.find("public BackgroundTypeOption BackgroundType")!=std::string::npos,"C# expõe o tipo de fundo");
   AE_EXPECT_TRUE(api.find("public float FocalLength")!=std::string::npos && api.find("public bool PhysicalCamera")!=std::string::npos,"C# câmera física");
 }
