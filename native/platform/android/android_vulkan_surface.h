@@ -38,6 +38,7 @@ public:
   rhi::VulkanDevice &device() { return device_; }
   rhi::VulkanSwapchain &swapchain() { return swapchain_; }
   bool swappyActive() const { return swappyScheduler_.active(); }
+  void setTargetFrameRate(u32 fps) {swappyScheduler_.setTargetFrameRate(fps);}
 
 private:
   AndroidSwappyScheduler swappyScheduler_;

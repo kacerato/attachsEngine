@@ -15,6 +15,7 @@ public:
   void configure(ANativeActivity *activity, ANativeWindow *window, u32 targetFramesPerSecond,
                  bool requested);
   void setWindow(ANativeWindow *window) { window_ = window; }
+  void setTargetFrameRate(u32 framesPerSecond);
   bool requested() const { return requested_; }
   bool active() const { return active_; }
 

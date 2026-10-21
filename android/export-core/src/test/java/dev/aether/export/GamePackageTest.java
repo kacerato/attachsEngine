@@ -17,11 +17,16 @@ public class GamePackageTest {
             Files.writeString(new File(project,"private.p12").toPath(),"never export signing keys");
             new File(project,".astra/save").mkdirs();
             Files.writeString(new File(project,".astra/save/state.json").toPath(),"author's test progress must not ship");
+            Files.writeString(new File(project,".astra/editor-preferences.astra").toPath(),"viewport_quality low\nviewport_animation off\n");
+            final String gameGraphics="astra_rendering 3\nquality=s\nupscaling_filter=arm_asr\n";
+            Files.writeString(new File(project,".astra/rendering.astra").toPath(),gameGraphics);
             File snapshot=new File(root,"snapshot");List<GamePackage.Entry> entries=GamePackage.snapshot(project,snapshot);
-            assertEquals(2,entries.size());
+            assertEquals(3,entries.size());
             File apk=new File(root,"game.apk");writeApk(apk,snapshot,entries,false);
             File restored=new File(root,"restored");GamePackage.extract(apk,restored);
             assertEquals("fixture",Files.readString(new File(restored,"scenes/editor.aescene").toPath()));
+            assertFalse(new File(restored,".astra/editor-preferences.astra").exists());
+            assertEquals(gameGraphics,Files.readString(new File(restored,".astra/rendering.astra").toPath()));
             File tampered=new File(root,"tampered.apk");writeApk(tampered,snapshot,entries,true);
             File refused=new File(root,"refused");
             try {GamePackage.extract(tampered,refused);fail("corrupt payload accepted");}catch(IOException expected){assertFalse(refused.exists());}

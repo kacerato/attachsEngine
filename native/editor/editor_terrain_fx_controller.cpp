@@ -66,13 +66,28 @@ bool TerrainFxEditorController::sample(TerrainFxEditToken token,double x,double 
   if(!active_){error="FX paint is not armed";return false;}
   if(token!=token_){cancel();error="FX gesture cancelled: terrain or author revision changed";return false;}
   if(!std::isfinite(seconds)||seconds<0||seconds>60||!std::isfinite(pressure)||pressure<0||pressure>1){error="Invalid captured FX sample duration/pressure";return false;}
-  if(nextIdentity_==std::numeric_limits<u64>::max()){error="FX identity frontier exhausted";return false;}
-  auto candidate=draft_;auto stroke=brush_;stroke.identity=nextIdentity_;stroke.gesture=gesture_;
-  stroke.x=x;stroke.z=z;stroke.sampleSeconds=seconds;stroke.pressure=pressure;stroke.target=erase_?0:brush_.target;
-  candidate.strokes.push_back(stroke);
+  if(!std::isfinite(x)||!std::isfinite(z)||std::abs(x)>1e8||std::abs(z)>1e8){error="Invalid captured FX position";return false;}
+  // Resample the segment, rather than stamping only the Android Move events.
+  // Divide captured time across stamps so sparse input never multiplies flow.
+  const bool previous=hasSamples();
+  const double startX=previous?draft_.strokes.back().x:x,startZ=previous?draft_.strokes.back().z:z;
+  const double spacing=brush_.radiusMeters*std::min(1.0,brush_.aspect)*.25;
+  const double required=std::max(1.0,std::ceil(std::hypot(x-startX,z-startZ)/spacing));
+  if(!std::isfinite(required)||required>limits.maximumStrokes||draft_.strokes.size()>limits.maximumStrokes-usize(required)){
+    error="FX continuous stroke exceeds sample budget; gesture was not truncated";return false;
+  }
+  const usize count=usize(required);
+  if(count>std::numeric_limits<u64>::max()-nextIdentity_){error="FX identity frontier exhausted";return false;}
+  auto candidate=draft_;
+  for(usize i=1;i<=count;++i){
+    auto stroke=brush_;stroke.identity=nextIdentity_+i-1;stroke.gesture=gesture_;
+    const double t=double(i)/count;stroke.x=startX+(x-startX)*t;stroke.z=startZ+(z-startZ)*t;
+    stroke.sampleSeconds=seconds/count;stroke.pressure=pressure;stroke.target=erase_?0:brush_.target;
+    candidate.strokes.push_back(stroke);
+  }
   std::shared_ptr<const TerrainFxEditorBitmap> next;
   if(!prepareBitmap(candidate,slope_,bitmap_.get(),next,error,limits,progress))return false;
-  draft_=std::move(candidate);bitmap_=std::move(next);++nextIdentity_;++sampleRevision_;return true;
+  draft_=std::move(candidate);bitmap_=std::move(next);nextIdentity_+=count;++sampleRevision_;return true;
 }
 bool TerrainFxEditorController::prepareCommit(TerrainFxEditToken token,TerrainFxPreparedCommit &out,std::string &error,
     const resources::TerrainFxLimits &limits,const Progress &progress){

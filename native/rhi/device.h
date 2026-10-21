@@ -64,6 +64,7 @@ enum class SwapchainStatus : u32 {
   SuboptimalNeedsRecreate = 1, // ainda utilizável neste frame, mas recriar em seguida
   OutOfDateMustRecreate = 2,   // resize/rotação/perda de surface: recriar antes de usar
   SurfaceLost = 3,             // superfície perdida (ex.: app foi para background); recriar surface inteira
+  NotReady = 5, // poll/acquire only: no image acquired, no submission/fence reset
   FatalError = 4,              // device/queue/comando falhou; não tentar reutilizar o frame atual
 };
 
@@ -100,9 +101,13 @@ public:
   // Adquire o próximo índice de imagem. Retorna o status para o caller
   // decidir se deve pular o frame (SurfaceLost / OutOfDate) ou seguir e
   // recriar só depois de apresentar (Suboptimal).
+  // Default preserves compatibility for non-Vulkan/fake backends. Vulkan polls
+  // the single in-flight fence without waiting or resetting it.
+  virtual SwapchainStatus pollFrameReady() { return SwapchainStatus::Ok; }
   virtual SwapchainStatus acquireNextImage(u32 *outImageIndex) = 0;
 
-  // Apresenta a imagem adquirida. Mesmo contrato de status de acquire.
+  // Apresenta a imagem adquirida. Nunca retorna NotReady: a imagem/semáforo
+  // já pertencem à submissão, que não pode ser abandonada como retry.
   virtual SwapchainStatus present(u32 imageIndex) = 0;
 
   virtual u32 width() const = 0;
@@ -132,6 +137,7 @@ public:
   void shutdown();
 
   bool recreate(u32 newWidth, u32 newHeight) override;
+  SwapchainStatus pollFrameReady() override;
   SwapchainStatus acquireNextImage(u32 *outImageIndex) override;
   SwapchainStatus present(u32 imageIndex) override;
 

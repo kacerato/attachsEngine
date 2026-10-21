@@ -36,6 +36,7 @@ inline FrameBudget makeFrameBudget(float displayHz, float requestedMaximumHz,
   const u32 renderHz = available >= 119.0f ? 120u
                        : available >= 89.0f ? 90u
                        : available >= 59.0f ? 60u
+                       : available >= 50.0f ? 50u
                        : available >= 29.0f ? 30u
                        : std::max(1u, static_cast<u32>(available));
   const float interval = 1000.0f / static_cast<float>(renderHz);

@@ -1,5 +1,8 @@
 // Production full editor UI and actual terrain selection, software raster only.
 #include "editor/editor_session.h"
+#include "editor/editor_archive.h"
+#include "editor/editor_scene_camera.h"
+#include "scene/camera.h"
 #include "editor/editor_screen.h"
 #include "editor/editor_theme.h"
 #include "editor/editor_terrain_fx_controller.h"
@@ -35,6 +38,21 @@ struct TemporaryProject {
 struct Scenario {const char *name;u32 mode;editor::EditorGizmoMode tool;bool navigation=false,pending=true;};
 }
 int main(int argc,char **argv){
+ // Operates only on a caller-selected isolated QA scene, never the app project.
+ if(argc==3 && std::string_view(argv[1])=="--prepare-player-qa") {
+  editor::EditorDocument document;
+  if(!check(editor::loadEditorDocument(argv[2],0,document),"load isolated exported QA document"))return 8;
+  if(!check(!editor::resolveSceneCamera(document).entity,"QA source must not already contain a gameplay camera"))return 8;
+  const auto id=document.createEntity(document.root(),runtime::ObjectKind::Camera,"QA Player Camera");
+  auto object=*document.find(id);object.transform.position[1]=24;object.transform.position[2]=-36;object.transform.rotationDegrees[0]=33.6900675f;
+  auto *camera=static_cast<scene::Camera*>(object.components.add(scene::Camera::descriptor));camera->nearPlane=.1f;camera->farPlane=1000;camera->priority=10;
+  if(!check(document.applyEntityValues(id,object),"apply typed Camera and transform") ||
+     !check(editor::saveEditorDocument(argv[2],document,0),"save QA through production scene archive"))return 8;
+  editor::EditorDocument reopened;
+  if(!check(editor::loadEditorDocument(argv[2],0,reopened),"reload serialized QA Camera") ||
+     !check(editor::resolveSceneCamera(reopened).entity==id,"Player resolves its actual saved Camera"))return 8;
+  std::printf("Player QA camera %u serialized and reopened. Only the selected local fixture changed.\n",id);return 0;
+ }
  if(argc<2)return 2;
  const auto output=std::filesystem::absolute(argv[1]);std::filesystem::create_directories(output);
  std::filesystem::current_path(AETHER_REPOSITORY_ROOT);
@@ -86,6 +104,21 @@ int main(int argc,char **argv){
   view.rect=layout.viewport;const float camera[3]{0,18,-28};view.frustum=renderer::buildPerspectiveFrustum(camera,0,std::atan2(18.f,28.f),view.rect.width/std::max(1.f,view.rect.height),{});
   list.begin(state.surface,font.metrics(ui::UiFontWeight::Regular));router.beginFrame();return editor::buildEditorScreen(state,editor::editorTheme(),list,router);
  };
+ if(argc>4 && std::string_view(argv[4])=="viewport") {
+  state.terrainOpen=false;state.terrainFx.cursorVisible=false;state.sceneEffectsMenu=true;
+  for(u32 mode=0;mode<4;++mode) {
+   state.viewportSettings.quality=static_cast<renderer::EditorViewportQuality>(std::min(mode,2u));
+   state.viewportSettings.animatedMaterials=mode==2;state.qualityPanel=mode==3;
+   state.sceneEffectsMenu=mode!=3;state.qualityDraft.upscalingFilter=renderer::UpscalingFilter::ArmAsr;
+   state.qualityApplied=state.qualityDraft;state.qualityArmAsr=renderer::TemporalUpscalerAvailability::Available;
+   state.qualityStats="Editor agora 960×540 · GPU pendente";render();
+   std::vector<ui::UiInstance> instances;const auto built=ui::buildUiInstances(list,font,icons,65536,instances);
+   if(!check(!built.dropped&&!built.missingGlyphRuns,"viewport UI complete"))return 6;
+   test::UiSoftwareTarget image;image.resize(width,height,.098f,.11f,.13f);test::rasterizeUi(instances,font,icons,image);
+   if(!check(capturePpm(output/("viewport-"+std::to_string(mode)+"-"+std::to_string(width)+"x"+std::to_string(height)+".ppm"),image),"write production viewport UI"))return 6;
+  }
+  return 0;
+ }
  const bool searchOnly=argc>4 && std::string_view(argv[4])=="search";
  const bool searchRequested=searchOnly || (argc>4 && std::string_view(argv[4])=="all");
  const bool materialOnly=argc>4 && std::string_view(argv[4])=="material";

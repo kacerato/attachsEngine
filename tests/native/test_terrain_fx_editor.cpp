@@ -1,5 +1,6 @@
 #include "editor/editor_terrain_fx_controller.h"
 #include "harness.h"
+#include <cmath>
 using namespace ae;
 AE_TEST(terrain_fx_editor_budget_refuses_before_allocating_and_preserves_source) {
   resources::TerrainFxAsset asset;asset.width=asset.height=2048;std::string error;
@@ -43,4 +44,32 @@ AE_TEST(terrain_fx_editor_erase_targets_zero_without_replacing_authored_target) 
   editor::TerrainFxPreparedCommit commit;AE_EXPECT_TRUE(controller.prepareCommit(token,commit,error),"erase prepares snapshot");
   AE_EXPECT_EQ(commit.after->strokes.back().target,0.,"erase snapshot uses target zero");
   AE_EXPECT_EQ(brush.target,.7,"caller target stays prepared");
+}
+
+AE_TEST(terrain_fx_editor_sparse_input_resamples_continuously_and_preserves_captured_time) {
+ resources::TerrainFxAsset asset;asset.enabled=true;asset.width=asset.height=128;
+ editor::TerrainFxEditorController controller;resources::TerrainFxStroke brush;brush.channel=resources::TerrainFxChannel::Stream;brush.radiusMeters=2;brush.aspect=.5;
+ editor::TerrainFxEditToken token{3,4,5};std::string error;
+ AE_EXPECT_TRUE(controller.begin(asset,brush,false,token,{},error),error.c_str());
+ AE_EXPECT_TRUE(controller.sample(token,-20,0,0,1,error)&&controller.sample(token,20,0,.25,1,error),error.c_str());
+ const auto image=controller.bitmap();
+ for(int x=-19;x<=19;++x){std::array<float,4> value{};AE_EXPECT_TRUE(resources::sampleTerrainFxBytes(image->pixels,128,128,(x+32.)/64,.5,value),"real bitmap");
+  AE_EXPECT_TRUE(value[2]>0,"sparse Move has no blank gaps along captured segment");
+  AE_EXPECT_EQ(value[0]+value[1]+value[3],0.f,"independent channels unchanged");}
+ editor::TerrainFxPreparedCommit commit;AE_EXPECT_TRUE(controller.prepareCommit(token,commit,error),error.c_str());
+ AE_EXPECT_TRUE(commit.after->strokes.size()>2,"intermediate positions retained in authoring history");
+ double total=0;u64 identity=0;for(const auto &stroke:commit.after->strokes){total+=stroke.sampleSeconds;AE_EXPECT_TRUE(stroke.identity>identity,"unique monotonic identities");identity=stroke.identity;}
+ AE_EXPECT_TRUE(std::abs(total-.25)<1e-12,"interpolation divides time instead of multiplying flow");
+ AE_EXPECT_TRUE(asset.strokes.empty()&&asset.seedPixels.empty(),"transient stroke does not mutate authored source");
+ controller.cancel();AE_EXPECT_TRUE(!controller.accept(commit),"cancel rejects prepared interpolated commit");
+}
+AE_TEST(terrain_fx_editor_continuous_sample_budget_refusal_keeps_last_good_bitmap) {
+ resources::TerrainFxAsset asset;asset.enabled=true;asset.width=asset.height=32;resources::TerrainFxLimits limits;limits.maximumStrokes=5;
+ editor::TerrainFxEditorController controller;resources::TerrainFxStroke brush;brush.radiusMeters=1;editor::TerrainFxEditToken token{3,4,5};std::string error;
+ AE_EXPECT_TRUE(controller.begin(asset,brush,false,token,{},error,limits)&&controller.sample(token,-20,0,.1,1,error,limits),error.c_str());
+ const auto before=controller.bitmap();
+ AE_EXPECT_TRUE(!controller.sample(token,20,0,.25,1,error,limits),"overflow refuses entire segment without truncation");
+ AE_EXPECT_TRUE(controller.bitmap()==before&&controller.active(),"last good bitmap and gesture preserved");
+ editor::TerrainFxPreparedCommit commit;AE_EXPECT_TRUE(controller.prepareCommit(token,commit,error,limits),error.c_str());
+ AE_EXPECT_EQ(commit.after->strokes.size(),usize(1),"refused segment added no authored samples");
 }

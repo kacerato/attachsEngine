@@ -10,6 +10,7 @@
 #include "renderer/grid_plan.h"
 #include "renderer/terrain_control.h"
 #include "renderer/terrain_surface_binding.h"
+#include "renderer/terrain_pipeline_publication_owner.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -191,6 +192,7 @@ public:
     }
     editorBackground_=enabled;
   }
+  void setMaterialPreviewTime(float seconds) { materialPreviewTime_=seconds; }
   void setEditorViewportOptions(bool lighting,bool effects,bool sky,bool fog,bool post) {
     editorSceneLighting_=lighting;editorSceneEffects_=effects;editorSceneSky_=sky;
     editorSceneFog_=fog;editorScenePost_=post;
@@ -583,6 +585,7 @@ public:
 
 private:
   bool editorBackground_=false;
+  float materialPreviewTime_=-1.f;
   bool editorSceneLighting_=true,editorSceneEffects_=true,editorSceneSky_=true;
   bool editorSceneFog_=true,editorScenePost_=true;
   float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
@@ -621,6 +624,7 @@ private:
                                    bool preserveDynamicScale);
   bool createRenderPass();
   bool createPipeline();
+  VkPipeline terrainCapabilityPipeline(VkPipeline generic) const {return terrainPipelineCapabilities_?terrainPipelineCapabilities_->select(generic):generic;}
   bool createFramebuffers();
   void destroyFramebuffers();
   bool createCommandResources();
@@ -881,6 +885,8 @@ private:
   // Lazily populated only for feature combinations present in the cooked map.
   // Each specialization removes absent normal/MR/emissive paths before driver
   // optimization; arrays remain backend implementation detail, not public API.
+  // Device-owned recipes/modules/specializations, cleared at existing idle teardown.
+  std::unique_ptr<renderer::TerrainPipelinePublicationOwner> terrainPipelineCapabilities_;
   VkPipeline opaqueMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
   VkPipeline coverageMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
   VkPipeline transparentMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};

@@ -74,6 +74,7 @@ enum class EditorWidget : u32 {
   PathPointPosition,PathPointOrientation,PathPointListPrevious,PathPointListNext,PathFollowRestart,PathFollowStop,
   PathPointSelectBase=0xD9000000u,
   PrefabOverridesRevertAll=0xDA000000u,
+  ViewportLow=0xCD170000u,ViewportMedium,ViewportHigh,ViewportAnimateMaterials,
   None = 0,
   FilesUp=0x65000000,FilesRefresh,FilesPrevious,FilesNext,FilesSplitter,FilesCollapse,FilesRename,FilesDelete,
   ConsoleInfo,ConsoleWarning,ConsoleError,ConsoleClear,ConsoleCollapse,

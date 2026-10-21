@@ -92,7 +92,7 @@ std::string terrainMaterialContext(const EditorScreenState &s) {
 }
 bool compact(const UiRect &a) { return a.height < 400; }
 bool compactTerrainModule(const EditorScreenState &s,const UiRect &area) {
-  return (compact(area) || terrainFxView(s.terrainMaterialView)) && s.terrainTab==2 && s.terrainMaterialView!=0 && !s.terrainBusy && s.terrainBrush.layer<s.terrainDraft.surface.layers.size();
+  return (compact(area) || terrainFxView(s.terrainMaterialView) || s.terrainMaterialView==1) && s.terrainTab==2 && s.terrainMaterialView!=0 && !s.terrainBusy && s.terrainBrush.layer<s.terrainDraft.surface.layers.size();
 }
 bool compactTerrainFx(const EditorScreenState &s,const UiRect &area) {
   return compact(area) && compactTerrainModule(s,area) && terrainFxView(s.terrainMaterialView) && !terrainStaticFlowView(s.terrainMaterialView) && !terrainFlowModuleView(s.terrainMaterialView);
@@ -148,7 +148,7 @@ float baseContentHeight(const EditorScreenState &s) {
     if(s.terrainMaterialView==1) {
       const auto count=s.terrainCatalog ? std::min<usize>(6,terrainCatalogCount(s,true)-
         std::min<usize>(terrainCatalogCount(s,true),usize(s.terrainCatalogPage)*6)):0;
-      return 146.f+(s.terrainCatalog?122.f+(deep?40.f*float(count):112.f*float((count+1)/2)):58.f)+padding+16-(deep?210.f:0.f);
+      return 146.f+(s.terrainCatalog?122.f+(compact(terrainPanelRect(s))?40.f*float(count):112.f*float((count+1)/2)):58.f)+padding+16-(deep?210.f:0.f);
     }
     if(terrainModuleView(s.terrainMaterialView)) {
       const bool small=compactTerrainModule(s,terrainPanelRect(s));
@@ -581,7 +581,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
     } else if(view==1) {
       button({contexts.x,contexts.y,32,32},"<",EditorWidget::TerrainCatalogPrevious,false,s.terrainCatalogPage>0);
       button({contexts.right()-32,contexts.y,32,32},">",EditorWidget::TerrainCatalogNext,false,s.terrainCatalog && (s.terrainCatalogPage+1)*6<terrainCatalogCount(s,true));
-      text({contexts.x+32,contexts.y,contexts.width-64,32},"Acervo · página "+std::to_string(s.terrainCatalogPage+1),theme.color.text,true,UiAlign::Center);
+      text({contexts.x+32,contexts.y,contexts.width-64,32},"Acervo · "+std::to_string(s.terrainCatalogPage+1)+" / "+std::to_string(std::max<usize>(1,(terrainCatalogCount(s,true)+5)/6)),theme.color.text,true,UiAlign::Center);
     } else if(view==190) {
       button({contexts.x,contexts.y,32,32},"<",terrainCatalogAction(6),false,s.terrainCatalogPage>0);
       button({contexts.right()-32,contexts.y,32,32},">",terrainCatalogAction(7),false,(s.terrainCatalogPage+1)*6<terrainCatalogCount(s,false));
@@ -1744,7 +1744,7 @@ void buildTerrainSurface(const EditorScreenState &s, const UiTheme &theme,
         }
         const auto count=std::min<usize>(6,catalog->materials.size()-
           std::min<usize>(catalog->materials.size(),usize(s.terrainCatalogPage)*6));
-        if(moduleCompact)for(u32 i=0;i<count;++i){
+        if(compact(area))for(u32 i=0;i<count;++i){
           const auto &material=catalog->materials[usize(s.terrainCatalogPage)*6+i];const auto line=row(40);
           button(line,"",EditorWidget(widgetId(EditorWidget::TerrainCatalogItemBase)+i),b.layer<r.surface.layers.size() && r.surface.layers[b.layer].sourceCatalogId==material.id);
           list.addImage({line.x+5,line.y+4,32,32},static_cast<UiImageId>(terrainMaterialIcon(material.id)));

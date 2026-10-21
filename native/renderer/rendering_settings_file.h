@@ -1,16 +1,9 @@
 #pragma once
-// Configurações de renderização do PROJETO, no disco e na tela do editor.
-//
-// A Unity guarda isso em Project Settings > Quality (os níveis, com Render
-// Scale, Upscaling Filter e Anti-aliasing no URP Asset de cada nível); a Godot
-// em Project Settings > Rendering (Scaling 3D Scale/Mode, MSAA/TAA/FXAA, Max
-// FPS). As duas fazem o autor escolher, no editor, o nível de qualidade e a
-// resolução interna — e as duas renderizam o viewport do EDITOR em resolução
-// nativa, sem escala dinâmica, porque é ali que se julga a imagem.
-//
-// O arquivo v2 preserva o nível e todos os overrides autorais que a política
-// consome. Assim o painel pode começar pelo preset e aprofundar por eixo sem
-// criar um segundo contrato ou perder os ajustes ao reabrir o projeto.
+// Project GAME rendering settings, persisted and included in exported packages.
+// Unity 6000.0: Manual/class-QualitySettings.html and Manual/GameView.html.
+// Authoring previews have an independent local budget in view_rendering_settings.h;
+// saving game quality does not overwrite the current authoring viewport policy.
+// The versioned file retains every supported per-axis override on roundtrip.
 #include "renderer/rendering_policy.h"
 
 #include <string>
@@ -28,11 +21,9 @@ inline constexpr u32 RenderingSettingsFileVersion = 3;
 std::string writeRenderingSettings(const ProjectRenderingSettings &settings);
 bool readRenderingSettings(std::string_view text, ProjectRenderingSettings &out);
 
-// O que o editor usa quando o projeto não decidiu: resolução nativa, sem escala
-// dinâmica e alvo de 60 Hz. A escala dinâmica é ferramenta de jogo em
-// execução; no editor ela troca a imagem que o autor está julgando por uma
-// mais borrada assim que a GPU aperta — foi o que aconteceu no aparelho, com o
-// viewport caindo para 50% em um segundo e não voltando.
+// Legacy compatibility helper for consumers that explicitly request native-scale
+// 60 Hz defaults. Current Android authoring uses settingsForRenderView instead;
+// never apply this helper to the persisted game/export authority.
 ProjectRenderingSettings withEditorDefaults(ProjectRenderingSettings settings);
 
 // "Ampliação temporal" do painel: uma escolha só sobre dois eixos da política

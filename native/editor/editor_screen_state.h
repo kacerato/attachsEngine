@@ -17,6 +17,7 @@ namespace ae::ui { class UiDrawList; }
 #include "editor/editor_animation_pose_selection.h"
 #include "resources/animation_clip_bake.h"
 #include "renderer/rendering_policy.h"
+#include "renderer/view_rendering_settings.h"
 #include "renderer/texture_streaming.h"
 #include "renderer/scene_statistics.h"
 #include "resources/environment_map_asset.h"
@@ -727,6 +728,8 @@ struct EditorScreenState final {
   // histórico da cena.
   bool sceneLighting=true,sceneEffects=true,sceneSky=true,sceneFog=true,scenePost=true;
   bool sceneEffectsMenu=false;
+  renderer::EditorViewportSettings viewportSettings{};
+  bool viewportPreferencesChanged=false;
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;

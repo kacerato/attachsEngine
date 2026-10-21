@@ -1,4 +1,5 @@
 #include "platform/android/android_frame_pacer.h"
+#include "core/frame_admission.h"
 
 #include <android/choreographer.h>
 #include <android/log.h>
@@ -11,6 +12,7 @@ constexpr const char *LogTag = "Aether.Android";
 void AndroidFramePacer::setTargetFrameRate(unsigned framesPerSecond) {
   const unsigned safeRate = framesPerSecond == 0 ? 60u : framesPerSecond;
   targetIntervalNanos_.store(1'000'000'000LL / safeRate, std::memory_order_relaxed);
+  lastAdmittedNanos_.store(0,std::memory_order_relaxed);
 }
 
 bool AndroidFramePacer::initialize() {
@@ -74,14 +76,10 @@ void AndroidFramePacer::onFrame(long frameTimeNanos, void *context) {
   // a Surface vota em 60 Hz. Admitir todos esses callbacks renderizaria frames
   // que o compositor descarta. Filtramos pela meta global, sem busy-wait.
   const std::int64_t target = pacer.targetIntervalNanos_.load(std::memory_order_relaxed);
-  const std::int64_t lastAdmitted = pacer.lastAdmittedNanos_.load(std::memory_order_relaxed);
-  constexpr std::int64_t SchedulingToleranceNanos = 500'000;
-  if (lastAdmitted == 0 || static_cast<std::int64_t>(frameTimeNanos) - lastAdmitted +
-                               SchedulingToleranceNanos >= target) {
-    pacer.lastAdmittedNanos_.store(static_cast<std::int64_t>(frameTimeNanos),
-                                   std::memory_order_relaxed);
-    // Coalesce callbacks if rendering was longer than the target interval.
-    pacer.frameReady_.store(true, std::memory_order_release);
+  std::int64_t phase=pacer.lastAdmittedNanos_.load(std::memory_order_relaxed);
+  if(ae::admitPresentationFrame(static_cast<std::int64_t>(frameTimeNanos),target,phase)) {
+    pacer.lastAdmittedNanos_.store(phase,std::memory_order_relaxed);
+    pacer.frameReady_.store(true,std::memory_order_release);
   }
   pacer.schedule();
 }

@@ -1,3 +1,4 @@
+#include "renderer/terrain_surface_texture_relocation.h"
 #include "editor/editor_session_internal.h"
 #include "editor/editor_terrain_snow_controls.h"
 #include "editor/editor_humanoid_bones.h"
@@ -560,6 +561,7 @@ void EditorSession::loadEditorPreferences() {
   loadAnimationPoseSelections();
   clipPoseClipboard_.reset();state_.clipPoseClipboardAvailable=false;
   state_.pickerAdvanced=false;
+  state_.viewportSettings={};state_.viewportPreferencesChanged=false;
   state_.focusedInspectors.clear();focusedNames_.clear();focusedValidated_=false;state_.focusedActive=0;
   state_.focusedCollapsed=false;state_.focusedMenu=false;state_.undoNewestFirst=true;
   state_.inspectorSurface=EditorInspectorSurface::Inspection;state_.componentOverviewScroll=0;
@@ -579,6 +581,9 @@ void EditorSession::loadEditorPreferences() {
     std::istringstream fields(line);
     if(!(fields>>key)) continue;
     if(key=="object_picker" && fields>>value) state_.pickerAdvanced=value=="advanced";
+    else if(key=="viewport_quality" && fields>>value)
+      state_.viewportSettings.quality=renderer::parseEditorViewportQuality(value.c_str());
+    else if(key=="viewport_animation" && fields>>value) state_.viewportSettings.animatedMaterials=value=="on";
     else if(key=="undo_order" && fields>>value) state_.undoNewestFirst=value!="oldest";
     else if(key=="inspector_surface" && fields>>value)
       state_.inspectorSurface=value=="components"?EditorInspectorSurface::Components:EditorInspectorSurface::Inspection;
@@ -631,6 +636,8 @@ void EditorSession::saveEditorPreferences() {
   out<<"ASTRA_EDITOR_PREFERENCES_1\nobject_picker "<<(state_.pickerAdvanced?"advanced":"classic")<<'\n';
   out<<"undo_order "<<(state_.undoNewestFirst?"newest":"oldest")<<'\n';
   out<<"inspector_surface "<<(state_.inspectorSurface==EditorInspectorSurface::Components?"components":"inspection")<<'\n';
+  out<<"viewport_quality "<<renderer::editorViewportQualityName(state_.viewportSettings.quality)<<'\n';
+  out<<"viewport_animation "<<(state_.viewportSettings.animatedMaterials?"on":"off")<<'\n';
   out<<"scene_layers "<<state_.hiddenLayers<<' '<<state_.unpickableLayers<<'\n';
   // Visibilidade e seleção por objeto: o id e o nome (a cena reaberta confere).
   for(const auto id:state_.sceneHidden) if(const auto *e=document_.find(id)) out<<"scene_hidden "<<id<<' '<<std::quoted(std::string(e->name))<<'\n';
@@ -3991,7 +3998,9 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
       if(control.textureIndex!=renderer::InvalidMapTexture)control.textureIndex+=textureBase;
       library.terrainControls.push_back(control);
       auto surface=m<source.terrainSurfaces.size()?source.terrainSurfaces[m]:renderer::TerrainSurfaceBinding{};
-      for(auto &texture:surface.textures)if(texture.textureIndex!=renderer::InvalidMapTexture)texture.textureIndex+=textureBase;
+      // source-local -> flat source library, once. Android later adds only
+      // its primitive-package prefix; dedup below is a separate mapping.
+      if(!renderer::offsetTerrainSurfaceSourceTextureIndices(surface,textureBase,source.textures.size(),library.textureDiagnostic))return library;
       library.terrainSurfaces.push_back(std::move(surface));
     }
     library.textures.insert(library.textures.end(),source.textures.begin(),source.textures.end());
@@ -4083,6 +4092,7 @@ EditorSession::ImportedLibrary EditorSession::flattenSources(const std::vector<I
 // duas cópias desta sequência que deixavam uma delas para trás.
 bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string &diagnostic,
                                     usize *outPrimitives, bool transient) {
+  if(!library.textureDiagnostic.empty()){diagnostic=library.textureDiagnostic;return false;}
   if(!publishGeometry_) { diagnostic="Este ambiente não publica geometria importada."; return false; }
   PublishedGeometry published;
   // R2: o orçamento agregado reduz a residência antes de subir. As fontes (e o
@@ -4127,6 +4137,11 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
       streaming[map.textureIndex].streamable=false;
       streaming[map.textureIndex].requestedMip=streaming[map.textureIndex].minimumResidentMip;
     }
+  for(const auto &surface:library.terrainSurfaces)if(surface.staticFx.enabled){
+    const auto index=surface.staticFx.textureIndex;
+    if(index>=textures.size()||!textures[index]||textures[index]->srgb||textures[index]->levels!=1){diagnostic="StaticFX immutable raw snapshot outside flat source library.";return false;}
+    streaming[index].streamable=false;streaming[index].requestedMip=0;streaming[index].minimumResidentMip=0;
+  }
   // A source revision is a separate asset, but identical immutable pixels with
   // identical streaming policy need only one GPU image and bindless descriptor.
   // Keep source-local indices intact; remap only the publication transaction.
@@ -4154,10 +4169,9 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   auto terrainControls=library.terrainControls;
   auto terrainSurfaces=library.terrainSurfaces;
   if(terrainSurfaces.size()!=materials.size()){diagnostic="Superfícies PBR desalinhadas dos materiais.";return false;}
-  for(auto &surface:terrainSurfaces)for(auto &texture:surface.textures) {
-    if(texture.textureIndex>=textureSlots.size()){diagnostic="Textura PBR fora da biblioteca.";return false;}
-    texture.textureIndex=textureSlots[texture.textureIndex];
-  }
+  // flat source library -> deduplicated publication, once for PBR + StaticFX.
+  for(auto &surface:terrainSurfaces)
+    if(!renderer::remapTerrainSurfaceFlatTextureIndices(surface,textureSlots,diagnostic))return false;
   if(terrainControls.size()!=materials.size()) {
     diagnostic="Mapas de controle desalinhados dos materiais.";return false;
   }
@@ -4174,6 +4188,7 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   std::vector<std::pair<u32,renderer::SharedAuthoringTexture>> originalTerrainMaps;
   for(const auto &surface:terrainSurfaces)for(const auto &map:surface.textures)
     originalTerrainMaps.emplace_back(map.textureIndex,textures[map.textureIndex]);
+  for(const auto &surface:terrainSurfaces)if(surface.staticFx.enabled)originalTerrainMaps.emplace_back(surface.staticFx.textureIndex,textures[surface.staticFx.textureIndex]);
   std::vector<renderer::SharedAuthoringTexture> preservedTerrainMaps;
   preservedTerrainMaps.reserve(originalTerrainMaps.size());
   for(const auto &[index,original]:originalTerrainMaps) { (void)index;preservedTerrainMaps.push_back(original); }
@@ -5922,7 +5937,7 @@ EditorEntityId EditorSession::instantiateAssetInTransaction(u32 index, EditorEnt
 void EditorSession::setRenderStats(u32 width,u32 height,float gpuMilliseconds,
                                    std::string_view detectedLevel) {
   state_.qualityDetected=std::string(detectedLevel);
-  std::string text="Renderizando "+std::to_string(width)+"×"+std::to_string(height);
+  std::string text=std::string(state_.standalonePlayer?"Jogo agora ":isPlaying()?"Play agora ":"Editor agora ")+std::to_string(width)+"×"+std::to_string(height);
   if(gpuMilliseconds>0) text+=" · GPU "+decimalText(gpuMilliseconds,1)+" ms";
   state_.qualityStats=std::move(text);
 }
@@ -6438,6 +6453,45 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   refreshTerrainJob();
+  const auto drawRuntimeGui=[&](const UiFontMetrics &metrics) {
+  if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.contextMenu) {
+    auto &sceneGui=playScene_.sceneGui();sceneGui.prepare(playScene_.world(),guiPlayView().frustum,layout_.viewport,state_.surface);
+    sceneGui.draw(list_,metrics);
+    auto &runtime=playScene_.gui();const auto &canvas=runtime.document().canvas();
+    if(!sceneGui.diagnostic().empty())state_.status=sceneGui.diagnostic();
+    if(sceneGui.instances().empty()&&sceneGui.diagnostic().empty()) {
+    if(canvas.mode==ui::GuiCanvasMode::World) {
+      if(guiWorld_.configure(canvas,guiPlayView().frustum,layout_.viewport,state_.surface)) {
+        runtime.layout({0,0,canvas.resolution.x,canvas.resolution.y});
+        guiWorldDrawing_.begin({0,0,canvas.resolution.x,canvas.resolution.y},metrics);
+        runtime.draw(guiWorldDrawing_);
+        guiWorldDrawing_.projectRange(0,guiWorld_.projection(),canvas.occlusion,layout_.viewport);
+        list_.append(guiWorldDrawing_);
+      }
+    } else {runtime.layout(layout_.viewport);runtime.draw(list_);}
+    }
+  }
+  };
+  if(state_.standalonePlayer || (isPlaying() && !state_.playInspect)) {
+    // Play preview keeps its controls, Player keeps only gameplay presentation.
+    // Both retain the Play world and runtime GUI without refreshing authoring
+    // inspectors, thumbnails, search or the two-pass authoring layout.
+    state_.document=isPlaying()&&playScene_.active()?&playScene_.document():&document_;
+    state_.uiTime=clockPrimed_?lastWallSeconds_:0;
+    if(!font_ || !icons_)return;
+    const auto metrics=font_->metrics(UiFontWeight::Regular);
+    list_.begin(state_.surface,metrics);list_.setSolidUv(gui_.immediate().whiteUv());
+    router_.beginFrame();u32 pressed=0;
+    state_.pressedWidget=router_.pressedWidget(pressed)?pressed:0;
+    layout_=buildEditorScreen(state_,editorTheme(),list_,router_);
+    view_=buildEditorViewport(camera_,layout_.viewport,{},projection_);
+    if(isPlaying()&&playScene_.active())view_=guiPlayView();
+    state_.view=&view_;
+    refreshGuiImages();drawRuntimeGui(metrics);
+    instances_.clear();buildUiInstances(list_,*font_,*icons_,kMaximumInstances,instances_);
+    return;
+  }
+
   state_.studio=studio_.get();
   refreshAnimationClip();
   if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);
@@ -6570,6 +6624,7 @@ void EditorSession::update() {
     if(state_.selection==kInvalidEntity) set.clear();
     else if(!state_.isSelected(state_.selection)) set={state_.selection};
   }
+  if(state_.viewportPreferencesChanged) {state_.viewportPreferencesChanged=false;saveEditorPreferences();}
   if(state_.sceneVisibilityChanged) {
     state_.sceneVisibilityChanged=false;appearanceChanged_=true;saveEditorPreferences();
   }
@@ -6702,23 +6757,7 @@ void EditorSession::update() {
     area.height=std::max(0.0f,area.height-state_.surface.height*state_.platformImeFraction);
     gui_.draw(area,state_.surface,list_,guiDeltaSeconds_);
   }
-  if(isPlaying() && playScene_.active() && !state_.playInspect && !state_.contextMenu) {
-    auto &sceneGui=playScene_.sceneGui();sceneGui.prepare(playScene_.world(),guiPlayView().frustum,layout_.viewport,state_.surface);
-    sceneGui.draw(list_,metrics);
-    auto &runtime=playScene_.gui();const auto &canvas=runtime.document().canvas();
-    if(!sceneGui.diagnostic().empty())state_.status=sceneGui.diagnostic();
-    if(sceneGui.instances().empty()&&sceneGui.diagnostic().empty()) {
-    if(canvas.mode==ui::GuiCanvasMode::World) {
-      if(guiWorld_.configure(canvas,guiPlayView().frustum,layout_.viewport,state_.surface)) {
-        runtime.layout({0,0,canvas.resolution.x,canvas.resolution.y});
-        guiWorldDrawing_.begin({0,0,canvas.resolution.x,canvas.resolution.y},metrics);
-        runtime.draw(guiWorldDrawing_);
-        guiWorldDrawing_.projectRange(0,guiWorld_.projection(),canvas.occlusion,layout_.viewport);
-        list_.append(guiWorldDrawing_);
-      }
-    } else {runtime.layout(layout_.viewport);runtime.draw(list_);}
-    }
-  }
+  drawRuntimeGui(metrics);
   instances_.clear();
   buildUiInstances(list_, *font_, *icons_, kMaximumInstances, instances_);
 }

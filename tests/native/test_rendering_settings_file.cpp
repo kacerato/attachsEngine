@@ -172,3 +172,40 @@ AE_TEST(rendering_settings_v3_persist_temporal_upscaler_and_reject_future_names)
   AE_EXPECT_TRUE(readRenderingSettings("astra_rendering 2\nupscaling_filter=fsr1\n", untouched) &&
                  untouched.upscalingFilter == UpscalingFilter::Fsr1, "v2 continua legível");
 }
+
+// Editor quality is a local authoring choice, not a mutation of the game file.
+#include "renderer/view_rendering_settings.h"
+AE_TEST(view_contexts_preserve_game_settings_and_restore_authoring_after_play) {
+  ProjectRenderingSettings game;
+  game.preset=QualityPreset::S;game.upscalingFilter=UpscalingFilter::ArmAsr;
+  game.antiAliasing=AntiAliasingMode::Temporal;game.resolutionScale=.65f;
+  game.maximumRenderHz=120;game.bloomIntensity=2.5f;
+  game.textureStreaming=FeatureOverride::Enabled;
+  const auto original=writeRenderingSettings(game);
+  EditorViewportSettings viewport;
+  for(auto quality:{EditorViewportQuality::Low,EditorViewportQuality::Medium,EditorViewportQuality::High}) {
+    viewport.quality=quality;
+    const auto editor=settingsForRenderView(RenderViewContext::Authoring,game,viewport);
+    const auto play=settingsForRenderView(RenderViewContext::PlayPreview,game,viewport);
+    const auto player=settingsForRenderView(RenderViewContext::Player,game,viewport);
+    auto cappedGame=game;cappedGame.maximumRenderHz=50;
+    AE_EXPECT_EQ(writeRenderingSettings(play),writeRenderingSettings(cappedGame),"Play retains graphics with temporary50FPS budget");
+    AE_EXPECT_EQ(writeRenderingSettings(player),writeRenderingSettings(cappedGame),"Player matches Play graphics and50FPS budget");
+    AE_EXPECT_EQ(editor.maximumRenderHz,30u,"every authoring preset is limited to30FPS");
+    RenderingCapabilities display;display.displayHz=120;
+    AE_EXPECT_EQ(resolveRenderingPolicy(editor,display,ThermalPressure::None).frame.renderHz,30u,"authoring resolved presentation budget");
+    AE_EXPECT_EQ(resolveRenderingPolicy(play,display,ThermalPressure::None).frame.renderHz,50u,"Play resolved presentation budget stays50, not30");
+    AE_EXPECT_EQ(writeRenderingSettings(game),original,"authoring cannot mutate the export authority");
+    auto lateScriptRestore=game;lateScriptRestore.preset=QualityPreset::C;
+    lateScriptRestore.resolutionScale=.5f;lateScriptRestore.upscalingFilter=UpscalingFilter::Fsr2;
+    AE_EXPECT_EQ(writeRenderingSettings(settingsForRenderView(RenderViewContext::Authoring,lateScriptRestore,viewport)),
+        writeRenderingSettings(editor),"late script/Stop restoration cannot replace viewport policy");
+    AE_EXPECT_TRUE(editor.upscalingFilter==UpscalingFilter::Bilinear &&
+        editor.antiAliasing!=AntiAliasingMode::Temporal,"authoring allocates no temporal reconstruction");
+    AE_EXPECT_TRUE(editor.textures==TextureQuality::Full && editor.textureStreaming==FeatureOverride::Disabled,
+        "all presets preserve original texture residency");
+    AE_EXPECT_EQ(writeRenderingSettings(settingsForRenderView(RenderViewContext::Authoring,game,viewport)),
+        writeRenderingSettings(editor),"Stop restores the same authoring configuration");
+  }
+  AE_EXPECT_TRUE(parseEditorViewportQuality("invalid")==EditorViewportQuality::Medium,"safe preference fallback");
+}

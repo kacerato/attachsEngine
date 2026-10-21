@@ -1,6 +1,7 @@
 // Standalone real-device offscreen test. Uses Vulkan directly so it does not
 // depend on editor state, Android, renderer mocks, image codecs or a window.
 #define VK_NO_PROTOTYPES
+#include "renderer/terrain_pipeline_publication_owner.h"
 #include "renderer/material_override.h"
 #include "renderer/terrain_surface_table.h"
 #include "resources/terrain_surface_texture_refs.h"
@@ -513,9 +514,10 @@ int main(int argc, char **argv) {
         "pipeline layout");
   std::string directory = argv[1];
   VkShaderModule vert = shader(f.device, directory + "/control.vert.spv");
-  std::array<VkPipeline, 3> pipelines;
-  for (size_t i = 0; i < 3; ++i) {
-    auto frag = shader(f.device, directory + (i == 2 ? "/pbr.frag.spv"
+  ae::renderer::TerrainPipelinePublicationOwner capabilityOwner(f.device,vkCreateGraphicsPipelines,vkDestroyPipeline,vkDestroyShaderModule);
+  std::array<VkPipeline, 20> pipelines;
+  for (size_t i = 0; i < pipelines.size(); ++i) {
+    auto frag = shader(f.device, directory + (i >= 2 ? "/pbr.frag.spv"
                                               : i    ? "/fallback.frag.spv"
                                                      : "/control.frag.spv"));
     std::array<VkPipelineShaderStageCreateInfo, 2> stages{};
@@ -527,6 +529,16 @@ int main(int argc, char **argv) {
     stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
     stages[1].module = frag;
     stages[1].pName = "main";
+    const ae::u32 capability=i==19?0x80000000u:ae::u32(i-3);
+    VkSpecializationMapEntry capabilityEntry{6,0,sizeof(capability)};
+    VkSpecializationInfo capabilityInfo{1,&capabilityEntry,sizeof(capability),&capability};
+    if(i>=3)stages[1].pSpecializationInfo=&capabilityInfo;
+    // The owner copies the production six-ID recipe then appends capability ID6.
+    std::array<ae::u32,6> originalValues{0,0xffffffffu,0,0,1,0};
+    std::array<VkSpecializationMapEntry,6> originalEntries;
+    for(ae::u32 n=0;n<6;++n)originalEntries[n]={n,n*4,4};
+    VkSpecializationInfo originalInfo{6,originalEntries.data(),sizeof(originalValues),originalValues.data()};
+    if(i==2)stages[1].pSpecializationInfo=&originalInfo;
     VkPipelineVertexInputStateCreateInfo vi{
         VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
     VkPipelineInputAssemblyStateCreateInfo ia{
@@ -562,12 +574,16 @@ int main(int argc, char **argv) {
     pi.pRasterizationState = &raster;
     pi.pMultisampleState = &ms;
     pi.pColorBlendState = &cb;
+    VkPipelineDynamicStateCreateInfo retainedDynamic{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    VkPipelineDepthStencilStateCreateInfo retainedDepth{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    pi.pDynamicState=&retainedDynamic;pi.pDepthStencilState=&retainedDepth;
     pi.layout = pipelineLayout;
     pi.renderPass = renderPass;
     check(vkCreateGraphicsPipelines(f.device, VK_NULL_HANDLE, 1, &pi, nullptr,
                                     &pipelines[i]),
           "production shader graphics pipeline");
-    vkDestroyShaderModule(f.device, frag, nullptr);
+    if(i==2){require(capabilityOwner.capture(pipelines[i],pi),"capture real Vulkan PBR creation recipe");capabilityOwner.retainModule(frag);}
+    else vkDestroyShaderModule(f.device, frag, nullptr);
   }
   auto expectPixel = [&](uint32_t x, std::array<uint8_t, 4> expected,
                          const char *label,int tolerance=3) {
@@ -589,6 +605,7 @@ int main(int argc, char **argv) {
   std::array<std::vector<uint8_t>,312> modePixels;
   for (uint32_t mode = 0; mode < 312; ++mode) {
     if(mode==189&&argc!=3)continue;
+    ae::u32 capabilityMask=ae::renderer::TerrainCapabilityGeneric;
     if (mode == 29 || mode==50) {
       auto staging = f.buffer(4, VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
       const uint8_t negativeZ[4]{uint8_t(mode==29?128:191), 128, uint8_t(mode==29?0:238), 255};
@@ -1004,6 +1021,7 @@ int main(int argc, char **argv) {
       require(
           appendTerrainSurfaceTable(binding, slots, published, offset, error),
           error.c_str());
+      capabilityMask=ae::renderer::terrainPipelineCapabilities(published);
       if(mode==48||mode==110||mode==181||mode==218||mode==248||mode==281||mode==295){
         require(relocateTerrainSurfaceTable(published,3,error),error.c_str());
         published.insert(published.begin(),12,0.f);offset+=3;
@@ -1075,6 +1093,65 @@ int main(int argc, char **argv) {
     require(bool(evidence), "write real GPU evidence PPM");
     evidence.flush();
     modePixels[mode].assign(rgba,rgba+width*height*4);
+    if(mode>=8&&capabilityMask<=ae::renderer::TerrainCapabilityKnown){
+      // Actual Vulkan readback equality for every existing PBR mode, including
+      // refraction, Snow, Rain, color, derivatives and relocations. No old
+      // analytic assertion is replaced by this comparison.
+      capabilityOwner.beginPublicationAtIdle();
+      capabilityOwner.commitPublicationAtIdle(capabilityMask,VK_NULL_HANDLE);
+      require(capabilityOwner.select(pipelines[2])!=pipelines[2],"actual publication owner selects created VkPipeline");
+      for(VkPipeline specializedPipeline:{pipelines[3u+capabilityMask],pipelines[19],capabilityOwner.select(pipelines[2])}){
+    auto cmd = f.command();
+    VkClearValue clear{};
+    VkRenderPassBeginInfo bi{VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO};
+    bi.renderPass = renderPass;
+    bi.framebuffer = framebuffer;
+    bi.renderArea = {{0, 0}, {width, height}};
+    bi.clearValueCount = 1;
+    bi.pClearValues = &clear;
+    if(timestamps){vkCmdResetQueryPool(cmd,timestamps,0,2);vkCmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,timestamps,0);}
+    vkCmdBeginRenderPass(cmd, &bi, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      specializedPipeline);
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout, 0, 2, sets.data(), 0, nullptr);
+    vkCmdPushConstants(cmd, pipelineLayout, VK_SHADER_STAGE_FRAGMENT_BIT, 0, 4,
+                       &mode);
+    vkCmdDraw(cmd, 6, 1, 0, 0);
+    vkCmdEndRenderPass(cmd);
+    if(timestamps)vkCmdWriteTimestamp(cmd,VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,timestamps,1);
+    f.transition(cmd, target, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                 VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                 VK_ACCESS_TRANSFER_READ_BIT,
+                 VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT);
+    VkBufferImageCopy copy{};
+    copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    copy.imageExtent = {width, height, 1};
+    vkCmdCopyImageToBuffer(cmd, target.handle,
+                           VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                           readback.handle, 1, &copy);
+    VkBufferMemoryBarrier barrier{VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex =
+        VK_QUEUE_FAMILY_IGNORED;
+    barrier.buffer = readback.handle;
+    barrier.size = VK_WHOLE_SIZE;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_HOST_BIT, 0, 0, nullptr, 1, &barrier,
+                         0, nullptr);
+    f.submit(cmd);
+
+        const auto *actual=static_cast<const uint8_t*>(readback.mapped);
+        for(size_t byte=0;byte<modePixels[mode].size();++byte)
+          require(std::abs(int(actual[byte])-int(modePixels[mode][byte]))<=1,
+            "capability specialized/unknown-key generic fallback equals full PBR readback within one UNORM unit");
+      }
+      std::memcpy(readback.mapped,modePixels[mode].data(),modePixels[mode].size());
+    }
+
     if(mode==310||mode==311){expectPixel(16,mode==310?std::array<uint8_t,4>{128,128,0,255}:std::array<uint8_t,4>{155,100,0,255},"Refraction height fade uses same world metre domain as coverage, while depth uses material height");continue;}
     if(mode>=302&&mode<=309){
       const std::array<std::array<uint8_t,4>,8> expected{{
@@ -1376,6 +1453,7 @@ int main(int argc, char **argv) {
       "PASS: production terrain fragment shader, narrow stripe/exterior, exact "
       "UV edges, closed side, legacy material and non-bindless fallback");
   if(timestamps)vkDestroyQueryPool(f.device,timestamps,nullptr);
+  capabilityOwner.clearAtIdle();
   for (auto p : pipelines)
     vkDestroyPipeline(f.device, p, nullptr);
   vkDestroyShaderModule(f.device, vert, nullptr);

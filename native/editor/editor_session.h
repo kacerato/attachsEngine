@@ -1351,6 +1351,7 @@ private:
                            const std::string &path,std::string &diagnostic);
   void settleModelPublication();
   struct ImportedLibrary {
+    std::string textureDiagnostic; // failed cold source-index validation; never publish partial library
     std::vector<u8> vertices;
     std::vector<u32> indices;
     std::vector<renderer::MapDrawRecord> draws;

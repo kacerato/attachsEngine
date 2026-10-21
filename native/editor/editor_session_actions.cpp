@@ -2664,7 +2664,9 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityOpen)) {
-    state_.qualityPanel=!state_.qualityPanel;return true;
+    state_.qualityPanel=!state_.qualityPanel;
+    if(state_.qualityPanel && isPlaying()) state_.playInspect=true;
+    return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityTemporalDebugQuick)) {
     if(state_.qualityTemporalAvailable && state_.workspace==EditorWorkspace::Scene)
@@ -2672,8 +2674,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     return true;
   }
   if(routing.tapped && routing.widgetId==widgetId(EditorWidget::QualityTemporalModeQuick)) {
-    // Controle rápido: aplica na hora, sobre o que está salvo, e pula o que o
-    // aparelho recusa dizendo por quê.
+    // Save the next Play/APK policy, skipping unavailable device capabilities.
+    // This does not replace the independent authoring viewport policy.
     using Mode=renderer::TemporalReconstruction;
     auto next=renderingSettings_;
     auto mode=renderer::temporalReconstruction(next);
@@ -2695,7 +2697,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     renderingSettingsRequestRevision_=qualityRevision_;
     renderingSettingsRequested_=true;
     if(!state_.qualityDirty) state_.qualityDraft=next;
-    state_.status=std::string("Ampliação temporal: ")+renderer::temporalReconstructionLabel(mode)+
+    state_.status=std::string("Próximo Play/APK: ")+renderer::temporalReconstructionLabel(mode)+
                   (skipped.empty()?std::string():" ("+skipped+")");
     return true;
   }
@@ -2906,7 +2908,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       requestedRenderingSettings_=draft;
       renderingSettingsRequestRevision_=qualityRevision_;
       renderingSettingsRequested_=true;
-      state_.status="Salvando qualidade do projeto";
+      state_.status="Salvando gráficos para o próximo Play/APK";
       return true;
     } else changed=false;
     if(changed) {

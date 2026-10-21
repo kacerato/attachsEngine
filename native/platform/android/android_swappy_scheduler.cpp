@@ -32,6 +32,11 @@ void AndroidSwappyScheduler::configure(ANativeActivity *activity, ANativeWindow 
                       static_cast<u64>(std::max(1u, targetFramesPerSecond));
 }
 
+void AndroidSwappyScheduler::setTargetFrameRate(u32 framesPerSecond) {
+  targetIntervalNs_=1'000'000'000ULL/std::max(1u,framesPerSecond);
+  if(active_ && device_ && swapchain_)SwappyVk_setSwapIntervalNS(device_,swapchain_,targetIntervalNs_);
+}
+
 void AndroidSwappyScheduler::requiredDeviceExtensions(
     VkPhysicalDevice physicalDevice, std::vector<std::string> &extensions) {
   extensions.clear();

@@ -9947,7 +9947,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
   const auto close = takeRight(header, 28);
   builder.label(close, "X", theme.color.textDim, theme.type.caption, UiAlign::Center);
   router.addRegion(close, widgetId(EditorWidget::QualityClose));
-  builder.label(header, "Gráficos do projeto", theme.color.text, theme.type.cardName);
+  builder.label(header, "Gráficos do jogo", theme.color.text, theme.type.cardName);
   auto tabs=takeTop(content,34);
   const std::array<std::tuple<const char *,EditorWidget>,5> tabItems{{
     {"Geral",EditorWidget::QualityTabGeneral},{"Sombras",EditorWidget::QualityTabShadows},
@@ -10034,7 +10034,8 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     const bool pending=mode!=renderer::temporalReconstruction(state.qualityApplied);
     if(availability!=renderer::TemporalUpscalerAvailability::Available)
       temporal+=std::string(" · indisponível: ")+renderer::temporalUpscalerAvailabilityLabel(availability);
-    else if(pending) temporal+=" · aplicar";
+    else if(pending) temporal+=" · salvar";
+    else if(state.workspace!=EditorWorkspace::Play) temporal+=" · no Play/APK";
     else if(upscaler) temporal+=state.qualityExecutedUpscaler==draft.upscalingFilter?" · ativo":
         std::string(" · falhou: ")+renderer::temporalUpscalerAvailabilityLabel(state.qualityExecutedStatus);
     else if(mode==Mode::NativeTaa) temporal+=state.qualityTemporalAaExecuted?" · ativo":" · sem histórico nesta vista";
@@ -10048,7 +10049,7 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
         EditorWidget::QualityAntiAliasing,!upscaler);
     row("Filtro espacial",upscaler?std::string("Substituído pelo ")+renderer::upscalingFilterLabel(draft.upscalingFilter):
         std::string(renderer::upscalingFilterLabel(draft.upscalingFilter)),EditorWidget::QualityUpscaling,!upscaler);
-    row("Taxa alvo",draft.maximumRenderHz?std::to_string(draft.maximumRenderHz)+" Hz":std::string("Do nível"),EditorWidget::QualityRate);
+    row("Limite de quadros","50 FPS · Play/APK",EditorWidget::QualityRate,false);
     row("Texturas / anisotropia",renderer::textureQualityLabel(draft.textures),EditorWidget::QualityTextures);
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
   } else if(state.qualityTab==1) {
@@ -10117,10 +10118,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Variantes de material",renderer::featureOverrideLabel(draft.materialShaderVariants),EditorWidget::QualityMaterialVariants);
     row("Estatísticas no viewport",state.sceneStatisticsVisible?"Visíveis":"Ocultas",EditorWidget::QualitySceneStatistics);
   }
-  // Aplicar reconstrói o renderer: é explícito, como o Apply do Import
-  // Settings, porque troca alvos de renderização e leva um instante.
+  // Save game settings explicitly. Editor viewport quality is independent;
+  // the next Play/Player start resolves the saved game policy.
   list.addRect(apply, state.qualityDirty ? theme.color.accent : theme.color.raised, theme.radius.control);
-  builder.label(apply, state.qualityDirty ? "Aplicar" : "Aplicado",
+  builder.label(apply, state.qualityDirty ? "Salvar para Play/APK" : "Salvo · Play/APK",
                 state.qualityDirty ? theme.color.accentInk : theme.color.textMuted, theme.type.caption, UiAlign::Center);
   if (state.qualityDirty) router.addRegion(apply, widgetId(EditorWidget::QualityApply));
   builder.label(stats, state.qualityStats, theme.color.textMuted, theme.type.caption);
@@ -11033,6 +11034,7 @@ void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layou
 EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiTheme &theme,
                                      UiDrawList &list, UiInputRouter &router) {
   EditorScreenLayout layout{};
+  UiRect viewportOptionsAnchor{};
   if (state.document == nullptr || state.surface.isEmpty()) return layout;
 
   if(state.standalonePlayer) {
@@ -11310,23 +11312,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
                        widgetId(EditorWidget::SceneEffectsToggle),state.sceneEffects);
     builder.iconButton(effectsMenu,state.sceneEffectsMenu?UiIcon::UiChevronUp:UiIcon::UiChevronDown,
                        widgetId(EditorWidget::SceneEffectsMenu),state.sceneEffectsMenu);
-    if(state.sceneEffectsMenu) {
-      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 126.0f};
-      list.addRect(panel,withAlpha(theme.color.surface,.97f),theme.radius.control);
-      // Construção explícita para preservar o retângulo completo como alvo.
-      const auto row=[&](float y,UiIcon glyph,const char *label,EditorWidget widget,bool active) {
-        UiRect bounds{panel.x+5.0f,y,panel.width-10.0f,36.0f};
-        list.addRect(bounds,active?theme.color.raised:theme.color.surface,theme.radius.control);
-        UiRect content=bounds;
-        list.addImage(centred(takeLeft(content,34.0f),18.0f,18.0f),static_cast<UiImageId>(glyph),
-                      active?theme.color.accent:theme.color.textDim);
-        builder.label(content,label,active?theme.color.text:theme.color.textDim,theme.type.caption);
-        router.addRegion(bounds,widgetId(widget),theme.touch.minimumTarget);
-      };
-      row(panel.y+6.0f,UiIcon::LightingSky,"Sky",EditorWidget::SceneSkyToggle,state.sceneSky);
-      row(panel.y+45.0f,UiIcon::LightingFog,"Fog",EditorWidget::SceneFogToggle,state.sceneFog);
-      row(panel.y+84.0f,UiIcon::LightingPostProcessing,"Post Processing",EditorWidget::ScenePostToggle,state.scenePost);
-    }
+    viewportOptionsAnchor=effects;
     }
     if(state.cameraViewEntity) {
       const auto *cameraEntity=state.document->find(state.cameraViewEntity);
@@ -11434,6 +11420,43 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
   // O roteador resolve da última região para a primeira, então a mesma ordem
   // também impede Lighting/Effects e a navegação inferior de roubarem toques.
   // Menus contextuais e modais abaixo continuam acima dele deliberadamente.
+  // Draw and route the entire popup above navigation controls.
+    if(state.sceneEffectsMenu && state.workspace==EditorWorkspace::Scene && !viewportOptionsAnchor.isEmpty()) {
+      const float panelX=std::max(layout.viewport.x+8.f,std::min(viewportOptionsAnchor.x,layout.viewport.right()-260.f));
+      const float panelY=std::max(state.surface.y+8.f,std::min(viewportOptionsAnchor.bottom()+6.f,state.surface.bottom()-180.f));
+      const UiRect panel{panelX,panelY,252.f,172.f};
+      router.addBlocker(panel);
+      list.addRect(panel,withAlpha(theme.color.surface,.97f),theme.radius.control);
+      // Construção explícita para preservar o retângulo completo como alvo.
+      const auto row=[&](float y,UiIcon glyph,const char *label,EditorWidget widget,bool active) {
+        UiRect bounds{panel.x+5.0f,y,panel.width-10.0f,36.0f};
+        list.addRect(bounds,active?theme.color.raised:theme.color.surface,theme.radius.control);
+        UiRect content=bounds;
+        list.addImage(centred(takeLeft(content,34.0f),18.0f,18.0f),static_cast<UiImageId>(glyph),
+                      active?theme.color.accent:theme.color.textDim);
+        builder.label(content,label,active?theme.color.text:theme.color.textDim,theme.type.caption);
+        router.addRegion(bounds,widgetId(widget),theme.touch.minimumTarget);
+      };
+      builder.label({panel.x+10.f,panel.y+6.f,panel.width-20.f,24.f},"Viewport do editor · 30 FPS",theme.color.text,theme.type.caption);
+      const char *qualityNames[]{"Baixo","Médio","Alto"};
+      for(u32 i=0;i<3;++i) {
+        const UiRect bounds{panel.x+6.f+i*80.f,panel.y+34.f,76.f,40.f};
+        const bool selected=static_cast<u32>(state.viewportSettings.quality)==i;
+        list.addRect(bounds,selected?theme.color.raised:theme.color.surface,theme.radius.control);
+        builder.label(bounds,qualityNames[i],selected?theme.color.accent:theme.color.text,theme.type.caption,UiAlign::Center);
+        router.addRegion(bounds,widgetId(EditorWidget::ViewportLow)+i,theme.touch.minimumTarget);
+      }
+      row(panel.y+80.f,UiIcon::LightingSceneEffects,"Animar materiais",EditorWidget::ViewportAnimateMaterials,state.viewportSettings.animatedMaterials);
+      const char *effectNames[]{"Céu","Névoa","Pós"};
+      const EditorWidget effectWidgets[]{EditorWidget::SceneSkyToggle,EditorWidget::SceneFogToggle,EditorWidget::ScenePostToggle};
+      const bool effectStates[]{state.sceneSky,state.sceneFog,state.scenePost};
+      for(u32 i=0;i<3;++i) {
+        const UiRect bounds{panel.x+6.f+i*80.f,panel.y+126.f,76.f,40.f};
+        list.addRect(bounds,effectStates[i]?theme.color.raised:theme.color.surface,theme.radius.control);
+        builder.label(bounds,effectNames[i],effectStates[i]?theme.color.accent:theme.color.textDim,theme.type.caption,UiAlign::Center);
+        router.addRegion(bounds,widgetId(effectWidgets[i]),theme.touch.minimumTarget);
+      }
+    }
   if(state.qualityPanel) buildQualityPanel(builder,layout.viewport);
   if(state.lightExplorer) buildLightExplorer(builder,layout.viewport);
   // Janelas que não bloqueiam o editor (Inspectors focados, histórico, camadas

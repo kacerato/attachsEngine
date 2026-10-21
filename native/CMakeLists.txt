@@ -333,6 +333,7 @@ add_library(aether_renderer STATIC
   renderer/shadow_cascades.cpp
   renderer/shadow_atlas.cpp
   renderer/rendering_settings_file.cpp
+  renderer/view_rendering_settings.cpp
   renderer/temporal_upscaler_capability.cpp
   renderer/hzb_visibility.cpp
   renderer/lod_selection.cpp
@@ -1006,6 +1007,13 @@ if(NOT ANDROID)
   target_link_libraries(aether_terrain_workflow_preview PRIVATE aether_core aether_ui aether_editor aether_renderer)
   aether_add_terrain_core_tests()
   aether_add_terrain_surface_preview()
+  add_executable(aether_view_rendering_tests EXCLUDE_FROM_ALL
+    ../tests/native/family_base_main.cpp
+    ../tests/native/test_rendering_policy.cpp
+    ../tests/native/test_rendering_settings_file.cpp
+    ../tests/native/test_frame_policy.cpp)
+  target_include_directories(aether_view_rendering_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_view_rendering_tests PRIVATE aether_renderer)
   add_executable(aether_terrain_tests ../tests/native/family_base_main.cpp ../tests/native/test_terrain.cpp ../tests/native/test_terrain_import.cpp ../tests/native/test_terrain_lod.cpp
     ../tests/native/test_terrain_core.cpp ../tests/native/test_terrain_reedit.cpp ../tests/native/test_terrain_ui.cpp
     ../tests/native/test_terrain_history_store.cpp ../tests/native/test_terrain_neighbors.cpp
@@ -1019,9 +1027,19 @@ if(NOT ANDROID)
     ../tests/native/test_terrain_fx_editor.cpp ../tests/native/test_terrain_static_fx_import.cpp
     ../tests/native/test_terrain_static_fx_pipeline.cpp ../tests/native/test_terrain_static_fx_table.cpp
     ../tests/native/test_terrain_streams_lava_table.cpp ../tests/native/test_terrain_rain_specular_table.cpp
-    ../tests/native/test_terrain_surface_texture_relocation.cpp)
+    ../tests/native/test_terrain_surface_texture_relocation.cpp
+    ../tests/native/test_terrain_static_fx_source_remap.cpp)
   target_include_directories(aether_terrain_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_terrain_tests PRIVATE aether_editor aether_ui aether_renderer)
+  add_executable(aether_terrain_pipeline_capabilities_tests EXCLUDE_FROM_ALL
+    ../tests/native/family_base_main.cpp ../tests/native/test_terrain_pipeline_capabilities.cpp
+    ../tests/native/test_terrain_pipeline_publication_owner.cpp)
+  target_include_directories(aether_terrain_pipeline_capabilities_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native ${Vulkan_INCLUDE_DIRS})
+  target_link_libraries(aether_terrain_pipeline_capabilities_tests PRIVATE aether_assets aether_renderer)
+  add_executable(aether_swapchain_frame_gate_tests EXCLUDE_FROM_ALL
+    ../tests/native/family_base_main.cpp ../tests/native/test_swapchain_frame_gate.cpp)
+  target_include_directories(aether_swapchain_frame_gate_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native ${Vulkan_INCLUDE_DIRS})
+  target_link_libraries(aether_swapchain_frame_gate_tests PRIVATE aether_core)
   add_executable(aether_texture_publication_tests EXCLUDE_FROM_ALL
     ../tests/native/family_base_main.cpp ../tests/native/test_project_textures.cpp
     ../tests/native/test_texture_streaming.cpp ../tests/native/test_texture_disk_levels.cpp

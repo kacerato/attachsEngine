@@ -1,3 +1,4 @@
+#include "rhi/swapchain_frame_gate.h"
 // Implementação real de VulkanDevice/VulkanSwapchain. VulkanDevice não é
 // exercitada por teste nesta máquina — sem GPU nem loader Vulkan funcional
 // (ver nota em device.h) — escrita para compilar e para ser correta contra
@@ -346,29 +347,15 @@ bool VulkanSwapchain::recreate(u32 newWidth, u32 newHeight) {
   return true;
 }
 
+SwapchainStatus VulkanSwapchain::pollFrameReady() {
+  if(!isReady())return SwapchainStatus::FatalError;
+  return pollVulkanFrameReady(device_,inFlightFence_,vkGetFenceStatus);
+}
+
 SwapchainStatus VulkanSwapchain::acquireNextImage(u32 *outImageIndex) {
-  if (outImageIndex == nullptr || !isReady() ||
-      vkWaitForFences(device_, 1, &inFlightFence_, VK_TRUE, UINT64_MAX) != VK_SUCCESS) {
-    return SwapchainStatus::FatalError;
-  }
-
-  u32 imageIndex = 0;
-  const VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-                                                imageAvailableSemaphore_, VK_NULL_HANDLE,
-                                                &imageIndex);
-  if (result == VK_ERROR_OUT_OF_DATE_KHR) return SwapchainStatus::OutOfDateMustRecreate;
-  if (result == VK_ERROR_SURFACE_LOST_KHR) return SwapchainStatus::SurfaceLost;
-  if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) return SwapchainStatus::FatalError;
-
-  // Fence só é resetada depois de sabermos que vamos de fato submeter este
-  // frame — resetar antes e depois falhar em acquire deixaria a fence
-  // sinalizada errado (o próximo acquireNextImage não esperaria nada).
-  if (vkResetFences(device_, 1, &inFlightFence_) != VK_SUCCESS) {
-    return SwapchainStatus::FatalError;
-  }
-
-  *outImageIndex = imageIndex;
-  return result == VK_SUBOPTIMAL_KHR ? SwapchainStatus::SuboptimalNeedsRecreate : SwapchainStatus::Ok;
+  if(!isReady())return SwapchainStatus::FatalError;
+  return acquireVulkanFrameNonblocking(device_,swapchain_,inFlightFence_,imageAvailableSemaphore_,outImageIndex,
+      vkGetFenceStatus,vkAcquireNextImageKHR,vkResetFences);
 }
 
 SwapchainStatus VulkanSwapchain::present(u32 imageIndex) {

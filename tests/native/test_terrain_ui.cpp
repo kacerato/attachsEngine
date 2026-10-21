@@ -2120,3 +2120,97 @@ AE_TEST(terrain_catalog_search_accepts_complete_source_sha_and_custom_keyboard_w
  AE_EXPECT_TRUE(!f.session.completeTextEdit(f.session.pendingTextEdit(),std::string(129,'a'),true),"129-byte query is refused rather than truncated");
  AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),std::string(128,'a'),true),"full128-byte search budget is supported");
 }
+
+#include "renderer/rendering_settings_file.h"
+AE_TEST(viewport_quality_controls_persist_without_mutating_game_settings) {
+  TerrainUiFixture f(1024,420);AE_EXPECT_TRUE(f.ready,"actual editor fixture");
+  renderer::ProjectRenderingSettings game;game.preset=renderer::QualityPreset::S;
+  game.upscalingFilter=renderer::UpscalingFilter::ArmAsr;
+  f.session.setRenderingSettings(game);
+  const auto original=renderer::writeRenderingSettings(f.session.renderingSettings());
+  AE_EXPECT_TRUE(f.tap(id(Widget::TerrainClose)),"return to actual Scene viewport");
+  const auto tapScreen=[&](Widget widget) {
+    f.render();const auto surface=f.session.screen().surface;
+    for(float y=surface.y+2;y<surface.bottom();y+=2) for(float x=surface.x+2;x<surface.right();x+=2)
+      if(f.router.hitTest({x,y}).widgetId==id(widget)) {
+        f.time+=1;f.session.handlePointer({97,ui::UiPointerPhase::Down,{x,y},f.time});
+        f.session.handlePointer({97,ui::UiPointerPhase::Up,{x,y},f.time+.1});return true;
+      }
+    return false;
+  };
+  AE_EXPECT_TRUE(tapScreen(Widget::SceneEffectsMenu),"real Scene options menu");
+  AE_EXPECT_TRUE(tapScreen(Widget::ViewportLow),"low touch target");
+  AE_EXPECT_TRUE(f.session.screen().viewportSettings.quality==renderer::EditorViewportQuality::Low,"low consumed by model");
+  AE_EXPECT_TRUE(tapScreen(Widget::ViewportHigh),"high touch target");
+  AE_EXPECT_TRUE(tapScreen(Widget::ViewportAnimateMaterials),"animated material preview touch target");
+  f.render();
+  AE_EXPECT_EQ(renderer::writeRenderingSettings(f.session.renderingSettings()),original,"authoring controls preserve game graphics");
+  renderer::ProjectRenderingSettings requested;
+  AE_EXPECT_TRUE(!f.session.takeRenderingSettingsRequest(requested),"no project quality apply request from authoring");
+  editor::EditorSession reopened;reopened.initialize(&f.font,&f.icons);
+  AE_EXPECT_TRUE(reopened.setProjectDirectory(f.path.string().c_str()),"reopen actual saved editor preferences");
+  AE_EXPECT_TRUE(reopened.screen().viewportSettings.quality==renderer::EditorViewportQuality::High &&
+      reopened.screen().viewportSettings.animatedMaterials,"quality and animation survive reopening");
+}
+
+#include "scene/ui_canvas.h"
+AE_TEST(play_and_player_update_keep_runtime_gui_input_and_authored_source_immutable) {
+  for(bool player:{false,true}) {
+    TerrainUiFixture f(1024,420);AE_EXPECT_TRUE(f.ready&&f.tap(id(Widget::TerrainClose)),"actual session leaves terrain authoring");
+    ui::GuiDocument source;std::string error;
+    const auto button=source.create(ui::GuiKind::Toggle);auto node=*source.find(button);
+    node.offsets={40,40,160,100};node.interaction.clickable=true;
+    AE_EXPECT_TRUE(source.update(node,error),"real runtime toggle source");
+    f.session.gui().document()=source;AE_EXPECT_TRUE(f.session.gui().save(),"registered persistent GUI resource");
+    resources::AssetRegistry registry;
+    AE_EXPECT_TRUE(resources::AssetRegistry::deserialize(f.session.serializeAssets(),registry),"read actual registry");
+    const auto *record=registry.findByPath("UI/main.aeui");AE_EXPECT_TRUE(record,"registered main GUI");
+    if(!record)return;
+    auto &document=f.session.document();const auto owner=document.createEntity(document.root(),runtime::ObjectKind::Folder,"Game HUD");
+    auto object=*document.find(owner);auto *canvas=static_cast<scene::UiCanvas*>(object.components.add(scene::UiCanvas::descriptor));
+    canvas->document=record->guid;canvas->mode=0;
+    AE_EXPECT_TRUE(document.applyEntityValues(owner,object),"gameplay Canvas owns its presentation");
+    f.session.setStandalonePlayer(player);
+    AE_EXPECT_TRUE(f.session.startPlay(),"real Play request accepted");
+    std::vector<renderer::MapDrawState> frame;
+    AE_EXPECT_TRUE(f.session.extractPlayMap(frame),"backend starts the real execution world");f.session.update();
+    auto &play=const_cast<editor::EditorPlayScene &>(f.session.playScene());
+    const auto lease=play.sceneGui().instanceFor(play.world(),owner);
+    const auto *live=play.sceneGui().find(play.world(),lease);AE_EXPECT_TRUE(live,"actual world GUI instance");
+    if(!live)return;
+    const auto *placement=live->runtime.placement(button);AE_EXPECT_TRUE(placement,"runtime GUI received fresh layout");
+    if(!placement)return;
+    const ui::UiPoint point{placement->bounds.x+placement->bounds.width*.5f,placement->bounds.y+placement->bounds.height*.5f};
+    f.session.handlePointer({98,ui::UiPointerPhase::Down,point,20});
+    f.session.handlePointer({98,ui::UiPointerPhase::Up,point,20.1});f.session.update();
+    AE_EXPECT_EQ(live->runtime.document().find(button)->value,1.f,"actual routed touch changes only live GUI state");
+    AE_EXPECT_EQ(f.session.gui().document().find(button)->value,0.f,"authored GUI source remains immutable");
+    AE_EXPECT_TRUE(f.session.layout().inspectorPanel.isEmpty(),"gameplay has no authoring Inspector");
+    AE_EXPECT_TRUE(player?f.session.layout().topBar.isEmpty():!f.session.layout().topBar.isEmpty(),"Player omits editor chrome; Play preview keeps Stop controls");
+    f.session.setStandalonePlayer(false);f.render();bool stopped=false;
+    for(float y=0;y<f.session.screen().surface.height&&!stopped;y+=2)
+      for(float x=0;x<f.session.screen().surface.width&&!stopped;x+=2)
+        if(f.router.hitTest({x,y}).widgetId==id(Widget::PlayFromTopBar)) {
+          f.session.handlePointer({99,ui::UiPointerPhase::Down,{x,y},21});
+          f.session.handlePointer({99,ui::UiPointerPhase::Up,{x,y},21.1});stopped=true;
+        }
+    AE_EXPECT_TRUE(stopped,"real Stop control is reachable when editor chrome is restored");f.session.update();
+    AE_EXPECT_TRUE(!f.session.isPlaying(),"Stop ends the world without keeping a second gameplay simulation");
+  }
+}
+
+AE_TEST(viewport_options_effects_remain_above_compact_navigation_touch_targets) {
+ for(const auto size:{ui::UiPoint{655,300},ui::UiPoint{1280,720}}) {
+  TerrainUiFixture f(size.x,size.y);AE_EXPECT_TRUE(f.ready&&f.tap(id(Widget::TerrainClose)),"actual Scene view");
+  f.render();bool opened=false;
+  for(float y=0;y<size.y&&!opened;y+=2)for(float x=0;x<size.x&&!opened;x+=2)
+   if(f.router.hitTest({x,y}).widgetId==id(Widget::SceneEffectsMenu)) {
+    f.session.handlePointer({101,ui::UiPointerPhase::Down,{x,y},30});f.session.handlePointer({101,ui::UiPointerPhase::Up,{x,y},30.1});opened=true;
+   }
+  AE_EXPECT_TRUE(opened,"open real viewport options");f.render();ui::UiRect title{};
+  for(const auto &c:f.list.commands())if(c.kind==ui::UiPrimitive::Text&&f.list.textOf(c)=="Viewport do editor · 30 FPS")title=c.bounds;
+  AE_EXPECT_TRUE(!title.isEmpty(),"production popup heading");
+  const Widget effects[]{Widget::SceneSkyToggle,Widget::SceneFogToggle,Widget::ScenePostToggle};
+  for(u32 i=0;i<3;++i)AE_EXPECT_EQ(f.router.hitTest({title.x+34.f+i*80.f,title.y+140.f}).widgetId,id(effects[i]),"effect center stays above viewport navigation");
+ }
+}

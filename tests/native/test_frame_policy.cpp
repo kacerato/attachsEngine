@@ -54,3 +54,22 @@ AE_TEST(frame_policy_adpf_detailed_total_reports_cpu_and_gpu_work) {
                    std::numeric_limits<ae::i64>::max(), 1),
                std::numeric_limits<ae::i64>::max(), "saturating ABI value");
 }
+
+#include "core/frame_admission.h"
+AE_TEST(frame_admission_keeps_thirty_and_fifty_over_actual_mobile_refresh_callbacks) {
+ for(const auto refresh:{60u,90u,120u})for(const auto target:{30u,50u}) {
+  ae::i64 phase=0;unsigned admitted=0;
+  for(unsigned n=0;n<refresh*10;++n)if(ae::admitPresentationFrame(1000000000LL+ae::i64(n)*1000000000LL/refresh,1000000000LL/target,phase))++admitted;
+  AE_EXPECT_TRUE(admitted>=target*10-1 && admitted<=target*10+1,"ten seconds of physical VSYNC retain requested average without rounding50 to40");
+  AE_EXPECT_EQ(ae::makeFrameBudget(float(refresh),float(target)).renderHz,target,"resolved mobile budget preserves supported30/50");
+ }
+}
+AE_TEST(frame_admission_coalesces_gpu_stalls_without_a_catch_up_burst) {
+ ae::i64 phase=0;
+ AE_EXPECT_TRUE(ae::admitPresentationFrame(1000000000,20000000,phase),"first callback");
+ AE_EXPECT_TRUE(ae::admitPresentationFrame(4000000000,20000000,phase),"one frame after a three-second GPU stall");
+ AE_EXPECT_TRUE(!ae::admitPresentationFrame(4000000000,20000000,phase),"same callback cannot replay150 missed frames");
+ AE_EXPECT_TRUE(!ae::admitPresentationFrame(4008333333,20000000,phase),"next physical VSYNC is still before the next deadline");
+ AE_EXPECT_TRUE(ae::admitPresentationFrame(4025000000,20000000,phase),"next actual presentation deadline");
+ phase=0;AE_EXPECT_TRUE(!ae::admitPresentationFrame(0,20000000,phase),"invalid clock produces no frame");
+}

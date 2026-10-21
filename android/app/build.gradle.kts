@@ -145,11 +145,20 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
     from("../../native/third_party/fidelityfx_fsr1/LICENSE.txt") { into("licenses/fidelityfx_fsr1") }
     from("../../native/third_party/recastnavigation/License.txt") { into("licenses/recastnavigation") }
     from("../../assets/terrain") { include("LICENSE-supplied.txt", "manifest.json"); into("licenses/terrain") }
-    // Full-resolution, lossless runtime PNGs and previews. Import source copies
-    // remain in the repository: all runtime reads use catalog.runtimePath.
-    // Shipping sources/*.png again adds ~200 MiB without improving any pixels.
+    // Package exactly the full-resolution paths consumed by the catalog.
+    // Some runtime PNGs intentionally reuse sources/; unused converted copies
+    // are not runtime dependencies. Never infer residency from a folder name.
+    val terrainCatalog = JsonSlurper().parse(file("../../assets/terrain/library/catalog.json")) as Map<*, *>
+    val terrainRuntimeFiles = (terrainCatalog["textures"] as List<*>).flatMap { entry ->
+        val texture = entry as Map<*, *>
+        listOf(texture["runtime"] as String, texture["thumbnail"] as String)
+    }.toSet()
+    check(terrainRuntimeFiles.all { Regex("^(sources|textures|thumbnails)/[0-9a-f]{64}\\.png$").matches(it) }) {
+        "Unsafe terrain catalog runtime path"
+    }
     from("../../assets/terrain/library") {
-        include("catalog.json", "textures/**", "thumbnails/**")
+        include("catalog.json")
+        include(terrainRuntimeFiles)
         into("terrain/library")
     }
     if (includeLegacyDemos) {

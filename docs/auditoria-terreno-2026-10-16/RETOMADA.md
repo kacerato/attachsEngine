@@ -1,6 +1,15 @@
 # Retomada — 16/10/2026
 
-Checkpoint local21/10: [correntes, lava, chuva e brilho por altura](FLUXOS-LAVA-CHUVA-2026-10-20.md). **230/230 editor,112/112 Core,312/312 GPU,44 shaders,2/2 assets e106 capturas UI**. Quatro fontes originais intactas; catálogo82/156 e atlas646. Corrigidos busca SHA64/cancelamento modal, espaço mundial da refração e índice Android da máscara FX. APK111 em compilação para uma passagem ADB autorizada antes das próximas Docs; depois continuar sem ADB até terminar o plano. Nenhuma nova publicação ou instalação está confirmada neste checkpoint;71 itens/28 linhas preservados.
+Checkpoint local21/10: [separação Viewport/Play/Player e desempenho](VIEWPORT-PLAY-PLAYER-2026-10-21.md) complementa [correntes, lava, chuva e brilho por altura](FLUXOS-LAVA-CHUVA-2026-10-20.md). **239/239 terreno/editor,46/46 política gráfica,312/312 GPU e44 shaders** passaram na revisão local; os112 Core/2 assets/106 capturas anteriores continuam históricos. APK111 `.20261021.1` instalado para QA privada, SHA256 `c16bf1d44e63842c51c14d9f7e1900a4a17b254222f0014f2c218cba9f6301e6`; ainda apresentou cerca de5 FPS em movimento. **Não aprovado em desempenho/água visual.** Candidato intermediário `.20261021.2` compilado, sem instalação; revisão seguinte em preparação com presets editoriais próprios, relógio de prévia opcional, exclusão de preferências da exportação, prova de camadas vazias e shader que acumula um material por vez. Não há instalação do candidato novo, push ou próximas Docs confirmados neste checkpoint. ADB sem aparelho na última consulta. Play/Player agora têm atualização de UI enxuta, com toque em Canvas real verificado e arquivo autoral intacto; presets do editor e gráficos do próximo Play/APK têm escopos explícitos. Captura executável revelou navegação sobrepondo o popover; ordem corrigida e testada em655×300/1280×720, recaptura em andamento. A/B móvel e exportação executável pendentes. A passagem ADB excepcional desta entrega segue aberta; depois das próximas Docs continuar sem ADB até terminar o plano. Originais intactos; catálogo82/156, atlas646;71 itens/28 linhas preservados.
+
+Ajuste subsequente solicitado: autoria30FPS; Play/Player50FPS, sem seletor por enquanto.
+53/53 política/cadência,6/6 retry/fence e10/10 seleção de pipelines passaram; shader real
+312 modos com comparações extras de especialização/fallback passou em238,25s,44 famílias
+SPIR-V válidas. Candidato privado `.20261021.3` em compilação com frame gate não bloqueante,
+seleção conservadora de recursos e logs de idade do input. Ainda sem instalação/medição.
+ADB foi reconectado ao endpoint pareado; testes só com foco da Astra. Não aceitarFPS ou
+água antes do teste real. As contagens239/239 de editor acima são do checkpoint anterior
+à última mudança de cadência/título; suíte/capturas finais e exportação seguem pendentes.
 
 Publicação M13 confirmada em20/10: engine `78ff1825` na branch
 `codex/terrain-voxel-generator`, AstraDocs `ce156ff9`, Vercel

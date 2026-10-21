@@ -45,7 +45,7 @@ public final class GamePackage {
         String name=path.substring(path.lastIndexOf('/')+1).toLowerCase(Locale.ROOT);
         if(name.endsWith(".jks")||name.endsWith(".keystore")||name.endsWith(".p12")||name.endsWith(".pem")||name.equals(".env")||name.startsWith(".env."))return true;
         for(String segment:path.split("/"))if(Arrays.asList(".git",".gradle",".idea","bin","obj","node_modules").contains(segment))return true;
-        return path.equals(".astra/code-drafts.astra")||path.equals(".astra/save")||path.startsWith(".astra/save/");
+        return path.equals(".astra/editor-preferences.astra")||path.equals(".astra/code-drafts.astra")||path.equals(".astra/save")||path.startsWith(".astra/save/");
     }
     static String validPath(String path) throws IOException {
         if(path.isEmpty()||path.length()>2048||path.startsWith("/")||path.indexOf('\\')>=0||path.indexOf(':')>=0||path.indexOf('\0')>=0)

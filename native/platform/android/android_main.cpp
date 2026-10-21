@@ -111,6 +111,9 @@ struct AndroidShell final {
   ae::platform::AppLifecycle lifecycle;
   ae::platform::android::AndroidFrameProfiler frameProfiler;
   ae::platform::android::AndroidFramePacer framePacer;
+  bool frameRetryWait=false;
+  ae::u64 latestViewportInputNs=0,lastProfiledViewportInputNs=0;
+  double latestViewportDispatchAgeMs=0; // busy GPU/image retries still service every normal input event
   ae::platform::android::AndroidPerformance performance;
   AdpfFrameSample pendingAdpfFrame{};
   ae::platform::android::AndroidThermalMonitor thermalMonitor;
@@ -339,12 +342,15 @@ struct AndroidShell final {
   bool mapCameraInitialized = false;
   bool hasLaunchCamera = false;
   ae::platform::FreeCameraState launchCamera{};
-  ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 60.0f, 60);
+  ae::FrameBudget frameBudget = ae::makeFrameBudget(60.0f, 30.0f, 60);
+  float performanceHintTargetRatio=0;
   ae::VisibilityBudget visibilityBudget{};
   ae::renderer::GpuCostIsolation gpuCostIsolation = ae::renderer::GpuCostIsolation::Full;
   // Escolha global do projeto e política resolvida (ADR-014). Uma única
   // resolução por época de configuração; nenhuma cena tem perfil próprio.
   ae::renderer::ProjectRenderingSettings renderingSettings{};
+  ae::renderer::RenderViewContext renderViewContext=ae::renderer::RenderViewContext::Player;
+  ae::renderer::EditorViewportQuality viewportQuality=ae::renderer::EditorViewportQuality::Medium;
   ae::renderer::RenderingCapabilities renderingCapabilities{};
   ae::renderer::ResolvedRenderingPolicy renderingPolicy{};
   ae::renderer::ResolvedRenderingPolicy activeRenderingPolicy{};
@@ -382,6 +388,7 @@ struct AndroidShell final {
 };
 
 void applyThermalRenderingPolicy(AndroidShell &shell, bool force);
+void synchronizePresentationBudget(AndroidShell &shell);
 
 bool sameSpectrumAuthoring(const ae::renderer::WaterSpectrumAuthoringSettings &a,
                            const ae::renderer::WaterSpectrumAuthoringSettings &b) {
@@ -588,6 +595,7 @@ void applyRuntimeControls(AndroidShell &shell) {
   policy.post.bloomIntensity = controls.bloomIntensity;
   policy.post.sharpen = controls.sharpen;
   shell.activeRenderingPolicy = policy;
+  synchronizePresentationBudget(shell);
   shell.instancedRenderer.setRuntimeRenderingPolicy(policy);
   shell.runtimeControlsRevision = controls.revision;
   // A escala efetiva e a origem dela aparecem juntas: sem a origem, uma captura
@@ -840,6 +848,30 @@ namespace {
 // O registro de recursos mora ao lado da cena, dentro do projeto.
 // Configurações de renderização do projeto (painel Qualidade), ao lado do
 // registro de recursos. Arquivo ausente ou ilegível deixa o padrão como está.
+void synchronizePresentationBudget(AndroidShell &shell) {
+  const auto &next=shell.activeRenderingPolicy.frame;
+  if(shell.frameBudget.renderHz==next.renderHz && shell.frameBudget.simulationHz==next.simulationHz)return;
+  shell.frameBudget=next;
+  shell.framePacer.setTargetFrameRate(next.renderHz);
+  shell.vulkanSurface.setTargetFrameRate(next.renderHz);
+  if(shell.app && shell.app->window)ae::platform::android::requestRenderFrameRate(shell.app->window,float(next.renderHz));
+  shell.performance.updateTargetFrameDuration(ae::performanceHintTargetNanoseconds(next,shell.performanceHintTargetRatio));
+  shell.pendingAdpfFrame={};shell.lastPresentedAt={};shell.smoothedFps=0;
+  __android_log_print(ANDROID_LOG_INFO,LogTag,"[ViewCadence] context=%u render_hz=%u simulation_hz=%u interval_ms=%.3f",
+      unsigned(shell.renderViewContext),next.renderHz,next.simulationHz,double(next.frameIntervalMs));
+}
+
+bool refreshRenderViewContext(AndroidShell &shell,bool editorActive,bool playing) {
+  const auto context=shell.editorSession.screen().standalonePlayer?ae::renderer::RenderViewContext::Player:
+      editorActive?(playing?ae::renderer::RenderViewContext::PlayPreview:
+      ae::renderer::RenderViewContext::Authoring):ae::renderer::RenderViewContext::Player;
+  const auto &viewport=shell.editorSession.screen().viewportSettings;
+  if(context==shell.renderViewContext &&
+      (context!=ae::renderer::RenderViewContext::Authoring || viewport.quality==shell.viewportQuality))return false;
+  shell.renderViewContext=context;shell.viewportQuality=viewport.quality;
+  shell.activeRenderingSettings=ae::renderer::settingsForRenderView(context,shell.renderingSettings,viewport);
+  shell.qualityRebuildPending=true;return true;
+}
 std::string projectRenderingSettingsPath(const char *projectPath) {
   return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/rendering.astra" : std::string();
 }
@@ -1372,6 +1404,7 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
       shell.activeRenderingPolicy=shell.renderingPolicyBeforeScriptRequest;
     }
     if(success) shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
+    synchronizePresentationBudget(shell);
     shell.editorSession.completeScriptRenderingRequest(shell.scriptRenderingRequestId,success,
         success?shell.activeRenderingPolicy:ae::renderer::ResolvedRenderingPolicy{},success);
     if(success) reportScriptTextureResidency(shell);
@@ -1471,6 +1504,7 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
   shell.renderingPolicy = ae::renderer::resolveRenderingPolicy(
       shell.activeRenderingSettings, capabilities, ae::renderer::ThermalPressure::None);
   shell.activeRenderingPolicy = shell.renderingPolicy;
+  synchronizePresentationBudget(shell);
   partialImportTextures.store(shell.renderingPolicy.textures.streaming);
   shell.thermalPolicyApplied = false;
   // VisibilityBudget also carries HZB knobs that are not part of the rendering
@@ -1562,6 +1596,7 @@ void applyThermalRenderingPolicy(AndroidShell &shell, bool force) {
       shell.profileLockRenderingQuality?ae::renderer::ThermalPressure::None:pressure);
   shell.instancedRenderer.setRuntimeRenderingPolicy(shell.activeRenderingPolicy);
   shell.activeRenderingPolicy=shell.instancedRenderer.activeRenderingPolicy();
+  synchronizePresentationBudget(shell);
   shell.appliedThermalPressure = pressure;
   shell.thermalPolicyApplied = true;
   shell.frameProfiler.reset();
@@ -2012,6 +2047,15 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
     }
     // Relógio do próprio evento (ns): é o que mede o toque longo do menu de contexto.
     const double eventTime = static_cast<double>(AMotionEvent_getEventTime(event)) * 1e-9;
+    if(shell.frameProfiler.enabled() && editorAction==AMOTION_EVENT_ACTION_MOVE) {
+      for(size_t index=0;index<pointerCount;++index)if(shell.editorSession.layout().viewport.contains(toLogical(index))) {
+        const auto eventNs=AMotionEvent_getEventTime(event);
+        if(eventNs>0){shell.latestViewportInputNs=static_cast<ae::u64>(eventNs);
+          const auto now=currentMonotonicNanoseconds();
+          shell.latestViewportDispatchAgeMs=now>=shell.latestViewportInputNs?double(now-shell.latestViewportInputNs)/1e6:0;}
+        break;
+      }
+    }
     if (editorAction == AMOTION_EVENT_ACTION_CANCEL) {
       shell.editorSession.cancelPointers();
       consumed = true;
@@ -2258,7 +2302,7 @@ void android_main(android_app *app) {
   // entradas distintas para não solicitar 120 Hz em painéis limitados a 60/90.
   const float maximumDisplayHz =
       ae::platform::android::queryMaximumDisplayRefreshRate(app->activity);
-  float requestedMaximumRenderHz = static_cast<float>(ae::DefaultMaximumRenderHz);
+  float requestedMaximumRenderHz = shell.editorUi&&!shell.editorSession.screen().standalonePlayer?30.f:50.f;
   ae::platform::android::readFloatLaunchOption(
       app->activity, "aether.target_fps", requestedMaximumRenderHz);
   shell.frameBudget = ae::makeFrameBudget(maximumDisplayHz, requestedMaximumRenderHz, 60);
@@ -2276,6 +2320,7 @@ void android_main(android_app *app) {
   float performanceHintTargetRatio = 0.0f;
   ae::platform::android::readFloatLaunchOption(
       app->activity, "aether.adpf_target_ratio", performanceHintTargetRatio);
+  shell.performanceHintTargetRatio=performanceHintTargetRatio;
   ae::platform::android::AndroidPerformancePolicy performancePolicy{};
   performancePolicy.targetFrameDurationNs =
       ae::performanceHintTargetNanoseconds(shell.frameBudget, performanceHintTargetRatio);
@@ -2469,12 +2514,13 @@ void android_main(android_app *app) {
             app->activity, "aether.disable_environment_split_sum"))
       shell.renderingSettings.environmentSplitSumBrdf = ae::renderer::FeatureOverride::Disabled;
   }
-  // O viewport do editor é onde se julga a imagem: como na Unity e na Godot,
-  // ele renderiza em resolução nativa e sem escala dinâmica, salvo pedido
-  // explícito do projeto. No aparelho a escala dinâmica derrubava o viewport
-  // para 50% em um segundo, com orçamento de 120 Hz, e não voltava.
-  if(shell.editorUi) shell.renderingSettings=ae::renderer::withEditorDefaults(shell.renderingSettings);
-  shell.activeRenderingSettings=shell.renderingSettings;
+  // Authoring owns local preview budgets. Play and exported games use the
+  // original project settings; editor defaults never overwrite that authority.
+  shell.renderViewContext=shell.editorUi&&!shell.editorSession.screen().standalonePlayer?
+      ae::renderer::RenderViewContext::Authoring:ae::renderer::RenderViewContext::Player;
+  shell.viewportQuality=shell.editorSession.screen().viewportSettings.quality;
+  shell.activeRenderingSettings=ae::renderer::settingsForRenderView(shell.renderViewContext,
+      shell.renderingSettings,shell.editorSession.screen().viewportSettings);
   shell.instancedRenderer.setCoveragePrepassEnabled(
       !ae::platform::android::readBooleanLaunchOption(app->activity,
                                                        "aether.disable_coverage_prepass"));
@@ -2609,13 +2655,14 @@ void android_main(android_app *app) {
     // suspenso, o loop continua bloqueando sem evento, exatamente como
     // antes deste item existir.
     const bool shouldDraw = shell.lifecycle.isActive() && shell.instancedRendererReady;
+    if(!shouldDraw)shell.frameRetryWait=false;
     android_poll_source *source = nullptr;
     int events = 0;
     const bool choreographerAdmission = shell.framePacer.available() &&
                                         !shell.vulkanSurface.swappyActive();
     const int pollTimeout = shell.lifecycle.isActive() && choreographerAdmission
                                 ? -1
-                                : (shouldDraw ? 0 : (shell.rendererInitialization.valid() ? 16 : -1));
+                                : (shouldDraw ? (shell.frameRetryWait?4:0) : (shell.rendererInitialization.valid() ? 16 : -1));
     const int result = ALooper_pollOnce(pollTimeout, nullptr, &events,
                                         reinterpret_cast<void **>(&source));
     if (result >= 0 && source != nullptr) source->process(app, source);
@@ -2689,6 +2736,14 @@ void android_main(android_app *app) {
     // O evento processado acima pode ter destruído o renderer/janela.
     const bool frameAdmitted = !choreographerAdmission || shell.framePacer.consumeFrame();
     if (shell.lifecycle.isActive() && shell.instancedRendererReady && frameAdmitted) {
+      // Poll BEFORE scene/script/camera snapshot. The old blocking acquire waited
+      // after that snapshot on this same input thread, rendering an aged pose.
+      const auto ready=shell.vulkanSurface.swapchain().pollFrameReady();
+      if(ready==ae::rhi::SwapchainStatus::NotReady){shell.frameRetryWait=true;continue;}
+      if(ready!=ae::rhi::SwapchainStatus::Ok){
+        __android_log_print(ANDROID_LOG_ERROR,LogTag,"[FrameGate] fence/device unavailable; renderer stopped.");
+        shell.instancedRenderer.shutdown();shell.instancedRendererReady=false;shell.vulkanSurface.shutdown();continue;
+      }
       const auto frameWorkStarted = std::chrono::steady_clock::now();
       const ae::u64 frameMonotonicStarted = currentMonotonicNanoseconds();
       const ae::u64 frameThreadCpuStarted = currentThreadCpuNanoseconds();
@@ -2732,6 +2787,8 @@ void android_main(android_app *app) {
       const bool editorActive = shell.editorUi && shell.instancedRenderer.uiRendererReady();
       shell.editorSession.advanceClock(timeSeconds);
       bool editorPlaying = !editorActive || shell.editorSession.isPlaying();
+      const float materialPreviewSeconds=timeSeconds;
+      if(refreshRenderViewContext(shell,editorActive,editorPlaying))continue;
       if (editorActive) timeSeconds = shell.editorSession.sceneTime();
       if(!editorActive||!shell.editorSession.gameplayInputFocused()||
          ae::platform::android::editorCodePanelVisible()) shell.gameInput.clear();
@@ -2786,8 +2843,9 @@ void android_main(android_app *app) {
         ae::platform::android::updateEditorTextInput(shell.editorSession);
         // O build sai sozinho quando a digitacao para. O relogio e o mesmo do
         // shell; a sessao so precisa de um instante que ande para frente.
-        shell.editorSession.pumpCodeAutoBuild(
-            std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
+        if(!shell.editorSession.screen().standalonePlayer)
+          shell.editorSession.pumpCodeAutoBuild(
+              std::chrono::duration<double>(std::chrono::steady_clock::now()-shell.shellStartTime).count());
         updateEditorCodeCompiler(shell);
         // An explicit locked profiling pose must drive the real editor view,
         // after project recovery, not only the unused gameplay controller.
@@ -2797,33 +2855,34 @@ void android_main(android_app *app) {
                                             shell.launchCamera.yaw, shell.launchCamera.pitch);
         shell.editorSession.update();
         updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
-        // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o
-        // renderer com a política nova — o mesmo caminho de quando a surface é
-        // recriada, que já sabe devolver a cena ao renderer novo.
+        // Save the next game policy. Active Play and authoring views keep their
+        // own current policy until their next context transition.
         {
           ae::renderer::ProjectRenderingSettings requested;
-          if(!editorPlaying && shell.editorSession.takeRenderingSettingsRequest(requested)) {
+          if(shell.editorSession.takeRenderingSettingsRequest(requested)) {
             const bool saved=writeProjectRenderingSettings(shell.editorProjectPath,requested);
             shell.editorSession.completeRenderingSettingsRequest(saved);
             if(!saved) {
               __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Quality] Falha ao gravar as configurações do projeto.");
             } else {
-              shell.renderingSettings=ae::renderer::withEditorDefaults(requested);
-              shell.activeRenderingSettings=shell.renderingSettings;
-              // Rebuild at the safe point before the next frame: initialization
-              // runs on another thread and must not overlap this frame's use.
-              shell.qualityRebuildPending=true;
+              // Project settings belong to Play/Player. Authoring keeps its own policy.
+              shell.renderingSettings=requested;
             }
           }
           ae::u64 scriptRequest=0;
           if(!shell.scriptRenderingRebuildPending &&
              shell.editorSession.takeScriptRenderingRequest(scriptRequest,requested)) {
-            shell.renderingSettingsBeforeScriptRequest=shell.activeRenderingSettings;
-            shell.renderingPolicyBeforeScriptRequest=shell.activeRenderingPolicy;
-            shell.activeRenderingSettings=requested;
-            shell.scriptRenderingRequestId=scriptRequest;
-            shell.scriptRenderingRebuildPending=true;
-            shell.qualityRebuildPending=true;
+            // Stop restoration is already owned by the Authoring context
+            // transition. Consume it without a redundant resource rebuild.
+            if(shell.renderViewContext!=ae::renderer::RenderViewContext::Authoring) {
+              shell.renderingSettingsBeforeScriptRequest=shell.activeRenderingSettings;
+              shell.renderingPolicyBeforeScriptRequest=shell.activeRenderingPolicy;
+              shell.activeRenderingSettings=ae::renderer::settingsForRenderView(shell.renderViewContext,
+                  requested,shell.editorSession.screen().viewportSettings);
+              shell.scriptRenderingRequestId=scriptRequest;
+              shell.scriptRenderingRebuildPending=true;
+              shell.qualityRebuildPending=true;
+            }
           }
           // Rodapé do painel: o que o renderer faz AGORA. A GPU só é medida
           // enquanto o painel está aberto; fora dele o custo da medição some.
@@ -2831,7 +2890,9 @@ void android_main(android_app *app) {
           const bool measuring=shell.editorSession.screen().qualityPanel || shell.editorSession.screen().sceneStatisticsVisible;
           if(shell.instancedRendererReady) shell.instancedRenderer.setEditorGpuTiming(measuring);
           if(measuring && shell.instancedRendererReady) {
-            const auto profile=shell.renderingPolicy.effectiveProfile;
+            const auto profile=ae::renderer::resolveRenderingPolicy(
+                ae::renderer::ProjectRenderingSettings{},shell.renderingCapabilities,
+                ae::renderer::ThermalPressure::None).effectiveProfile;
             const auto level=profile==ae::rhi::DeviceProfile::S?ae::renderer::QualityPreset::S:
                              profile==ae::rhi::DeviceProfile::A?ae::renderer::QualityPreset::A:
                              profile==ae::rhi::DeviceProfile::B?ae::renderer::QualityPreset::B:ae::renderer::QualityPreset::C;
@@ -3516,6 +3577,8 @@ void android_main(android_app *app) {
         // Autostart can switch the workspace after the frame's initial mode
         // snapshot. Publish the Play map and camera in this same frame.
         editorPlaying = !editorActive || session.isPlaying();
+        // Autostart must install game graphics before the first script frame.
+        if(refreshRenderViewContext(shell,editorActive,editorPlaying))continue;
         // R3: o painel mudou o perfil. A prévia volta ao worker com os MESMOS bytes
         // (e o mesmo manifesto de dependências), preparada com o rascunho.
         if(session.takeImportReprepare()) {
@@ -3835,6 +3898,11 @@ void android_main(android_app *app) {
       ae::platform::FreeCameraState sceneCamera = shell.cameraController.state();
       // A failed Play publication may have returned the session to editing.
       editorPlaying = !editorActive || shell.editorSession.isPlaying();
+      // A failed publication can Stop Play in this same frame.
+      if(refreshRenderViewContext(shell,editorActive,editorPlaying))continue;
+      shell.instancedRenderer.setMaterialPreviewTime(editorActive && !editorPlaying &&
+          shell.editorSession.screen().viewportSettings.animatedMaterials &&
+          shell.editorSession.screen().sceneEffects?materialPreviewSeconds:-1.f);
       float sceneNear=0,sceneFar=0,sceneFov=0,sceneOrthoHeight=0;
       ae::u32 sceneEnvironmentMask=~0u;
       ae::u32 exposureCameraEntity=0;
@@ -3890,6 +3958,24 @@ void android_main(android_app *app) {
       if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
+      // Fence readiness does not guarantee a compositor image is available.
+      // Timeout0 returns to the normal ALooper path without a reset/submission.
+      if(frameStatus==ae::rhi::SwapchainStatus::NotReady){shell.frameRetryWait=true;continue;}
+      shell.frameRetryWait=false;
+      if(shell.frameProfiler.enabled() && shell.latestViewportInputNs &&
+          shell.latestViewportInputNs!=shell.lastProfiledViewportInputNs &&
+          (frameStatus==ae::rhi::SwapchainStatus::Ok || frameStatus==ae::rhi::SwapchainStatus::SuboptimalNeedsRecreate)) {
+        const auto inputNs=shell.latestViewportInputNs;
+        const auto queuedNs=currentMonotonicNanoseconds();
+        const auto &timing=shell.instancedRenderer.lastFrameTimings();
+        __android_log_print(ANDROID_LOG_INFO,LogTag,
+            "[InputLatency] {\"context\":%u,\"input_ns\":%llu,\"snapshot_ns\":%llu,\"present_return_ns\":%llu,\"dispatch_age_ms\":%.3f,\"snapshot_age_ms\":%.3f,\"acquire_ms\":%.3f,\"present_ms\":%.3f}",
+            unsigned(shell.renderViewContext),static_cast<unsigned long long>(inputNs),
+            static_cast<unsigned long long>(frameMonotonicStarted),static_cast<unsigned long long>(queuedNs),
+            shell.latestViewportDispatchAgeMs,frameMonotonicStarted>=inputNs?double(frameMonotonicStarted-inputNs)/1e6:0,
+            timing.acquireMs,timing.presentMs);
+        shell.lastProfiledViewportInputNs=inputNs;
+      }
       const auto &autoExposureDiagnostic=shell.instancedRenderer.autoExposureDiagnostic();
       if(autoExposureDiagnostic!=shell.editorAutoExposureDiagnostic) {
         shell.editorAutoExposureDiagnostic=autoExposureDiagnostic;

@@ -83,7 +83,7 @@ não substituem a conferência Android. APK111 e aparelho ainda em validação.
 ADB liberado pelo proprietário somente para esta entrega antes da
 próxima nota pública; após isso o restante do plano prossegue sem ADB.
 
-## Referências concretas
+## Prévia contínua e espaço do APK
 
 Revisão adicional21/10 antes do aparelho: **230/230 cenários integrados**.
 A igualdade estrita do token de prévia descartava malhas concluídas enquanto
@@ -94,13 +94,22 @@ continua restaurando a geometria aplicada e rejeitando conclusões tardias.
 O teste usa movimento contínuo real sobre terreno planoY0, exige elevação
 publicada antes de Up e verifica receita/histórico/cancelamento íntegros.
 
-Empacotamento: a primeira compilação111 passou, mas continha112 PNGs de origem
-redundantes,209.636.961 bytes além das texturas runtime integrais. O renderer
-carrega catalog.runtimePath; sourcePath participa somente da proveniência/busca.
-O Sync Android agora envia catálogo, texturas runtime e miniaturas; fontes
-continuam no repositório. A auditoria exige ausência de sources/ no APK e compara
-os bytes/hashes de todas as156 entradas runtime. Não houve redimensionamento ou
-alteração dos pixels. APK final e economia real ainda serão auditados.
+Empacotamento: a primeira compilação111 passou com649.627.581 bytes.
+A tentativa inicial de excluir sources/ foi recusada pela auditoria ANTES da
+instalação:111 entradas runtime usam diretamente PNGs originais nessa pasta.
+O critério correto é a união exata de runtimePath+thumbnail do catálogo, não o
+nome da pasta. O Sync agora envia313 arquivos necessários (catálogo,156 imagens
+runtime e156 miniaturas), sem conversões/cópias não referenciadas. Todas as156
+imagens foram comparadas por bytes/SHA e nenhuma foi reduzida ou alterada.
+APK final448.089.078 bytes; economia201.538.503 bytes, cerca192,2MiB.
+SHA2560702325979bd0435f49c40c9071cbf67ea6bb186dddd49711cfd0139aebf4074.
+AssinaturaV2/certificado anterior, ARM64, ZIPCRC/alinhamento e nativo exato passaram.
+Instalado por atualização, code111/0.3.1-dev.terrain.20261021.1, sem apagar dados.
+Aparelho usa páginas4096. Há bibliotecas ELF que não têm alinhamento16KiB;
+não anunciar compatibilidade16KiB integral. Teste de interação ainda em andamento
+no novo projeto isolado TerrainQA111; os projetos antigos não foram editados.
+
+## Referências concretas
 
 Unity Shader Graph17.0.4: [Normal Vector](https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Normal-Vector-Node.html)
 e [Transform](https://docs.unity3d.com/Packages/com.unity.shadergraph@17.0/manual/Transform-Node.html)

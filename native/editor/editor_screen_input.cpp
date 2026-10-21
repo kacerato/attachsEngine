@@ -349,6 +349,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
 
   if(widget==widgetId(EditorWidget::ComponentVisualsToggle)) {state.showComponentVisuals=!state.showComponentVisuals;return outcome;}
   if(widget==widgetId(EditorWidget::CameraViewClose)) {state.cameraViewEntity=0;return outcome;}
+  if(widget>=widgetId(EditorWidget::ViewportLow) && widget<=widgetId(EditorWidget::ViewportHigh)) {
+    state.viewportSettings.quality=static_cast<renderer::EditorViewportQuality>(widget-widgetId(EditorWidget::ViewportLow));
+    state.viewportPreferencesChanged=true;return outcome;
+  }
+  if(widget==widgetId(EditorWidget::ViewportAnimateMaterials)) {
+    state.viewportSettings.animatedMaterials=!state.viewportSettings.animatedMaterials;
+    state.viewportPreferencesChanged=true;return outcome;
+  }
   if(widget==widgetId(EditorWidget::SceneLightingToggle)) {state.sceneLighting=!state.sceneLighting;return outcome;}
   if(widget==widgetId(EditorWidget::SceneEffectsToggle)) {state.sceneEffects=!state.sceneEffects;return outcome;}
   if(widget==widgetId(EditorWidget::SceneEffectsMenu)) {state.sceneEffectsMenu=!state.sceneEffectsMenu;return outcome;}

@@ -250,7 +250,7 @@ void EditorSession::completeRenderingSettingsRequest(bool success) {
     renderingSettings_ = requestedRenderingSettings_;
     state_.qualityApplied = renderingSettings_;
     state_.qualityDirty = qualityRevision_ != renderingSettingsRequestRevision_;
-    state_.status = state_.qualityDirty ? "Qualidade aplicada; há novas alterações" : "Qualidade aplicada";
+    state_.status = state_.qualityDirty ? "Gráficos salvos para Play/APK; há novas alterações" : "Gráficos salvos para o próximo Play/APK";
   } else {
     state_.qualityDirty = true;
     state_.status = "Não foi possível salvar a qualidade; revise o armazenamento e tente novamente";

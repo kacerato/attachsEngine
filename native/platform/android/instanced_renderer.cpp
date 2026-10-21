@@ -1,3 +1,4 @@
+#include "renderer/terrain_used_layers.h"
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
 #include "renderer/water_detail_texture.h"
@@ -581,6 +582,8 @@ bool InstancedRenderer::createPipeline() {
     return false;
   }
 
+  if(dirtRoadPreview_&&useBindless_)
+    terrainPipelineCapabilities_=std::make_unique<renderer::TerrainPipelinePublicationOwner>(device_,vkCreateGraphicsPipelines,vkDestroyPipeline,vkDestroyShaderModule);
   VkPipelineShaderStageCreateInfo stages[2]{};
   stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
   stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
@@ -761,7 +764,17 @@ bool InstancedRenderer::createPipeline() {
       sceneBlend[mask].colorBlendOp = sceneBlend[mask].alphaBlendOp = VK_BLEND_OP_MAX;
       sceneBlend[mask].colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
     }
-    return vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, scenePipelineInfo, nullptr, out);
+    // Reuse the device-owned driver compilation cache across quality/context
+    // epochs. Pipeline ownership remains here; no second renderer is retained.
+    const auto result=vkCreateGraphicsPipelines(device_, rhiDevice_?rhiDevice_->pipelineCache().driverHandle():VK_NULL_HANDLE,
+        1, scenePipelineInfo, nullptr, out);
+    // Snapshot each existing state family exactly. Depth-only coverage and water
+    // use different shaders and remain generic. Optional capture failure cannot
+    // reject the fully functional original pipeline.
+    if(result==VK_SUCCESS&&terrainPipelineCapabilities_&&
+       (stages[1].module==fragModule||stages[1].module==coverageShadeFragModule))
+      terrainPipelineCapabilities_->capture(*out,*scenePipelineInfo);
+    return result;
   };
 
   const VkDescriptorSetLayout setLayouts[2] = {textureSetLayout_, environmentSetLayout_};
@@ -967,12 +980,16 @@ bool InstancedRenderer::createPipeline() {
     }
   }
 
-  vkDestroyShaderModule(device_, vertModule, nullptr);
-  vkDestroyShaderModule(device_, fragModule, nullptr);
-  if (coverageFragModule != VK_NULL_HANDLE)
-    vkDestroyShaderModule(device_, coverageFragModule, nullptr);
-  if (coverageShadeFragModule != VK_NULL_HANDLE)
-    vkDestroyShaderModule(device_, coverageShadeFragModule, nullptr);
+  if(terrainPipelineCapabilities_){
+    terrainPipelineCapabilities_->retainModule(vertModule);
+    terrainPipelineCapabilities_->retainModule(fragModule);
+    terrainPipelineCapabilities_->retainModule(coverageShadeFragModule);
+  }else{
+    vkDestroyShaderModule(device_,vertModule,nullptr);
+    vkDestroyShaderModule(device_,fragModule,nullptr);
+    if(coverageShadeFragModule)vkDestroyShaderModule(device_,coverageShadeFragModule,nullptr);
+  }
+  if(coverageFragModule)vkDestroyShaderModule(device_,coverageFragModule,nullptr);
   if (waterFragModule != VK_NULL_HANDLE)
     vkDestroyShaderModule(device_, waterFragModule, nullptr);
   if (waterVertModule != VK_NULL_HANDLE)
@@ -4674,6 +4691,7 @@ void InstancedRenderer::shutdown() {
   activeEnvironmentMap_.reset();environmentMaps_.clear();environmentMapDiagnostic_.clear();
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
+  if(terrainPipelineCapabilities_){terrainPipelineCapabilities_->clearAtIdle();terrainPipelineCapabilities_.reset();}
   destroyCameraPreview();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
@@ -5115,10 +5133,15 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   if(pbr && (!useBindless_ || textures.size()>u64(bindlessRegistry_.capacity()-bindlessRegistry_.allocatedCount())+authoringTextureSlots_.size())) {
     __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] descritores insuficientes para as texturas PBR originais; publicação recusada.");return false;
   }
+  u32 candidateTerrainCapabilities=0;
   const auto prepareRows=[&](std::span<const u32> slots,u32 textureOffset,std::vector<float> &rows,std::vector<u32> &offsets) {
     std::map<std::vector<float>,u32> shared;offsets.assign(materials.size(),0);
     for(usize m=0;m<terrainSurfaces.size();++m) {
       auto surface=terrainSurfaces[m];
+      const u32 usedChannels=renderer::terrainUsedLayerChannels(u32(m),vertices,indices,draws,terrainControls,textures);
+      for(usize layer=0;layer<std::min<usize>(4,surface.surface.layers.size());++layer)
+        if(!(usedChannels&(1u<<layer))) surface.surface.layers[layer].active=false;
+
       if(surface.surface.layers.empty())continue;
       if(!(materials[m].flags&renderer::MapMaterialTerrain))return false;
       for(auto &t:surface.textures) {
@@ -5132,6 +5155,9 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
       if(!renderer::appendTerrainSurfaceTable(surface,slots,part,unused,reason)) {
         __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Terrain] %s",reason.c_str());return false;
       }
+      const auto capabilities=renderer::terrainPipelineCapabilities(part);
+      candidateTerrainCapabilities=candidateTerrainCapabilities>renderer::TerrainCapabilityKnown||capabilities>renderer::TerrainCapabilityKnown
+          ?renderer::TerrainCapabilityGeneric:(candidateTerrainCapabilities|capabilities);
       if(const auto found=shared.find(part);found!=shared.end()){offsets[m]=found->second;continue;}
       if(rows.size()+part.size()>usize(renderer::TerrainSurfaceMaximumRows)*4)return false;
       offsets[m]=u32(rows.size()/4)+1;shared.emplace(part,offsets[m]);
@@ -5158,7 +5184,10 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   // Trocar buffers de vértice com um quadro em voo desenharia memória já
   // liberada. Importar é raro e explícito: esperar é a resposta certa aqui, e
   // não uma fila de destruição diferida que ninguém mais no renderer usa.
-  vkDeviceWaitIdle(device_);
+  if(vkDeviceWaitIdle(device_)!=VK_SUCCESS)return false;
+  // Any later failure may leave partially replaced resources in existing paths.
+  // Use FULL generic until the entire publication commits, never an old mask.
+  if(terrainPipelineCapabilities_)terrainPipelineCapabilities_->beginPublicationAtIdle();
   // Slots das texturas importadas: devolvidos ANTES da troca, porque apontam para
   // imagens que a reconstrução solta. Se ela falhar, a biblioteca antiga fica e
   // os slots dela voltam a ser registrados logo abaixo.
@@ -5266,6 +5295,15 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
     spatialIndexBuffer_.reset();spatialIndirectBuffer_.reset();spatialIndirectCapacity_=0;
     spatialGeometryChunks_.clear();spatialSourceRanges_.clear();
     __android_log_print(ANDROID_LOG_WARN,LogTag,"[SpatialGeometry] preparação recusada; desenhos originais preservados.");
+  }
+  if(terrainPipelineCapabilities_) {
+    const auto compileStarted=std::chrono::steady_clock::now();
+    terrainPipelineCapabilities_->commitPublicationAtIdle(
+        pbr?candidateTerrainCapabilities:renderer::TerrainCapabilityGeneric,
+        rhiDevice_?rhiDevice_->pipelineCache().driverHandle():VK_NULL_HANDLE);
+    if(frameProfilingEnabled_)__android_log_print(ANDROID_LOG_INFO,LogTag,
+        "[TerrainPipelines] recipes=%zu publication_ms=%.3f",
+        terrainPipelineCapabilities_->recipeCount(),std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-compileStarted).count());
   }
   return true;
 }
@@ -5927,7 +5965,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         renderingPolicy_.materialDistance.fadeBandRatio;
     // Dedicated material clock; independent of a water component's authored time.
     // Reuses the reserved UBO lane without changing offsets or push constants.
-    frame->materialDistanceParameters[3] = timeSeconds;
+    frame->materialDistanceParameters[3] = materialPreviewTime_>=0.f?materialPreviewTime_:timeSeconds;
     frame->waterParameters[0] = static_cast<float>(waterProfile_.waveCount);
     frame->waterParameters[1] = waterBaseHeight_;
     frame->waterParameters[2] = authoredWaterTime_>=0?authoredWaterTime_:timeSeconds;
@@ -6246,7 +6284,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // esse custo para o buraco entre o início do frame e a primeira marca.
   beginGpuRegion(GpuPassClass::Opaque);
 
-  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_);
+  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, terrainCapabilityPipeline(pipeline_));
   const VkDescriptorSet bindlessSet = textureSet_;
   if (!dirtRoadPreview_ || useBindless_)
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1,
@@ -6385,8 +6423,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Keep a command-buffer-local state cache so disabling material variants is
     // actually zero extra pipeline binds. With variants enabled this also
     // avoids rebinding when consecutive material batches share the same key.
-    VkPipeline boundMapPipeline = pipeline_;
+    VkPipeline boundMapPipeline = terrainCapabilityPipeline(pipeline_);
     auto bindMapPipeline = [&](VkPipeline pipeline) {
+      pipeline=terrainCapabilityPipeline(pipeline);
       if (pipeline == boundMapPipeline) return;
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
       boundMapPipeline = pipeline;
