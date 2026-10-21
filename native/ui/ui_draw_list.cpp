@@ -39,7 +39,7 @@ void UiDrawList::begin(const UiRect &viewport, const UiFontMetrics &metrics) noe
   clipDepth_ = 0;
   culled_ = 0;
   clipStack_[0] = isFinite(viewport) ? viewport : UiRect{};
-  metrics_ = metrics.isReady() ? &metrics : &fallbackFontMetrics();
+  metrics_ = metrics.isReady() ? metrics : fallbackFontMetrics();
 }
 
 bool UiDrawList::pushClip(const UiRect &rect) noexcept {
@@ -216,7 +216,7 @@ std::string_view UiDrawList::textOf(const UiDrawCommand &command) const noexcept
 }
 
 float UiDrawList::measure(std::string_view text, const UiTypeStyle &style) const noexcept {
-  return measureTextWidth(text, *metrics_, style);
+  return measureTextWidth(text, metrics_, style);
 }
 
 } // namespace ae::ui

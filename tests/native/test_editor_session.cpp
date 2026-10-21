@@ -5316,6 +5316,13 @@ AE_TEST(the_import_panel_measures_each_mesh_of_the_source_and_opens_its_card) {
 
   tapWidget(fixture, widgetId(EditorWidget::ImportTabMeshes));
   AE_EXPECT_TRUE(fixture.session.screen().importTab == EditorScreenState::ImportTab::Meshes, "a aba Malhas abre");
+  // Compact surfaces paginate measured mesh cards. Reach the second card by
+  // its real navigation instead of tapping outside the visible page.
+  if (locateWidget(fixture.session, widgetId(EditorWidget::ImportMeshRowBase) + 1).x < 0) {
+    AE_EXPECT_TRUE(locateWidget(fixture.session, widgetId(EditorWidget::ImportNextPage)).x >= 0,
+                   "a próxima página da lista compacta é alcançável");
+    tapWidget(fixture, widgetId(EditorWidget::ImportNextPage));
+  }
   tapWidget(fixture, widgetId(EditorWidget::ImportMeshRowBase) + 1);
   AE_EXPECT_TRUE(fixture.session.screen().importMeshDetail && fixture.session.screen().importMeshSelected == 1,
                  "tocar a linha abre o cartão daquela malha");

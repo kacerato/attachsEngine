@@ -129,7 +129,7 @@ public:
   // tela, não uma otimização a comemorar.
   u32 culledCommandCount() const noexcept { return culled_; }
   std::string_view textOf(const UiDrawCommand &command) const noexcept;
-  const UiFontMetrics &fontMetrics() const noexcept { return *metrics_; }
+  const UiFontMetrics &fontMetrics() const noexcept { return metrics_; }
   // Largura que `addText` vai ocupar. Exposto para o layout medir antes, sem
   // duplicar a regra de tracking em dois lugares.
   float measure(std::string_view text, const UiTypeStyle &style) const noexcept;
@@ -143,7 +143,8 @@ private:
   UiRect clipStack_[kMaximumClipDepth]{};
   u32 clipDepth_ = 0;
   u32 culled_ = 0;
-  const UiFontMetrics *metrics_ = &fallbackFontMetrics();
+  // Layout can outlive a caller's local metrics or a UiFont::metrics temporary.
+  UiFontMetrics metrics_ = fallbackFontMetrics();
 };
 
 } // namespace ae::ui

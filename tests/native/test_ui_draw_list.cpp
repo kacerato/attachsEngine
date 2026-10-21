@@ -19,6 +19,21 @@ UiDrawList beginList() {
 
 } // namespace
 
+AE_TEST(draw_list_owns_font_metrics_across_source_mutation_and_copy) {
+  UiDrawList list;
+  auto source=fallbackFontMetrics();
+  source.advance['A'-kUiFirstGlyph]=.75f;
+  list.begin(kScreen,source);
+  source.advance['A'-kUiFirstGlyph]=.1f;
+  UiTypeStyle style{};style.size=20;style.tracking=0;
+  AE_EXPECT_EQ(list.measure("AA",style),30.f,"layout retains the metrics supplied at begin");
+  auto copied=list;
+  list.begin(kScreen,source);
+  AE_EXPECT_EQ(copied.measure("AA",style),30.f,"copied list owns independent font measurements");
+  copied.begin(kScreen,[]{auto metrics=fallbackFontMetrics();metrics.advance['A'-kUiFirstGlyph]=.9f;return metrics;}());
+  AE_EXPECT_EQ(copied.measure("AA",style),36.f,"temporary metrics remain valid after the call");
+}
+
 // A fonte da interface cobre U+0020–U+00FF. Pontuação tipográfica fora disso
 // ("‹ Voltar", "Compilando…") media e desenhava um espaço vazio; agora mede
 // como o equivalente Latin-1, e o corte segue a mesma medida.
