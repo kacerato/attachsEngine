@@ -46,3 +46,29 @@ As pranchas lado a lado (`prancha-*.png`) e o julgamento estão na seção de va
   captura do céu numa sonda é do PK-6 (Reflection Probe).
 - Gradiente/Cor não têm cor HDR: a intensidade vai até 8×; cena fotométrica (sol em lux) deve usar a fonte Céu.
 - Sem Cubemap de 6 faces nem Skybox por câmera; Sun Source continua no componente Iluminação da cena (PK-3).
+
+## Validação
+
+### Host
+- `aether_environment_authoring_tests`: 53/53. `aether_tests`: 1610/1610. API C# conferida (`--check-api`).
+- Capturas da UI no host (`ui-host/`, `aether_ui_preview`): janela Iluminação sem Ambiente (padrão + Personalizar),
+  grupos Céu / Luz ambiente (Gradiente) / Neblina (Linear) e Criar › Volume e céu.
+
+### POCO F7 (Astra Dev 220, Vila Astra, 21/10 11:15–11:40)
+| Arquivo | O que mostra | Julgamento |
+|---|---|---|
+| `prancha-01-ceu-procedural.png` | Vila com Shader do céu = Procedural, Play × céu padrão URP | Mesma forma: zênite azul escuro clareando até um horizonte quase branco, chão marrom-acinzentado. O da Astra sai ~1 EV mais claro e mais saturado no zênite (95,134,195 × 83,104,136); a cena da Unity tem Tonemapping/Bloom no Volume, e a Vila tem a própria exposição. Não recalibrei a exposição interna 2,4 (decisão do G4) — fica registrado. |
+| `prancha-02-neblina-branca.png` | Neblina branca densa × Fog Exponential Squared 0,04 | Proporção parecida: casas ao fundo somem primeiro, primeiro plano limpo. |
+| `prancha-03-neblina-vermelha-antes.png` | Neblina vermelha × Unity | **Divergência encontrada**: na Unity o Skybox não recebe Fog; na Astra o céu ficava vermelho. Corrigido em `eaf0818d`: no Modo de cor = Cor o céu fica limpo; "Acompanhar o céu" (cenas antigas) mantém o visual antigo. Validado no host; a captura no aparelho com o 221/240 não foi possível (ver abaixo). |
+| `prancha-04-janela-iluminacao.png` | Janela Lighting × janela Iluminação no POCO | Mesma hierarquia: Material do céu no topo, depois o shader; Luz ambiente e Neblina em abas. A Astra pagina o cartão focado (1/2) — padrão atual do Inspector focado. |
+| `prancha-05-criar-volume.png` | GameObject › Volume × Criar › Volume e céu | Global/Caixa/Esfera + Ambiente e Nuvens numa categoria só, com ícones novos. |
+| `06-vila-antiga-220-x-135.png` | Vila original (céu físico) no 220 (cima) × APK 135 (baixo) | Mesma imagem; a sombra fica levemente mais clara (luz ambiente do céu físico agora vem da irradiância integrada). |
+| `07-cena-sem-ambiente-padrao.png` | Projeto sem Ambiente em Play no 220 | Céu procedural padrão, como a cena nova da Unity (A-05). |
+
+Vila devolvida a cada troca (md5 `2e2e996841f1f0eb5af1572c68dec3fc` conferido no aparelho).
+
+### Não testado no aparelho
+- A neblina com o céu limpo (correção do `eaf0818d`) e a troca de opções pela janela Iluminação (o 220 ignorava o toque
+  nos seletores fora do workspace Cena — corrigido e coberto por teste de host). O POCO ficou disputado: o 221 e o 240
+  foram substituídos por APKs do PK-9 (230/232) segundos depois da instalação.
+- Material do céu criado no aparelho, Gradiente/Cor no aparelho, Criar › Volume no aparelho.
