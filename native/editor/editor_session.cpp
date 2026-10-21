@@ -1178,6 +1178,7 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
     if(state_.motorSetupTarget==state_.selection&&state_.motorSetupPolicy==3&&state_.motorBakeSourcesOpen)
       return pickMotorBakeSource(at);
     if(colliderTopology_.active())return pickColliderTopology(at);
+    if(pickLightProbePoint(at)) return true;
     const auto *object=document_.find(state_.selection);
     const auto *focused=object?object->components.findInstance(state_.expandedNative):nullptr;
     if(state_.workspace==EditorWorkspace::Scene && state_.showComponentVisuals &&
@@ -6356,6 +6357,8 @@ void EditorSession::update() {
   state_.animatorControllers=&animatorControllers_;
   pumpNavigationBake();refreshNavigationView();
   state_.navigationView=&navigationView_;
+  refreshProbeView();
+  state_.probeView=&probeView_;
   state_.navigationRuntime=playInspecting()&&playScene_.active()?&playScene_.navigation():nullptr;
   state_.animatorControllerDiagnostic.clear();state_.animatorResolved=nullptr;
   if(state_.animatorOpen) {

@@ -5,6 +5,8 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/light_probes.h"
+#include "renderer/reflection_probes.h"
 #include "renderer/scene_environment.h"
 #include "renderer/color_grading.h"
 #include "renderer/physical_atmosphere.h"
@@ -51,6 +53,7 @@
 
 #include <array>
 #include <cmath>
+#include <deque>
 #include <vector>
 
 namespace ae::platform::android {
@@ -137,6 +140,39 @@ public:
     view=completedPreview_;success=previewCompletionSuccess_;completedPreview_={};return true;
   }
   const std::string &cameraPreviewDiagnostic() const {return previewDiagnostic_;}
+  // PK-6: sondas de reflexo e de luz (platform/android/instanced_probes.inl).
+  // A cena publica as sondas acesas junto das luzes; os recursos assados e o
+  // conjunto tetraedralizado das sondas de luz chegam quando o editor os carrega.
+  struct ProbeCaptureRequest {
+    u64 id=0;
+    u32 kind=0; // 0 reflexo (bake de Reflection Probe), 1 irradiância (sonda de luz)
+    u64 objectId=0,instance=0; // a sonda residente que já mostra o resultado
+    float position[3]{};
+    u32 resolution=128;
+    float nearClip=.3f,farClip=1000;
+    u32 cullingMask=~0u;
+    bool staticOnly=true;
+    bool solidBackground=false;
+    float background[3]{};
+    bool hdr=true;
+  };
+  struct ProbeCaptureResult {
+    u64 id=0;u32 kind=0;bool success=false;std::string error;
+    renderer::ReflectionProbeTexture texture; // kind 0
+    renderer::CubeFaces faces;               // kind 1, radiância linear
+  };
+  struct ProbeFrameStats {
+    u32 sceneProbes=0,residentProbes=0,readyProbes=0,facesCaptured=0,mipsFiltered=0;
+    u32 drawsUpdated=0,drawsWithLightProbes=0,drawsWithReflection=0,lightProbes=0,tetrahedra=0;
+    float cpuMs=0;
+  };
+  void queueSceneReflectionProbes(std::span<const renderer::SceneReflectionProbe> probes,bool playing);
+  void setReflectionProbeTextures(std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> textures);
+  void setLightProbeSet(std::shared_ptr<const renderer::LightProbeSet> set);
+  bool requestProbeCapture(const ProbeCaptureRequest &request);
+  bool takeProbeCaptureResult(ProbeCaptureResult &out);
+  bool probeCaptureBusy() const noexcept {return !probeCaptureQueue_.empty()||probeJob_.active||probeReadbackPending_;}
+  const ProbeFrameStats &probeStats() const noexcept {return probeStats_;}
   // Conta-gotas do editor (Unity: eyedropper da janela de cor): um pixel da
   // imagem final, depois da interface, copiado para a CPU e lido no quadro
   // seguinte. Coordenadas da interface (as mesmas do toque). Falso quando a
@@ -871,6 +907,73 @@ private:
   renderer::PhysicalAtmosphereGroundIrradianceCache previewAtmosphereGroundCache_{};
   bool previewEnvironmentReady_=false;
   bool previewEnvironmentUsesPrimary_=true;
+  // --- PK-6: sondas --------------------------------------------------------
+  struct ProbeLayer {
+    bool used=false,ready=false,awakeDone=false,hdr=true;
+    u64 key=0,contentKey=0;
+    u32 renderRequests=0,baseMip=0;
+    renderer::SceneReflectionProbe probe{};
+  };
+  struct ProbeJob {
+    bool active=false,bake=false,mipsGenerated=false;
+    ProbeCaptureRequest request{};
+    i32 layer=-1;
+    u32 size=0,facesDone=0,nextMip=0,baseMip=0,renderRequests=0;
+    u64 contentKey=0;
+    renderer::ReflectionProbeSlicing slicing=renderer::ReflectionProbeSlicing::NoTimeSlicing;
+  };
+  struct ProbeDrawCache {
+    float center[3]{};
+    i32 tetrahedron=-1;
+    u64 lightRevision=0,layerRevision=0;
+    u8 lightProbes=0,reflectionProbes=0;
+    bool valid=false;
+  };
+  bool createProbeResources();
+  void destroyProbeResources();
+  void destroyProbeCaptureTarget();
+  bool ensureProbeDrawCapacity(u32 draws);
+  bool ensureProbeCaptureTarget(u32 size);
+  bool ensureProbeReadback(u64 bytes);
+  bool writeProbeFaceSets();
+  void collectProbeReadback();
+  void updateProbeResidency(const float camera[3]);
+  void scheduleProbeWork();
+  bool prepareProbes(const platform::FreeCameraState &camera);
+  void recordProbes(float timeSeconds);
+  void recordProbeFace(u32 face,float timeSeconds);
+  rhi::VulkanImage probeAtlas_,probeScratch_,probeCapture_,probeCaptureDepth_,probeCaptureMaskA_,probeCaptureMaskB_;
+  rhi::VulkanSampler probeAtlasSampler_,probeCaptureSampler_;
+  rhi::VulkanBuffer probeBlock_,probeDisabledBlock_,probeReadback_,probeUpload_;
+  std::array<rhi::VulkanBuffer,6> probeFaceUniforms_{};
+  std::array<VkImageView,6> probeFaceViews_{};
+  std::array<VkFramebuffer,6> probeFramebuffers_{};
+  std::array<VkDescriptorSet,6> probeFaceSets_{};
+  std::array<VkImageView,renderer::ReflectionProbeAtlasMips> probeScratchViews_{};
+  std::array<VkDescriptorSet,renderer::ReflectionProbeAtlasMips> probeFilterSets_{};
+  VkDescriptorPool probeFacePool_=VK_NULL_HANDLE,probeFilterPool_=VK_NULL_HANDLE;
+  VkDescriptorSetLayout probeFilterSetLayout_=VK_NULL_HANDLE;
+  VkPipelineLayout probeFilterLayout_=VK_NULL_HANDLE;
+  VkPipeline probeFilterPipeline_=VK_NULL_HANDLE;
+  u32 probeBlockCapacity_=0,probeCaptureSize_=0,probeCaptureMips_=1;
+  bool probeBlitMips_=false,probeAtlasInitialized_=false;
+  std::array<ProbeLayer,renderer::MaximumFrameReflectionProbes> probeLayers_{};
+  ProbeJob probeJob_{};
+  u32 probeFrameFaces_=0;
+  bool probeFrameMipGen_=false,probeFrameFinish_=false;
+  std::vector<u32> probeFrameMips_;
+  std::deque<ProbeCaptureRequest> probeCaptureQueue_;
+  std::deque<ProbeCaptureResult> probeResults_;
+  bool probeReadbackPending_=false;
+  ProbeCaptureResult probeReadbackResult_{};
+  std::vector<std::pair<u32,std::shared_ptr<const renderer::ReflectionProbeTexture>>> probePendingUploads_;
+  std::vector<renderer::SceneReflectionProbe> sceneProbes_;
+  bool sceneProbesPlaying_=false;
+  std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> probeTextures_;
+  std::shared_ptr<const renderer::LightProbeSet> lightProbeSet_;
+  u64 lightProbeRevision_=1,probeLayerRevision_=1;
+  std::vector<ProbeDrawCache> probeDrawCache_;
+  ProbeFrameStats probeStats_{};
   // Item 2.1.4 do plano: em vez de um descriptor set por-objeto com 1 binding,
   // o pipeline instanciado consome o registro bindless (array único indexado
   // por materialIndex no shader) — ver rhi/bindless_registry.h. Esta PoC tem

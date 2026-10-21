@@ -33,6 +33,36 @@
       "consumer": "runtime/scene_lights.cpp → renderer/punctual_lights.h",
       "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/lighting-window.html",
       "apiName": "LightingSettings"
+    },
+    {
+      "type": "ReflectionProbe",
+      "name": "Sonda de reflexo",
+      "description": "Captura a cena num cubemap: metal e vidro refletem o cômodo em vez do céu",
+      "consumer": "renderer/reflection_probes.cpp → atlas de sondas; platform/android/instanced_probes.inl → captura",
+      "capability": "render.probe.reflection",
+      "invalidates": {
+        "cpp": "Invalidate::Probes"
+      },
+      "subfamily": "Sondas",
+      "icon": "lighting/reflection-probe",
+      "searchTerms": "Reflection Probe ReflectionProbe Cubemap Box Projection Reflexo Sonda Espelho",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-ReflectionProbe.html",
+      "apiName": "ReflectionProbe"
+    },
+    {
+      "type": "LightProbeGroup",
+      "name": "Grupo de sondas de luz",
+      "description": "Pontos que guardam a luz da cena para iluminar objetos que se movem",
+      "consumer": "renderer/light_probes.cpp → SH L2 por desenho; platform/android/instanced_probes.inl → bake",
+      "capability": "render.probe.irradiance",
+      "invalidates": {
+        "cpp": "Invalidate::Probes"
+      },
+      "subfamily": "Sondas",
+      "icon": "lighting/light-probe-group",
+      "searchTerms": "Light Probe Group LightProbeGroup Light Probes SH Irradiância Sonda Luz indireta",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-LightProbeGroup.html",
+      "apiName": "LightProbeGroup"
     }
   ],
   "defaults": {

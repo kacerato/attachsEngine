@@ -1521,7 +1521,8 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
 
   if(!state.motorBakeSourcesOpen&&!state.motorBakeSettingsOpen&&(state.workspace==EditorWorkspace::Scene||state.physicsDiagnosticOpen) && (state.showComponentVisuals||state.physicsDiagnosticOpen) && !state.cameraViewEntity) {
     const float aspect=state.view->frustum.tangentHalfHorizontal/state.view->frustum.tangentHalfVertical;
-    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative);
+    const auto visuals=collectComponentVisuals(*state.document,state.selection,aspect,state.resources,state.pathInstance,state.pathPointId,state.pathEntity,state.expandedNative,
+        state.probeView&&state.probeView->editing?state.probeView->selectedPoint:0);
     const auto *inspectedObject=state.document->find(state.selection);
     const auto *inspected=inspectedObject?inspectedObject->components.findInstance(state.expandedNative):nullptr;
     const bool colliderInspection=inspected && (&inspected->type()==&scene::Collider::descriptor || &inspected->type()==&scene::PhysicsBody::descriptor) &&
@@ -1711,13 +1712,16 @@ void buildViewportOverlay(ScreenBuilder &builder, const UiRect &viewport) {
   if(entity && state.showComponentVisuals && !state.cameraViewEntity &&
      state.workspace==EditorWorkspace::Scene && expandedVisual &&
      (&expandedVisual->type()==&scene::Light::descriptor ||
-      &expandedVisual->type()==&scene::Environment::descriptor)) {
+      &expandedVisual->type()==&scene::Environment::descriptor ||
+      &expandedVisual->type()==&scene::ReflectionProbe::descriptor ||
+      &expandedVisual->type()==&scene::LightProbeGroup::descriptor)) {
     constexpr const char *labels[]{"Alcance","Cone interno","Cone externo",
-        "Tamanho X","Tamanho Y","Tamanho Z","Raio","Mistura"};
+        "Tamanho X","Tamanho Y","Tamanho Z","Raio","Mistura","X","Y","Z"};
+    const u64 probePoint=state.probeView&&state.probeView->editing?state.probeView->selectedPoint:0;
     for(u32 index=0;index<static_cast<u32>(EditorComponentHandleKind::Count);++index) {
       EditorComponentHandle handle;
       const auto kind=static_cast<EditorComponentHandleKind>(index);
-      if(!componentHandleGeometry(*state.document,entity->id,expandedVisual->instanceId(),kind,handle)) continue;
+      if(!componentHandleGeometry(*state.document,entity->id,expandedVisual->instanceId(),kind,handle,probePoint)) continue;
       const auto point=projectWorldToScreen(*state.view,handle.point);float parameter;
       if(!point.valid || !viewport.contains(point.screen) ||
          !cameraHandleRayParameter(*state.view,handle,point.screen,parameter)) continue;
@@ -4162,6 +4166,23 @@ u32 componentGroupOverride(const scene::ComponentType &type,std::string_view gro
   return ~0u;
 }
 
+// PK-6: botão de ação das sondas — ícone e rótulo; o primário é cheio (Assar),
+// os secundários são contornos, como os da Superfície de navegação.
+void probeActionButton(ScreenBuilder &builder,UiRect rect,UiIcon icon,std::string_view label,u32 widget,
+                       bool primary,bool enabled,bool active=false) {
+  const auto &theme=builder.theme;
+  rect=deflate(rect,UiInsets{2,0,2,4});
+  const UiColor fill=primary?(enabled?theme.color.accent:theme.color.raised):active?withAlpha(theme.color.accent,.18f):theme.color.raised;
+  const UiColor ink=primary&&enabled?theme.color.accentInk:enabled?(active?theme.color.text:theme.color.textMuted):theme.color.textFaint;
+  builder.list.addRect(rect,fill,theme.radius.control);
+  if(!primary) builder.list.addBorder(rect,active?theme.color.accent:theme.color.lineSoft,1,theme.radius.control);
+  auto inner=rect;
+  const auto glyph=takeLeft(inner,30);
+  builder.list.addImage(centred(glyph,18,18),static_cast<UiImageId>(icon),ink);
+  builder.label(inner,fitMiddle(builder.list,std::string(label),inner.width-4,theme.type.caption),ink,
+                primary?theme.type.body:theme.type.caption);
+  if(enabled) builder.router.addRegion(rect,widget);
+}
 void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,
                           const EditorComponentEntry &entry,u32 index) {
   const auto &theme=builder.theme;
@@ -4388,6 +4409,83 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         builder.list.addRect(row,theme.color.raised,theme.radius.control);
         builder.label(row,"Desvincular",theme.color.textMuted,theme.type.caption,UiAlign::Center);
         builder.router.addRegion(row,nw::id(nw::Clear));
+      }
+    }
+  }
+  // PK-6: Sonda de reflexo e Grupo de sondas de luz — estado do bake, botões
+  // e, no grupo, o editor de pontos (Edit Light Probes da Unity).
+  if((entry.type==&scene::ReflectionProbe::descriptor||entry.type==&scene::LightProbeGroup::descriptor)&&!searching) {
+    namespace pw=probe_widget;
+    const auto *probe=state.probeView&&state.probeView->entity==entity.id&&state.probeView->instance==component->instanceId()?
+        state.probeView:nullptr;
+    const bool authoring=state.workspace!=EditorWorkspace::Play;
+    if(probe) {
+      const bool light=probe->lightGroup;
+      const UiColor tone=probe->baking?theme.color.accent:(probe->stale||probe->missing)?theme.color.warning:
+                         probe->hasBake?theme.color.accent:theme.color.textDim;
+      std::string detail=probe->detail;
+      if(probe->stats.valid&&!probe->baking) {
+        char text[96];
+        if(light) std::snprintf(text,sizeof text," · %u objetos usam",probe->stats.drawsWithLightProbes);
+        else std::snprintf(text,sizeof text," · %u/%u sondas prontas",probe->stats.readyProbes,probe->stats.sceneProbes);
+        detail+=text;
+      }
+      inspectorStatusCard(builder,content,light?UiIcon::LightingLightProbeGroup:UiIcon::LightingReflectionProbe,
+                          probe->title,detail,tone,probe->baking?probe->progress:-1);
+      const bool realtime=!light&&static_cast<const scene::ReflectionProbe&>(*component).realtime();
+      if(authoring&&!realtime) {
+        auto row=takeTop(content,44);
+        const float primaryWidth=std::max(130.f,row.width*.46f);
+        const auto primary=takeLeft(row,primaryWidth);
+        const char *bakeLabel=probe->baking?"Assando…":light?(probe->hasBake?"Assar de novo":"Assar sondas"):
+                              (probe->hasBake?"Assar de novo":"Assar");
+        probeActionButton(builder,primary,light?UiIcon::LightingLightProbeGroup:UiIcon::LightingReflectionProbe,bakeLabel,
+                          pw::id(light?pw::BakeLight:pw::BakeReflection),true,!probe->baking);
+        if(light) {
+          const auto edit=takeLeft(row,probe->hasBake?row.width*.55f:row.width);
+          probeActionButton(builder,edit,UiIcon::EditorAuthorMove,probe->editing?"Editando":"Editar sondas",
+                            pw::id(pw::EditPoints),false,true,probe->editing);
+        }
+        if(probe->hasBake&&!probe->baking)
+          probeActionButton(builder,row,UiIcon::UiClose,"Desvincular",pw::id(pw::Clear),false,true);
+      }
+      if(light&&probe->editing&&authoring) {
+        const auto &group=static_cast<const scene::LightProbeGroup&>(*component);
+        // Seleção: anterior / sonda N de M / próxima.
+        auto nav=takeTop(content,40);
+        const bool any=!group.points.empty();
+        builder.iconButton(takeLeft(nav,36),UiIcon::UiChevronLeft,pw::id(pw::PreviousPoint),false,theme.color.textDim,
+                           any&&probe->selectedIndex>0);
+        builder.iconButton(takeRight(nav,36),UiIcon::UiChevronRight,pw::id(pw::NextPoint),false,theme.color.textDim,
+                           any&&probe->selectedIndex+1<group.points.size());
+        builder.list.addImage(centred(takeLeft(nav,22),16,16),static_cast<UiImageId>(UiIcon::LightingLightProbeGroup),theme.color.accent);
+        char title[64];
+        if(any) std::snprintf(title,sizeof title,"Sonda %u de %u",probe->selectedIndex+1,static_cast<u32>(group.points.size()));
+        else std::snprintf(title,sizeof title,"Grupo vazio");
+        builder.label(nav,title,theme.color.text,theme.type.caption,UiAlign::Center);
+        // Adicionar, duplicar e apagar (Add Probe, Duplicate Selected, Delete Selected).
+        auto actions=takeTop(content,44);
+        const float third=actions.width/3;
+        probeActionButton(builder,takeLeft(actions,third),UiIcon::ComponentAdd,"Adicionar",pw::id(pw::AddPoint),false,
+                          group.points.size()<scene::LightProbeGroup::MaximumPoints);
+        probeActionButton(builder,takeLeft(actions,third),UiIcon::SceneDuplicate,"Duplicar",pw::id(pw::DuplicatePoint),false,any);
+        probeActionButton(builder,actions,UiIcon::UiRemove,"Apagar",pw::id(pw::RemovePoint),false,any);
+        // Posição local da sonda selecionada; arrastar as alças no viewport faz o mesmo.
+        if(any) {
+          auto row=takeTop(content,40);
+          builder.label(takeLeft(row,48),"Local",theme.color.textDim,theme.type.caption);
+          const float cellWidth=row.width/3;const UiColor colors[]{theme.color.axisX,theme.color.axisY,theme.color.axisZ};
+          const u32 slot=probe->selectedIndex;
+          for(u32 axis=0;axis<3;++axis) {
+            const auto hit=takeLeft(row,cellWidth);auto cell=deflate(hit,UiInsets::all(2));
+            builder.list.addRect(cell,theme.color.silhouette,4);
+            builder.label(takeLeft(cell,12),axis==0?"X":axis==1?"Y":"Z",colors[axis],theme.type.caption,UiAlign::Center);
+            char number[24];
+            std::snprintf(number,sizeof number,"%.3g",static_cast<double>(group.points[slot].position[axis]));
+            builder.label(cell,number,theme.color.text,theme.type.caption,UiAlign::Center);
+            builder.router.addRegion(hit,widgetId(EditorWidget::ComponentSlotNumberBase)+index+(axis<<8)+(slot<<16));
+          }
+        }
       }
     }
   }
@@ -4722,8 +4820,10 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     // Lightmap é uma rota própria. Propriedades sem grupo do material e da
     // geometria não podem inflar essa rota nem esconder o binding principal.
     if(mesh&&builder.state.meshTab==2&&!searching) return p.group=="Lightmap";
+    // PK-6: a posição por sonda é o editor de pontos do grupo, não 3×N linhas.
+    if(p.group=="Sonda selecionada") return false;
     if(mesh&&builder.state.meshTab==3&&!searching)
-      return p.group=="Iluminação"||p.group=="Configurações adicionais";
+      return p.group=="Iluminação"||p.group=="Sondas"||p.group=="Configurações adicionais";
     if(constantForce&&!searching) return group=="Força mundo"?(p.group=="Força mundo"||p.group=="Torque mundo"):
       (p.group=="Força local"||p.group=="Torque local");
     return searching||p.group.empty()||p.group==group;
@@ -4970,12 +5070,13 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const auto order=[&](const Field &field)->int{
       const std::string_view id=field.kind==1?entry.type->enums[field.index].id:
                                 field.kind==0?entry.type->booleans[field.index].id:std::string_view{};
-      return id=="cast_shadows"?0:id=="receive_shadows"?1:id=="rendering_layer_mask"?6:7;
+      return id=="cast_shadows"?0:id=="receive_shadows"?1:id=="light_probes"?2:id=="reflection_probes"?3:
+             id=="rendering_layer_mask"?6:7;
     };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return order(a)<order(b);});
     std::vector<Field> sectioned;int last=-1;
     for(const auto &field:fields) {
-      const int position=order(field),section=position<2?0:2;
+      const int position=order(field),section=position<2?0:position<6?1:2;
       if(section!=last) {sectioned.push_back({41,static_cast<u32>(section)});last=section;}
       sectioned.push_back(field);
     }
@@ -5081,7 +5182,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     if(f.kind==41) {
       // Cabeçalho de seção da aba Iluminação do Mesh Renderer.
       const char *titles[]{"Iluminação","Sondas","Configurações adicionais"};
-      const UiIcon icons[]{UiIcon::LightingShadowCaster,UiIcon::LightingLightmap,UiIcon::LightingRenderingLayers};
+      const UiIcon icons[]{UiIcon::LightingShadowCaster,UiIcon::LightingLightProbeGroup,UiIcon::LightingRenderingLayers};
       const u32 section=std::min<u32>(f.index,2);
       auto line=deflate(slot,UiInsets{2,10,2,4});
       builder.list.addImage(centred(takeLeft(line,22),18,18),static_cast<UiImageId>(icons[section]),theme.color.accent);

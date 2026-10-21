@@ -12,6 +12,8 @@ struct UnityPrefabObject {
   // ShadowCastingMode da Unity: 0 Off, 1 On, 2 TwoSided, 3 ShadowsOnly — os
   // mesmos valores do Projetar sombras do Mesh Renderer da Astra.
   u32 castShadows=1;
+  // PK-6: Probes do Mesh Renderer (LightProbeUsage, ReflectionProbeUsage da Unity).
+  u32 lightProbes=1,reflectionProbes=1;
   u32 layer=0;
   UnityObjectReference mesh;
   std::vector<UnityObjectReference> materials;

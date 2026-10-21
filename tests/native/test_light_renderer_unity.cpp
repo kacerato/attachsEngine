@@ -292,15 +292,19 @@ AE_TEST(mesh_renderer_v11_owns_shadows_probes_and_layers) {
   AE_EXPECT_TRUE(adopted && adopted->castShadows == 0 && !adopted->receiveShadows && !adopted->legacyObjectShadows,
                  "os interruptores antigos do objeto viram o Projetar/Receber do renderer");
 
-  // Sondas gravadas, fora do Inspector até o PK-6; camadas é máscara.
-  const scene::ComponentEnum *probes = nullptr, *layers = nullptr, *cast = nullptr;
+  // PK-6: as sondas viraram campos com consumidor (Off/Blend e os 4 modos de
+  // reflexo da Unity), com o padrão da Unity; camadas é máscara.
+  const scene::ComponentEnum *lightProbes = nullptr, *reflectionProbes = nullptr, *layers = nullptr, *cast = nullptr;
   for (const auto &property : type.enums) {
-    if (property.id == "light_probes" || property.id == "reflection_probes") probes = &property;
+    if (property.id == "light_probes") lightProbes = &property;
+    if (property.id == "reflection_probes") reflectionProbes = &property;
     if (property.id == "rendering_layer_mask") layers = &property;
     if (property.id == "cast_shadows") cast = &property;
   }
-  AE_EXPECT_TRUE(!probes && renderer.lightProbes == 1 && renderer.reflectionProbes == 1,
-                 "sondas ficam no arquivo com o padrão da Unity, sem campo sem consumidor");
+  AE_EXPECT_TRUE(lightProbes && reflectionProbes && lightProbes->options.size() == 2 && reflectionProbes->options.size() == 4 &&
+                 lightProbes->presentation.hasConsumer() && reflectionProbes->presentation.hasConsumer() &&
+                 renderer.lightProbes == 1 && renderer.reflectionProbes == 1,
+                 "sondas com consumidor e o padrão da Unity (Misturar sondas)");
   AE_EXPECT_TRUE(layers && layers->flags, "Rendering Layer Mask é máscara");
   AE_EXPECT_TRUE(cast && cast->options.size() == 4 && cast->presentation.hasConsumer(), "Cast Shadows com quatro modos");
 }

@@ -23,6 +23,7 @@
 #include "runtime/scene_tween_sequences.h"
 #include "runtime/scene_physics_queries.h"
 #include "runtime/scene_ik.h"
+#include "runtime/scene_probes.h"
 #include "runtime/scene_root_motion.h"
 #include "editor/editor_water_world.h"
 #include "scene/ik_effects.h"
@@ -246,6 +247,8 @@ public:
     scripts_.setAnimatorGraphs(&animatorGraphs_);
     scripts_.setNavigation(&navigation_);
     scripts_.setIk(&ik_);
+    reflectionProbes_.reset();
+    scripts_.setReflectionProbes(&reflectionProbes_);
     ik_.setBodyMover([this](runtime::ObjectId body,const float pose[7]) {return physics_.moveKinematic(body,pose);});
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
@@ -311,6 +314,8 @@ public:
     scripts_.setVirtualCameras(nullptr);
     scripts_.setNavigation(nullptr);
     scripts_.setIk(nullptr);
+    scripts_.setReflectionProbes(nullptr);
+    reflectionProbes_.reset();
     events_.reset();
     eventConnections_.reset();
     scripts_.setSceneGui(nullptr);
@@ -385,7 +390,8 @@ public:
     if(!active_) return runtime::WorldStatus::NotRunning;
     return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
   }
-  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_,&ik_};}
+  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_,&ik_,&reflectionProbes_};}
+  const runtime::SceneReflectionProbeRequests &reflectionProbeRequests() const noexcept {return reflectionProbes_;}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
   // Quem desenha o quadro publica a vista de jogo antes de avançar o mundo.
@@ -625,6 +631,7 @@ private:
   runtime::SceneCameraFollow cameraFollow_;
   runtime::SceneConstraints constraints_;
   runtime::SceneIk ik_;
+  runtime::SceneReflectionProbeRequests reflectionProbes_;
   runtime::SceneRootMotion rootMotion_;
   renderer::WaterWorld water_;
   runtime::SceneTweens tweens_;

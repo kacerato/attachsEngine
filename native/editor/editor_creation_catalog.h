@@ -110,6 +110,10 @@ inline const CreationComponent dayNightSun[]{{light,directionalLight},{"astra.re
 // Configurações de iluminação da cena (janela Lighting da Unity): a Fonte do
 // sol nasce vazia, que é a regra automática.
 inline const CreationComponent lightingSettings[]{{"astra.render.lighting_settings",{}}};
+// PK-6: GameObject › Light › Reflection Probe e Light Probe Group da Unity. A
+// sonda nasce Assada, caixa de 10 m e 128 px; o grupo, com 8 sondas num cubo.
+inline const CreationComponent reflectionProbe[]{{"astra.render.reflection_probe",{}}};
+inline const CreationComponent lightProbeGroup[]{{"astra.render.light_probe_group",{}}};
 inline const CreationComponent point[]{{light,pointLight}};
 // G4b: como um Volume global da Unity com só o override Cloud Layer: acima do
 // Ambiente da cena (prioridade 1), não mexe no céu, na neblina nem no pós dele.
@@ -264,7 +268,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,101> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -296,6 +300,12 @@ inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
   {"light.lighting_settings",EditorWidget::None,4,"Iluminação da cena","Escolhe qual luz direcional é o sol: a das cascatas e do céu.",ui::UiIcon::LightingSunSource,
     runtime::ObjectKind::Folder,recipe::lightingSettings,CreationPose::ViewTarget,0,{},{},"Lighting Settings Sun Source RenderSettings Fonte do sol"},
+  {"light.reflection_probe",EditorWidget::None,4,"Sonda de reflexo","Captura o cômodo para metal e vidro refletirem a sala, não o céu.",
+    ui::UiIcon::LightingReflectionProbe,runtime::ObjectKind::Folder,recipe::reflectionProbe,CreationPose::ViewTarget,1,{},{},
+    "Reflection Probe ReflectionProbe Cubemap Reflexo Box Projection"},
+  {"light.light_probe_group",EditorWidget::None,4,"Grupo de sondas de luz","Pontos que guardam a luz da cena para iluminar o que se move.",
+    ui::UiIcon::LightingLightProbeGroup,runtime::ObjectKind::Folder,recipe::lightProbeGroup,CreationPose::ViewTarget,1,{},{},
+    "Light Probe Group LightProbeGroup Light Probes Sondas de luz"},
   {"light.point",EditorWidget::None,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightPoint,
     runtime::ObjectKind::Light,recipe::point,CreationPose::ViewTarget,2,{},{},"Point Light Omni"},
   {"light.spot",EditorWidget::None,4,"Luz spot","Emite dentro de um cone orientável.",ui::UiIcon::LightSpot,

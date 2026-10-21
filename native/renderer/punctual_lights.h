@@ -65,6 +65,11 @@ struct DrawLightingKey {
   u32 objectLayer = 0;
   u32 renderingLayers = 1u;
   bool receiveShadows = true;
+  // PK-6: Probes do Mesh Renderer (valores da Unity) e o Static do objeto, que
+  // decide se o desenho entra na captura de uma sonda Assada.
+  u8 lightProbes = 1;      // 0 Desligado, 1 Misturar sondas
+  u8 reflectionProbes = 1; // 0 Desligado, 1 Misturar, 2 Misturar e céu, 3 Simples
+  bool isStatic = false;
 };
 inline constexpr bool lightFilterAccepts(const PunctualLightFilter &filter, const DrawLightingKey &key) noexcept {
   const u32 layerBit = key.objectLayer < 32 ? 1u << key.objectLayer : 0u;

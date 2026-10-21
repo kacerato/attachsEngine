@@ -30,6 +30,7 @@
 #include "rhi/shaders/post_process_temporal_spirv.h"
 #include "rhi/shaders/exposure_histogram_spirv.h"
 #include "rhi/shaders/exposure_reduce_spirv.h"
+#include "rhi/shaders/reflection_probe_filter_spirv.h"
 #include "rhi/shaders/fsr_easu_spirv.h"
 #include "rhi/shaders/fsr_rcas_spirv.h"
 #include "rhi/shaders/shadow_depth_spirv.h"
@@ -1110,7 +1111,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[19]{};
+  VkDescriptorSetLayoutBinding bindings[21]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1151,15 +1152,18 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G4b: mapa do Cloud Layer, lido pelo céu (conjunto 0) e pela sombra do sol (conjunto 1).
   bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
+  bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  bindings[bindingCount++]={25,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 2u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 3u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
+                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -1325,6 +1329,27 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].pImageInfo = &cloudMapInfo;
   ++writeCount;
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
+  // PK-6: o atlas e o registro por desenho (o buffer se reescreve no binding 24
+  // sozinho ao crescer). Sem sondas o shader cai exatamente no céu de antes.
+  if (!createProbeResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Probes] recursos de sonda indisponíveis.");
+    return false;
+  }
+  VkDescriptorImageInfo probeAtlas{probeAtlasSampler_.handle(), probeAtlas_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorBufferInfo probeBlock{probeBlock_.handle(), 0, probeBlock_.sizeBytes()};
+  VkWriteDescriptorSet probeWrites[2]{};
+  probeWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  probeWrites[0].dstSet = environmentSet_;
+  probeWrites[0].dstBinding = 24;
+  probeWrites[0].descriptorCount = 1;
+  probeWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  probeWrites[0].pBufferInfo = &probeBlock;
+  probeWrites[1] = probeWrites[0];
+  probeWrites[1].dstBinding = 25;
+  probeWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  probeWrites[1].pBufferInfo = nullptr;
+  probeWrites[1].pImageInfo = &probeAtlas;
+  vkUpdateDescriptorSets(device_, 2, probeWrites, 0, nullptr);
   return true;
 }
 
@@ -1839,6 +1864,7 @@ bool applySceneEnvironmentLook(
 }
 
 #include "platform/android/instanced_camera_preview.inl"
+#include "platform/android/instanced_probes.inl"
 
 void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
   if (!createUiRenderPass()) return;
@@ -4919,6 +4945,7 @@ void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
   destroyCameraPreview();
+  destroyProbeResources();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
   // The UI owns VMA buffers and images too. Release them before its render pass
@@ -5841,6 +5868,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(submittedPreview_.requestId) {
     completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;
   }
+  // A cerca do quadro anterior já foi cumprida: a leitura da sonda chegou.
+  collectProbeReadback();
   updateTextureStreaming(camera);
   updateAuthoredMeshLods(camera);
   if(previewCloseRequested_) {destroyCameraPreview();previewCloseRequested_=false;}
@@ -6403,6 +6432,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       sameCameraPose(camera,editorSceneCachedCamera_) && sceneUniformMatches;
   if(!sceneCacheEligible) editorSceneCacheValid_=false;
 
+  // PK-6: antes da prévia, que copia o binding 24 deste conjunto.
+  if(!prepareProbes(camera)) return rhi::SwapchainStatus::FatalError;
   if(pendingPreview_.requestId && !prepareCameraPreview()) {
     completedPreview_=pendingPreview_;pendingPreview_={};previewCompletionSuccess_=false;
   }
@@ -6417,6 +6448,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::Skinning);
   if (!recordSkinning()) return rhi::SwapchainStatus::FatalError;
   endGpuRegion(GpuPassClass::Skinning);
+  beginGpuRegion(GpuPassClass::Probes);
+  recordProbes(timeSeconds);
+  endGpuRegion(GpuPassClass::Probes);
   beginGpuRegion(GpuPassClass::CameraPreview);
   recordCameraPreview(timeSeconds);
   endGpuRegion(GpuPassClass::CameraPreview);
