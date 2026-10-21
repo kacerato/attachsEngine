@@ -99,10 +99,12 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "renderer/environment_map.cpp", ""},
   {"render.gi.lightmap", "Lightmap indireto externo por submalha", CapabilityState::DeviceLimited,
    "scene/lightmap_binding.h + rhi/shaders/dirt_road_shading.glsl", "RGB linear de irradiância; UV1 autoral; exige bindless. Sem bake, unwrap ou probes"},
-  {"render.probe.irradiance", "Sonda de irradiância por objeto", CapabilityState::Planned,
-   "renderer/ (volume de sondas)", "Sem recurso de sonda nem amostragem por instância"},
-  {"render.probe.reflection", "Sonda de reflexão local", CapabilityState::Planned,
-   "renderer/environment_map.cpp", "Sem captura local, atlas nem blend por volume"},
+  {"render.probe.irradiance", "Sondas de luz (Light Probe Group, SH L2 por objeto)", CapabilityState::Implemented,
+   "renderer/light_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "Bake por captura no aparelho: sol, céu e um rebate; luzes de tempo real não entram no SH, como na Unity. Sem Anchor Override nem LPPV"},
+  {"render.probe.reflection", "Sonda de reflexo local (Baked/Realtime, box projection, 2 por objeto)", CapabilityState::Implemented,
+   "renderer/reflection_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "8 sondas por quadro, 256 px por face; sem tipo Custom, Shadow Distance nem oclusão própria da captura"},
 
   // --- Material ------------------------------------------------------------
   {"render.material.pbr", "Superfície PBR metálico/rugosidade", CapabilityState::Implemented,

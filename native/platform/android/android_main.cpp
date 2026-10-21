@@ -137,6 +137,12 @@ struct AndroidShell final {
   std::vector<ae::renderer::MapDrawState> authoredDraws;
   std::vector<ae::renderer::SceneLight> authoredLights;
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
+  // PK-6: sondas publicadas para o renderer e o que já foi entregue a ele.
+  std::vector<ae::renderer::SceneReflectionProbe> authoredReflectionProbes;
+  ae::u64 publishedProbeTextures=0;
+  std::shared_ptr<const ae::renderer::LightProbeSet> publishedLightProbes;
+  std::vector<ae::editor::EditorProbeCaptureRequest> probeRequests;
+  float probeStatsLogClock=0;
   ae::renderer::SceneEnvironment authoredEnvironment{};
   // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
   // excedente sairia no log a cada quadro e viraria ruído em vez de aviso.
@@ -3862,6 +3868,13 @@ void android_main(android_app *app) {
               shell.instancedRenderer.queueSceneLights(shell.authoredLights);
             if(shell.editorSession.extractEnvironmentVolumes(shell.authoredEnvironmentVolumes))
               shell.instancedRenderer.queueSceneEnvironmentVolumes(shell.authoredEnvironmentVolumes);
+            // PK-6: as sondas saem do mesmo grafo e no mesmo quadro que as luzes.
+            if(shell.editorSession.extractReflectionProbes(shell.authoredReflectionProbes))
+              shell.instancedRenderer.queueSceneReflectionProbes(shell.authoredReflectionProbes,editorPlaying);
+            if(auto set=shell.editorSession.lightProbeSet(); set!=shell.publishedLightProbes) {
+              shell.publishedLightProbes=set;
+              shell.instancedRenderer.setLightProbeSet(std::move(set));
+            }
             // O relatório é o do último quadro desenhado: quem escolhe as luzes
             // é o quadro, com a câmera dele. Um excedente aparece no aviso
             // seguinte, nunca some.
@@ -3876,6 +3889,50 @@ void android_main(android_app *app) {
           else {
             __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Editor] Falha ao publicar documento no renderer.");
             if(editorPlaying) shell.editorSession.reportPlayFailure();
+          }
+        }
+        // PK-6: recursos assados, pedidos de captura do bake e o retorno deles.
+        if(shell.editorSession.reflectionProbeTexturesRevision()!=shell.publishedProbeTextures) {
+          shell.publishedProbeTextures=shell.editorSession.reflectionProbeTexturesRevision();
+          shell.instancedRenderer.setReflectionProbeTextures(shell.editorSession.reflectionProbeTextures());
+        }
+        shell.editorSession.takeProbeCaptureRequests(shell.probeRequests);
+        for(const auto &request:shell.probeRequests) {
+          ae::platform::android::InstancedRenderer::ProbeCaptureRequest capture{};
+          capture.id=request.id;capture.kind=request.kind;capture.objectId=request.objectId;capture.instance=request.instance;
+          std::copy(request.position,request.position+3,capture.position);capture.resolution=request.resolution;
+          capture.nearClip=request.nearClip;capture.farClip=request.farClip;capture.cullingMask=request.cullingMask;
+          capture.staticOnly=request.staticOnly;capture.solidBackground=request.solidBackground;
+          std::copy(request.background,request.background+3,capture.background);capture.hdr=request.hdr;
+          if(!shell.instancedRenderer.requestProbeCapture(capture)) {
+            ae::editor::EditorProbeCaptureResult failed;failed.id=request.id;failed.kind=request.kind;
+            failed.error="Renderer sem sondas neste aparelho";
+            shell.editorSession.deliverProbeCaptureResult(std::move(failed));
+          }
+        }
+        {
+          ae::platform::android::InstancedRenderer::ProbeCaptureResult captured;
+          while(shell.instancedRenderer.takeProbeCaptureResult(captured)) {
+            ae::editor::EditorProbeCaptureResult result;
+            result.id=captured.id;result.kind=captured.kind;result.success=captured.success;result.error=std::move(captured.error);
+            result.texture=std::move(captured.texture);result.faces=std::move(captured.faces);
+            shell.editorSession.deliverProbeCaptureResult(std::move(result));
+          }
+          const auto &stats=shell.instancedRenderer.probeStats();
+          ae::editor::EditorProbeRendererStats view;
+          view.sceneProbes=stats.sceneProbes;view.residentProbes=stats.residentProbes;view.readyProbes=stats.readyProbes;
+          view.facesCaptured=stats.facesCaptured;view.mipsFiltered=stats.mipsFiltered;
+          view.drawsWithLightProbes=stats.drawsWithLightProbes;view.drawsWithReflection=stats.drawsWithReflection;
+          view.lightProbes=stats.lightProbes;view.tetrahedra=stats.tetrahedra;view.cpuMs=stats.cpuMs;view.valid=true;
+          shell.editorSession.setProbeRendererStats(view);
+          // Custo medido no aparelho: uma linha a cada 2 s enquanto houver sonda.
+          shell.probeStatsLogClock+=1.0f/60.0f;
+          if((stats.sceneProbes||stats.lightProbes) && shell.probeStatsLogClock>=2.0f) {
+            shell.probeStatsLogClock=0;
+            __android_log_print(ANDROID_LOG_INFO,LogTag,
+              "[Probes] sondas=%u residentes=%u prontas=%u faces=%u mips=%u desenhosReflexo=%u desenhosSH=%u sondasLuz=%u tetra=%u cpu=%.3fms",
+              stats.sceneProbes,stats.residentProbes,stats.readyProbes,stats.facesCaptured,stats.mipsFiltered,
+              stats.drawsWithReflection,stats.drawsWithLightProbes,stats.lightProbes,stats.tetrahedra,static_cast<double>(stats.cpuMs));
           }
         }
         const auto &environmentMapDiagnostic=shell.instancedRenderer.environmentMapDiagnostic();

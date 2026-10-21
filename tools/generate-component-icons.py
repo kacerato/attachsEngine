@@ -475,6 +475,25 @@ ICONS["lighting/rendering-layers"] = (
     f'<circle cx="64" cy="12" r="6" fill="{ACCENT}"/><path d="M64 22v8" {stroke(4, ACCENT)}/>'
     f'<path d="M64 112l46-20M64 112L18 92" {stroke(5, extra='opacity=".45"')}/>')
 
+# PK-6: Sonda de reflexo — a esfera espelhada no meio da caixa de influência em
+# perspectiva (o gizmo da Unity), com o reflexo da janela acesa na esfera.
+ICONS["lighting/reflection-probe"] = (
+    f'<path d="M18 40l30-22h62v62l-30 22H18z" {stroke(4, extra='opacity=".55"')}/>'
+    f'<path d="M18 40h62v62M80 40l30-22" {stroke(4, extra='opacity=".55"')}/>'
+    f'<circle cx="64" cy="64" r="26" fill="{INK}" fill-opacity=".12" {stroke(6)}/>'
+    f'<path d="M50 54a17 17 0 0 1 12-10" {stroke(6, ACCENT)}/>'
+    f'<path d="M48 74h32" {stroke(4, extra='opacity=".6"')}/>')
+# PK-6: Grupo de sondas de luz — quatro sondas nos vértices de um tetraedro
+# ligadas pelas arestas que o objeto dinâmico usa para misturar a luz; a do
+# alto é a acesa.
+ICONS["lighting/light-probe-group"] = (
+    f'<path d="M64 22L22 92M64 22l42 70M64 22l-6 84M22 92h84M22 92l36 14M106 92l-48 14" {stroke(4, extra='opacity=".55"')}/>'
+    f'<circle cx="64" cy="22" r="12" fill="{ACCENT}"/>'
+    f'<circle cx="22" cy="92" r="11" fill="{INK}" fill-opacity=".2" {stroke(5)}/>'
+    f'<circle cx="106" cy="92" r="11" fill="{INK}" fill-opacity=".2" {stroke(5)}/>'
+    f'<circle cx="58" cy="106" r="11" fill="{INK}" fill-opacity=".2" {stroke(5)}/>'
+    f'<circle cx="62" cy="68" r="7" fill="{INK}"/>')
+
 # G4b: nuvens (Cloud Layer). O sol atrás do cúmulo diz "iluminada pelo sol",
 # os traços à esquerda são o vento e a mancha no chão é a sombra projetada.
 ICONS["lighting/clouds"] = (
