@@ -184,3 +184,31 @@ em namespace diferente; a declaração foi corrigida e o retry incremental passo
 em1m22s. O aparelho está bloqueado/apagado, aguardando desbloqueio do proprietário.
 Instalação não comprova cadência ou latência. A/B móvel, toque, água e Player
 exportado continuam pendentes; a janela ADB excepcional segue aberta.
+
+### Medição da revisão3 e correção subsequente
+
+Após desbloqueio, a revisão3 confirmou30,00FPS em repouso com600/600 cenas
+reaproveitadas. Isso não é aceite da navegação: a janela de arraste+repouso teve
+10,79 apresentações/s, com intervalos de aproximadamente200ms durante movimento.
+O passe opaco chegou a312,23ms; despacho do input ficou perto de8ms. A câmera
+continua sem aceite. Não inferir ganho comparativo com outra revisão/câmera.
+
+A seleção avançada confundia diretório de transporte com operação habilitada:
+FX/Geo/Snow também alocam esse diretório sem habilitar ruído/resample/clusters.
+Agora o grupo avançado exige operações declaradas; mantém inclusive ruído com
+força zero e camadas inativas, sem usar peso de pintura ou intensidade momentânea
+como prova. FX/Geo/Snow conservam seus grupos próprios. Testes passaram12/12;
+312 modos Vulkan com readbacks especializado/genérico passaram novamente em11,35s
+com cache aquecido. Assets e propriedades permanecem completos.
+
+Os fixtures anteriores de ruído/Geo/Snow não vinculavam todos os mapas obrigatórios
+e podiam aceitar o fallback genérico nas asserções por bit. Foram corrigidos com
+fontes/descritores reais e falha explícita para fixture inválido. A comparação GPU
+continua sendo a evidência de pixels; testes de PFN não a substituem.
+
+Revisão privada111 `.20261021.4` compilada em1m37s, auditada/assinada e instalada,
+SHA256 `07a59b2a12ca3b7141a7b03d7ec669d08aa48f601893c164075554041cf4b5ca`.
+Inclui essa seleção corrigida e log do capability_mask publicado. Ainda não medida:
+o celular está em outro app; não injetar gestos fora da Astra. A suíte host integrada
+final foi interrompida para priorizar esta investigação e retém objetos concluídos;
+seu log parcial não conta como passagem. Próximas Docs públicas ainda pendentes.

@@ -1,5 +1,15 @@
 # Retomada — 16/10/2026
 
+Revisão posterior21/10:111 `.20261021.4` instalada, SHA256
+`07a59b2a12ca3b7141a7b03d7ec669d08aa48f601893c164075554041cf4b5ca`.
+A revisão3 confirmou30FPS em repouso, mas movimento continuou com intervalos~200ms
+e passe opaco até312ms; não está aceita. A4 corrige diretório avançado indevidamente
+tratado como habilitação de ruídos/clusters.12/12 testes nativos e312 modos GPU com
+comparação especializada/genérica passaram; nenhum ganho Android foi inferido.
+Aparelho passou para outro app; pergunta de disponibilidade segue pendente.
+Suíte host ampla interrompida com cache preservado para priorizar desempenho.
+Fonte/detalhes: [contrato e evidências](VIEWPORT-PLAY-PLAYER-2026-10-21.md).
+
 Estado mais recente21/10: APK111 `.20261021.3` compilado/auditado e instalado,
 SHA256 `e6f4114746d082a43c996485299864b14f47ecf246c2b56f5246181633888c7b`.
 Editor30FPS e Play/Player50FPS implementados; ganho de navegação ainda não medido.

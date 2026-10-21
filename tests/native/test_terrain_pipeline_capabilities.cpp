@@ -4,7 +4,22 @@
 using namespace ae;using namespace ae::renderer;using namespace ae::resources;
 namespace {
 TerrainSurfaceBinding surface(){TerrainSurfaceBinding b;TerrainSurfaceLayer l;l.identity={201,1};l.name="Stable";b.surface.layers={l};return b;}
-std::vector<float> table(const TerrainSurfaceBinding &b){std::vector<float> out;u32 offset=0;std::string e;if(!appendTerrainSurfaceTable(b,{},out,offset,e))return {};return out;}
+void bindMap(TerrainSurfaceBinding &b,TerrainSurfaceMap &map){
+ const u32 index=u32(b.textures.size());map.texture={301,index+1};
+ const bool normal=map.channel==TerrainSurfaceChannel::NormalRGB||map.channel==TerrainSurfaceChannel::NormalRG||map.channel==TerrainSurfaceChannel::NormalGA;
+ const u32 packing=normal?(map.channel==TerrainSurfaceChannel::NormalRG?6u:map.channel==TerrainSurfaceChannel::NormalGA?7u:5u):0u;
+ b.textures.push_back({map.texture,normal||map.linear,normal,index,packing});
+}
+void enableSnow(TerrainSurfaceBinding &b){
+ b.surface.snow.mode=TerrainSnowMode::Simple;
+ for(auto *map:{&b.surface.snow.diffuse,&b.surface.snow.height,&b.surface.snow.normal,&b.surface.snow.smoothness,&b.surface.snow.ao})bindMap(b,*map);
+}
+std::vector<float> table(const TerrainSurfaceBinding &b){
+ std::vector<float> out;std::vector<u32> slots(b.textures.size());for(u32 i=0;i<slots.size();++i)slots[i]=i;
+ u32 offset=0;std::string e;if(!appendTerrainSurfaceTable(b,slots,out,offset,e)){
+  std::fprintf(stderr,"Invalid real table fixture: %s\n",e.c_str());ae::test::currentTestFailed()=true;return {};
+ }return out;
+}
 template<class T>T handle(u64 n){if constexpr(std::is_pointer_v<T>)return reinterpret_cast<T>(n);else return T(n);}
 struct Calls {u32 create=0,destroy=0,mask=0;bool fail=false,partial=false,valid=true;VkPipelineCache cache{};} calls;
 VKAPI_ATTR VkResult VKAPI_CALL createPipeline(VkDevice,VkPipelineCache cache,u32 count,const VkGraphicsPipelineCreateInfo *info,const VkAllocationCallbacks*,VkPipeline *out){
@@ -26,10 +41,34 @@ AE_TEST(terrain_pipeline_capabilities_derive_validated_real_table_not_transient_
  auto b=surface();auto base=table(b);AE_EXPECT_TRUE(!base.empty(),"actual canonical PBR table produced");AE_EXPECT_EQ(terrainPipelineCapabilities(base),0u,"plain material has no absent modules");
  b.surface.layers[0].scaleX=17;b.surface.layers[0].maps[0].colorFactor={.2f,.5f,.8f,1};
  AE_EXPECT_EQ(terrainPipelineCapabilities(table(b)),0u,"live source/property edits keep same compatible capability");
- b.surface.layers[0].detailNoise.enabled=true;AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"real enabled noise retains entire advanced family");
- b.surface.geo.mode=TerrainGeoMode::Albedo;AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityShared,"Geo/global modules retained");
- b.surface.snow.mode=TerrainSnowMode::Simple;AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilitySnow,"Snow retained independently");
+ b.surface.layers[0].detailNoise.enabled=true;bindMap(b,b.surface.layers[0].detailNoise.map);AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"real enabled noise retains entire advanced family");
+ b.surface.geo.mode=TerrainGeoMode::Albedo;bindMap(b,b.surface.geo.albedo);AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityShared,"Geo/global modules retained");
+ enableSnow(b);AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilitySnow,"Snow retained independently");
  b.surface.flow.specularFade=true;AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityStaticFx,"even mask-free specular fade retains complete FX family");
+}
+AE_TEST(terrain_pipeline_capabilities_module_directory_does_not_enable_absent_noise_and_clusters){
+ auto b=surface();b.surface.flow.specularFade=true;
+ auto fx=table(b);AE_EXPECT_TRUE(fx[2]>0,"FX allocates an advanced directory even without advanced sampling");
+ AE_EXPECT_EQ(terrainPipelineCapabilities(fx),TerrainCapabilityStaticFx,"FX-only keeps water family without unrelated noise/cluster shader paths");
+ b=surface();enableSnow(b);
+ auto snowTable=table(b);AE_EXPECT_TRUE(!snowTable.empty(),"valid Snow-only fixture");
+ AE_EXPECT_EQ(terrainPipelineCapabilities(snowTable),TerrainCapabilitySnow,"Snow keeps its own noise without enabling terrain noise");
+ b.surface.geo.mode=TerrainGeoMode::Albedo;bindMap(b,b.surface.geo.albedo);
+ AE_EXPECT_EQ(terrainPipelineCapabilities(table(b)),TerrainCapabilitySnow|TerrainCapabilityShared,"independent modules do not imply advanced operations");
+ b.surface.flow.specularFade=true;
+ AE_EXPECT_EQ(terrainPipelineCapabilities(table(b)),TerrainCapabilitySnow|TerrainCapabilityShared|TerrainCapabilityStaticFx,"all module families remain without unrelated advanced paths");
+}
+AE_TEST(terrain_pipeline_capabilities_noise_presence_survives_zero_strength_and_inactive_layer){
+ auto b=surface();b.surface.flow.specularFade=true;
+ b.surface.detailNoise.enabled=true;b.surface.detailNoise.strength=0;bindMap(b,b.surface.detailNoise.map);
+ AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"enabled global noise remains even with zero amplitude");
+ b.surface.detailNoise.enabled=false;b.surface.distanceNoise.enabled=true;bindMap(b,b.surface.distanceNoise.map);
+ AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"global distance noise retained");
+ b.surface.distanceNoise.enabled=false;b.surface.layers[0].active=false;
+ b.surface.layers[0].distanceNoise.enabled=true;b.surface.layers[0].distanceNoise.strength=0;bindMap(b,b.surface.layers[0].distanceNoise.map);
+ AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"inactive authored layer can be repainted later without missing shader features");
+ b.surface.layers[0].distanceNoise.enabled=false;b.surface.layers[0].resampleAlbedo=true;
+ AE_EXPECT_TRUE(terrainPipelineCapabilities(table(b))&TerrainCapabilityAdvanced,"resampling remains independent of noise");
 }
 AE_TEST(terrain_pipeline_capabilities_unknown_abi_and_future_control32_are_generic){
  auto canonical=table(surface());canonical[1]=2;

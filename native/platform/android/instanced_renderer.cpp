@@ -5302,8 +5302,9 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
         pbr?candidateTerrainCapabilities:renderer::TerrainCapabilityGeneric,
         rhiDevice_?rhiDevice_->pipelineCache().driverHandle():VK_NULL_HANDLE);
     if(frameProfilingEnabled_)__android_log_print(ANDROID_LOG_INFO,LogTag,
-        "[TerrainPipelines] recipes=%zu publication_ms=%.3f",
-        terrainPipelineCapabilities_->recipeCount(),std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-compileStarted).count());
+        "[TerrainPipelines] recipes=%zu capability_mask=%u publication_ms=%.3f",
+        terrainPipelineCapabilities_->recipeCount(),pbr?candidateTerrainCapabilities:renderer::TerrainCapabilityGeneric,
+        std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-compileStarted).count());
   }
   return true;
 }
