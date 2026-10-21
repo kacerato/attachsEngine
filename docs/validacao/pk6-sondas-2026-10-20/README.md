@@ -46,7 +46,45 @@ sondas, Misturar sondas e céu, Simples), agora editáveis e lidas por desenho.
 | Box projection por pixel, mistura de 2 sondas + céu, SH no difuso | `rhi/shaders/probe_lighting.glsl` | Fragmento PBR |
 | Bake, recursos, Inspector, gizmos, alças, seleção | `editor/editor_probes.cpp`, `editor_screen.cpp`, `editor_component_visuals.h`, `editor_component_handles.h` | Editor |
 
+## Testes no host
+
+- `aether_probe_family_tests`: 21 cenários (SH L2 contra integral numérica, anti-ringing, Delaunay de cubo
+  coesférico, caminhada e extrapolação fora do casco, mistura por Importance/volume, box projection, ida e volta dos
+  recursos `.aeprobe`/`.aelightprobes`, cena inteira com as duas sondas voltando pelo leitor com a identidade).
+- Suíte completa: 1621/1621 (rodada da raiz do repositório). API C# regenerada com `--sync-api`.
+
+## Validação no aparelho (POCO F7, Sponza, Astra Dev 450 e 1500)
+
+Cena `tools/pk6_probe_scene_author.cpp`: 115 objetos Static, duas sondas de reflexo (pátio e arcada, Importance 2),
+um grupo de 50 sondas de luz, duas esferas cromadas e duas foscas (dinâmicas).
+
+| Medida | Resultado |
+|---|---|
+| Assar a sonda do pátio (256², HDR, 6 faces + filtro GGX + leitura) | 0,1 s · 699 KB |
+| Assar 50 sondas de luz | 1,3 s · 91 tetraedros · 6440 B |
+| Desenhos com reflexo / com SH por quadro | 111 / 32 |
+| CPU das sondas por quadro (`[Probes]`) | 0,02–0,05 ms |
+| `gpu_probes_ms` em repouso (sem captura) | 0,0005 ms |
+| GPU do quadro, 600 quadros, mesma câmera: com sondas × sem recurso | 16,91 × 16,25 ms (média) · passo opaco 11,29 × 10,66 ms |
+| Custo da amostragem (SH + atlas + box projection) | **≈ +0,6 ms/quadro** em 2772×1280 |
+
+Pranchas: [`prancha-reflexo.png`](prancha-reflexo.png) (R1/R3/R6/R2 × P1/P2/P7/P3) e
+[`prancha-luz.png`](prancha-luz.png) (L4/L3/L5 × P5/P9/P10).
+
+O APK 450 escurecia a cena no Play ([`P8`](P8-luz-assada-escura-defeito-450.png)): os desenhos Static também liam o
+SH, e faltava a intensidade do ambiente. Corrigido em 1adf9bd0 (como na Unity, objetos Static não usam light
+probes; o SH é escalado por intensidade/π como o caminho do ambiente). No 1500 a arquitetura fica idêntica com e sem
+sondas ([`P9`](P9-play-1500-sem-recurso-de-sonda.png) × [`P10`](P10-play-1500-sondas-de-luz-e-reflexo.png)).
+
+Diferenças da Unity, observadas: o reflexo da Astra puxa mais para o azul do céu e é menos nítido; o rebote de cor
+das sondas de luz é simples (uma captura por ponto), mais fraco que o da Unity no chão vermelho.
+
 ## Pendente (declarado)
+
+- Fora do PK-6, visto na validação: no modo isolado do viewport, a "Esfera fosca no sol" (esfera embutida) aparece
+  como a malha do slot 2 do Sponza; fora do isolamento ela é desenhada como esfera.
+- A prancha de luz não tem enquadramento dedicado das esferas foscas no sol × na sombra; a A/B usa a câmera de
+  validação fixa.
 
 - Lightmaps e GI assada (Mixed/Baked lighting): continuam planejados (`render.light.baked`).
 - Reflection Probe tipo Custom, Shadow Distance e Occlusion Culling da captura: não expostos.
