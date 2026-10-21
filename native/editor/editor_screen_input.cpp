@@ -29,6 +29,11 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
+  if(&type==&scene::Camera::descriptor) {
+    const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Luz na ordem do Light Inspector da Unity: Geral (Tipo), Emissão, Volume
   // (alcance e cone), Sombra e Renderização (máscaras).
   if(&type==&scene::Light::descriptor) {
@@ -589,6 +594,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->booleans.size()) return outcome;
         const auto &property=entry.type->booleans[field];
         if(scene::setComponentProperty(value.components,entry.type->id,property.id,!property.read(*component),instance)!=scene::ComponentPropertyStatus::Applied) return outcome;
+        // Câmera física ligada: a focal nasce do campo vertical atual no sensor
+        // (Camera.FieldOfViewToFocalLength), como na Unity.
+        if(property.id=="physical_camera" && entry.type==&scene::Camera::descriptor && !property.read(*component)) {
+          const auto &camera=static_cast<const scene::Camera&>(*component);
+          scene::setComponentProperty(value.components,entry.type->id,"focal_length",
+              scene::cameraFocalLengthForFov(camera.verticalFov,camera.sensorHeight),instance);
+        }
       } else if(operation==widgetId(EditorWidget::ComponentEnumBase)) {
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->enums.size()) return outcome;
         state.enumPicker=widget;return outcome;

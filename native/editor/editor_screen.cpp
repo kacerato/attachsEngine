@@ -68,6 +68,7 @@ namespace {
 
 using namespace ae::ui;
 
+
 // Medidas em DP, e a distinção importa. Os masters foram desenhados numa tela de
 // 1672×941; um telefone real em paisagem tem cerca de 853×394 dp, porque a
 // densidade é 3× e não 1,66×. Copiar os números do master daria uma barra
@@ -4942,9 +4943,11 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     }
     }
   }
-  if(std::string_view(entry.type->id).starts_with("astra.physics2d.")&&!searching) {
+  // Viewport Rect da Câmera em duas linhas (posição e tamanho), como na Unity.
+  if((std::string_view(entry.type->id).starts_with("astra.physics2d.")||entry.type==&scene::Camera::descriptor)&&!searching) {
     constexpr std::string_view pairs[][2]{{"velocity_x","velocity_y"},{"half_x","half_y"},{"offset_x","offset_y"},
-      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"}};
+      {"force_x","force_y"},{"relative_force_x","relative_force_y"},{"anchor_a_x","anchor_a_y"},{"anchor_b_x","anchor_b_y"},
+      {"viewport_x","viewport_y"},{"viewport_width","viewport_height"}};
     for(const auto &names:pairs) {
       u32 channels[2]{~u32{0},~u32{0}};
       for(const auto &field:fields) if(field.kind==2)
@@ -5285,7 +5288,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         const auto enumHit=slot;auto box=deflate(slot,UiInsets::all(2));
         builder.list.addRect(box,theme.color.raised,theme.radius.control);
         builder.list.addImage(centred(takeRight(box,16),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
-        const char *label="Inválido";for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+        std::string label=property.flags?componentMaskLabel(*builder.state.document,property,property.read(*component)):"Inválido";
+        if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
         if(builder.mixed(multiKey(component->instanceId(),property.id))) label="—";
         builder.label(box,label,theme.color.text,theme.type.caption,UiAlign::Center);
         if(property.presentation.isEditable(*component)) builder.router.addRegion(enumHit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.second<<8));
@@ -5299,10 +5303,12 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     } else if(f.kind==16) {
       const auto id=entry.type->numbers[f.index].id;
       const char *title=id=="velocity_x"?"Vel. (m/s)":id=="half_x"?"Meia dim. (m)":id=="force_x"?"Mundo (N)":
-        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":"Centro (m)";
+        id=="relative_force_x"?"Local (N)":id=="anchor_a_x"?"Âncora A":id=="anchor_b_x"?"Âncora B":
+        id=="viewport_x"?"Viewport":id=="viewport_width"?"Tamanho":"Centro (m)";
       builder.label(takeLeft(slot,std::min(72.f,slot.width*.34f)),title,theme.color.textDim,theme.type.caption);
       const float width=slot.width*.5f;
-      const u32 channels[]{f.index,f.second};const char *names[]{"X","Y"};
+      const bool size=id=="viewport_width";
+      const u32 channels[]{f.index,f.second};const char *names[]{size?"L":"X",size?"A":"Y"};
       for(u32 axis=0;axis<2;++axis) {
         auto cell=takeLeft(slot,width);const auto field=channels[axis];const auto &property=entry.type->numbers[field];
         builder.label(takeLeft(cell,13),names[axis],axis?theme.color.axisY:theme.color.axisX,theme.type.caption);
@@ -7873,7 +7879,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   }
   builder.label(title,assigning?"Atribuir tag":"Tags do projeto",theme.color.text,theme.type.cardName);
   std::string detail=assigning?(state.multi.count>1?std::to_string(state.multi.count)+" objetos selecionados":object?object->name:""):
-                               std::to_string(names.size()-1)+" tags · uma por objeto";
+                               std::to_string(names.size()-runtime::ObjectTags::BuiltinCount)+" tags · uma por objeto";
   builder.label(takeTop(content,26),detail.c_str(),theme.color.textDim,theme.type.caption);
   auto tools=takeTop(content,44),create=takeRight(tools,78);
   builder.list.addRect(deflate(tools,UiInsets::all(3)),theme.color.raised,theme.radius.control);
@@ -7915,7 +7921,7 @@ void buildTags(ScreenBuilder &builder,UiRect content,bool assigning) {
   if(page+1<pages) builder.router.addRegion(next,widgetId(EditorWidget::TagNext));
   builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
   if(!assigning) {
-    const bool removable=authoring && state.tagSelected!="Untagged" && state.document->tags().contains(state.tagSelected);
+    const bool removable=authoring && !runtime::ObjectTags::builtin(state.tagSelected) && state.document->tags().contains(state.tagSelected);
     builder.label(removal,"Excluir tag sem uso",removable?theme.color.text:theme.color.textFaint,theme.type.caption);
     if(removable) builder.router.addRegion(removal,widgetId(EditorWidget::TagDelete));
   }
@@ -11164,7 +11170,7 @@ void buildProjectSettings(ScreenBuilder &builder,UiRect area) {
   std::vector<Section> sections{
     {EditorProjectSection::Layers,UiIcon::SceneLayers,"Camadas e colisão",std::to_string(layers)+" camada(s)"},
     {EditorProjectSection::Input,UiIcon::InputAction,"Entrada",std::to_string(state.document->inputActions().actions().size())+" ação(ões)"},
-    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-1)+" no projeto"}};
+    {EditorProjectSection::Tags,UiIcon::SceneTag,"Tags",std::to_string(state.document->tags().names().size()-runtime::ObjectTags::BuiltinCount)+" no projeto"}};
   if(waterCreationAvailable(state)) sections.push_back({EditorProjectSection::Water,UiIcon::NatureWater,"Água da cena","Superfícies e ondas"});
   if(wide) builder.label(takeTop(rail,30),"PROJETO",theme.color.textMuted,theme.type.label);
   for(const auto &section:sections) {
@@ -11378,6 +11384,10 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
 
 void buildGameplayOverlay(ScreenBuilder &builder,const EditorScreenLayout &layout,bool debug) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
+    // Segunda câmera do Play (Viewport Rect): a imagem dela cobre a principal
+    // no próprio retângulo, abaixo dos controles e da GUI do jogo.
+    if(state.playStackReady && !state.playStackRect.isEmpty())
+      list.addImage(state.playStackRect,kUiCameraPreviewImage,0xffffffff,0);
     const auto *controlled=state.document?state.document->find(state.selection):nullptr;
     const bool hasSecondary=!state.playSecondaryActionLabel.empty();
     const bool showJump=hasSecondary||state.playHasCharacter?state.playHasCharacter:

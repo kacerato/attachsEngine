@@ -249,6 +249,34 @@ public:
     if(sceneEnvironmentVolumes_.empty()) sceneEnvironment_={};
   }
   void setSceneEnvironmentLayerMask(u32 mask) { sceneEnvironmentLayerMask_=mask; }
+  // PK-7: o que a câmera de jogo decide sobre o quadro principal. Fora do Play
+  // o shell publica os padrões (céu, todas as camadas, pós/sombras/HDR ligados).
+  // Culling Mask: bit por camada de objeto; um objeto fora dela não desenha nem
+  // projeta sombra nesta vista.
+  void setSceneCullingMask(u32 mask) { sceneCullingMask_=mask; }
+  // 0 céu, 1 cor sólida (RGB linear), 2 não inicializado (sem céu nem cor).
+  // `partial`: o Viewport Rect não cobre a vista inteira (o resto fica preto).
+  void setSceneBackground(u32 mode,const float color[3],bool partial=false) {
+    sceneBackground_=mode<=2?mode:0;sceneBackgroundPartial_=partial;
+    if(color) std::copy(color,color+3,sceneBackgroundColor_);
+  }
+  void setScenePostProcessing(bool enabled) { scenePostProcessing_=enabled; }
+  void setSceneShadows(bool enabled) {
+    if(sceneShadows_!=enabled) invalidateStaticShadowCache();
+    sceneShadows_=enabled;
+  }
+  void setSceneHdr(bool enabled) { sceneHdr_=enabled; }
+  // 0 do projeto, 1 nenhum, 2 FXAA. TAA continua sendo do projeto.
+  void setSceneAntialiasing(u32 mode) {
+    if(mode!=sceneAntialiasing_) temporalHistoryInitialized_=false;
+    sceneAntialiasing_=mode<=2?mode:0;
+  }
+  // Gate Fit "Nenhum": a projeção usa a proporção do sensor. Zero = da vista.
+  void setSceneAspectOverride(float aspect) {
+    const float next=std::isfinite(aspect)&&aspect>0?aspect:0.f;
+    if(next!=sceneAspectOverride_) temporalHistoryInitialized_=false;
+    sceneAspectOverride_=next;
+  }
   const renderer::SceneEnvironmentBlendReport &environmentBlendReport() const noexcept {
     return environmentBlendReport_;
   }
@@ -639,6 +667,17 @@ private:
   bool editorBackground_=false;
   bool editorSceneLighting_=true,editorSceneEffects_=true,editorSceneSky_=true;
   bool editorSceneFog_=true,editorScenePost_=true;
+  // Câmera de jogo (PK-7); ver setSceneCullingMask e vizinhos.
+  u32 sceneCullingMask_=~0u,appliedCullingMask_=~0u;
+  u32 sceneBackground_=0;
+  bool sceneBackgroundPartial_=false;
+  float sceneBackgroundColor_[3]{.0307f,.0742f,.1912f};
+  bool scenePostProcessing_=true,sceneShadows_=true,sceneHdr_=true;
+  u32 sceneAntialiasing_=0;
+  float sceneAspectOverride_=0;
+  // Os efeitos de pós da vista principal: os do volume e da política, salvo
+  // quando o editor os desliga na vista de Cena ou a câmera os desliga.
+  bool viewPostEnabled() const {return (!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&scenePostProcessing_;}
   float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
   float previousSceneProjection_[5]{};
   float sceneOrthographicHalfHeight_=0;
@@ -654,6 +693,35 @@ private:
   // sombra), já zerado quando o objeto não renderiza. Os passes de sombra leem
   // só `authoredShadows_`; o passe de cor, só `authoredVisibility_`.
   std::vector<u8> authoredVisibility_, authoredShadows_;
+  // Visibilidade autoral antes da Culling Mask e a camada de cada desenho.
+  // `authoredVisibility_` é a da vista principal: base E camada na máscara.
+  // `authoredBaseShadows_` é o modo de sombra (0..3) antes da máscara.
+  std::vector<u8> authoredBaseVisibility_, authoredBaseShadows_, authoredLayers_;
+  bool authoredLayerIn(u32 draw,u32 mask) const {
+    return draw>=authoredLayers_.size() || ((mask>>(authoredLayers_[draw]&31u))&1u);
+  }
+  bool authoredVisibleIn(u32 draw,u32 mask) const {
+    if(draw>=authoredBaseVisibility_.size()) return authoredVisibility_.empty() || (draw<authoredVisibility_.size()&&authoredVisibility_[draw]);
+    return authoredBaseVisibility_[draw] && authoredLayerIn(draw,mask);
+  }
+  u8 authoredShadowsIn(u32 draw,u32 mask) const {
+    if(draw>=authoredBaseShadows_.size()) return draw<authoredShadows_.size()?authoredShadows_[draw]:u8{1};
+    return authoredLayerIn(draw,mask)?authoredBaseShadows_[draw]:u8{0};
+  }
+  // Reaplica a máscara à vista principal; verdadeiro quando algo mudou.
+  bool applySceneCullingMask() {
+    bool changed=false;
+    for(u32 i=0;i<authoredBaseVisibility_.size() && i<authoredVisibility_.size();++i) {
+      const u8 next=authoredVisibleIn(i,sceneCullingMask_)?1:0;
+      changed|=authoredVisibility_[i]!=next;authoredVisibility_[i]=next;
+      if(i<authoredShadows_.size()) {
+        const u8 shadow=authoredShadowsIn(i,sceneCullingMask_);
+        changed|=authoredShadows_[i]!=shadow;authoredShadows_[i]=shadow;
+      }
+    }
+    appliedCullingMask_=sceneCullingMask_;
+    return changed;
+  }
   // Camada do objeto, Rendering Layer Mask e Receive Shadows de cada desenho.
   std::vector<renderer::DrawLightingKey> authoredLighting_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
@@ -1411,6 +1479,7 @@ private:
     bool visible = true;
     u8 castShadows = 1;
     renderer::DrawLightingKey lighting{};
+    u8 layer = 0;  // camada do objeto (Culling Mask), cópia de lighting.objectLayer
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;

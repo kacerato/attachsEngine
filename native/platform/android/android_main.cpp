@@ -147,6 +147,8 @@ struct AndroidShell final {
   // Quantas luzes ficaram de fora no último aviso publicado. Sem isto o mesmo
   // excedente sairia no log a cada quadro e viraria ruído em vez de aviso.
   ae::u32 editorReportedLightOverflow = 0;
+  // A vista independente está compondo a segunda câmera do Play (PK-7).
+  bool editorStackViewOpen = false;
   bool forceTextureFallback = false;
   bool lockCamera = false;
   // Medição sem toque: entra em Play assim que o projeto termina de abrir.
@@ -3970,6 +3972,12 @@ void android_main(android_app *app) {
       float sceneNear=0,sceneFar=0,sceneFov=0,sceneOrthoHeight=0;
       ae::u32 sceneEnvironmentMask=~0u;
       ae::u32 exposureCameraEntity=0;
+      // PK-7: o restante da câmera de jogo. Fora do Play, os padrões da vista.
+      ae::u32 sceneCullingMask=~0u,sceneBackground=0,sceneAntialiasing=0;
+      float sceneBackgroundColor[3]{.0307f,.0742f,.1912f},sceneAspect=0;
+      bool sceneBackgroundPartial=false,scenePost=true,sceneShadows=true,sceneHdr=true;
+      // Segunda câmera na tela (Viewport Rect por cima da principal).
+      ae::renderer::RenderViewSnapshot stackRequest;bool stackActive=false;
       shell.instancedRenderer.setEditorBackground(editorActive && !editorPlaying);
       const auto &editorScreen=shell.editorSession.screen();
       shell.instancedRenderer.setEditorViewportOptions(
@@ -3988,16 +3996,36 @@ void android_main(android_app *app) {
         sceneCamera.pitch = projection.pitch;
         sceneCamera.roll = projection.roll;
         if(editorPlaying) {
-          const auto authoredCamera=shell.editorSession.sceneCameraPose();
-          if(authoredCamera.entity) {
+          // As câmeras da tela em ordem de prioridade: a de baixo vai pelo
+          // caminho principal (sombras, TAA, HZB); a de cima, se houver, pelo
+          // caminho de vista independente, composta no próprio retângulo.
+          const auto stack=shell.editorSession.sceneCameraStack();
+          if(!stack.empty()) {
+            const auto &authoredCamera=stack.front();
             exposureCameraEntity=authoredCamera.entity;
             std::copy(authoredCamera.position,authoredCamera.position+3,sceneCamera.position);
             sceneCamera.yaw=authoredCamera.yaw;sceneCamera.pitch=authoredCamera.pitch;
             sceneCamera.roll=authoredCamera.roll;
             sceneNear=authoredCamera.nearPlane;sceneFar=authoredCamera.farPlane;
-            sceneFov=authoredCamera.verticalFov*0.017453292519943295f;
+            const auto &surface=editorScreen.surface;
+            const auto area=shell.editorSession.layout().viewport;
+            const auto cameraRect=authoredCamera.screenRect(area);
+            if(!cameraRect.isEmpty() && surface.width>0 && surface.height>0)
+              shell.instancedRenderer.setSceneViewport({cameraRect.x/surface.width,cameraRect.y/surface.height,
+                                                        cameraRect.width/surface.width,cameraRect.height/surface.height});
+            const float rectAspect=cameraRect.height>0?cameraRect.width/cameraRect.height:1.f;
+            const auto lens=authoredCamera.lens(rectAspect);
+            sceneFov=lens.verticalFovRadians;
+            sceneAspect=std::abs(lens.aspect-rectAspect)>1e-4f?lens.aspect:0.f;
             sceneOrthoHeight=authoredCamera.projection==ae::scene::CameraProjection::Orthographic?authoredCamera.orthographicHalfHeight:0;
             sceneEnvironmentMask=authoredCamera.environmentMask;
+            sceneCullingMask=authoredCamera.cullingMask;
+            sceneBackground=static_cast<ae::u32>(authoredCamera.background);
+            std::copy(authoredCamera.backgroundColor,authoredCamera.backgroundColor+3,sceneBackgroundColor);
+            sceneBackgroundPartial=!authoredCamera.coversView();
+            scenePost=authoredCamera.postProcessing;sceneShadows=authoredCamera.renderShadows;
+            sceneHdr=authoredCamera.hdr;sceneAntialiasing=static_cast<ae::u32>(authoredCamera.antialiasing);
+            stackActive=stack.size()>1 && shell.editorSession.playStackView(stackRequest);
           }
         }
       }
@@ -4007,6 +4035,13 @@ void android_main(android_app *app) {
       shell.instancedRenderer.setSceneFieldOfView(sceneFov);
       shell.instancedRenderer.setSceneOrthographicHalfHeight(sceneOrthoHeight);
       shell.instancedRenderer.setSceneEnvironmentLayerMask(sceneEnvironmentMask);
+      shell.instancedRenderer.setSceneCullingMask(sceneCullingMask);
+      shell.instancedRenderer.setSceneBackground(sceneBackground,sceneBackgroundColor,sceneBackgroundPartial);
+      shell.instancedRenderer.setScenePostProcessing(scenePost);
+      shell.instancedRenderer.setSceneShadows(sceneShadows);
+      shell.instancedRenderer.setSceneHdr(sceneHdr);
+      shell.instancedRenderer.setSceneAntialiasing(sceneAntialiasing);
+      shell.instancedRenderer.setSceneAspectOverride(sceneAspect);
       shell.instancedRenderer.setAutoExposureSceneEpoch(shell.editorSession.sceneVersion().epoch,exposureCameraEntity);
       shell.instancedRenderer.setAutoExposurePaused(editorPlaying&&shell.editorSession.screen().playPaused);
       ae::renderer::RenderViewSnapshot previewRequest;
@@ -4015,11 +4050,17 @@ void android_main(android_app *app) {
       const ae::u32 previewMaterialRevision=previewMaterial?previewMaterial->revision:0;
       const bool previewVisible=editorActive && !editorPlaying &&
           shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene;
-      if(preview.request(shell.editorSession.document(),shell.editorSession.sceneVersion(),
-                         currentMonotonicNanoseconds()*1e-9,previewVisible,false,previewRequest,
-                         shell.editorSession.screen().resources,previewMaterialRevision))
-        shell.instancedRenderer.requestCameraPreview(previewRequest);
-      if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      // A vista independente serve à segunda câmera do Play ou à prévia do
+      // editor, nunca às duas: no Play a prévia do editor não está visível.
+      if(stackActive) shell.instancedRenderer.requestCameraPreview(stackRequest);
+      else {
+        if(shell.editorStackViewOpen) {shell.editorStackViewOpen=false;shell.editorSession.setPlayStackImage(false);}
+        if(preview.request(shell.editorSession.document(),shell.editorSession.sceneVersion(),
+                           currentMonotonicNanoseconds()*1e-9,previewVisible,false,previewRequest,
+                           shell.editorSession.screen().resources,previewMaterialRevision))
+          shell.instancedRenderer.requestCameraPreview(previewRequest);
+        if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);
       const auto &autoExposureDiagnostic=shell.instancedRenderer.autoExposureDiagnostic();
@@ -4030,9 +4071,16 @@ void android_main(android_app *app) {
                                               ae::editor::EditorConsoleSeverity::Error);
       }
       ae::renderer::RenderViewSnapshot previewCompleted;bool previewSuccess=false;
-      if(shell.instancedRenderer.takeCameraPreviewCompletion(previewCompleted,previewSuccess))
-        preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess,
-                         shell.instancedRenderer.cameraPreviewDiagnostic(),previewMaterialRevision);
+      if(shell.instancedRenderer.takeCameraPreviewCompletion(previewCompleted,previewSuccess)) {
+        if(previewCompleted.continuous) {
+          // A imagem da segunda câmera passa a ser composta a partir do quadro seguinte.
+          if(stackActive) {shell.editorStackViewOpen=true;shell.editorSession.setPlayStackImage(previewSuccess);}
+          if(!previewSuccess)
+            __android_log_print(ANDROID_LOG_WARN,LogTag,"[Camera] Segunda camera recusada: %s",
+                                shell.instancedRenderer.cameraPreviewDiagnostic().c_str());
+        } else preview.complete(previewCompleted,shell.editorSession.sceneVersion(),previewSuccess,
+                                shell.instancedRenderer.cameraPreviewDiagnostic(),previewMaterialRevision);
+      }
       if(frameStatus!=ae::rhi::SwapchainStatus::Ok) preview.invalidateTarget();
       const ae::u64 frameThreadCpuFinished = currentThreadCpuNanoseconds();
       const ae::u64 frameMonotonicFinished = currentMonotonicNanoseconds();

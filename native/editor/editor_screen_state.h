@@ -737,6 +737,10 @@ struct EditorScreenState final {
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  // Play com duas câmeras na tela (PK-7): o retângulo da câmera de cima na
+  // vista de jogo e se a imagem dela já foi desenhada pelo renderer.
+  ui::UiRect playStackRect{};
+  bool playStackReady=false;
   bool cameraPreviewMaterial=false;
   bool cameraPreviewActive=false,cameraPreviewStandalone=false;
   u8 materialPreviewShape=0;
