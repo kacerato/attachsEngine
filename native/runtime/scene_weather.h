@@ -31,6 +31,13 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity);
 // `interval` segundos, em posição sorteada pela semente, com dois pulsos.
 float lightningFlash(u32 seed, double seconds, float interval);
 
+// Câmera da cena que a precipitação acompanha: posição de mundo e guinada
+// (0 olha para +Z), como o filho da Main Camera na Unity.
+struct WeatherCamera {
+  float position[3]{};
+  float yaw = 0;
+};
+
 class SceneWeather final {
 public:
   struct Report {
@@ -41,7 +48,7 @@ public:
   // `live`: Play (transição e relâmpagos). `camera`: posição de mundo da câmera
   // da cena, ou nulo sem câmera. `writeTransform` grava a pose dos emissores:
   // documento no editor, GameWorld no Play (respeita a autoridade do transform).
-  Report advance(SceneGraph &graph, double seconds, float deltaSeconds, bool live, const float *camera,
+  Report advance(SceneGraph &graph, double seconds, float deltaSeconds, bool live, const WeatherCamera *camera,
                  const std::function<bool(ObjectId, const Transform &)> &writeTransform);
   // Estado atual (já misturado) de um clima: para o Inspector e os testes.
   bool current(ObjectId object, u64 instance, WeatherLook &out) const;

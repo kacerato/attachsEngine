@@ -362,7 +362,8 @@ public:
   // taxa e a pose novas no mesmo quadro.
   bool advanceWeather(float elapsed) {
     const auto camera=resolveSceneCamera(world_.graph());
-    weatherReport_=weather_.advance(world_.poseGraph(),world_.elapsedSeconds(),elapsed,true,camera.entity?camera.position:nullptr,
+    runtime::WeatherCamera pose{{camera.position[0],camera.position[1],camera.position[2]},camera.yaw};
+    weatherReport_=weather_.advance(world_.poseGraph(),world_.elapsedSeconds(),elapsed,true,camera.entity?&pose:nullptr,
       [&](runtime::ObjectId id,const runtime::Transform &t){return world_.setLocalTransform(world_.handle(id),t)==runtime::WorldStatus::Ok;});
     return true;
   }

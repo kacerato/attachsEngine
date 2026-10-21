@@ -3,8 +3,8 @@
   bool enabled = true;
   float intensity = 0.7f;
   float transitionSeconds = 8.0f;
-  float rainRate = 1800.0f;
-  float snowRate = 700.0f;
+  float rainRate = 3500.0f;
+  float snowRate = 1600.0f;
   float heightAboveCamera = 10.0f;
   float windInfluence = 0.35f;
   float fogDensity = 0.02f;

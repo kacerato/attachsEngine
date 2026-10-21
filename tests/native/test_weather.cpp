@@ -95,8 +95,8 @@ AE_TEST(weather_targets_order_the_sky_from_clear_to_storm) {
 AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   auto s = makeWeatherScene(scene::WeatherKind::Rain, 0.5f);
   runtime::SceneWeather weather;
-  const float camera[3]{3, 2, -4};
-  const auto report = weather.advance(s.graph, 0, 0, false, camera,
+  const runtime::WeatherCamera camera{{3, 2, -4}, 0};
+  const auto report = weather.advance(s.graph, 0, 0, false, &camera,
       [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); });
   AE_EXPECT_TRUE(report.weathers == 1 && report.writes > 0, "o clima escreveu");
   const auto look = runtime::weatherTarget(scene::WeatherKind::Rain, 0.5f);
@@ -104,7 +104,7 @@ AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   AE_EXPECT_TRUE(env.values.clouds.enabled && env.overrideClouds && env.values.clouds.coverage == look.coverage,
                  "nuvens do Ambiente com a cobertura da chuva");
   AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.02f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
-  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 900.0f, "1800/s × 0,5");
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 1750.0f, "3500/s × 0,5");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.snow).emissionRate.constantMax == 0.0f, "neve parada na chuva");
   // Vento padrão das nuvens (20 km/h para +X) × 0,35 inclina a gota pela
   // Velocidade no tempo em espaço Mundo; a neve é arrastada 1,6× mais.
@@ -115,10 +115,12 @@ AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).velocityX.constantMax - 20.0f / 3.6f * 0.35f * 1.6f) < 1e-4f,
                  "neve arrastada mais");
   float world[16];
-  AE_EXPECT_TRUE(runtime::worldMatrix(s.graph, s.rain, world) && std::abs(world[12] - 3) < 1e-4f &&
-                 std::abs(world[13] - 12) < 1e-4f && std::abs(world[14] + 4) < 1e-4f, "chuva 10 m acima da câmera");
+  // 10 m acima, 6 m à frente (+Z) e meia vida contra o vento (+X).
+  const float windX = 20.0f / 3.6f * 0.35f, halfLife = 0.5f * particlesOf(s.graph, s.rain).startLifetime.constantMax;
+  AE_EXPECT_TRUE(runtime::worldMatrix(s.graph, s.rain, world) && std::abs(world[12] - (3 - windX * halfLife)) < 1e-3f &&
+                 std::abs(world[13] - 12) < 1e-4f && std::abs(world[14] - 2) < 1e-3f, "chuva acima, à frente e contra o vento");
   const auto revision = s.graph.revision();
-  const auto again = weather.advance(s.graph, 0, 0, false, camera,
+  const auto again = weather.advance(s.graph, 0, 0, false, &camera,
       [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); });
   AE_EXPECT_TRUE(again.writes == 0 && s.graph.revision() == revision, "clima parado não mexe no grafo");
   // A cena resolvida (o que o renderer recebe) mostra as nuvens do clima.
@@ -132,7 +134,7 @@ AE_TEST(weather_transition_in_play_moves_from_rain_to_snow_over_time) {
   runtime::SceneWeather weather;
   const auto write = [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); };
   weather.advance(s.graph, 0, 0.016f, true, nullptr, write);
-  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 1800.0f, "começa no clima autoral");
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "começa no clima autoral");
   auto values = *s.graph.find(s.weather);
   static_cast<scene::Weather *>(values.components.edit(scene::Weather::descriptor))->kind = scene::WeatherKind::Snow;
   s.graph.applyEntityValues(s.weather, values);
@@ -140,11 +142,11 @@ AE_TEST(weather_transition_in_play_moves_from_rain_to_snow_over_time) {
   for (int i = 0; i < 60; ++i) weather.advance(s.graph, t += 1.0 / 60, 1.0f / 60, true, nullptr, write);
   const float rainMid = particlesOf(s.graph, s.rain).emissionRate.constantMax;
   const float snowMid = particlesOf(s.graph, s.snow).emissionRate.constantMax;
-  AE_EXPECT_TRUE(rainMid < 1800.0f && rainMid > 600.0f && snowMid > 50.0f && snowMid < 700.0f,
+  AE_EXPECT_TRUE(rainMid < 3500.0f && rainMid > 1200.0f && snowMid > 50.0f && snowMid < 700.0f,
                  "1 s de 8: chuva diminuindo, neve começando");
   for (int i = 0; i < 60 * 30; ++i) weather.advance(s.graph, t += 1.0 / 60, 1.0f / 60, true, nullptr, write);
   AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 0.0f, "a chuva para de verdade");
-  AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).emissionRate.constantMax - 700.0f) < 1.0f, "neve cheia");
+  AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).emissionRate.constantMax - 1600.0f) < 1.0f, "neve cheia");
 }
 
 AE_TEST(weather_storm_flashes_lightning_only_in_play_and_deterministically) {
@@ -168,8 +170,8 @@ AE_TEST(weather_storm_flashes_lightning_only_in_play_and_deterministically) {
 AE_TEST(weather_rain_particles_fall_below_the_emitter) {
   auto s = makeWeatherScene(scene::WeatherKind::Rain, 1.0f);
   runtime::SceneWeather weather;
-  const float camera[3]{0, 0, 0};
-  weather.advance(s.graph, 0, 0, false, camera,
+  const runtime::WeatherCamera camera{};
+  weather.advance(s.graph, 0, 0, false, &camera,
       [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); });
   runtime::SceneParticles particles;
   for (int i = 0; i < 30; ++i) particles.advance(s.graph, 1.0f / 30);

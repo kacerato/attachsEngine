@@ -140,22 +140,23 @@ inline constexpr std::string_view weatherType="astra.environment.weather",partic
 inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",true},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
   {environmentType,"fog",true},{environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
+  {environmentType,"fog_base_height",0.f},{environmentType,"fog_height_falloff",.06f},
   {environmentType,"priority",2.f}};
 inline const CreationValue weatherValues[]{{weatherType,"kind",u32{2}},{weatherType,"intensity",.7f}};
 inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{weatherType,weatherValues}};
-inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",40.f},
-  {particleType,"shape_box_y",40.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
+  {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
   {particleType,"start_speed",14.f},{particleType,"start_size",.018f},{particleType,"gravity_modifier",.3f},
-  {particleType,"max_particles",6000.f},{particleType,"emission_rate",1800.f},{particleType,"render_mode",u32{1}},
+  {particleType,"max_particles",8000.f},{particleType,"emission_rate",3500.f},{particleType,"render_mode",u32{1}},
   {particleType,"stretch_velocity_scale",.045f},{particleType,"stretch_length_scale",1.f},
   {particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},{particleType,"start_color_b",.88f},
   {particleType,"start_color_a",.32f}};
-inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
-  {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",24.f},
+  {particleType,"shape_box_y",24.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
-  {particleType,"start_lifetime",7.f},{particleType,"start_speed",1.2f},{particleType,"start_size",.045f},
-  {particleType,"gravity_modifier",.03f},{particleType,"max_particles",6000.f},{particleType,"emission_rate",0.f},
+  {particleType,"start_lifetime",5.f},{particleType,"start_speed",1.5f},{particleType,"start_size",.045f},
+  {particleType,"gravity_modifier",.03f},{particleType,"max_particles",12000.f},{particleType,"emission_rate",0.f},
   {particleType,"start_color_a",.9f},{particleType,"noise_enabled",true},{particleType,"noise_strength",.8f},
   {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
 inline const CreationComponent rain[]{{particleType,rainValues}};

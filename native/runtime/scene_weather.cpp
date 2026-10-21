@@ -41,13 +41,19 @@ bool applyEnvironment(SceneGraph &graph, ObjectId id, const scene::Weather &weat
   assign(clouds.cirrus, std::clamp(look.cirrus, 0.0f, 1.0f), changed);
   assign(clouds.density, std::clamp(look.density, 0.0f, 1.0f), changed);
   for (u32 c = 0; c < 3; ++c) assign(clouds.tint[c], std::clamp(look.tint, 0.0f, 1.0f), changed);
+  // Tempo fechado: a sombra das nuvens chega ao máximo (o sol quase não passa).
+  const float overcast = std::clamp((look.coverage - 0.5f) / 0.4f, 0.0f, 1.0f);
+  assign(clouds.shadowMultiplier, lerp(0.8f, 1.0f, overcast), changed);
   // O clarão acende as nuvens por dentro (Exposure Compensation) e a neblina.
   const float flashEv = flash * weather.lightningBrightness;
   assign(clouds.exposureEv, std::clamp(flashEv, -8.0f, 8.0f), changed);
   if (next.overrideFog) {
     assign(next.values.fog, true, changed);
     assign(next.values.fogDensity, weather.fogDensity * std::clamp(look.fog, 0.0f, 1.0f), changed);
-    assign(next.values.fogLightEnergy, 1.0f + flash * (std::exp2(weather.lightningBrightness) - 1.0f) * 0.35f, changed);
+    // A névoa escurece com o céu (chuva e tempestade mais escuras, como os
+    // frames da Pixagon) e acende no clarão do relâmpago.
+    const float shade = lerp(1.0f, std::clamp(look.tint, 0.0f, 1.0f), 0.8f);
+    assign(next.values.fogLightEnergy, shade + flash * (std::exp2(weather.lightningBrightness) - 1.0f) * 0.35f, changed);
   }
   if (!changed || !next.valid()) return false;
   auto *components = graph.editComponents(id);
@@ -100,12 +106,21 @@ bool applyPrecipitation(SceneGraph &graph, ObjectId id, float rate, const float 
   return true;
 }
 
-bool followCamera(const SceneGraph &graph, ObjectId id, const float camera[3], float height,
+// O emissor fica acima da câmera, um pouco À FRENTE dela (a caixa não gasta
+// partículas atrás de quem olha) e CONTRA o vento por meia vida da partícula:
+// assim a gota ou o floco arrastado pelo vento chega na frente da câmera, e não
+// só de um lado da tela.
+bool followCamera(const SceneGraph &graph, ObjectId id, const WeatherCamera &camera, float height, const float (&wind)[2],
                   const std::function<bool(ObjectId, const Transform &)> &write) {
   const auto *object = graph.find(id);
   float world[16], parent[16];
   if (!object || !worldMatrix(graph, id, world) || !parentWorldMatrix(graph, id, parent)) return false;
-  const float target[3]{camera[0], camera[1] + height, camera[2]};
+  float halfLife = 0;
+  if (const auto *found = object->components.find(scene::ParticleSystem::descriptor))
+    halfLife = 0.5f * std::max(0.0f, scene::particleSystem(*found).startLifetime.constantMax);
+  const float ahead = height * 0.6f;
+  const float target[3]{camera.position[0] + std::sin(camera.yaw) * ahead - wind[0] * halfLife, camera.position[1] + height,
+                        camera.position[2] + std::cos(camera.yaw) * ahead - wind[1] * halfLife};
   if (std::abs(world[12] - target[0]) < 1e-3f && std::abs(world[13] - target[1]) < 1e-3f &&
       std::abs(world[14] - target[2]) < 1e-3f)
     return false;
@@ -131,33 +146,33 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.fog = 0.1f;
     break;
   case scene::WeatherKind::Cloudy:
-    look.coverage = lerp(0.45f, 0.85f, i);
+    look.coverage = lerp(0.45f, 0.72f, i);
     look.cirrus = 0.4f;
-    look.density = lerp(0.5f, 0.65f, i);
+    look.density = lerp(0.6f, 0.75f, i);
     look.tint = lerp(0.95f, 0.85f, i);
     look.fog = lerp(0.15f, 0.3f, i);
     break;
   case scene::WeatherKind::Rain:
-    look.coverage = lerp(0.75f, 0.98f, i);
-    look.cirrus = 0.5f;
-    look.density = lerp(0.7f, 0.9f, i);
-    look.tint = lerp(0.78f, 0.55f, i);
+    look.coverage = lerp(0.7f, 0.88f, i);
+    look.cirrus = 0.45f;
+    look.density = lerp(0.85f, 0.95f, i);
+    look.tint = lerp(0.8f, 0.6f, i);
     look.rain = i;
     look.fog = lerp(0.3f, 0.7f, i);
     break;
   case scene::WeatherKind::Storm:
-    look.coverage = lerp(0.92f, 1.0f, i);
-    look.cirrus = 0.6f;
-    look.density = lerp(0.9f, 1.0f, i);
-    look.tint = lerp(0.5f, 0.35f, i);
+    look.coverage = lerp(0.85f, 0.95f, i);
+    look.cirrus = 0.55f;
+    look.density = lerp(0.95f, 1.0f, i);
+    look.tint = lerp(0.55f, 0.4f, i);
     look.rain = lerp(0.5f, 1.0f, i);
     look.fog = lerp(0.5f, 0.9f, i);
     look.storm = 1.0f;
     break;
   case scene::WeatherKind::Snow:
-    look.coverage = lerp(0.8f, 0.98f, i);
+    look.coverage = lerp(0.68f, 0.85f, i);
     look.cirrus = 0.5f;
-    look.density = lerp(0.55f, 0.7f, i);
+    look.density = lerp(0.65f, 0.75f, i);
     look.tint = lerp(0.95f, 0.85f, i);
     look.snow = i;
     look.fog = lerp(0.4f, 1.0f, i);
@@ -186,7 +201,7 @@ float lightningFlash(u32 seed, double seconds, float interval) {
 }
 
 SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, float deltaSeconds, bool live,
-                                           const float *camera,
+                                           const WeatherCamera *camera,
                                            const std::function<bool(ObjectId, const Transform &)> &writeTransform) {
   Report report;
   std::vector<ObjectId> ids;
@@ -243,7 +258,7 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       if (!entry.system || !graph.exists(target)) continue;
       report.writes += applyPrecipitation(graph, target, entry.rate, entry.wind);
       if (weather.followCamera && camera)
-        report.writes += followCamera(graph, target, camera, weather.heightAboveCamera, writeTransform);
+        report.writes += followCamera(graph, target, *camera, weather.heightAboveCamera, entry.wind, writeTransform);
     }
   }
   return report;

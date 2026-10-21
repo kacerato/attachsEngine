@@ -79,7 +79,7 @@
             "cpp": "10"
           },
           "default": {
-            "cpp": "1800.0f"
+            "cpp": "3500.0f"
           },
           "presentation": {
             "group": "Precipitação",
@@ -110,7 +110,7 @@
             "cpp": "10"
           },
           "default": {
-            "cpp": "700.0f"
+            "cpp": "1600.0f"
           },
           "presentation": {
             "group": "Precipitação",

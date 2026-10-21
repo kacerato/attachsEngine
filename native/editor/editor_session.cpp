@@ -6391,7 +6391,8 @@ void EditorSession::update() {
   // tipo muda as nuvens do Ambiente e a emissão das partículas na hora.
   if(!isPlaying()) {
     const auto camera=resolveSceneCamera(document_);
-    previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?camera.position:nullptr,
+    runtime::WeatherCamera pose{{camera.position[0],camera.position[1],camera.position[2]},camera.yaw};
+    previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?&pose:nullptr,
       [&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
   }
   refreshAnimationClip();
