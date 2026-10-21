@@ -415,8 +415,11 @@ void main() {
   mediump float nv=max(dot(n,v),0.0);
   // PK-6: com Light Probes = Misturar sondas e um bake na cena, o ambiente
   // difuso vem do SH interpolado no tetraedro do objeto (E/π), no lugar do céu.
-  mediump vec3 diffuseIrradiance=(astraLightProbesActive()?astraLightProbeIrradiance(n)*0.31830988618:
-                                  environmentAmbientDiffuse(n))*occlusion;
+  // A mesma força do ambiente que escala o céu escala a sonda: uma sonda em
+  // campo aberto devolve exatamente o ambiente do céu que ela substitui.
+  mediump vec3 diffuseIrradiance=(astraLightProbesActive()?
+      astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
+      environmentAmbientDiffuse(n))*occlusion;
 #ifdef OCCLUSION_MAP
   // External lightmaps contain linear indirect irradiance E, not reflected color.
   // Replace ambient diffuse to avoid counting indirect lighting twice; retain

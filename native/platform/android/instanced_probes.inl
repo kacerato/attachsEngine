@@ -718,7 +718,9 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
       cache.layerRevision = probeLayerRevision_;
     }
     if (lightDirty) {
-      if (lightProbes && key.lightProbes != 0) {
+      // Como na Unity, as sondas de luz iluminam o que se move; o que é Static
+      // recebe a luz indireta assada (aqui, sem lightmap, o ambiente do céu).
+      if (lightProbes && key.lightProbes != 0 && !key.isStatic) {
         const auto where = renderer::locateProbes(*set, draw.boundsCenter, cache.lightRevision == lightProbeRevision_ ? cache.tetrahedron : -1);
         const auto sh = renderer::interpolateProbes(*set, where);
         cache.tetrahedron = where.tetrahedron;
