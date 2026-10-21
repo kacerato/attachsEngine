@@ -3585,23 +3585,12 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
         get => (CastShadowsOption)Component.GetEnum("cast_shadows");
         set => Component.SetEnum("cast_shadows", (uint)value);
     }
-    [System.Flags]
-    public enum RenderingLayerMaskOption : uint
-    {
-        Padrao = 1,
-        Camada1 = 2,
-        Camada2 = 4,
-        Camada3 = 8,
-        Camada4 = 16,
-        Camada5 = 32,
-        Camada6 = 64,
-        Camada7 = 128,
-    }
     /// <summary>Camadas de renderização. Só luzes com uma camada de renderização em comum iluminam esta malha</summary>
-    public RenderingLayerMaskOption RenderingLayerMask
+    /// <remarks>Máscara de bits; 0 = nada, 0xFFFFFFFF = tudo.</remarks>
+    public uint RenderingLayerMask
     {
-        get => (RenderingLayerMaskOption)Component.GetEnum("rendering_layer_mask");
-        set => Component.SetEnum("rendering_layer_mask", (uint)value);
+        get => Component.GetEnum("rendering_layer_mask");
+        set => Component.SetEnum("rendering_layer_mask", value);
     }
     /// <summary>Malha. Recurso do projeto por slot</summary>
     public AssetGuid GetMesh(uint slot = 0) => Component.GetResource("mesh", slot);
@@ -4944,65 +4933,19 @@ public readonly struct Light : IComponentFacade<Light>
         get => (ShadowResolutionOption)Component.GetEnum("shadow_resolution");
         set => Component.SetEnum("shadow_resolution", (uint)value);
     }
-    [System.Flags]
-    public enum CullingMaskOption : uint
-    {
-        Padrao = 1,
-        Camada1 = 2,
-        Camada2 = 4,
-        Camada3 = 8,
-        Camada4 = 16,
-        Camada5 = 32,
-        Camada6 = 64,
-        Camada7 = 128,
-        Camada8 = 256,
-        Camada9 = 512,
-        Camada10 = 1024,
-        Camada11 = 2048,
-        Camada12 = 4096,
-        Camada13 = 8192,
-        Camada14 = 16384,
-        Camada15 = 32768,
-        Camada16 = 65536,
-        Camada17 = 131072,
-        Camada18 = 262144,
-        Camada19 = 524288,
-        Camada20 = 1048576,
-        Camada21 = 2097152,
-        Camada22 = 4194304,
-        Camada23 = 8388608,
-        Camada24 = 16777216,
-        Camada25 = 33554432,
-        Camada26 = 67108864,
-        Camada27 = 134217728,
-        Camada28 = 268435456,
-        Camada29 = 536870912,
-        Camada30 = 1073741824,
-        Camada31 = 2147483648,
-    }
     /// <summary>Máscara de culling. Camadas de objeto que esta luz ilumina</summary>
-    public CullingMaskOption CullingMask
+    /// <remarks>Máscara de bits; 0 = nada, 0xFFFFFFFF = tudo.</remarks>
+    public uint CullingMask
     {
-        get => (CullingMaskOption)Component.GetEnum("culling_mask");
-        set => Component.SetEnum("culling_mask", (uint)value);
-    }
-    [System.Flags]
-    public enum RenderingLayersOption : uint
-    {
-        Padrao = 1,
-        Camada1 = 2,
-        Camada2 = 4,
-        Camada3 = 8,
-        Camada4 = 16,
-        Camada5 = 32,
-        Camada6 = 64,
-        Camada7 = 128,
+        get => Component.GetEnum("culling_mask");
+        set => Component.SetEnum("culling_mask", value);
     }
     /// <summary>Camadas de renderização. Ilumina só renderers com uma camada de renderização em comum</summary>
-    public RenderingLayersOption RenderingLayers
+    /// <remarks>Máscara de bits; 0 = nada, 0xFFFFFFFF = tudo.</remarks>
+    public uint RenderingLayers
     {
-        get => (RenderingLayersOption)Component.GetEnum("rendering_layers");
-        set => Component.SetEnum("rendering_layers", (uint)value);
+        get => Component.GetEnum("rendering_layers");
+        set => Component.SetEnum("rendering_layers", value);
     }
 }
 
