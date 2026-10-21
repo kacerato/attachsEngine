@@ -20,4 +20,52 @@ Referências (Unity 6000.0, URP 17):
 | T-04 | Surface Type Opaque/Transparent; Blending Mode Alpha/Premultiply/Additive/Multiply; Preserve Specular; Render Face Front/Back/Both; Alpha Clipping + Threshold; Sorting Priority (fila 3000 + prioridade). | Pipelines de mistura próprias (ONE/1−SA, ONE/ONE, DST_COLOR/ZERO); Render Face Back descarta a frente; recorte também no transparente; prioridade ordena os transparentes antes da distância. |
 | T-05 | O `.mat` do Standard/URP traz `_PARALLAXMAP`, `_DETAIL_MULX2`, `_ALPHAPREMULTIPLY_ON`. | O importador aceita os três e lê também URP Lit/Simple Lit/Unlit/Particles e o Standard (Specular setup). |
 
-(resultado, medições e capturas: em preenchimento)
+
+## Testes de host
+
+- `aether_unity_material_tests` 34/34 (novo `test_material_shading_pk9.cpp`: v8 e migração v7, flags e linhas
+  13..20 da extensão, campos visíveis por shader, Smoothness, importador Standard/URP, Inspector por toque com
+  slider que só grava ao soltar, e o gerador do projeto de validação).
+- `aether_tests` 1601/1601; suíte gerenciada 523/523; `generate-component-contracts.py --sync-api`: API atual.
+- Três testes antigos do editor foram reescritos para os campos novos (a lista paginada do material do projeto saiu).
+
+## Aparelho (POCO F7, Astra Dev 186/187, Play com câmera fixa)
+
+Projeto `PK9 Materiais` gerado no host (`ASTRA_PK9_PROJECT`) com o Cenário de referência (sol físico, exposição),
+texturas procedurais próprias e materiais `.mat` URP convertidos pelo importador; variantes só mudam a câmera.
+
+| Captura | O que mostra |
+|---|---|
+| 01–04 | Projeto aberto; Inspector do material (URP/Lit, Transparente, Mistura, Faces, Mapa base); lista dos 6 shaders; troca para Simple Lit ao vivo (Fluxo some, Mapa/Cor especular aparecem, rev. 2, desfeito) |
+| 05 | Grade Metálico 0→1 × Suavidade 0→1 em esferas e cubos |
+| 06 | Tijolo: mapa normal, altura (paralaxe) e detalhe ×2 |
+| 07 | Transparentes vistos por trás: vidro com Preserve Specular, aditivo; **cubo Multiplicar errado** |
+| 08 | Sem verniz × verniz (Complex Lit) do lado do sol |
+| 09 | Antes da correção: GGX com suavidade 1 estourava o fp16 e virava um ponto preto |
+| host-* | Captura do Inspector no host (Lit e Simple Lit) |
+
+`prancha-pk9.png`: frames da Unity (pasta `referencia-unity/`, com vídeo e tempo no nome) × capturas do POCO.
+
+### Julgamento contra a Unity
+
+- **Brilho e reflexo**: o realce do sol encolhe e se concentra com a suavidade como no vídeo (pontual em 1,0);
+  o metálico perde o difuso e escurece como na fileira 0→1 da Unity. Diferença declarada: o céu do cenário é
+  quase uniforme e claro, então o metal liso reflete uma cor só, não o estúdio escuro com luzes do vídeo.
+- **Detalhe**: o grão ×2 tem escala de 4× o tijolo e fica visível de perto sem dominar a cor, como no frame do
+  Ned Makes Games; a altura dá relevo no chanfro sem nadar.
+- **Verniz**: do lado do sol o efeito é sutil (F0 0,04); falta uma vista de estúdio para julgar o brilho duplo do
+  vídeo. Luzes adicionais não acendem o verniz (declarado na capacidade).
+- **Multiplicar**: errado no aparelho (o cubo clareia). Esconder o cubo confirma que é ele; o arquivo do material
+  tem Mistura = Multiplicar. Diagnóstico em andamento com um APK que registra a saída de mistura por desenho.
+
+## Custo no aparelho
+
+Primeira medição inválida (o app foi trocado por outra frente durante a rodada) e refeita pendente do aparelho.
+O desenho do custo: materiais Lit sem opções novas continuam nas pipelines especializadas por textura (o código
+PK-9 é eliminado por constante de especialização); só materiais com shader/opções novas vão para a pipeline geral.
+
+## Mudanças por causa da comparação
+
+- Brilho especular calculado em highp e limitado antes do fp16 (ponto preto da captura 09).
+- Multiplicar passou a usar a tinta da superfície em vez da cor iluminada (a cena é HDR antes da exposição).
+- Verniz e transparentes recapturados do lado do sol.
