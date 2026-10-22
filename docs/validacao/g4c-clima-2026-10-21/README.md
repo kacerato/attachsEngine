@@ -16,8 +16,8 @@ Branch `claude/mystifying-visvesvaraya-fb2538`. Fluxo Unity × Astra e limites e
 | Vento das nuvens inclinando a chuva e arrastando a neve (Velocidade no tempo, Mundo) | Host; no POCO visível na neve |
 | Neblina por altura no volume do clima (céu com nuvens acima do horizonte) | POCO (capturas 04 × 06) |
 | API C# `Astra.Components.Weather` | Gerada; não exercitada por script no aparelho |
-| Variação natural (pancadas e calmarias) com Variação e Ritmo no Inspector | Host; APK 501 instalado, **não verificado no aparelho** (tela bloqueada por senha) |
-| Teto do aparelho repartido pela necessidade (corrige a chuva "em ondas") | Host; a causa foi confirmada no POCO (chuva presa em 3.200 vivas no APK 410) |
+| Variação natural (pancadas e calmarias) com Variação e Ritmo no Inspector | Host e POCO (APK 0.3.0-dev.261022999-clima-1311, capturas 12 e 13) |
+| Teto do aparelho repartido pela necessidade (corrige a chuva "em ondas") | Host e POCO: no APK 410 a chuva ficava presa em 3.200 vivas; no 261022999 varia de 3.003 a 3.553 sem tocar o teto |
 | Raio desenhado, trovão, respingo no chão, chuva que não entra sob telhado | **Não feito** |
 
 ## Referência Unity (frames de vídeo) e o que mudou por causa dela
@@ -72,6 +72,12 @@ necessidade real (taxa × vida + rajadas, com piso de 256 para Emit e sub-emisso
 Além disso, o Clima ganhou **Variação natural** (0,35) e **Ritmo da variação** (45 s): em Play a
 intensidade oscila por ruído suave entre o autoral e (1 − variação) × autoral, passando pela
 Transição — pancadas e calmarias sem repetição, como os ciclos de intensidade dos scripts de clima.
+
+Verificação no POCO (22/10, `0.3.0-dev.261022999-clima-1311`, Vila em Play, chuva 0,7, variação 0,35):
+60 amostras do log `[Particles]` em 2 min (`gpu/chuva-continua-vivas-261022999.txt`) — as gotas vivas
+sobem e descem devagar entre 3.003 e 3.553, longe do teto de 8.000, sem os buracos das ondas
+(`12-chuva-continua-gotas-vivas.png`); quadros aos 10, 50 e 90 s em `13-chuva-continua-quadros-10s-50s-90s.png`.
+Passe das partículas: 0,06–0,08 ms de GPU.
 
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
