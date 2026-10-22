@@ -23,9 +23,13 @@ inline constexpr float NightMoonSkyFraction = 0.2f;
 // Piso de luz das estrelas e do brilho do ar, em fração do ambiente que o céu
 // tinha no fim do crepúsculo: noite de lua nova fica quase preta, não zero.
 inline constexpr float NightStarlightFraction = 0.003f;
-// O céu visível ao luar é ~1,5x a luz difusa que ele manda ao chão: fica mais
-// claro que a praça, como o azul-marinho dos frames de referência da Unity.
-inline constexpr float NightSkyGlow = 1.5f;
+// Brilho do céu visível ao luar sobre a luz difusa que ele manda ao chão.
+// Fisicamente seria ~1,5; os céus noturnos dos vídeos da Unity (sRGB 15-44 no
+// céu) são pintados mais claros que isso. No POCO (Vila, 22 h, exposição -6)
+// 12 deu um céu de sRGB ~1 e 300 um céu de anoitecer (sRGB ~190), porque o
+// tonemap esmaga o fim escuro; 60 fica no azul-marinho deles. Sem lua o luar é
+// zero e o céu volta a ser só estrelas, como a lua nova da Unity.
+inline constexpr float NightSkyGlow = 60.0f;
 // Tom do céu noturno (luminância 1): frio, como a noite dos jogos da Unity.
 inline constexpr float NightSkyTint[3]{0.62f, 0.83f, 1.38f};
 

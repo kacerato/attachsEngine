@@ -1741,6 +1741,17 @@ void applyNightSky(DirtRoadFrameUniform &frame,const renderer::SceneEnvironment 
     if(look.fogColorMode==renderer::FogColorMode::SkyLight)
       frame.sceneFogColorDensity[c]+=(lighting.nightSky[c]*renderer::NightSkyGlow-frame.sceneFogColorDensity[c])*lighting.night;
   }
+  // Diagnóstico de calibração no aparelho (logcat [NightSky]), a cada ~300 quadros.
+  static u32 nightLogFrame=0;
+  if(++nightLogFrame%300u==1u)
+    __android_log_print(ANDROID_LOG_INFO,LogTag,
+        "[NightSky] noite=%.2f solY=%.3f lua=%.3g ceu=%.3g,%.3g,%.3g ambiente=%.3g sh=%d",
+        static_cast<double>(lighting.night),static_cast<double>(frame.skySun[1]),
+        static_cast<double>(renderer::nightLuminance(moonRadiance)),
+        static_cast<double>(frame.skyNight[0]),static_cast<double>(frame.skyNight[1]),
+        static_cast<double>(frame.skyNight[2]),
+        static_cast<double>(renderer::nightLuminance(lighting.sky)),
+        frame.diffuseIrradianceSh[0][3]>0.5f?1:0);
   // PK-1: com a sonda SH publicada, é ela que o shader lê. A noite mistura a
   // sonda do céu com a do céu noturno (gradiente vertical, como a fonte
   // Gradient da janela Lighting), na mesma proporção da constante acima.
