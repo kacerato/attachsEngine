@@ -8,6 +8,7 @@
 // Uso: v2_night_scene_author <projeto-copiado> <saida> <hora>
 #include "editor/editor_archive.h"
 #include "scene/light.h"
+#include "scene/environment.h"
 #include "scene/light_defaults.h"
 #include "scene/time_of_day.h"
 
@@ -41,6 +42,26 @@ int main(int argc, char **argv) {
     if (light && light->kind == scene::LightKind::Directional && std::string_view(object->name) == "Sol de fim de tarde") sunId = id;
   }
   if (!sunId) fail("sol da Vila não encontrado");
+  // A Vila veio das cenas antigas com a Exposição Fixa (-0,41 EV), calibrada
+  // para o dia. Um ciclo de dia e noite na Unity usa a Exposure Automatic do
+  // Volume com limites; a variante usa os padrões da Astra (Automática, Peso no
+  // centro, -8/10), como o autor faria no Inspector.
+  u32 automatic = 0;
+  for (auto id : ids) {
+    const auto *object = doc.find(id);
+    if (!object || !object->components.find(scene::Environment::descriptor)) continue;
+    auto values = *object;
+    auto *environment = static_cast<scene::Environment *>(values.components.edit(scene::Environment::descriptor));
+    const renderer::SceneEnvironment defaults{};
+    environment->values.exposureMode = defaults.exposureMode;
+    environment->values.exposureMetering = defaults.exposureMetering;
+    environment->values.exposureLimitMin = defaults.exposureLimitMin;
+    environment->values.exposureLimitMax = defaults.exposureLimitMax;
+    environment->values.exposureCompensation = 0.0f;
+    if (!doc.applyEntityValues(id, values)) fail("Exposição automática recusada");
+    ++automatic;
+  }
+  std::cout << "Exposição automática em " << automatic << " Ambiente(s)\n";
   const auto moonId = doc.createEntity(doc.find(sunId)->parent, EditorEntityKind::Folder, "Lua");
   auto moon = *doc.find(moonId);
   moon.transform = doc.find(sunId)->transform;

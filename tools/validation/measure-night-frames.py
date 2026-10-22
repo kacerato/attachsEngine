@@ -11,6 +11,7 @@ do editor da Astra). Para cada imagem e recorte:
   - azul/vermelho da média (> 1 é noite fria).
 """
 import json
+import re
 import sys
 
 import numpy as np
@@ -44,7 +45,8 @@ def region(pixels):
 
 
 def measure(spec):
-    path, _, box = spec.partition(":")
+    match = re.fullmatch(r"(.+):(\d+,\d+,\d+,\d+)", spec)
+    path, box = (match.group(1), match.group(2)) if match else (spec, "")
     image = np.asarray(Image.open(path).convert("RGB"))
     if box:
         x0, y0, x1, y1 = (int(v) for v in box.split(","))

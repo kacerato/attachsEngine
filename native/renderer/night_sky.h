@@ -22,7 +22,10 @@ namespace ae::renderer {
 inline constexpr float NightMoonSkyFraction = 0.2f;
 // Piso de luz das estrelas e do brilho do ar, em fração do ambiente que o céu
 // tinha no fim do crepúsculo: noite de lua nova fica quase preta, não zero.
-inline constexpr float NightStarlightFraction = 0.03f;
+inline constexpr float NightStarlightFraction = 0.003f;
+// O céu visível ao luar é ~1,5x a luz difusa que ele manda ao chão: fica mais
+// claro que a praça, como o azul-marinho dos frames de referência da Unity.
+inline constexpr float NightSkyGlow = 1.5f;
 // Tom do céu noturno (luminância 1): frio, como a noite dos jogos da Unity.
 inline constexpr float NightSkyTint[3]{0.62f, 0.83f, 1.38f};
 

@@ -199,8 +199,11 @@ struct DirtRoadFrameUniform {
   float skySun[4]{};
   float skyMoon[4]{};
   float skyStarRotation[3][4]{};
+  // V-2: brilho do céu noturno (o luar espalhado pelo ar), rgb; w reservado.
+  float skyNight[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4240);
+static_assert(sizeof(DirtRoadFrameUniform) == 4256);
+static_assert(offsetof(DirtRoadFrameUniform, skyNight) == 4240);
 static_assert(offsetof(DirtRoadFrameUniform, skySun) == 4160);
 static_assert(offsetof(DirtRoadFrameUniform, skyMoon) == 4176);
 static_assert(offsetof(DirtRoadFrameUniform, skyStarRotation) == 4192);
@@ -1729,6 +1732,15 @@ void applyNightSky(DirtRoadFrameUniform &frame,const renderer::SceneEnvironment 
   std::copy_n(lighting.sky,3,frame.environment.ambientColorStrength);
   std::copy_n(lighting.ground,3,frame.environment.groundColorSaturation);
   frame.sceneAoDetail[3]*=lighting.specularScale;
+  // O céu visível à noite brilha com o luar espalhado (mais claro que o chão,
+  // como nos frames da Unity), e a neblina que acompanha o céu fica da cor dele
+  // -- o Sky Color da neblina do HDRP. Sem isso o piso de 0,015 do dia virava
+  // uma faixa branca no horizonte depois da exposição da noite.
+  for(u32 c=0;c<3;++c) {
+    frame.skyNight[c]=lighting.nightSky[c]*renderer::NightSkyGlow*lighting.night;
+    if(look.fogColorMode==renderer::FogColorMode::SkyLight)
+      frame.sceneFogColorDensity[c]+=(lighting.nightSky[c]*renderer::NightSkyGlow-frame.sceneFogColorDensity[c])*lighting.night;
+  }
   // PK-1: com a sonda SH publicada, é ela que o shader lê. A noite mistura a
   // sonda do céu com a do céu noturno (gradiente vertical, como a fonte
   // Gradient da janela Lighting), na mesma proporção da constante acima.
@@ -1850,6 +1862,7 @@ bool applySceneEnvironmentLook(
   std::fill(std::begin(frame.skySun),std::end(frame.skySun),0.0f);
   std::fill(std::begin(frame.skyMoon),std::end(frame.skyMoon),0.0f);
   for(auto &row:frame.skyStarRotation) std::fill(std::begin(row),std::end(row),0.0f);
+  std::fill(std::begin(frame.skyNight),std::end(frame.skyNight),0.0f);
   publishNightSky(frame,lights);
   if(const auto *sun=renderer::selectDirectionalLight(lights)) {
     float direction[3];renderer::detail::normalized(sun->direction,direction);

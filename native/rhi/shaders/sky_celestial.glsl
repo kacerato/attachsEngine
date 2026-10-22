@@ -185,9 +185,9 @@ vec3 celestialStars(vec3 direction,vec3 sunDirection,vec3 sky,float pixelAngle,f
   // Visíveis a olho nu (~6000 no céu inteiro) e um véu fraco que dá textura.
   vec3 stars=celestialStarLayer(celestial,120.0,0.040,-1.4,6.5,pixelAngle,time,twinkle)+
              celestialStarLayer(celestial,240.0,0.018,5.0,8.0,pixelAngle,time,twinkle);
-  // Escala da cena com o meio-dia em ~EV100 0: a magnitude 0 fica ~200 vezes
-  // acima do chão ao luar, uma de magnitude 6,5 abaixo dele, e a Via Láctea
-  // no nível das estrelas mais fracas, como no céu real à mesma exposição.
+  // Escala da cena com o meio-dia em ~EV100 0, calibrada no POCO (Vila, 22 h,
+  // exposição da noite ~-6,5): magnitude 2 nítida, 4,5 no limite da visão, e a
+  // Via Láctea no nível das mais fracas, como no céu dos vídeos da Unity.
   vec3 milkyWay=celestialMilkyWay(celestial)*2.5e-5;
-  return (stars*0.012+milkyWay)*visibility*intensity*mix(vec3(1.0,0.82,0.66),vec3(1.0),airmass);
+  return (stars*0.06+milkyWay*5.0)*visibility*intensity*mix(vec3(1.0,0.82,0.66),vec3(1.0),airmass);
 }

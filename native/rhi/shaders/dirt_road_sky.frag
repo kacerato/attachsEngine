@@ -38,6 +38,7 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=4160) vec4 skySun;
   layout(offset=4176) vec4 skyMoon;
   layout(offset=4192) vec4 skyStarRotation[3];
+  layout(offset=4240) vec4 skyNight; // rgb brilho do céu ao luar
 } environment;
 // O céu segue o sol verdadeiro; à noite a luz principal pode ser a Lua.
 vec3 skySunDirection() {
@@ -279,6 +280,9 @@ void main() {
     float moonCoverage;
     vec3 moon=celestialMoon(visibleDirection,sunDirection,pixelAngle,moonCoverage);
     float aboveHorizon=smoothstep(-0.012,0.012,visibleDirection.y);
+    // V-2: o céu da noite não é preto: o ar espalha o luar, mais claro perto
+    // do horizonte (mais ar no caminho), como o azul-marinho da Unity à noite.
+    color+=environment.skyNight.rgb*(0.75+0.75*(1.0-clamp(visibleDirection.y,0.0,1.0)))*aboveHorizon;
     color+=moon*aboveHorizon;
     color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
            (1.0-moonCoverage*aboveHorizon);
