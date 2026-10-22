@@ -2966,7 +2966,6 @@ void android_main(android_app *app) {
         shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
             !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
                 ? std::min(shell.editorSession.screen().qualityTemporalDebug,6u) : 0u));
-        shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
         const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
         if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {
           const auto requested=shell.editorSession.requestedScenePath();

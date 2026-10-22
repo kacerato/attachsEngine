@@ -1391,12 +1391,27 @@ AE_TEST(session_material_and_environment_numeric_controls_use_the_same_history_p
   tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+1);tapWidget(f,widgetId(EditorWidget::NumericApply));
   AE_EXPECT_EQ(meshMaterial(*f.session.document().find(f.cube)).roughness,.2f,"exact roughness");
   AE_EXPECT_EQ(f.session.document().find(f.cube)->transform.position[0],0.0f,"transform untouched");
+  // PK-1/PK-2: a janela Iluminação não edita mais multiplicadores da raiz.
+  // Sem Ambiente ela mostra o padrão e "Personalizar", que cria o Ambiente da
+  // cena (Volume global de prioridade mínima) pelo mesmo histórico.
   tapWidget(f,widgetId(EditorWidget::TabLighting));
-  tapWidget(f,widgetId(EditorWidget::TransformFieldBase)+20);
-  tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+2);tapWidget(f,widgetId(EditorWidget::NumericApply));
-  AE_EXPECT_EQ(f.session.document().find(f.session.document().root())->environment[0],3.0f,"sun belongs to scene root");
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Lighting,"janela Iluminação aberta");
+  tapWidget(f,widgetId(EditorWidget::LightingCreateEnvironment));
+  const auto *root=f.session.document().find(f.session.document().root());
+  const auto *environment=static_cast<const scene::Environment*>(root->components.find(scene::Environment::descriptor));
+  AE_EXPECT_TRUE(environment&&environment->values.priority==-1000.0f&&
+                 environment->shape==renderer::EnvironmentVolumeShape::Global,"Ambiente da cena na raiz, prioridade mínima");
+  AE_EXPECT_EQ(f.session.screen().expandedNative,environment->instanceId(),"a janela passa a editar esse Ambiente");
+  AE_EXPECT_EQ(root->environment[0],1.0f,"raiz sem multiplicadores");
+  // Os controles do cartão respondem dentro da janela (antes só no workspace Cena).
+  u32 componentIndex=0,skyEnum=0;
+  for(u32 i=0;i<root->components.size();++i) if(root->components.at(i)==environment) componentIndex=i;
+  for(u32 i=0;i<scene::Environment::descriptor.enums.size();++i) if(scene::Environment::descriptor.enums[i].id=="sky") skyEnum=i;
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+componentIndex+(skyEnum<<8));
+  AE_EXPECT_TRUE(f.session.screen().enumPicker!=0,"Shader do céu abre o seletor na janela Iluminação");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo environment");
-  AE_EXPECT_EQ(f.session.document().find(f.session.document().root())->environment[0],1.0f,"lighting restored");
+  AE_EXPECT_TRUE(!f.session.document().find(f.session.document().root())->components.find(scene::Environment::descriptor),
+                 "desfazer volta ao ambiente padrão");
 }
 
 AE_TEST(session_frame_group_uses_descendants_instead_of_empty_group_origin) {

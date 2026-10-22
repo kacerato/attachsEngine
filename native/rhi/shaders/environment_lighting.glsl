@@ -110,8 +110,9 @@ mediump vec3 environmentDiffuseIrradiance(mediump vec3 direction) {
 mediump vec3 environmentAmbientDiffuse(mediump vec3 normal) {
   // The cooked coefficients contain irradiance E. Lambertian diffuse uses
   // E/pi; the existing strength remains the common authoring/volume scale.
-  if(environment.diffuseIrradianceSh[0].w>0.5 &&
-     environment.quality.z>0.5 && environment.sceneSky.w<0.5)
+  // PK-1: a sonda vale para toda fonte de ambiente (Skybox procedural, HDRI,
+  // Gradient, Color); a CPU só a publica quando ela existe.
+  if(environment.diffuseIrradianceSh[0].w>0.5 && environment.quality.z>0.5)
     return environmentDiffuseIrradiance(normal)*
         (environment.ambientColorStrength.w/PI);
 
@@ -159,9 +160,9 @@ mediump vec3 environmentRadianceUnscaled(highp vec3 direction,mediump float lod)
   return textureLod(environmentSpecularMap,uv,clamp(lod,0.0,environment.parameters.z)).rgb;
 }
 
-// `sceneAoDetail.w` e a escala do reflexo do ambiente: a razao sol autorado / sol
-// do recurso (quando o sol da cena esta em lux) vezes o Reflexo indireto do
-// volume da camera. 1 no legado. Todo reflexo do ambiente passa por aqui.
+// `sceneAoDetail.w` e a escala do reflexo do ambiente: o brilho do ceu (Exposure
+// do Skybox ou EV do HDRI) vezes a Intensity Multiplier dos reflexos do volume
+// da camera. Todo reflexo do ambiente passa por aqui.
 // O sol de um HDRI real chega a ~6e4 no mip 0, perto do teto do fp16 (65504):
 // a escala em mediump estourava para inf e, adiante, inf*0 virava NaN (pixel
 // preto no reflexo do sol). A escala fica em highp e o resultado é limitado.

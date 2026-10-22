@@ -132,8 +132,7 @@ void InstancedRenderer::recordFsr(u32 imageIndex,const platform::FreeCameraState
   const bool srgb=swapchain_->imageFormat()==VK_FORMAT_R8G8B8A8_SRGB||
                   swapchain_->imageFormat()==VK_FORMAT_B8G8R8A8_SRGB;
   const bool effects=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
-  const auto look=sceneEnvironment_.active?sceneEnvironment_:
-      (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+  const auto look=effectiveSceneLook();
   const auto rect=physicalSceneViewport();
   Push push{{float(renderWidth()),float(renderHeight()),float(swapchain_->width()),float(swapchain_->height())},
             {float(swapchain_->width()),float(swapchain_->height()),effects&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f,srgb?1.0f:0.0f},

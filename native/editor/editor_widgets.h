@@ -26,6 +26,8 @@ enum class EditorWidget : u32 {
   // índice) e fechar a lista.
   MaterialSectionBase=0xCD1A0000u,MaterialInspectorScroll=0xCD1A0100u,MaterialChoiceOptionBase=0xCD1A0200u,
   MaterialChoiceClose=0xCD1A0300u,
+  // PK-2: janela Iluminação (Ambiente da cena e Material do céu).
+  LightingCreateEnvironment=0xCD1B0000u,LightingCreateSkybox,LightingEditSkybox,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,

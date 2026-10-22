@@ -6,6 +6,9 @@
 #include "scene/time_of_day.h"
 #include "renderer/time_of_day.h"
 
+#include <algorithm>
+#include <utility>
+
 namespace ae::runtime {
 bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out, double sceneSeconds) {
   std::vector<ObjectId> ids;
@@ -14,15 +17,31 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
   // Fonte do sol: as Configurações de iluminação da cena (a primeira na ordem
   // da hierarquia, como a cena ativa da Unity tem uma só janela Lighting).
   ObjectId sunSource = 0;
+  // V-2: a Lua de cada Hora do dia, como o par Sun/Moon do ciclo do HDRP.
+  std::vector<std::pair<ObjectId, const scene::TimeOfDay *>> moons;
+  bool settingsFound = false;
   for (auto id : ids) {
     const auto *object = graph.find(id);
     if (!object) return false;
-    if (const auto *settings = static_cast<const scene::LightingSettings *>(
-            object->components.find(scene::LightingSettings::descriptor))) {
-      sunSource = settings->sunSource;
-      break;
-    }
+    if (!settingsFound)
+      if (const auto *settings = static_cast<const scene::LightingSettings *>(
+              object->components.find(scene::LightingSettings::descriptor))) {
+        sunSource = settings->sunSource;
+        settingsFound = true;
+      }
+    if (const auto *time = static_cast<const scene::TimeOfDay *>(object->components.find(scene::TimeOfDay::descriptor));
+        time && time->enabled && time->valid() && time->moonLight != 0 && time->moonLight != id &&
+        object->components.find(scene::Light::descriptor))
+      moons.emplace_back(time->moonLight, time);
   }
+  const auto timeInput = [&](const scene::TimeOfDay &time) {
+    renderer::TimeOfDayInput input;
+    input.hour = renderer::advanceTimeOfDayHour(time.hour, time.dayLengthMinutes, sceneSeconds);
+    input.dayOfYear = time.dayOfYear;
+    input.latitude = time.latitude;
+    input.northDegrees = time.northDegrees;
+    return input;
+  };
   for (auto id : ids) {
     const auto *object = graph.find(id);
     if (!object) return false;
@@ -61,15 +80,27 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     if (light->kind == scene::LightKind::Directional) {
       if (const auto *time = static_cast<const scene::TimeOfDay *>(object->components.find(scene::TimeOfDay::descriptor));
           time && time->enabled && time->valid()) {
-        renderer::TimeOfDayInput input;
-        input.hour = renderer::advanceTimeOfDayHour(time->hour, time->dayLengthMinutes, sceneSeconds);
-        input.dayOfYear = time->dayOfYear;
-        input.latitude = time->latitude;
-        input.northDegrees = time->northDegrees;
+        const auto input = timeInput(*time);
         const auto sun = renderer::evaluateTimeOfDay(input);
         for (u32 axis = 0; axis < 3; ++axis) entry.color[axis] *= sun.sunColor[axis];
         entry.intensity *= sun.sunIntensity;
         entry.moonPhase = sun.moonPhase;
+        entry.celestialBody = renderer::CelestialLightBody::Sun;
+        std::copy_n(sun.toSun, 3, entry.celestialToSun);
+        renderer::celestialSphereRows(input, entry.celestialSphere);
+      }
+      // V-2: a Lua. A cor é a autoral (fria, como a Moon das cenas da Unity);
+      // a hora dita só a fase, a altura e o desligamento durante o dia.
+      for (const auto &[moonId, time] : moons) {
+        if (moonId != id) continue;
+        const auto input = timeInput(*time);
+        const auto sun = renderer::evaluateTimeOfDay(input);
+        entry.intensity *= renderer::evaluateMoon(sun).intensity;
+        entry.moonPhase = sun.moonPhase;
+        entry.celestialBody = renderer::CelestialLightBody::Moon;
+        std::copy_n(sun.toSun, 3, entry.celestialToSun);
+        renderer::celestialSphereRows(input, entry.celestialSphere);
+        break;
       }
     }
     // Sombra autoral da luz (v4): pontual e spot pedem tiles no atlas local; a

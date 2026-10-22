@@ -3,6 +3,7 @@
 #include "scene/prefab_link.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_archive.h"
+#include "runtime/environment_migration.h"
 #include "editor/editor_properties.h"
 #include "editor/editor_component_catalog.h"
 #include "platform/atomic_asset_file.h"
@@ -191,6 +192,9 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
     prepared.setViews(views);
   }
   stream>>std::ws;if(!stream.eof()) return false;
+  // PK-1: cena anterior ao Ambiente v17 troca a escala do céu pelo sol e os
+  // multiplicadores da raiz pelos campos donos (runtime/environment_migration.h).
+  runtime::migrateLegacyEnvironmentLighting(prepared);
   document=std::move(prepared);return true;
 }
 bool saveEditorDocument(const char *path,const EditorDocument &document,u64 fingerprint,EditorComponentRegistry registry) {

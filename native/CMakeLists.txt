@@ -426,6 +426,7 @@ add_library(aether_renderer STATIC
   renderer/light_probes.cpp
   renderer/reflection_probes.cpp
   renderer/procedural_sky.cpp
+  renderer/environment_ambient.cpp
   renderer/cloud_layer.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
@@ -577,6 +578,7 @@ add_library(aether_runtime STATIC
   runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
   runtime/scene_environment.cpp
+  runtime/environment_migration.cpp
   runtime/scene_physics.cpp
   runtime/scene_dynamic_motor.cpp
   runtime/scene_physics_diagnostic.cpp
@@ -955,8 +957,10 @@ if(NOT ANDROID)
     ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_probes_unity.cpp
     ../tests/native/test_runtime_environment.cpp
+    ../tests/native/test_environment_lighting_window.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
+    ../tests/native/test_night_sky.cpp
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
@@ -1180,8 +1184,9 @@ if(NOT ANDROID)
   # entire native test catalogue for a sky authoring change.
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
-    ../tests/native/test_sky_celestial.cpp
-    ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp)
+    ../tests/native/test_environment_lighting_window.cpp ../tests/native/test_sky_celestial.cpp
+    ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp
+    ../tests/native/test_night_sky.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1293,6 +1298,12 @@ if(NOT ANDROID)
   target_link_libraries(pk6_probe_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)
     target_compile_options(pk6_probe_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
+  # V-2: variante noturna da Vila (Hora do dia + Lua) para a prancha da noite.
+  add_executable(v2_night_scene_author EXCLUDE_FROM_ALL ../tools/v2_night_scene_author.cpp)
+  target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(v2_night_scene_author PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(sponza_scene_author EXCLUDE_FROM_ALL ../tools/sponza_scene_author.cpp)
   target_link_libraries(sponza_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)

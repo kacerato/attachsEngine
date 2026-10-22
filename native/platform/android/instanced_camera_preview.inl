@@ -277,10 +277,10 @@ bool InstancedRenderer::prepareCameraPreview() {
   const bool editorPost=(!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&pendingPreview_.postProcessing;
   const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
       ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
-  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
-      previewSceneEnvironment_,mapDescription,static_cast<bool>(previewEnvironmentMap_) ||
-      (previewEnvironmentUsesPrimary_&&static_cast<bool>(activeEnvironmentMap_)),
-      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,cloudTimeSeconds_)) {
+  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),
+      effectiveSceneLook(previewSceneEnvironment_),mapDescription,
+      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,
+      previewAmbientProbeCache_,cloudTimeSeconds_)) {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
   }
