@@ -12,27 +12,31 @@ layout(location=6) in mediump float vDither;
 // Ver dirt_road_vertex.glsl: luzes aceitas que alcancam este desenho e as
 // flags autorais (Receive Shadows, sol pelas mascaras).
 layout(location=11) flat in highp uint vLightMask;
-const uint DRAW_NO_SHADOWS=131072u; // renderer::DrawLightingNoShadows
-const uint DRAW_NO_SUN=262144u;     // renderer::DrawLightingNoSun
+// highp nas constantes: este arquivo declara `precision mediump int`, e uma
+// constante declarada depois herda a precisão relaxada. A Adreno materializa
+// a constante com 16 bits, então 1u<<17, 1u<<18, 1u<<20 e a máscara 0xffffffff
+// viravam 0/0xffff: o teste de flag dava falso mesmo com o uint em highp.
+const highp uint DRAW_NO_SHADOWS=131072u; // renderer::DrawLightingNoShadows
+const highp uint DRAW_NO_SUN=262144u;     // renderer::DrawLightingNoSun
 layout(location=0) out vec4 outColor;
 #include "temporal_masks.glsl"
-layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
-layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
+layout(constant_id=0) const highp uint GPU_COST_ISOLATION=0u;
+layout(constant_id=1) const highp uint MATERIAL_FEATURE_MASK=0xffffffffu;
 // Projecao da sonda de ambiente resolvida em tempo de compilacao de pipeline.
 // O ramo legado equirect custa atan/acos/fract e, sobretudo, registradores em
 // TODO fragmento enquanto for um uniform -- o driver nao pode provar que ele e
 // morto. Como spec constant ele desaparece do binario do perfil que usa AEEN v3.
 // Zero e "decidir em runtime", preservando o comportamento anterior.
-layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
+layout(constant_id=2) const highp uint ENVIRONMENT_PROJECTION=0u;
 // Only solid, non-transitioning draws may omit the clipping contract.
-layout(constant_id=3) const uint OPAQUE_NO_CLIP=0u;
-layout(constant_id=4) const uint FULL_DETAIL_SAMPLING=0u;
+layout(constant_id=3) const highp uint OPAQUE_NO_CLIP=0u;
+layout(constant_id=4) const highp uint FULL_DETAIL_SAMPLING=0u;
 // Only selected when every uploaded punctual light is a point without an
 // allocated local shadow. Directional lighting and its cascades stay intact.
-layout(constant_id=5) const uint UNSHADOWED_POINT_LIGHTING=0u;
+layout(constant_id=5) const highp uint UNSHADOWED_POINT_LIGHTING=0u;
 const float PI=3.141592653589793;
-const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
-const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
+const highp uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
+const highp uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 // Precisa casar com renderer::MaximumPunctualLights. Os dois lados leem a mesma
 // memoria; divergir aqui leria alem do array ou apagaria luzes que couberam.
 const int PUNCTUAL_LIGHT_LIMIT=16;
@@ -50,7 +54,7 @@ const int PUNCTUAL_LIGHT_BANK=8; // renderer::PunctualLightBankSize
 #include "impostor_view.glsl"
 #include "material_uv_transform.glsl"
 #include "world_uv.glsl"
-const uint MATERIAL_SHADING_EXTENSION=1048576u; // renderer::MapMaterialShadingExtension
+const highp uint MATERIAL_SHADING_EXTENSION=1048576u; // renderer::MapMaterialShadingExtension
 const float AETHER_MEDIUMP_MAX=60000.0;          // abaixo do maior finito do fp16 (65504)
 // PK-9: estado do Material por desenho que a BRDF consulta (uniforme no
 // desenho). Fora da extensão valem os padrões do Lit e nada muda.

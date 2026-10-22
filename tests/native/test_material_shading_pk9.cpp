@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <functional>
+#include <regex>
 
 // PK-9 (auditoria full Unity, T-01..T-05): shader do Material, vocabulário
 // Smoothness, altura/detalhe/clear coat/especular, superfície transparente e o
@@ -146,21 +147,45 @@ AE_TEST(pk9_override_flags_and_extension_rows_reach_the_shader) {
   AE_EXPECT_EQ(row(15,0),-1.f,"unlit ignores height");AE_EXPECT_EQ(row(19,2),-1.f,"unlit has no clear coat");
 }
 
-// No POCO o Multiply clareava: o shader lia as flags num uint mediump, a Adreno
-// guardava 16 bits e o bit 20 (extensão PK-9) sumia. O host não reproduz a
-// perda, então o contrato fica no texto do shader: toda flag acima do bit 15
-// só pode ser lida por um caminho highp.
-AE_TEST(pk9_material_flags_above_bit_15_are_read_in_highp) {
+// No POCO o Multiply clareava: dirt_road_shading.glsl declara `precision mediump
+// int`, e a constante MATERIAL_SHADING_EXTENSION (1u<<20), declarada depois,
+// herdava a precisão relaxada. A Adreno a materializa com 16 bits (vira 0) e o
+// teste de flag dava falso mesmo com o uint em highp; DRAW_NO_SHADOWS/NO_SUN
+// (bits 17/18) e a máscara de especialização 0xffffffff sofriam o mesmo. O host
+// não reproduz a perda, então o contrato fica no texto dos shaders: em arquivo
+// com mediump int, constante inteira acima de 16 bits só com highp explícito.
+AE_TEST(pk9_shader_integer_constants_above_16_bits_are_highp) {
+  namespace fs=std::filesystem;
+  const fs::path shaders=fs::path(AETHER_REPOSITORY_ROOT)/"native/rhi/shaders";
+  const std::regex constant(R"((^|\n)\s*(layout\s*\([^)]*\)\s*)?const\s+(lowp\s+|mediump\s+|highp\s+)?(u?int)\s+(\w+)\s*=\s*(0x[0-9a-fA-F]+|\d+)u?)");
+  u32 checked=0,mediumFiles=0;
+  for(const auto &entry:fs::directory_iterator(shaders)) {
+    const auto ext=entry.path().extension().string();
+    if(ext!=".glsl" && ext!=".frag" && ext!=".vert" && ext!=".comp") continue;
+    std::vector<u8> bytes;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(entry.path(),bytes),"shader source");
+    const std::string source(bytes.begin(),bytes.end());
+    const auto precision=source.find("precision mediump int");
+    if(precision==std::string::npos) continue;
+    ++mediumFiles;
+    for(auto it=std::sregex_iterator(source.begin()+static_cast<std::ptrdiff_t>(precision),source.end(),constant);it!=std::sregex_iterator();++it) {
+      const auto &m=*it;
+      const unsigned long long value=std::stoull(m[6].str(),nullptr,0);
+      const bool wide=m[4].str()=="uint"?value>0xffffull:value>0x7fffull;
+      ++checked;
+      if(wide) AE_EXPECT_TRUE(m[3].str().find("highp")!=std::string::npos,
+                              (entry.path().filename().string()+": "+m[5].str()+" precisa de highp").c_str());
+    }
+  }
+  AE_EXPECT_TRUE(mediumFiles>=4 && checked>=10,"the scan reached the mediump shaders");
   std::vector<u8> bytes;
-  AE_EXPECT_TRUE(EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"native/rhi/shaders/dirt_road_shading.glsl",bytes),"shader source");
+  AE_EXPECT_TRUE(EditorImportTransaction::read(shaders/"dirt_road_shading.glsl",bytes),"shader source");
   const std::string source(bytes.begin(),bytes.end());
-  AE_EXPECT_TRUE(source.find("precision mediump int;")!=std::string::npos,"the file still defaults ints to mediump");
   AE_EXPECT_TRUE(renderer::MapMaterialShadingExtension>0xffffu,"the PK-9 flag lives above bit 15");
-  AE_EXPECT_TRUE(source.find("const uint MATERIAL_SHADING_EXTENSION="+std::to_string(renderer::MapMaterialShadingExtension)+"u")!=std::string::npos,
-                 "shader constant matches the CPU flag");
+  AE_EXPECT_TRUE(source.find("const highp uint MATERIAL_SHADING_EXTENSION="+std::to_string(renderer::MapMaterialShadingExtension)+"u")!=std::string::npos,
+                 "shader constant matches the CPU flag and is highp");
   AE_EXPECT_TRUE(source.find("bool hasMaterialFeature(highp uint flags,highp uint feature)")!=std::string::npos,"feature test is highp");
   AE_EXPECT_TRUE(source.find("highp uint flags=frame.materialFlags.x;")!=std::string::npos,"flags are loaded in highp");
-  AE_EXPECT_TRUE(source.find("  uint flags=frame.materialFlags.x;")==std::string::npos,"no mediump copy of the flags");
 }
 
 AE_TEST(pk9_inspector_fields_follow_the_shader_like_urp) {
