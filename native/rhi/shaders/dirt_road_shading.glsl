@@ -93,8 +93,11 @@ mediump vec4 aetherParticleColor(mediump vec4 albedo,mediump vec4 color,uint mod
   albedo.rgb=max(albedo.rgb,vec3(0.0));
   return albedo;
 }
-bool hasMaterialFeature(uint flags,uint feature) {
-  uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
+// highp: o arquivo usa `precision mediump int`, e a Adreno lê um uint relaxado
+// com 16 bits. As flags passam do bit 15 (MATERIAL_SHADING_EXTENSION é o bit 20);
+// em mediump o bit some, o PK-9 inteiro desliga e o Multiply vira um clarão.
+bool hasMaterialFeature(highp uint flags,highp uint feature) {
+  highp uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
   return (selected&feature)!=0u;
 }
 mediump float materialDetailWeight(highp float cameraDistance, highp float maximumDistance) {
@@ -317,7 +320,7 @@ void aetherWriteSurface(mediump vec3 color,mediump vec3 specular,mediump float a
 }
 void main() {
   if(OPAQUE_NO_CLIP==0u && aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
-  uint flags=frame.materialFlags.x;
+  highp uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   aetherWriteTemporalMasks(0.0,0.0);
   // The specialized solid family has already validated water/impostor/LOD

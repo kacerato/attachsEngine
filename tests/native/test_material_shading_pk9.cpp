@@ -146,6 +146,23 @@ AE_TEST(pk9_override_flags_and_extension_rows_reach_the_shader) {
   AE_EXPECT_EQ(row(15,0),-1.f,"unlit ignores height");AE_EXPECT_EQ(row(19,2),-1.f,"unlit has no clear coat");
 }
 
+// No POCO o Multiply clareava: o shader lia as flags num uint mediump, a Adreno
+// guardava 16 bits e o bit 20 (extensão PK-9) sumia. O host não reproduz a
+// perda, então o contrato fica no texto do shader: toda flag acima do bit 15
+// só pode ser lida por um caminho highp.
+AE_TEST(pk9_material_flags_above_bit_15_are_read_in_highp) {
+  std::vector<u8> bytes;
+  AE_EXPECT_TRUE(EditorImportTransaction::read(std::filesystem::path(AETHER_REPOSITORY_ROOT)/"native/rhi/shaders/dirt_road_shading.glsl",bytes),"shader source");
+  const std::string source(bytes.begin(),bytes.end());
+  AE_EXPECT_TRUE(source.find("precision mediump int;")!=std::string::npos,"the file still defaults ints to mediump");
+  AE_EXPECT_TRUE(renderer::MapMaterialShadingExtension>0xffffu,"the PK-9 flag lives above bit 15");
+  AE_EXPECT_TRUE(source.find("const uint MATERIAL_SHADING_EXTENSION="+std::to_string(renderer::MapMaterialShadingExtension)+"u")!=std::string::npos,
+                 "shader constant matches the CPU flag");
+  AE_EXPECT_TRUE(source.find("bool hasMaterialFeature(highp uint flags,highp uint feature)")!=std::string::npos,"feature test is highp");
+  AE_EXPECT_TRUE(source.find("highp uint flags=frame.materialFlags.x;")!=std::string::npos,"flags are loaded in highp");
+  AE_EXPECT_TRUE(source.find("  uint flags=frame.materialFlags.x;")==std::string::npos,"no mediump copy of the flags");
+}
+
 AE_TEST(pk9_inspector_fields_follow_the_shader_like_urp) {
   auto material=sample();
   const auto visible=[&](std::string_view key) {const auto *field=findMaterialField(key);return field && field->visible(material);};
