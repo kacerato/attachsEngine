@@ -5316,6 +5316,12 @@ public readonly struct TimeOfDay : IComponentFacade<TimeOfDay>
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
     }
+    /// <summary>Lua. Luz direcional girada até a lua desta hora; à noite ilumina com a fase e projeta a sombra</summary>
+    public ObjectReference MoonLight
+    {
+        get => Component.GetReference("moon_light");
+        set => Component.SetReference("moon_light", value);
+    }
 }
 
 /// <summary>Iluminação da cena: Fonte do sol: qual luz direcional é o sol da cena. Família Luz · Luzes.</summary>

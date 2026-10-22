@@ -19,6 +19,7 @@
 #include <cmath>
 #include <locale>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 using namespace ae;
@@ -159,6 +160,6 @@ AE_TEST(day_night_recipe_creates_the_moon_linked_to_the_sun) {
                  moon->intensity == scene::kMoonLightDefault.intensity && moon->useColorTemperature &&
                  moon->colorTemperature == scene::kMoonColorTemperature,
                  "Lua de 0,5 lux, fria, como no tutorial HDRP Night");
-  AE_EXPECT_TRUE(moonObject->name == "Lua" && moonObject->parent == graph.root(), "irmã do sol na hierarquia");
+  AE_EXPECT_TRUE(std::string_view(moonObject->name) == "Lua" && moonObject->parent == graph.root(), "irmã do sol na hierarquia");
   AE_EXPECT_EQ(session.history().undoDepth(), depth + 1, "um só passo de desfazer");
 }

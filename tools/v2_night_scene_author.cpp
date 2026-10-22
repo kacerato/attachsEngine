@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <string_view>
 
 using namespace ae;
 using namespace ae::editor;
@@ -37,7 +38,7 @@ int main(int argc, char **argv) {
   for (auto id : ids) {
     const auto *object = doc.find(id);
     const auto *light = object ? static_cast<const scene::Light *>(object->components.find(scene::Light::descriptor)) : nullptr;
-    if (light && light->kind == scene::LightKind::Directional && object->name == "Sol de fim de tarde") sunId = id;
+    if (light && light->kind == scene::LightKind::Directional && std::string_view(object->name) == "Sol de fim de tarde") sunId = id;
   }
   if (!sunId) fail("sol da Vila não encontrado");
   const auto moonId = doc.createEntity(doc.find(sunId)->parent, EditorEntityKind::Folder, "Lua");
