@@ -882,6 +882,23 @@ bool InstancedRenderer::createPipeline() {
       pipelineInfo.subpass = waterSubpassActive_ ? 1u : 0u;
       if (pipelineOk)
         pipelineOk = createScenePipeline(&transparentPipeline_) == VK_SUCCESS;
+      // PK-9: Blending Mode do Transparent. Só o fator de cor muda; o alfa
+      // segue carregando a cobertura opaca restante. O shader já entrega a cor
+      // na forma que cada fator espera (renderer::MaterialBlendOutput*).
+      {
+        const VkBlendFactor factors[renderer::MaterialBlendOutputCount][2]{
+            {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
+            {VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
+            {VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE},
+            {VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_ZERO}};
+        for (u32 output = 1; pipelineOk && output < renderer::MaterialBlendOutputCount; ++output) {
+          colorBlendAttachment.srcColorBlendFactor = factors[output][0];
+          colorBlendAttachment.dstColorBlendFactor = factors[output][1];
+          pipelineOk = createScenePipeline(&transparentBlendPipelines_[output]) == VK_SUCCESS;
+        }
+        colorBlendAttachment.srcColorBlendFactor = factors[0][0];
+        colorBlendAttachment.dstColorBlendFactor = factors[0][1];
+      }
       pipelineInfo.subpass = 0;
 
       // Material detail LOD is a compiled pipeline choice, not merely a
@@ -1354,6 +1371,16 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   return true;
 }
 
+// PK-9: saída da mistura de um desenho transparente (o índice da pipeline).
+u32 InstancedRenderer::transparentBlendOutput(u32 drawIndex) const {
+  if (drawIndex >= authoredMaterials_.size() || drawIndex >= dirtRoadResources_.draws().size()) return 0;
+  const auto &material = authoredMaterials_[drawIndex];
+  const u32 flags = renderer::applyMaterialOverride(
+      dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex], material).flags;
+  if (!(flags & renderer::MapMaterialShadingExtension) || !(flags & renderer::MapMaterialBlend)) return 0;
+  return renderer::materialBlendOutput(material.shading);
+}
+
 bool InstancedRenderer::writeAuthoredUvTransforms() {
   authoredUvTransformEntries_.assign(authoredMaterials_.size(), 0u);
   auto *entries = static_cast<float *>(materialUvTransformBuffer_.mappedData());
@@ -1363,14 +1390,23 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
   const u32 textureBase = static_cast<u32>(dirtRoadResources_.packageTextureCount());
   for (usize draw = 0; draw < authoredMaterials_.size(); ++draw) {
     const auto &material = authoredMaterials_[draw];
-    if (!renderer::needsMaterialExtension(material)) continue;
-    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
     // O padrão da fonte (oclusão empacotada ou não) vem das flags efetivas do desenho.
     u32 flags = 0;
     if (draw < dirtRoadResources_.draws().size()) {
       const u32 materialIndex = dirtRoadResources_.draws()[draw].materialIndex;
       if (materialIndex < dirtRoadResources_.materials().size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex], material, textureBase).flags;
+    }
+    if (!renderer::needsMaterialExtension(material) && !(flags & renderer::MapMaterialShadingExtension)) continue;
+    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
+    // PK-9: altura, detalhe e clear coat, como a oclusão própria (só bindless).
+    u32 extraSlots[scene::MaterialExtraTextureCount];
+    for (u32 extra = 0; extra < scene::MaterialExtraTextureCount; ++extra) {
+      extraSlots[extra] = renderer::MaterialExtensionNoTexture;
+      const u32 resolved = material.extraTextures[extra];
+      if (!useBindless_ || !renderer::materialExtraTexturePresent(resolved)) continue;
+      const u64 texture = u64{resolved} + textureBase;
+      if (texture < dirtTextureSlots_.size()) extraSlots[extra] = dirtTextureSlots_[texture];
     }
     // Textura de oclusão própria só existe com descritores bindless: o caminho de
     // fallback tem exatamente quatro samplers por material.
@@ -1391,7 +1427,8 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
       if(texture<dirtTextureSlots_.size()) lightmapSlot=dirtTextureSlots_[texture];
     }
     renderer::materialExtensionEntry(material, flags, occlusionSlot,
-                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot);
+                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot,
+                                     extraSlots);
     authoredUvTransformEntries_[draw] = ++used;
   }
   // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.
@@ -3117,8 +3154,10 @@ void InstancedRenderer::splitShadowDraws(const std::vector<u32> &solid,const std
         if(drawIndex<authoredMaterials_.size())
           material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
                                                    static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+        // Render Face "Back" projeta sombra das duas faces: o passe de sombra
+        // só sabe descartar a de trás.
         culled=(material.flags&renderer::MapMaterialCullBackFaces)!=0 &&
-               (material.flags&renderer::MapMaterialDoubleSided)==0;
+               (material.flags&(renderer::MapMaterialDoubleSided|renderer::MapMaterialCullFrontFaces))==0;
       }
       (culled?cull:none).push_back(drawIndex);
     }
@@ -5013,6 +5052,10 @@ void InstancedRenderer::shutdown() {
     vkDestroyPipeline(device_, transparentPipeline_, nullptr);
     transparentPipeline_ = VK_NULL_HANDLE;
   }
+  for (auto &blendPipeline : transparentBlendPipelines_) {
+    if (blendPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device_, blendPipeline, nullptr);
+    blendPipeline = VK_NULL_HANDLE;
+  }
   if (waterPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, waterPipeline_, nullptr);
     waterPipeline_ = VK_NULL_HANDLE;
@@ -6645,9 +6688,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // R4: dupla face real. Só material que provou ordem de vértices (glTF de
       // uma face ou "Uma face" escolhida) descarta a face de trás.
       if(materialCulling_)
-        rhiDevice_->cmdSetCullMode(commandBuffer_,
-            (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
-                ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
+        rhiDevice_->cmdSetCullMode(commandBuffer_,renderer::materialCullMode(material.flags)==2u?VK_CULL_MODE_FRONT_BIT:
+            renderer::materialCullMode(material.flags)==1u?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE);
       if (!useBindless_) {
         const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -6705,6 +6747,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (drawIndex < authoredMaterials_.size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex],
                                                 authoredMaterials_[drawIndex]).flags;
+      // PK-9: o código do shader do Material só existe na pipeline geral.
+      if (flags & renderer::MapMaterialShadingExtension) return fallback;
       const u32 variant = renderer::materialFeatureVariant(flags);
       return variants[variant] != VK_NULL_HANDLE ? variants[variant] : fallback;
     };
@@ -7020,11 +7064,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     const auto *solidInstances = static_cast<const renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
     opaqueNoClipLastFrame_ = opaqueNoClipEnabled_ && opaqueNoClipPipeline_ != VK_NULL_HANDLE &&
         solidInstances && !visibleSolidDrawOrder_.empty();
+    // PK-9: a pipeline de luz pontual sem sombra compila sem a superfície
+    // geral, onde o shader do Material mora.
+    bool shadingExtensionVisible = false;
     for (u32 drawIndex : visibleSolidDrawOrder_) {
       if (!opaqueNoClipLastFrame_) break;
       const auto &base = dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex];
       const auto material = drawIndex < authoredMaterials_.size()
           ? renderer::applyMaterialOverride(base, authoredMaterials_[drawIndex], dirtRoadResources_.packageTextureCount()) : base;
+      if (material.flags & renderer::MapMaterialShadingExtension) shadingExtensionVisible = true;
       if (solidInstances[drawIndex].normalColumns[7] != 0.0f ||
           (material.flags & (renderer::MapMaterialBlend | renderer::MapMaterialAlphaMask |
                              renderer::MapMaterialImpostor | renderer::MapMaterialWater)))
@@ -7068,7 +7116,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (masksChanged && !memoryAllocator_->flushBuffer(instanceBuffer_))
         return rhi::SwapchainStatus::FatalError;
     }
-    pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ &&
+    pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ && !shadingExtensionVisible &&
         pointLightingSpecializationEnabled_ && pointLightingPipeline_ != VK_NULL_HANDLE && lightingFrame &&
         lightingFrame->punctualLightParameters[0] >= 0.0f &&
         lightingFrame->punctualLightParameters[0] <= static_cast<float>(renderer::MaximumPunctualLights) &&
@@ -7318,7 +7366,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       boundMapPipeline = VK_NULL_HANDLE;
     }
 
+    // PK-9: Sorting Priority primeiro (fila Transparent 3000 + prioridade, a
+    // menor desenha antes), depois de trás para a frente.
+    const auto sortingPriority = [&](u32 drawIndex) {
+      return drawIndex < authoredMaterials_.size() ? static_cast<int>(authoredMaterials_[drawIndex].shading.sortingPriority) : 0;
+    };
     std::sort(visibleTransparentDrawOrder_.begin(), visibleTransparentDrawOrder_.end(), [&](u32 left, u32 right) {
+      const int pa=sortingPriority(left),pb=sortingPriority(right);
+      if(pa!=pb) return pa<pb;
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
       float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
         const float bv=b.boundsCenter[axis]-camera.position[axis];da+=av*av;db+=bv*bv;}return da>db;
@@ -7340,8 +7395,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
             drawMapPrimitive(drawIndex, nullptr, waterPipeline_, VK_NULL_HANDLE);
         }
         else {
-          drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
-                           transparentDistantPipeline_);
+          const u32 output = transparentBlendOutput(drawIndex);
+          if (output != renderer::MaterialBlendOutputStraight && transparentBlendPipelines_[output] != VK_NULL_HANDLE)
+            drawMapPrimitive(drawIndex, nullptr, transparentBlendPipelines_[output], VK_NULL_HANDLE);
+          else
+            drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
+                             transparentDistantPipeline_);
         }
       }
     }

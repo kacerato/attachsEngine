@@ -1985,6 +1985,11 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     double evaluated=0;std::string reason;
     const auto *entity=document_.find(edit.entity);
     state_.numericError=true;
+    // PK-9: campo do Inspector do Material por shader (um, dois ou três números).
+    if(isMaterialFieldWidget(edit.field)) {
+      if(!commitMaterialFieldText(edit.field,value)) return false;
+      state_.numericError=false;close();return true;
+    }
     const bool assetNumber=materialAssetMode() && edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
         edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size();
     // Perfil de ambiente: número ou trio ("r g b") da linha aberta.
@@ -4506,7 +4511,7 @@ u32 EditorSession::textureUsersOf(const resources::AssetGuid &guid) const {
   if(!guid.valid() || guid==scene::MaterialTextureNone) return 0;
   u32 users=sceneUsersOf(guid);
   for(const auto &material:materials_)
-    if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) ++users;
+    if(material.usesTexture(guid)) ++users;
   return users;
 }
 
@@ -4632,7 +4637,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
         for(const auto &identity:source.identities) report.sceneUsers+=sceneUsersOf(identity);
     // R4: materiais do projeto que usam esta textura dependem dela.
     for(const auto &material:materials_) {
-      if(std::find(material.textures.begin(),material.textures.end(),guid)==material.textures.end() && material.occlusionTexture!=guid) continue;
+      if(!material.usesTexture(guid)) continue;
       if(std::find(doomed.begin(),doomed.end(),material.guid)==doomed.end()) ++report.registryDependents;
     }
     for(const auto &dependent:assets_.dependents(guid)) {
@@ -7067,6 +7072,16 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
       state_.textureUvLabels[4]=number("Rot. %.0f°",sampling.rotation);
     }
   }
+  // PK-9: o recurso inteiro para o Inspector por shader e o nome da textura
+  // de cada binding do seletor (pacote, oclusão, altura, detalhe e verniz).
+  view.assetValid=true;view.asset=material;
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) view.fieldTextures[binding]=view.textureNames[binding];
+  view.fieldTextures[scene::MaterialOcclusionTextureBinding]=view.occlusionTextureLabel;
+  for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra) {
+    const auto &texture=material.extraTextures[extra];
+    const auto *found=texture.valid()?findProjectTexture(texture):nullptr;
+    view.fieldTextures[scene::MaterialExtraTextureBindingBase+extra]=found?found->name:texture.valid()?std::string("Textura ausente"):std::string("Nenhuma");
+  }
   scene::MeshRenderer probe;probe.material=material.values;
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
     view.values[field]=scene::meshRendererNumbers[field].read(probe);
@@ -7075,6 +7090,7 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
 bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
   if(!findMaterialAsset(guid)) return false;
   state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;state_.environmentInspector={};
+  state_.materialInspectorScroll=0;state_.materialChoiceField=0;state_.materialSliderField=0;
   state_.profileInspector={};
   state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;
   state_.textureInspector=false;state_.textureManager=false;state_.propertyPage=0;state_.propertyQuery.clear();
@@ -7089,7 +7105,7 @@ void EditorSession::publishMaterialLibrary() {
   library.reserve(materials_.size());
   for(const auto &material:materials_)
     library.push_back({material.guid,{material.values,material.textures,material.surface,material.sampling,material.channels,
-                                      material.occlusionTexture}});
+                                      material.occlusionTexture,material.shading,material.extraTextures}});
   mapScene_.setMaterialLibrary(std::move(library));
   appearanceChanged_=true;
 }
@@ -7159,7 +7175,7 @@ void EditorSession::refreshTexturePanels() {
       state_.textureUserEntities.push_back(id);
     }
     for(const auto &material:materials_)
-      if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) {
+      if(material.usesTexture(guid)) {
         state_.textureUserLabels.push_back("Material do projeto: "+material.name);
         state_.textureUserEntities.push_back(kInvalidEntity);
       }
@@ -7521,6 +7537,11 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
     for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding,material.sampling[binding]);
   // Oclusão própria: dado linear, amostrada como o metal/rugosidade (binding 2).
   for(const auto &material:materials_) add(material.occlusionTexture,2,material.sampling[2]);
+  // PK-9: altura, máscara e clear coat seguem a cor base; o detalhe tem os seus.
+  for(const auto &material:materials_)
+    for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+      add(material.extraTextures[extra],scene::materialExtraPublicationBinding(extra),
+          extra==scene::MaterialExtraDetailAlbedo||extra==scene::MaterialExtraDetailNormal?material.shading.detailSampling:material.sampling[0]);
   // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
   for(const auto &item:anticipatedTextures_)
     if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
@@ -7538,6 +7559,10 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
         add(mapScene_.slotTexture(*render,slot,binding),binding,mapScene_.slotSampling(*render,slot,binding));
     for(u32 slot=0;slot<render->slotCount();++slot)
       add(mapScene_.slotOcclusionTexture(*render,slot),2,mapScene_.slotSampling(*render,slot,2));
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      if(const auto *shared=mapScene_.sharedMaterial(render->slotMaterialAsset(slot)))
+        for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+          add(shared->extraTextures[extra],scene::materialExtraPublicationBinding(extra),mapScene_.extraTextureSampling(*render,slot,extra));
     for(u32 slot=0;slot<render->slotCount();++slot)
       add(render->slotLightmap(slot).texture,2,scene::lightmapSampling());
   }
@@ -7667,6 +7692,7 @@ bool EditorSession::repairSharedTexture(resources::AssetGuid material,resources:
   auto candidate=*current;u32 changed=0;
   for(auto &texture:candidate.textures) if(texture==from) {texture=to;++changed;}
   if(candidate.occlusionTexture==from) {candidate.occlusionTexture=to;++changed;}
+  for(auto &texture:candidate.extraTextures) if(texture==from) {texture=to;++changed;}
   if(!changed) {diagnostic="O material não usa essa textura.";return false;}
   ++candidate.revision;
   if(!commitSharedMaterial(candidate,diagnostic)) return false;
@@ -7713,7 +7739,11 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de trocar a textura.";return false;}
   // O binding logo depois dos quatro do pacote é a textura de oclusão própria.
   const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
-  if((!assetShared && (!render || slot>=render->slotCount())) || binding>scene::MaterialOcclusionTextureBinding) {diagnostic="Binding de textura inexistente.";return false;}
+  if((!assetShared && (!render || slot>=render->slotCount())) ||
+     binding>=scene::MaterialExtraTextureBindingBase+scene::MaterialExtraTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  if(binding>=scene::MaterialExtraTextureBindingBase && scope!=MaterialScope::Shared) {
+    diagnostic="Altura, detalhe e clear coat são do material do projeto (como na Unity); edite o material compartilhado.";return false;
+  }
   if(texture.valid() && texture!=scene::MaterialTextureNone && !findProjectTexture(texture)) {diagnostic="Textura fora do projeto.";return false;}
   if(scope==MaterialScope::Shared) {
     const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
@@ -7724,10 +7754,15 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
     const auto *record=assets_.find(guid);
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
-    if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
+    // PK-9: as texturas extras (altura, detalhe, clear coat) só existem no
+    // recurso; "none" nelas é ausência.
+    if(binding>=scene::MaterialExtraTextureBindingBase && binding<scene::MaterialExtraTextureBindingBase+scene::MaterialExtraTextureCount)
+      candidate.extraTextures[binding-scene::MaterialExtraTextureBindingBase]=texture==scene::MaterialTextureNone?resources::AssetGuid{}:texture;
+    else if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
     else candidate.textures[binding]=texture;
     ++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic,true,binding==scene::MaterialOcclusionTextureBinding?"ch1":"tex"+std::to_string(binding))) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,binding>=scene::MaterialExtraTextureBindingBase?"x"+std::to_string(binding-scene::MaterialExtraTextureBindingBase):
+                             binding==scene::MaterialOcclusionTextureBinding?"ch1":"tex"+std::to_string(binding))) return false;
   } else {
     auto values=*entity;
     if(binding==scene::MaterialOcclusionTextureBinding) *editMeshRenderer(values)->editSlotOcclusionTexture(slot)=texture;
@@ -8022,6 +8057,9 @@ bool EditorSession::commitMaterialBatch(const std::vector<resources::MaterialAss
       diagnostic="Textura do material ausente ou com tipo incompatível.";return false;
     }
     if(!append(candidate.occlusionTexture)) {diagnostic="Textura de oclusão ausente ou incompatível.";return false;}
+    for(const auto &texture:candidate.extraTextures) if(!append(texture)) {
+      diagnostic="Textura de altura, detalhe ou clear coat ausente ou incompatível.";return false;
+    }
     const auto text=candidate.serialize();
     const std::span<const u8> bytes{reinterpret_cast<const u8*>(text.data()),text.size()};
     if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,

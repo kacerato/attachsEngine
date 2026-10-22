@@ -24,8 +24,11 @@ namespace ae::resources {
 struct MaterialAsset {
   // Versão 6 (R4): canais, oclusão (origem, força, textura própria), inversão Y
   // do normal e origem do alfa. Versão 7 (G3a): origem da rugosidade
-  // (rugosidade ou suavidade do Standard da Unity).
-  static constexpr u32 FormatVersion = 7;
+  // (rugosidade ou suavidade do Standard da Unity). Versão 8 (PK-9): shader
+  // (Lit, Complex Lit, Simple Lit, Unlit, Particles Lit/Unlit) e as opções do
+  // URP Lit: workflow, mistura do transparente, Render Face de trás, prioridade,
+  // altura, detalhe, clear coat e as texturas extras. Antes dela tudo é Lit.
+  static constexpr u32 FormatVersion = 8;
   AssetGuid guid;
   u32 revision = 1;
   std::string name;
@@ -35,7 +38,18 @@ struct MaterialAsset {
   std::array<scene::MaterialSampling, scene::MaterialTextureCount> sampling{};
   scene::MaterialChannels channels{};
   AssetGuid occlusionTexture{};
+  scene::MaterialShading shading{};
+  // Altura, máscara de detalhe, detalhe de cor, normal de detalhe e mapa do
+  // clear coat. Inválida = sem textura (o recurso não tem fonte de onde herdar).
+  std::array<AssetGuid, scene::MaterialExtraTextureCount> extraTextures{};
   bool valid() const;
+  // Qualquer binding, a oclusão própria ou uma textura extra.
+  bool usesTexture(const AssetGuid &texture) const {
+    if (!texture.valid()) return false;
+    for (const auto &value : textures) if (value == texture) return true;
+    for (const auto &value : extraTextures) if (value == texture) return true;
+    return occlusionTexture == texture;
+  }
   std::string serialize() const;
   static bool deserialize(std::string_view text, MaterialAsset &out);
 };

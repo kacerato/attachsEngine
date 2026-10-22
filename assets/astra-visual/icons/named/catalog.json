@@ -2330,6 +2330,42 @@
       "dark_ui_ready": true,
       "generation": "component-v1"
     },
+    "assets/material-shader": {
+      "category": "assets",
+      "name": "material-shader",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-surface-options": {
+      "category": "assets",
+      "name": "material-surface-options",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-surface-inputs": {
+      "category": "assets",
+      "name": "material-surface-inputs",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-detail": {
+      "category": "assets",
+      "name": "material-detail",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-particles": {
+      "category": "assets",
+      "name": "material-particles",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-advanced": {
+      "category": "assets",
+      "name": "material-advanced",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
     "lighting/reflection-probe": {
       "category": "lighting",
       "name": "reflection-probe",

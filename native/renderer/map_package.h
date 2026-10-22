@@ -68,6 +68,14 @@ inline constexpr u32 MapMaterialOcclusionInMetallicRoughness = 1u << 14;
 // o renderer pode descartar a face de trás. Sem esta flag nada é descartado --
 // primitivas internas e pacotes antigos não garantem a ordem.
 inline constexpr u32 MapMaterialCullBackFaces = 1u << 15;
+// Bits 16..18 são da primitiva interna (PrimitiveAuthoringMask).
+// PK-9: Render Face "Back" -- descarta a face da frente.
+inline constexpr u32 MapMaterialCullFrontFaces = 1u << 19;
+// PK-9: o desenho usa shader/opções além do Lit padrão (Simple Lit, Unlit,
+// especular, detalhe, altura, clear coat, mistura não-alfa...). Lidas da
+// extensão de material; o renderer desenha com a pipeline geral, onde esse
+// código existe; as variantes especializadas por textura o eliminam.
+inline constexpr u32 MapMaterialShadingExtension = 1u << 20;
 
 struct MapTextureRecord {
   // Pacotes antigos usam bits 0/1 (filtro único e mip linear). Pacotes novos

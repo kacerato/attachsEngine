@@ -10,7 +10,8 @@ bool MaterialAsset::valid() const {
   if (!guid.valid() || !revision || name.empty() || name.size() > 128) return false;
   for (unsigned char c : name) if (c < 32 || c == 127) return false;
   for (const auto &value : sampling) if (!scene::validMaterialSampling(value)) return false;
-  if (!scene::validMaterialChannels(channels)) return false;
+  if (!scene::validMaterialChannels(channels) || !scene::validMaterialShading(shading)) return false;
+  for (const auto &texture : extraTextures) if (texture == scene::MaterialTextureNone) return false;
   return scene::MeshRenderer::validMaterial(values) && scene::validMaterialSurface(surface);
 }
 
@@ -34,6 +35,15 @@ std::string MaterialAsset::serialize() const {
       << ' ' << static_cast<unsigned>(channels.normalFlipY) << ' ' << static_cast<unsigned>(channels.alphaSource) << ' '
       << scene::materialTextureToken(occlusionTexture);
   out << ' ' << static_cast<unsigned>(channels.roughnessSource);
+  const auto &s = shading;
+  out << ' ' << unsigned(s.shader) << ' ' << unsigned(s.workflow) << ' ' << unsigned(s.blend) << ' ' << unsigned(s.preserveSpecular) << ' '
+      << unsigned(s.transparentClip) << ' ' << unsigned(s.specularHighlights) << ' ' << unsigned(s.environmentReflections) << ' '
+      << int(s.sortingPriority) << ' ' << unsigned(s.particleColorMode) << ' ' << unsigned(s.cameraFading) << ' ' << s.cameraFadeNear << ' '
+      << s.cameraFadeFar << ' ' << s.specularColor[0] << ' ' << s.specularColor[1] << ' ' << s.specularColor[2] << ' ' << s.heightScale << ' '
+      << s.detailAlbedoScale << ' ' << s.detailNormalScale << ' ' << scene::materialSamplingToken(s.detailSampling) << ' '
+      << s.detailSampling.offset[0] << ' ' << s.detailSampling.offset[1] << ' ' << s.detailSampling.scale[0] << ' ' << s.detailSampling.scale[1]
+      << ' ' << s.detailSampling.rotation << ' ' << unsigned(s.clearCoat) << ' ' << s.clearCoatMask << ' ' << s.clearCoatSmoothness;
+  for (const auto &texture : extraTextures) out << ' ' << scene::materialTextureToken(texture);
   out << '\n';
   return out.str();
 }
@@ -60,7 +70,7 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
   if (version >= 3) {
     unsigned alpha = 0, sides = 0;
     float cutoff = .5f;
-    if (!(in >> alpha >> sides >> cutoff) || alpha > scene::MaterialAlphaBlend || sides > scene::MaterialSidesDouble) return false;
+    if (!(in >> alpha >> sides >> cutoff) || alpha > scene::MaterialAlphaBlend || sides > scene::MaterialSidesBack) return false;
     candidate.surface = {static_cast<std::uint8_t>(alpha), static_cast<std::uint8_t>(sides), cutoff};
   }
   if (version >= 4)
@@ -86,6 +96,32 @@ bool MaterialAsset::deserialize(std::string_view text, MaterialAsset &out) {
     unsigned roughnessSource = 0;
     if (!(in >> roughnessSource) || roughnessSource > 255) return false;
     candidate.channels.roughnessSource = static_cast<std::uint8_t>(roughnessSource);
+  }
+  // v8 (PK-9): shader e opções do URP Lit. Antes dela: Lit, Metallic, Alpha
+  // reto -- o transparente antigo multiplicava o brilho pelo alfa, então
+  // Preserve Specular nasce desligado na migração (o padrão novo é o da Unity).
+  if (version < 8) candidate.shading.preserveSpecular = false;
+  if (version >= 8) {
+    auto &s = candidate.shading;
+    unsigned shader = 0, workflow = 0, blend = 0, preserve = 0, clip = 0, highlights = 0, reflections = 0, colorMode = 0, fading = 0,
+             coat = 0;
+    int priority = 0;
+    std::string token;
+    if (!(in >> shader >> workflow >> blend >> preserve >> clip >> highlights >> reflections >> priority >> colorMode >> fading >>
+          s.cameraFadeNear >> s.cameraFadeFar >> s.specularColor[0] >> s.specularColor[1] >> s.specularColor[2] >> s.heightScale >>
+          s.detailAlbedoScale >> s.detailNormalScale >> token) ||
+        shader > 255 || workflow > 255 || blend > 255 || colorMode > 255 || preserve > 1 || clip > 1 || highlights > 1 || reflections > 1 ||
+        fading > 1 || priority < -128 || priority > 127 || !scene::parseMaterialSamplingToken(token, s.detailSampling))
+      return false;
+    if (!(in >> s.detailSampling.offset[0] >> s.detailSampling.offset[1] >> s.detailSampling.scale[0] >> s.detailSampling.scale[1] >>
+          s.detailSampling.rotation >> coat >> s.clearCoatMask >> s.clearCoatSmoothness) || coat > 1)
+      return false;
+    s.shader = static_cast<std::uint8_t>(shader);s.workflow = static_cast<std::uint8_t>(workflow);s.blend = static_cast<std::uint8_t>(blend);
+    s.preserveSpecular = preserve;s.transparentClip = clip;s.specularHighlights = highlights;s.environmentReflections = reflections;
+    s.sortingPriority = static_cast<std::int8_t>(priority);s.particleColorMode = static_cast<std::uint8_t>(colorMode);
+    s.cameraFading = fading;s.clearCoat = coat;
+    for (auto &texture : candidate.extraTextures)
+      if (!(in >> token) || !scene::parseMaterialTextureToken(token, texture) || texture == scene::MaterialTextureNone) return false;
   }
   in >> std::ws;
   if (!in.eof() || !candidate.valid()) return false;

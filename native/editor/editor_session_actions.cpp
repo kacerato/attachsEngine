@@ -1,6 +1,7 @@
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
 #include "resources/unity_material_import.h"
+#include "editor/editor_material_fields.h"
 #include "scene/path.h"
 #include "scene/animation.h"
 #include "editor/editor_component_impact.h"
@@ -348,6 +349,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(!field.empty() && state_.materialMixedHas(field)) {
       state_.setValueMenu.key="asset.mat."+field;state_.setValueMenu.label="Valor do material";
       if(field.starts_with("num")) state_.setValueMenu.label=scene::meshRendererNumbers[std::stoul(field.substr(3))].name;
+      else if(const auto *spec=findMaterialField(field)) state_.setValueMenu.label=std::string(spec->label);
       state_.setValueMenu.rows.clear();
       for(u32 i=0;i<multiMaterials_.size();++i) if(const auto *material=findMaterialAsset(multiMaterials_[i])) {
         auto value=materialFieldText(*material,field);
@@ -554,6 +556,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(handleRigTool(routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
+  // PK-9: Inspector do Material por shader (campos, seções, lista, rolagem).
+  if(!state_.numericField && state_.materialInspector.valid() && !state_.texturePicker && !isPlaying() &&
+     (isMaterialFieldWidget(routing.widgetId) ||
+      (routing.widgetId>=widgetId(EditorWidget::MaterialSectionBase) && routing.widgetId<=widgetId(EditorWidget::MaterialChoiceClose))) &&
+     handleMaterialFieldPointer(event,routing)) return true;
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(routing.tapped&&probe_widget::owns(routing.widgetId)) {handleProbeWidget(routing.widgetId);return true;}
