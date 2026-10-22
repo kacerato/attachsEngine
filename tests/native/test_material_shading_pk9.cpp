@@ -7,6 +7,8 @@
 #include "renderer/material_override.h"
 #include "renderer/primitive_geometry.h"
 #include "resources/unity_material_import.h"
+#include "resources/environment_map_asset.h"
+#include "scene/environment.h"
 #include "runtime/primitive_object.h"
 #include "ui_software_raster.h"
 #include <chrono>
@@ -418,13 +420,15 @@ AE_TEST(pk9_build_device_validation_project) {
     "  \"editorScene\": \"scenes/editor.aescene\"\n}\n");
   EditorImportTransaction::writeText(root/"scenes/main.ascene","{\n  \"format\": \"ASTRA-SCENE-1\",\n  \"template\": \"empty\",\n  \"nodes\": []\n}\n");
   // Texturas procedurais (TGA RGBA, 256²).
-  Image albedo,height,detail,mask,glass;
+  Image albedo,height,detail,mask,glass,occlusion;
   for(u32 y=0;y<256;++y) for(u32 x=0;x<256;++x) {
     const float h=brickHeight(x,y),n=hashNoise(x,y);
     u8 *a=&albedo.rgba[(y*256+x)*4];
     const float brick=.75f+.25f*hashNoise(x/64+(y/32)*7,y/32);
     a[0]=static_cast<u8>(h>0?(150+40*n)*brick:150);a[1]=static_cast<u8>(h>0?(70+20*n)*brick:146);a[2]=static_cast<u8>(h>0?(52+16*n)*brick:138);
     u8 *g=&height.rgba[(y*256+x)*4];g[0]=g[1]=g[2]=static_cast<u8>(h*255);
+    // Oclusão (a URP lê o canal G): argamassa funda a 35%, tijolo inteiro claro.
+    u8 *o=&occlusion.rgba[(y*256+x)*4];o[0]=o[1]=o[2]=static_cast<u8>((.35f+.65f*std::min(1.0f,h*2.5f))*255);
     // Detalhe: cinza sRGB 128 (neutro no ×2) com grão fino.
     u8 *d=&detail.rgba[(y*256+x)*4];d[0]=d[1]=d[2]=static_cast<u8>(std::clamp(128+(n-.5f)*110,0.0f,255.0f));
     // Máscara no alfa: detalhe em tudo, menos num círculo no meio.
@@ -435,12 +439,12 @@ AE_TEST(pk9_build_device_validation_project) {
   AE_EXPECT_TRUE(writeTga(root/"PK9/tijolo_cor.tga",albedo)&&writeTga(root/"PK9/tijolo_altura.tga",height)&&
                  writeTga(root/"PK9/tijolo_normal.tga",normalFrom(brickHeight,4))&&writeTga(root/"PK9/detalhe_cor.tga",detail)&&
                  writeTga(root/"PK9/detalhe_normal.tga",normalFrom(noiseHeight,3))&&writeTga(root/"PK9/detalhe_mascara.tga",mask)&&
-                 writeTga(root/"PK9/vidro.tga",glass),"procedural textures");
+                 writeTga(root/"PK9/vidro.tga",glass)&&writeTga(root/"PK9/tijolo_oclusao.tga",occlusion),"procedural textures");
   const char *guids[]{"a0000000000000000000000000000001","a0000000000000000000000000000002","a0000000000000000000000000000003",
                       "a0000000000000000000000000000004","a0000000000000000000000000000005","a0000000000000000000000000000006",
-                      "a0000000000000000000000000000007"};
-  const char *names[]{"tijolo_cor","tijolo_altura","tijolo_normal","detalhe_cor","detalhe_normal","detalhe_mascara","vidro"};
-  for(u32 i=0;i<7;++i) EditorImportTransaction::writeText(root/("PK9/"+std::string(names[i])+".tga.meta"),meta(guids[i]));
+                      "a0000000000000000000000000000007","a0000000000000000000000000000008"};
+  const char *names[]{"tijolo_cor","tijolo_altura","tijolo_normal","detalhe_cor","detalhe_normal","detalhe_mascara","vidro","tijolo_oclusao"};
+  for(u32 i=0;i<8;++i) EditorImportTransaction::writeText(root/("PK9/"+std::string(names[i])+".tga.meta"),meta(guids[i]));
   const auto tex=[&](const char *property,u32 index,float scale=1) {return texture(property,guids[index],scale);};
   const std::string gold="    - _BaseColor: {r: 0.95, g: 0.64, b: 0.37, a: 1}\n";
   // Grade: metálico 0..1 nas colunas, suavidade 0..1 nas linhas.
@@ -451,9 +455,9 @@ AE_TEST(pk9_build_device_validation_project) {
     materials.push_back("PK9/"+name+".mat");
   }
   EditorImportTransaction::writeText(root/"PK9/Tijolo_Detalhe.mat",urpMaterial("Tijolo_Detalhe",
-    tex("_BaseMap",0)+tex("_ParallaxMap",1)+tex("_BumpMap",2)+tex("_DetailAlbedoMap",3,4)+tex("_DetailNormalMap",4,4)+tex("_DetailMask",5),
-    "    - _Smoothness: 0.35\n    - _Parallax: 0.05\n    - _DetailAlbedoMapScale: 1.6\n    - _DetailNormalMapScale: 1\n",
-    "    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}\n","  - _NORMALMAP\n  - _PARALLAXMAP\n  - _DETAIL_MULX2\n"));
+    tex("_BaseMap",0)+tex("_ParallaxMap",1)+tex("_BumpMap",2)+tex("_DetailAlbedoMap",3,4)+tex("_DetailNormalMap",4,4)+tex("_DetailMask",5)+tex("_OcclusionMap",7),
+    "    - _Smoothness: 0.35\n    - _OcclusionStrength: 1\n    - _Parallax: 0.05\n    - _DetailAlbedoMapScale: 1.6\n    - _DetailNormalMapScale: 1\n",
+    "    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}\n","  - _NORMALMAP\n  - _PARALLAXMAP\n  - _DETAIL_MULX2\n  - _OCCLUSIONMAP\n"));
   EditorImportTransaction::writeText(root/"PK9/Vidro.mat",urpMaterial("Vidro",tex("_BaseMap",6),
     "    - _Surface: 1\n    - _Blend: 0\n    - _Cull: 0\n    - _Metallic: 1\n    - _Smoothness: 0.95\n    - _BlendModePreserveSpecular: 1\n",
     "    - _BaseColor: {r: 0.85, g: 0.9, b: 1, a: 1}\n","  - _SURFACE_TYPE_TRANSPARENT\n"));
@@ -475,6 +479,28 @@ AE_TEST(pk9_build_device_validation_project) {
                  session.importMap(draws,records,false,vertices,indices,0),"primitives");
   AE_EXPECT_TRUE(session.createSceneTemplate(0),"reference scene (sun, exposure, views)");
   std::string diagnostic;
+  // Comparação justa do metal: com ASTRA_PK9_HDRI o Ambiente da cena usa um HDRI
+  // real (campo e céu, como o frame da Unity), não o céu procedural claro.
+  if(const char *hdri=std::getenv("ASTRA_PK9_HDRI")) {
+    std::vector<u8> source;
+    AE_EXPECT_TRUE(EditorImportTransaction::read(hdri,source),"hdri source");
+    resources::EnvironmentMapImportSettings settings;renderer::SharedEnvironmentMap map;
+    AE_EXPECT_TRUE(resources::importRadianceEnvironmentMap(source,settings,{},{},map,diagnostic),diagnostic.c_str());
+    AE_EXPECT_TRUE(session.commitEnvironmentMap("PK9/ceu.hdr",source,{},map,settings,diagnostic),diagnostic.c_str());
+    const auto environmentMap=session.environmentMaps().back().first;
+    std::vector<EditorEntityId> ids;session.document().collectSubtree(session.document().root(),ids);
+    u32 bound=0;
+    for(const auto id:ids) {
+      auto values=*session.document().find(id);bool changed=false;
+      for(u32 index=0;index<values.components.size();++index) {
+        auto *component=values.components.editInstance(values.components.at(index)->instanceId());
+        if(!component||&component->type()!=&scene::Environment::descriptor) continue;
+        static_cast<scene::Environment&>(*component).values.environmentMap=environmentMap;changed=true;
+      }
+      if(changed&&session.document().applyEntityValues(id,values)) ++bound;
+    }
+    AE_EXPECT_TRUE(bound>0,"reference environment uses the HDRI");
+  }
   std::string failed;
   const auto import=[&](const std::string &path)->resources::AssetGuid {
     const auto guid=session.importUnityMaterial(path,diagnostic);

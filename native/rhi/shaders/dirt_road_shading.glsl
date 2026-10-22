@@ -667,7 +667,12 @@ void main() {
     mediump vec3 coatNormal=normalize(vNormal);
     mediump float coatRough=clamp(1.0-coatSmoothness,.07,1.0);
     highp float coatNv=max(dot(coatNormal,v),1e-4);
-    mediump float coatFresnel=.04+.96*pow5(1.0-float(coatNv));
+    // URP (BRDF.hlsl/GlobalIllumination.hlsl, ClearCoat): o mesmo fresnelTerm
+    // (1-N.V)^4 atenua a base e escolhe o reflexo do ambiente, que tende a
+    // grazingTerm na borda. Com a LUT de split-sum no reflexo e Schlick puro na
+    // atenuação, a silhueta perdia a base sem ganhar o reflexo: aro escuro.
+    mediump float coatFresnelTerm=1.0-float(coatNv);coatFresnelTerm*=coatFresnelTerm;coatFresnelTerm*=coatFresnelTerm;
+    mediump float coatFresnel=.04+.96*coatFresnelTerm;
     color*=1.0-coatMask*coatFresnel;
     aetherSpecularSum*=1.0-coatMask*coatFresnel;
     mediump vec3 coatLight=vec3(0.0);
@@ -680,8 +685,11 @@ void main() {
                  coatF*vec3(sunRadiance)*sunVisibility*aetherHighlightWeight,vec3(AETHER_MEDIUMP_MAX)));
     }
     if(environment.quality.w>0.5) {
-      mediump vec2 coatBrdf=environmentBrdf(float(coatNv),coatRough);
-      coatLight+=environmentRadiance(reflect(-v,coatNormal),coatRough*environment.parameters.z)*(.04*coatBrdf.x+coatBrdf.y)*occlusion;
+      mediump float coatAlphaSq=coatRough*coatRough;
+      mediump float coatSurfaceReduction=1.0/(coatAlphaSq*coatAlphaSq+1.0);
+      mediump float coatGrazing=clamp(coatSmoothness+.04,0.0,1.0);
+      coatLight+=environmentRadiance(reflect(-v,coatNormal),coatRough*environment.parameters.z)*
+                 (coatSurfaceReduction*mix(.04,coatGrazing,coatFresnelTerm))*occlusion;
     }
     color+=coatLight*coatMask;
     aetherSpecularSum+=coatLight*coatMask;
