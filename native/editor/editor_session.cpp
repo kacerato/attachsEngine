@@ -1191,6 +1191,7 @@ bool EditorSession::handleViewportPointer(const UiPointerEvent &event,
     if(state_.motorSetupTarget==state_.selection&&state_.motorSetupPolicy==3&&state_.motorBakeSourcesOpen)
       return pickMotorBakeSource(at);
     if(colliderTopology_.active())return pickColliderTopology(at);
+    if(pickLightProbePoint(at)) return true;
     const auto *object=document_.find(state_.selection);
     const auto *focused=object?object->components.findInstance(state_.expandedNative):nullptr;
     if(state_.workspace==EditorWorkspace::Scene && state_.showComponentVisuals &&
@@ -6370,6 +6371,8 @@ void EditorSession::update() {
   state_.animatorControllers=&animatorControllers_;
   pumpNavigationBake();refreshNavigationView();
   state_.navigationView=&navigationView_;
+  refreshProbeView();
+  state_.probeView=&probeView_;
   state_.navigationRuntime=playInspecting()&&playScene_.active()?&playScene_.navigation():nullptr;
   state_.animatorControllerDiagnostic.clear();state_.animatorResolved=nullptr;
   if(state_.animatorOpen) {
@@ -6549,17 +6552,22 @@ void EditorSession::update() {
   if(state_.cameraViewEntity && state_.workspace==EditorWorkspace::Scene) {
     const auto pose=resolveSceneCamera(document_,state_.cameraViewEntity,true);
     if(pose.entity && !layout_.viewport.isEmpty()) {
-      auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;
-      projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
-      projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
-      projection.orthographicHalfHeight=pose.orthographicHalfHeight;
-      view_.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,layout_.viewport.width/layout_.viewport.height,projection);
+      auto projection=projection_;
+      const float aspect=pose.buildProjection(projection,layout_.viewport.width,layout_.viewport.height);
+      view_.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,aspect,projection);
     } else {finishCameraGesture(true);state_.cameraViewEntity=0;state_.cameraPiloting=false;}
   }
   // Inspection diagnostics must use precisely the camera used to render Play,
   // including authored projection, roll and the runtime camera hierarchy.
   if(isPlaying() && state_.playInspect && state_.physicsDiagnosticOpen)
     view_=guiPlayView();
+  // A câmera de cima de um Play com duas câmeras ocupa o próprio retângulo.
+  {
+    const auto stack=sceneCameraStack();
+    state_.playStackRect=stack.size()>1?stack.back().screenRect(layout_.viewport):ui::UiRect{};
+    if(state_.playStackRect.isEmpty()) state_.playStackReady=false;
+    if(!isPlaying()) playStackWarned_=false;
+  }
   state_.view = &view_;
   if(isPlaying() && playScene_.active()) {
     state_.debugLines=&playScene_.debugLines();
@@ -6788,9 +6796,12 @@ EditorViewport EditorSession::guiPlayView() const {
   // coordinates. Use the same ray as GuiWorldFrame, without a second rotation.
   view.surfaceTransform={};const auto pose=sceneCameraPose();
   if(pose.entity && !view.rect.isEmpty()) {
-    auto projection=projection_;projection.nearPlane=pose.nearPlane;projection.farPlane=pose.farPlane;projection.verticalFieldOfViewRadians=pose.verticalFov*.017453292519943295f;projection.roll=pose.roll;
-    projection.projection=pose.projection==scene::CameraProjection::Orthographic?renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;projection.orthographicHalfHeight=pose.orthographicHalfHeight;
-    view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,view.rect.width/view.rect.height,projection);
+    // O raio sai do retângulo da câmera (Viewport Rect), como o pixelRect da Unity.
+    const auto cameraRect=pose.screenRect(view.rect);
+    if(!cameraRect.isEmpty()) view.rect=cameraRect;
+    auto projection=projection_;
+    const float aspect=pose.buildProjection(projection,view.rect.width,view.rect.height);
+    view.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,aspect,projection);
   }
   return view;
 }

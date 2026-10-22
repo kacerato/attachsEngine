@@ -5,6 +5,8 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/light_probes.h"
+#include "renderer/reflection_probes.h"
 #include "renderer/scene_environment.h"
 #include "renderer/environment_ambient.h"
 #include "renderer/color_grading.h"
@@ -52,6 +54,7 @@
 
 #include <array>
 #include <cmath>
+#include <deque>
 #include <vector>
 
 namespace ae::platform::android {
@@ -138,6 +141,39 @@ public:
     view=completedPreview_;success=previewCompletionSuccess_;completedPreview_={};return true;
   }
   const std::string &cameraPreviewDiagnostic() const {return previewDiagnostic_;}
+  // PK-6: sondas de reflexo e de luz (platform/android/instanced_probes.inl).
+  // A cena publica as sondas acesas junto das luzes; os recursos assados e o
+  // conjunto tetraedralizado das sondas de luz chegam quando o editor os carrega.
+  struct ProbeCaptureRequest {
+    u64 id=0;
+    u32 kind=0; // 0 reflexo (bake de Reflection Probe), 1 irradiância (sonda de luz)
+    u64 objectId=0,instance=0; // a sonda residente que já mostra o resultado
+    float position[3]{};
+    u32 resolution=128;
+    float nearClip=.3f,farClip=1000;
+    u32 cullingMask=~0u;
+    bool staticOnly=true;
+    bool solidBackground=false;
+    float background[3]{};
+    bool hdr=true;
+  };
+  struct ProbeCaptureResult {
+    u64 id=0;u32 kind=0;bool success=false;std::string error;
+    renderer::ReflectionProbeTexture texture; // kind 0
+    renderer::CubeFaces faces;               // kind 1, radiância linear
+  };
+  struct ProbeFrameStats {
+    u32 sceneProbes=0,residentProbes=0,readyProbes=0,facesCaptured=0,mipsFiltered=0;
+    u32 drawsUpdated=0,drawsWithLightProbes=0,drawsWithReflection=0,lightProbes=0,tetrahedra=0;
+    float cpuMs=0;
+  };
+  void queueSceneReflectionProbes(std::span<const renderer::SceneReflectionProbe> probes,bool playing);
+  void setReflectionProbeTextures(std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> textures);
+  void setLightProbeSet(std::shared_ptr<const renderer::LightProbeSet> set);
+  bool requestProbeCapture(const ProbeCaptureRequest &request);
+  bool takeProbeCaptureResult(ProbeCaptureResult &out);
+  bool probeCaptureBusy() const noexcept {return !probeCaptureQueue_.empty()||probeJob_.active||probeReadbackPending_;}
+  const ProbeFrameStats &probeStats() const noexcept {return probeStats_;}
   // Conta-gotas do editor (Unity: eyedropper da janela de cor): um pixel da
   // imagem final, depois da interface, copiado para a CPU e lido no quadro
   // seguinte. Coordenadas da interface (as mesmas do toque). Falso quando a
@@ -222,6 +258,34 @@ public:
     if(sceneEnvironmentVolumes_.empty()) sceneEnvironment_={};
   }
   void setSceneEnvironmentLayerMask(u32 mask) { sceneEnvironmentLayerMask_=mask; }
+  // PK-7: o que a câmera de jogo decide sobre o quadro principal. Fora do Play
+  // o shell publica os padrões (céu, todas as camadas, pós/sombras/HDR ligados).
+  // Culling Mask: bit por camada de objeto; um objeto fora dela não desenha nem
+  // projeta sombra nesta vista.
+  void setSceneCullingMask(u32 mask) { sceneCullingMask_=mask; }
+  // 0 céu, 1 cor sólida (RGB linear), 2 não inicializado (sem céu nem cor).
+  // `partial`: o Viewport Rect não cobre a vista inteira (o resto fica preto).
+  void setSceneBackground(u32 mode,const float color[3],bool partial=false) {
+    sceneBackground_=mode<=2?mode:0;sceneBackgroundPartial_=partial;
+    if(color) std::copy(color,color+3,sceneBackgroundColor_);
+  }
+  void setScenePostProcessing(bool enabled) { scenePostProcessing_=enabled; }
+  void setSceneShadows(bool enabled) {
+    if(sceneShadows_!=enabled) invalidateStaticShadowCache();
+    sceneShadows_=enabled;
+  }
+  void setSceneHdr(bool enabled) { sceneHdr_=enabled; }
+  // 0 do projeto, 1 nenhum, 2 FXAA. TAA continua sendo do projeto.
+  void setSceneAntialiasing(u32 mode) {
+    if(mode!=sceneAntialiasing_) temporalHistoryInitialized_=false;
+    sceneAntialiasing_=mode<=2?mode:0;
+  }
+  // Gate Fit "Nenhum": a projeção usa a proporção do sensor. Zero = da vista.
+  void setSceneAspectOverride(float aspect) {
+    const float next=std::isfinite(aspect)&&aspect>0?aspect:0.f;
+    if(next!=sceneAspectOverride_) temporalHistoryInitialized_=false;
+    sceneAspectOverride_=next;
+  }
   const renderer::SceneEnvironmentBlendReport &environmentBlendReport() const noexcept {
     return environmentBlendReport_;
   }
@@ -612,6 +676,17 @@ private:
   bool editorBackground_=false;
   bool editorSceneLighting_=true,editorSceneEffects_=true,editorSceneSky_=true;
   bool editorSceneFog_=true,editorScenePost_=true;
+  // Câmera de jogo (PK-7); ver setSceneCullingMask e vizinhos.
+  u32 sceneCullingMask_=~0u,appliedCullingMask_=~0u;
+  u32 sceneBackground_=0;
+  bool sceneBackgroundPartial_=false;
+  float sceneBackgroundColor_[3]{.0307f,.0742f,.1912f};
+  bool scenePostProcessing_=true,sceneShadows_=true,sceneHdr_=true;
+  u32 sceneAntialiasing_=0;
+  float sceneAspectOverride_=0;
+  // Os efeitos de pós da vista principal: os do volume e da política, salvo
+  // quando o editor os desliga na vista de Cena ou a câmera os desliga.
+  bool viewPostEnabled() const {return (!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&scenePostProcessing_;}
   float sceneNearPlane_ = 0, sceneFarPlane_ = 0, sceneFieldOfView_=0;
   float previousSceneProjection_[5]{};
   float sceneOrthographicHalfHeight_=0;
@@ -627,6 +702,35 @@ private:
   // sombra), já zerado quando o objeto não renderiza. Os passes de sombra leem
   // só `authoredShadows_`; o passe de cor, só `authoredVisibility_`.
   std::vector<u8> authoredVisibility_, authoredShadows_;
+  // Visibilidade autoral antes da Culling Mask e a camada de cada desenho.
+  // `authoredVisibility_` é a da vista principal: base E camada na máscara.
+  // `authoredBaseShadows_` é o modo de sombra (0..3) antes da máscara.
+  std::vector<u8> authoredBaseVisibility_, authoredBaseShadows_, authoredLayers_;
+  bool authoredLayerIn(u32 draw,u32 mask) const {
+    return draw>=authoredLayers_.size() || ((mask>>(authoredLayers_[draw]&31u))&1u);
+  }
+  bool authoredVisibleIn(u32 draw,u32 mask) const {
+    if(draw>=authoredBaseVisibility_.size()) return authoredVisibility_.empty() || (draw<authoredVisibility_.size()&&authoredVisibility_[draw]);
+    return authoredBaseVisibility_[draw] && authoredLayerIn(draw,mask);
+  }
+  u8 authoredShadowsIn(u32 draw,u32 mask) const {
+    if(draw>=authoredBaseShadows_.size()) return draw<authoredShadows_.size()?authoredShadows_[draw]:u8{1};
+    return authoredLayerIn(draw,mask)?authoredBaseShadows_[draw]:u8{0};
+  }
+  // Reaplica a máscara à vista principal; verdadeiro quando algo mudou.
+  bool applySceneCullingMask() {
+    bool changed=false;
+    for(u32 i=0;i<authoredBaseVisibility_.size() && i<authoredVisibility_.size();++i) {
+      const u8 next=authoredVisibleIn(i,sceneCullingMask_)?1:0;
+      changed|=authoredVisibility_[i]!=next;authoredVisibility_[i]=next;
+      if(i<authoredShadows_.size()) {
+        const u8 shadow=authoredShadowsIn(i,sceneCullingMask_);
+        changed|=authoredShadows_[i]!=shadow;authoredShadows_[i]=shadow;
+      }
+    }
+    appliedCullingMask_=sceneCullingMask_;
+    return changed;
+  }
   // Camada do objeto, Rendering Layer Mask e Receive Shadows de cada desenho.
   std::vector<renderer::DrawLightingKey> authoredLighting_;
   std::vector<renderer::MaterialOverride> authoredMaterials_;
@@ -880,6 +984,73 @@ private:
   renderer::PhysicalAtmosphereGroundIrradianceCache previewAtmosphereGroundCache_{};
   bool previewEnvironmentReady_=false;
   bool previewEnvironmentUsesPrimary_=true;
+  // --- PK-6: sondas --------------------------------------------------------
+  struct ProbeLayer {
+    bool used=false,ready=false,awakeDone=false,hdr=true;
+    u64 key=0,contentKey=0;
+    u32 renderRequests=0,baseMip=0;
+    renderer::SceneReflectionProbe probe{};
+  };
+  struct ProbeJob {
+    bool active=false,bake=false,mipsGenerated=false;
+    ProbeCaptureRequest request{};
+    i32 layer=-1;
+    u32 size=0,facesDone=0,nextMip=0,baseMip=0,renderRequests=0;
+    u64 contentKey=0;
+    renderer::ReflectionProbeSlicing slicing=renderer::ReflectionProbeSlicing::NoTimeSlicing;
+  };
+  struct ProbeDrawCache {
+    float center[3]{};
+    i32 tetrahedron=-1;
+    u64 lightRevision=0,layerRevision=0;
+    u8 lightProbes=0,reflectionProbes=0;
+    bool valid=false;
+  };
+  bool createProbeResources();
+  void destroyProbeResources();
+  void destroyProbeCaptureTarget();
+  bool ensureProbeDrawCapacity(u32 draws);
+  bool ensureProbeCaptureTarget(u32 size);
+  bool ensureProbeReadback(u64 bytes);
+  bool writeProbeFaceSets();
+  void collectProbeReadback();
+  void updateProbeResidency(const float camera[3]);
+  void scheduleProbeWork();
+  bool prepareProbes(const platform::FreeCameraState &camera);
+  void recordProbes(float timeSeconds);
+  void recordProbeFace(u32 face,float timeSeconds);
+  rhi::VulkanImage probeAtlas_,probeScratch_,probeCapture_,probeCaptureDepth_,probeCaptureMaskA_,probeCaptureMaskB_;
+  rhi::VulkanSampler probeAtlasSampler_,probeCaptureSampler_;
+  rhi::VulkanBuffer probeBlock_,probeDisabledBlock_,probeReadback_,probeUpload_;
+  std::array<rhi::VulkanBuffer,6> probeFaceUniforms_{};
+  std::array<VkImageView,6> probeFaceViews_{};
+  std::array<VkFramebuffer,6> probeFramebuffers_{};
+  std::array<VkDescriptorSet,6> probeFaceSets_{};
+  std::array<VkImageView,renderer::ReflectionProbeAtlasMips> probeScratchViews_{};
+  std::array<VkDescriptorSet,renderer::ReflectionProbeAtlasMips> probeFilterSets_{};
+  VkDescriptorPool probeFacePool_=VK_NULL_HANDLE,probeFilterPool_=VK_NULL_HANDLE;
+  VkDescriptorSetLayout probeFilterSetLayout_=VK_NULL_HANDLE;
+  VkPipelineLayout probeFilterLayout_=VK_NULL_HANDLE;
+  VkPipeline probeFilterPipeline_=VK_NULL_HANDLE;
+  u32 probeBlockCapacity_=0,probeCaptureSize_=0,probeCaptureMips_=1;
+  bool probeBlitMips_=false,probeAtlasInitialized_=false;
+  std::array<ProbeLayer,renderer::MaximumFrameReflectionProbes> probeLayers_{};
+  ProbeJob probeJob_{};
+  u32 probeFrameFaces_=0;
+  bool probeFrameMipGen_=false,probeFrameFinish_=false;
+  std::vector<u32> probeFrameMips_;
+  std::deque<ProbeCaptureRequest> probeCaptureQueue_;
+  std::deque<ProbeCaptureResult> probeResults_;
+  bool probeReadbackPending_=false;
+  ProbeCaptureResult probeReadbackResult_{};
+  std::vector<std::pair<u32,std::shared_ptr<const renderer::ReflectionProbeTexture>>> probePendingUploads_;
+  std::vector<renderer::SceneReflectionProbe> sceneProbes_;
+  bool sceneProbesPlaying_=false;
+  std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> probeTextures_;
+  std::shared_ptr<const renderer::LightProbeSet> lightProbeSet_;
+  u64 lightProbeRevision_=1,probeLayerRevision_=1;
+  std::vector<ProbeDrawCache> probeDrawCache_;
+  ProbeFrameStats probeStats_{};
   // Item 2.1.4 do plano: em vez de um descriptor set por-objeto com 1 binding,
   // o pipeline instanciado consome o registro bindless (array único indexado
   // por materialIndex no shader) — ver rhi/bindless_registry.h. Esta PoC tem
@@ -1317,6 +1488,7 @@ private:
     bool visible = true;
     u8 castShadows = 1;
     renderer::DrawLightingKey lighting{};
+    u8 layer = 0;  // camada do objeto (Culling Mask), cópia de lighting.objectLayer
   };
   std::vector<AuthoredInstanceState> pendingAuthoredState_;
   bool pendingAuthoredStateValid_ = false;

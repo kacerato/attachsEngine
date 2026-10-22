@@ -639,6 +639,9 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       update.lighting.objectLayer=entity->layer;
       update.lighting.renderingLayers=render->renderingLayerMask;
       update.lighting.receiveShadows=render->receiveShadows;
+      update.lighting.lightProbes=static_cast<u8>(render->lightProbes);
+      update.lighting.reflectionProbes=static_cast<u8>(render->reflectionProbes);
+      update.lighting.isStatic=entity->isStatic;
       if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
          skinned && deformation(index)) {
         DeformedPose pose;

@@ -3,19 +3,25 @@
 #include "scene/component_properties.h"
 #include "scene/environment.h"
 #include "scene/light.h"
+#include "scene/light_probe_group.h"
+#include "scene/reflection_probe.h"
 #include <cmath>
 
 namespace ae::editor {
 
 enum class EditorComponentHandleKind : u32 {
   LightRange, LightInnerAngle, LightOuterAngle,
-  BoxX, BoxY, BoxZ, SphereRadius, BlendDistance, Count
+  BoxX, BoxY, BoxZ, SphereRadius, BlendDistance,
+  // PK-6: a sonda selecionada de um Grupo de sondas de luz, pelos eixos locais.
+  ProbePointX, ProbePointY, ProbePointZ, Count
 };
 
 struct EditorComponentHandle : EditorCameraHandle {
   EditorComponentHandleKind kind=EditorComponentHandleKind::LightRange;
   u64 instance=0;
   float worldUnitsPerProperty=1;
+  // Ponto do grupo que a alça move (ProbePoint*).
+  u64 element=0;
 };
 
 inline std::string_view componentHandleProperty(EditorComponentHandleKind kind) {
@@ -33,11 +39,45 @@ inline std::string_view componentHandleProperty(EditorComponentHandleKind kind) 
 }
 
 inline bool componentHandleGeometry(const runtime::SceneGraph &document,EditorEntityId id,u64 instance,
-                                    EditorComponentHandleKind kind,EditorComponentHandle &out) {
+                                    EditorComponentHandleKind kind,EditorComponentHandle &out,u64 element=0) {
   const auto *entity=document.find(id);
   const auto *component=entity?entity->components.findInstance(instance):nullptr;
   float world[16],pose[16];
   if(!component||!component->valid()||!editorWorldMatrix(document,id,world)) return false;
+  const bool probePoint=kind>=EditorComponentHandleKind::ProbePointX&&kind<=EditorComponentHandleKind::ProbePointZ;
+  if(&component->type()==&scene::LightProbeGroup::descriptor) {
+    // Alça fora da esfera da sonda, no eixo local do grupo; uma unidade da
+    // posição local anda o comprimento da coluna (a escala do objeto).
+    const auto *point=probePoint?static_cast<const scene::LightProbeGroup&>(*component).point(element):nullptr;
+    if(!point) return false;
+    const u32 axis=static_cast<u32>(kind)-static_cast<u32>(EditorComponentHandleKind::ProbePointX);
+    float column[3]{world[axis*4],world[axis*4+1],world[axis*4+2]};
+    const float length=std::sqrt(column[0]*column[0]+column[1]*column[1]+column[2]*column[2]);
+    if(!std::isfinite(length)||length<1e-6f) return false;
+    for(u32 row=0;row<3;++row) {
+      out.axis[row]=column[row]/length;
+      out.point[row]=world[row]*point->position[0]+world[4+row]*point->position[1]+world[8+row]*point->position[2]+world[12+row]+
+                     out.axis[row]*.45f;
+    }
+    out.kind=kind;out.instance=instance;out.element=element;out.worldUnitsPerProperty=length;
+    return true;
+  }
+  if(probePoint) return false;
+  if(&component->type()==&scene::ReflectionProbe::descriptor) {
+    // A caixa da sonda segue só a posição do objeto (eixos do mundo, sem escala).
+    const auto &value=static_cast<const scene::ReflectionProbe&>(*component);
+    float local[3]{value.boxOffset[0],value.boxOffset[1],value.boxOffset[2]},direction[3]{};
+    float worldUnits=1;
+    if(kind>=EditorComponentHandleKind::BoxX&&kind<=EditorComponentHandleKind::BoxZ) {
+      const u32 axis=static_cast<u32>(kind)-static_cast<u32>(EditorComponentHandleKind::BoxX);
+      local[axis]+=value.boxSize[axis]*.5f;direction[axis]=1;worldUnits=.5f;
+    } else if(kind==EditorComponentHandleKind::BlendDistance) {
+      local[0]+=-value.boxSize[0]*.5f+value.blendDistance;direction[0]=1;
+    } else return false;
+    for(u32 row=0;row<3;++row) {out.point[row]=world[12+row]+local[row];out.axis[row]=direction[row];}
+    out.kind=kind;out.instance=instance;out.worldUnitsPerProperty=worldUnits;
+    return true;
+  }
   const bool light=&component->type()==&scene::Light::descriptor;
   const bool environment=&component->type()==&scene::Environment::descriptor;
   if(!light&&!environment) return false;
@@ -103,6 +143,16 @@ inline bool applyComponentHandleDelta(EditorEntity &entity,const EditorComponent
      handle.worldUnitsPerProperty<=0) return false;
   const auto *component=entity.components.findInstance(handle.instance);
   if(!component) return false;
+  if(handle.kind>=EditorComponentHandleKind::ProbePointX&&handle.kind<=EditorComponentHandleKind::ProbePointZ) {
+    auto *edit=entity.components.editInstance(handle.instance);
+    if(!edit||&edit->type()!=&scene::LightProbeGroup::descriptor) return false;
+    auto &group=static_cast<scene::LightProbeGroup&>(*edit);
+    const auto *point=group.point(handle.element);
+    if(!point) return false;
+    float position[3]{point->position[0],point->position[1],point->position[2]};
+    position[static_cast<u32>(handle.kind)-static_cast<u32>(EditorComponentHandleKind::ProbePointX)]+=worldDelta/handle.worldUnitsPerProperty;
+    return group.movePoint(handle.element,position);
+  }
   const auto id=componentHandleProperty(handle.kind);
   const scene::ComponentNumber *number=nullptr;
   for(const auto &entry:component->type().numbers) if(entry.id==id) {number=&entry;break;}

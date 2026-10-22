@@ -38,6 +38,7 @@ const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 const int PUNCTUAL_LIGHT_LIMIT=16;
 const int PUNCTUAL_LIGHT_BANK=8; // renderer::PunctualLightBankSize
 #include "environment_lighting.glsl"
+#include "probe_lighting.glsl"
 // LOD cross-fade (see renderer::selectLodLevel): vDither==0 for every draw
 // outside an active transition, so this is a no-op discard everywhere LOD is
 // disabled or a group has only one level. The two draws sharing a
@@ -412,7 +413,13 @@ void main() {
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
   if(isolation!=4u) color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
-  mediump vec3 diffuseIrradiance=environmentAmbientDiffuse(n)*occlusion;
+  // PK-6: com Light Probes = Misturar sondas e um bake na cena, o ambiente
+  // difuso vem do SH interpolado no tetraedro do objeto (E/π), no lugar do céu.
+  // A mesma força do ambiente que escala o céu escala a sonda: uma sonda em
+  // campo aberto devolve exatamente o ambiente do céu que ela substitui.
+  mediump vec3 diffuseIrradiance=(astraLightProbesActive()?
+      astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
+      environmentAmbientDiffuse(n))*occlusion;
 #ifdef OCCLUSION_MAP
   // External lightmaps contain linear indirect irradiance E, not reflected color.
   // Replace ambient diffuse to avoid counting indirect lighting twice; retain
@@ -434,7 +441,11 @@ void main() {
     // reflected energy. Roughness is continuous; it must not switch IBL off.
     mediump float probeLod=mix(environment.parameters.z,
         rough*environment.parameters.z,specularDetailWeight);
-    mediump vec3 specularEnvironment=environmentRadiance(reflection,probeLod);
+    // PK-6: as sondas de reflexo do desenho (box projection por pixel) e o céu
+    // no que sobra dos pesos. A rugosidade efetiva segue o mesmo esmaecimento
+    // de detalhe por distância que escolhe o mip do céu.
+    mediump vec3 specularEnvironment=astraSpecularRadiance(vPosition,reflection,probeLod,
+        mix(1.0,rough,specularDetailWeight));
     mediump vec2 integratedBrdf=environmentBrdf(nv,rough);
     // The split-sum LUT already integrates Schlick's angular term. Applying
     // Fresnel again double-counted it; scaling the result by the dielectric
