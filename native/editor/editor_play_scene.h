@@ -252,6 +252,7 @@ public:
     scripts_.setIk(&ik_);
     reflectionProbes_.reset();
     scripts_.setReflectionProbes(&reflectionProbes_);
+    scripts_.setParticles(&particles_);
     ik_.setBodyMover([this](runtime::ObjectId body,const float pose[7]) {return physics_.moveKinematic(body,pose);});
     scripts_.setNumberTweens(&numberTweens_);
     // Audio outlives scripts; early Awake queries await first reconciliation.
@@ -318,6 +319,7 @@ public:
     scripts_.setNavigation(nullptr);
     scripts_.setIk(nullptr);
     scripts_.setReflectionProbes(nullptr);
+    scripts_.setParticles(nullptr);
     reflectionProbes_.reset();
     events_.reset();
     eventConnections_.reset();
