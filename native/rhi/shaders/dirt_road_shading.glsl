@@ -153,15 +153,18 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
     aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
     return min(vec3(base/PI)*incoming+vec3(specularTerm),vec3(AETHER_MEDIUMP_MAX));
   }
-  highp float nv=max(dot(n,v),1e-4);mediump vec3 h=normalize(v+l);
-  highp float nh=max(dot(n,h),0);mediump float lh=max(dot(l,h),0);
-  mediump vec3 f=fresnel(f0,f90,lh);highp float alpha=rough*rough;
+  // highp no meio-vetor e piso de alpha em HALF_MIN_SQRT (URP, roughness2):
+  // ver distributionGGXStable.
+  highp vec3 hn=vec3(n);
+  highp float nv=max(dot(hn,vec3(v)),1e-4);highp vec3 h=normalize(vec3(v)+vec3(l));
+  highp float nh=max(dot(hn,h),0.0);mediump float lh=max(dot(vec3(l),h),0.0);
+  mediump vec3 f=fresnel(f0,f90,lh);highp float alpha=max(rough*rough,0.0078125);
   mediump float fd90=.5+2*rough*lh*lh;
   mediump float fd=(1+(fd90-1)*pow5(1-float(nl)))*(1+(fd90-1)*pow5(1-float(nv)))/PI;
   // O pico do GGX com rugosidade mínima passa de 10^4 e, vezes a radiância do
   // sol, estoura o fp16 (65504): o brilho virava inf/NaN, um ponto preto. O
   // lóbulo fica em highp e só desce para mediump já limitado.
-  highp float lobe=f90>0.0?distribution(nh,alpha)*visibility(nv,nl,alpha):0.0;
+  highp float lobe=f90>0.0?distributionGGXStable(hn,h,nh,alpha)*visibility(nv,nl,alpha):0.0;
   // PK-9: Specular Highlights desligado tira só o lóbulo direto.
   mediump vec3 specularTerm=vec3(min(lobe*vec3(f)*aetherHighlightWeight*vec3(radiance)*nl,vec3(AETHER_MEDIUMP_MAX)));
   aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
@@ -491,7 +494,9 @@ void main() {
       rough=1.0-(1.0-frame.materialFactors.x)*smoothness;
     }
   }
-  rough=clamp(rough,.07,1);
+  // Rugosidade perceptual mínima do Filament para mediump (MIN_PERCEPTUAL_ROUGHNESS
+  // 0,089): abaixo disso o pico do GGX não cabe em fp16 com o sol físico.
+  rough=clamp(rough,.089,1);
   mediump float metal=clamp(mr[metallicChannel]*frame.materialFactors.y,0,1);
   // R4: oclusão empacotada no canal R do mapa metal/rugosidade (ORM do glTF),
   // só quando o importador provou mesma textura e mesmo UV. Atenua a luz
@@ -665,7 +670,7 @@ void main() {
     }
 #endif
     mediump vec3 coatNormal=normalize(vNormal);
-    mediump float coatRough=clamp(1.0-coatSmoothness,.07,1.0);
+    mediump float coatRough=clamp(1.0-coatSmoothness,.089,1.0);
     highp float coatNv=max(dot(coatNormal,v),1e-4);
     // URP (BRDF.hlsl/GlobalIllumination.hlsl, ClearCoat): o mesmo fresnelTerm
     // (1-N.V)^4 atenua a base e escolhe o reflexo do ambiente, que tende a
@@ -678,10 +683,11 @@ void main() {
     mediump vec3 coatLight=vec3(0.0);
     highp float coatNl=dot(coatNormal,environment.sunDirectionIntensity.xyz);
     if(coatNl>0.0) {
-      mediump vec3 coatHalf=normalize(v+environment.sunDirectionIntensity.xyz);
-      highp float coatAlpha=coatRough*coatRough;
-      mediump float coatF=.04+.96*pow5(1.0-clamp(dot(v,coatHalf),0.0,1.0));
-      coatLight+=vec3(min(distribution(max(dot(coatNormal,coatHalf),0.0),coatAlpha)*visibility(coatNv,coatNl,coatAlpha)*coatNl*
+      highp vec3 coatHalf=normalize(vec3(v)+environment.sunDirectionIntensity.xyz);
+      highp float coatAlpha=max(coatRough*coatRough,0.0078125);
+      mediump float coatF=.04+.96*pow5(1.0-clamp(dot(vec3(v),coatHalf),0.0,1.0));
+      highp vec3 coatN=vec3(coatNormal);
+      coatLight+=vec3(min(distributionGGXStable(coatN,coatHalf,max(dot(coatN,coatHalf),0.0),coatAlpha)*visibility(coatNv,coatNl,coatAlpha)*coatNl*
                  coatF*vec3(sunRadiance)*sunVisibility*aetherHighlightWeight,vec3(AETHER_MEDIUMP_MAX)));
     }
     if(environment.quality.w>0.5) {
