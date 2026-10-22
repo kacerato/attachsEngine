@@ -23,10 +23,10 @@ Referências (Unity 6000.0, URP 17):
 
 ## Testes de host
 
-- `aether_unity_material_tests` 34/34 (novo `test_material_shading_pk9.cpp`: v8 e migração v7, flags e linhas
+- `aether_unity_material_tests` 35/35 (novo `test_material_shading_pk9.cpp`, inclui o teste que exige highp em constante inteira acima de 16 bits nos shaders com mediump int: v8 e migração v7, flags e linhas
   13..20 da extensão, campos visíveis por shader, Smoothness, importador Standard/URP, Inspector por toque com
   slider que só grava ao soltar, e o gerador do projeto de validação).
-- `aether_tests` 1601/1601; suíte gerenciada 523/523; `generate-component-contracts.py --sync-api`: API atual.
+- `aether_tests` 1635/1635 (com G2, PK-6 e PK-7 mesclados); suíte gerenciada 523/523; `generate-component-contracts.py --sync-api`: API atual.
 - Três testes antigos do editor foram reescritos para os campos novos (a lista paginada do material do projeto saiu).
 
 ## Aparelho (POCO F7, Astra Dev 186/187, Play com câmera fixa)
@@ -46,17 +46,32 @@ texturas procedurais próprias e materiais `.mat` URP convertidos pelo importado
 
 `prancha-pk9.png`: frames da Unity (pasta `referencia-unity/`, com vídeo e tempo no nome) × capturas do POCO.
 
-### Julgamento contra a Unity
+### Julgamento contra a Unity (APK 0.3.0-dev.261022999-pk9-1245, base com G2, PK-6 e PK-7)
 
-- **Brilho e reflexo**: o realce do sol encolhe e se concentra com a suavidade como no vídeo (pontual em 1,0);
-  o metálico perde o difuso e escurece como na fileira 0→1 da Unity. Diferença declarada: o céu do cenário é
-  quase uniforme e claro, então o metal liso reflete uma cor só, não o estúdio escuro com luzes do vídeo.
-- **Detalhe**: o grão ×2 tem escala de 4× o tijolo e fica visível de perto sem dominar a cor, como no frame do
-  Ned Makes Games; a altura dá relevo no chanfro sem nadar.
-- **Verniz**: do lado do sol o efeito é sutil (F0 0,04); falta uma vista de estúdio para julgar o brilho duplo do
-  vídeo. Luzes adicionais não acendem o verniz (declarado na capacidade).
-- **Multiplicar**: errado no aparelho (o cubo clareia). Esconder o cubo confirma que é ele; o arquivo do material
-  tem Mistura = Multiplicar. Diagnóstico em andamento com um APK que registra a saída de mistura por desenho.
+`prancha-pk9.png`: os mesmos frames da Unity à esquerda (vídeo e tempo no nome, ou a página da documentação),
+o POCO à direita, e uma linha por item com o que ainda difere.
+
+| Item | Resultado no POCO | O que ainda difere |
+|---|---|---|
+| Metálico × Suavidade | Sob HDRI de campo (Hausdorf Clear Sky, Poly Haven, CC0; captura 10) o metal liso reflete céu e chão com o mesmo contraste das esferas URP Lit do LlamAcademy em campo aberto. Sob o céu procedural claro do cenário (11) a reflexão é de um céu quase uniforme. | Nada de material visível. O realce do sol na suavidade 1 mostra um padrão quadriculado de poucos pixels (12): pendente. |
+| Verniz (Complex Lit) | Sob o HDRI (13) o verniz reflete céu e horizonte numa camada lisa, com realce nítido por cima da base; sem verniz fica fosco, como no Clear Coat da Unity. | Luzes adicionais não acendem o verniz (declarado na capacidade). |
+| Tijolo: normal, altura, detalhe ×2, máscara, AO | Chanfros e relevo do sol, grão do detalhe só fora do círculo da máscara, argamassa funda pela AO (14). | A cor da argamassa é a da textura de teste, mais clara que a foto do vídeo. |
+| Multiplicar | O plano azul tinge céu, vidro e tijolo e escurece o que está atrás (15), como a imagem oficial de Blending Mode Multiply. | Nada visível. |
+| Vidro, aditivo | Preserve Specular e aditivo com as saídas próprias (16). | O vidro do vídeo reflete um estúdio escuro; no cenário claro o reflexo é suave (ambiente). |
+
+### O que a comparação encontrou e mudou
+
+- **Constantes relaxadas na Adreno (causa do Multiplicar claro e de todo o PK-9 desligado no aparelho).**
+  `dirt_road_shading.glsl` declara `precision mediump int`; as constantes declaradas depois saíam com
+  `RelaxedPrecision`, e a Adreno as guarda em 16 bits. `MATERIAL_SHADING_EXTENSION` (1u<<20) virava 0: o shader do
+  Material, a mistura própria, a altura, o detalhe e o verniz nunca rodavam no aparelho; o Multiplicar recebia a
+  cor HDR e clareava (17). Diagnóstico com shader de teste: a CPU enviava `0x10a001`, a GPU via o bit 20 apagado
+  (18, ciano = R zero). Correção: constantes em highp (`5b1b938c`), conferida no SPIR-V de todos os shaders. O mesmo
+  defeito desligava `DRAW_NO_SHADOWS`/`DRAW_NO_SUN` (bits 17 e 18) no aparelho.
+- **Verniz com aro escuro**: o reflexo do verniz vinha da LUT de split-sum e a atenuação da base, de Schlick puro;
+  na silhueta a base sumia sem ganhar reflexo. Agora segue a URP (`EnvironmentBRDFClearCoat`, mesmo fresnelTerm).
+- **Brilho de suavidade 1 virava ponto preto** (09): GGX em highp e limitado antes do fp16.
+- **Projeto de validação**: AO procedural no tijolo e opção `ASTRA_PK9_HDRI` no gerador para a comparação justa do metal.
 
 ## Custo no aparelho
 
@@ -75,15 +90,7 @@ Diferença abaixo de 0,02 ms: a grade cobre pouco da tela e o quadro é dominado
 o PK-9 não pesa nesta cena; não mede o pior caso (um material de verniz cobrindo a tela inteira), que fica pendente.
 Uma rodada anterior foi descartada porque outra frente instalou o APK 220 durante a medição.
 
-## Multiplicar: pendente
-
-No aparelho o cubo Multiplicar fica mais claro em vez de escurecer. Verificado com logs no POCO: o material chega
-com Mistura = Multiplicar, a extensão (linha 13) leva saída 3, a pipeline DST_COLOR/ZERO é criada e é a ligada no
-desenho. Forçar a saída do ramo do Multiplicar para preto **não muda a imagem** (nem no Play nem no editor), então o
-que aparece não vem desse ramo; a próxima etapa é uma captura de quadro (AGI/RenderDoc) para ver qual desenho
-pinta aquela área. A nota do AstraDocs já declara o Multiplicar como pendente.
-
-## Mudanças por causa da comparação
+## Mudanças anteriores (186/187)
 
 - Brilho especular calculado em highp e limitado antes do fp16 (ponto preto da captura 09).
 - Multiplicar passou a usar a tinta da superfície em vez da cor iluminada (a cena é HDR antes da exposição).
