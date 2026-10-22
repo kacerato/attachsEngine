@@ -53,14 +53,19 @@ Volume noturno com Limit Min próprio (Unite 2020 24:51).
 | 05 22 h, limite −6, céu ×12 | 38,1 | 3,5 | 51,6 | 0,46 | quadro e praça na faixa da Unity |
 | 06 2 h, idem | 38,1 | 3,9 | 51,3 | 0,46 | estrelas giradas pela hora |
 | 07 céu ×300 | 128 | 182 | 51,6 | 1,37 | passou: céu de anoitecer |
+| **08 22 h final, céu ×60, limite −6** | **65,6** | **81,3** | **51,6** | **1,86** | **bate com a praça com postes do Unite (88 / 91 / 49 / 1,44)** |
+| **09 2 h final** | **65,5** | **81,4** | **51,3** | **1,86** | **mesmo brilho, estrelas giradas** |
 
 Logcat: `[AutoExposure] medido=-8.50 adaptado=-6.00`; `[NightSky] noite=1.00 lua=4.8e-4`.
 
+Final no APK `0.3.0-dev.261022999-noite-1408` (22/10, 14:23): `[AutoExposure] medido=-7.74
+adaptado=-6.00`. A noite de referência mais parecida com a Vila é a praça com postes do Unite
+2020; contra a floresta ao luar do tutorial HDRP Night (quadro 35–38) a Vila fica mais clara
+porque as lanternas acesas entram na medição, como no Unite.
+
 ## Não validado
 
-- O brilho final do céu (`NightSkyGlow` = 60) está no APK `noite-1408`, mas a captura falhou:
-  o POCO bloqueou com tela segura no meio da sequência.
-- Azul/vermelho fica abaixo da Unity enquanto as lanternas da Vila forem 2300 K (autoria da
-  cena); o luar e o céu já são frios.
+- Noite de lua nova (o céu fica só com estrelas por construção, sem captura).
+- Outras cenas além da Vila: o Limite mínimo −6 foi calibrado na escala da Vila (sol 3,4 relativo).
 - A Vila do dono continua com a Exposição Fixa herdada; para o ciclo de dia e noite ela precisa
   de Automática no Volume, como no HDRP.

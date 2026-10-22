@@ -2,6 +2,20 @@
   "title": "V-2 · Noite: Unity (vídeos) × POCO (Vila Astra, câmera fixa do Play)",
   "rows": [
     {
+      "unity": "referencia-unity/unite2020-yqCHiZrgKzs-24m51s-noite-praca.jpg",
+      "device": "poco/08-22h-final-ceu60-limite-6.png",
+      "unity_caption": "Unite 2020 24:51 · praça com postes · quadro 88, céu 91, chão 49, B/R 1,44",
+      "device_caption": "POCO · APK noite-1408 · 22 h · quadro 66, céu 81, chão 52, B/R 1,86",
+      "verdict": "FINAL. Bate: céu azul-marinho com estrelas, praça nas poças dos postes, silhuetas e sombras pretas, cor fria. Exposição mede -7,7 e para em -6."
+    },
+    {
+      "unity": "referencia-unity/hdrp-ciclo-UqQsfRUdukE-00m00s-noite-lua-estrelas.jpg",
+      "device": "poco/09-02h-final-ceu60-limite-6.png",
+      "unity_caption": "Day/Night HDRP (Seta) 0:00 · céu azul-marinho com estrelas, B/R 2,8",
+      "device_caption": "POCO · APK noite-1408 · 2 h · mesma câmera, estrelas giradas",
+      "verdict": "FINAL. Mesmo brilho às 2 h; as estrelas giraram com a hora em torno do polo, como o Space Rotation do ciclo da Unity."
+    },
+    {
       "unity": "referencia-unity/hdrp-noite-vnzt3aRTd5o-10m59s-final-lua-rio.jpg",
       "device": "poco/00-22h-exposicao-fixa-da-vila.png",
       "unity_caption": "HDRP Night (Seta) youtu.be/vnzt3aRTd5o 10:59 · luar, sRGB 35",

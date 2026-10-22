@@ -41,7 +41,7 @@ inline constexpr float kPhysicalSunLux = 100000.0f;
 // V-2: a Lua do "Sol com dia e noite", como a Moon do tutorial HDRP Night
 // (Directional, 0,5 lux, Filter and Temperature frio, sombra ligada). Os
 // quadros do tutorial mostram 8570 K e 20000 K; 12000 K deu, no POCO, o azul
-// da noite dos vídeos (azul/vermelho ~1,6 com os postes acesos).
+// da noite dos vídeos (azul/vermelho 1,86 na Vila com os postes acesos).
 inline constexpr LightDefault kMoonLightDefault{LightKind::Directional, LightUnit::LuxLumen, 0.5f, 10.0f, 30.0f, 21.8f, 2};
 inline constexpr float kMoonColorTemperature = 12000.0f;
 
