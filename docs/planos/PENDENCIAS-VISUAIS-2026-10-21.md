@@ -28,6 +28,19 @@ no POCO com a mesma pose de câmera:**
 com contraste parecido; a causa está nomeada com evidência (captura com o efeito
 ligado e desligado) e o custo de GPU foi medido.
 
+## V-3 — Sem sombra / sem sol por objeto nunca valeram no aparelho
+
+**Achado do PK-9 (22/10, commit 5b1b938c na branch claude/beautiful-kalam-695ced):**
+`dirt_road_shading.glsl` declara `precision mediump int`, e as constantes
+declaradas depois saem com RelaxedPrecision no SPIR-V; a Adreno do POCO as
+materializa com 16 bits. `DRAW_NO_SHADOWS` (1u<<17) e `DRAW_NO_SUN` (1u<<18), as
+opções por desenho do PK-3/PK-8 (Receive Shadows desligado, objeto sem sol), viravam
+0: no aparelho todo objeto recebia sombra e sol. No host os testes passam.
+
+**A fazer quando o PK-9 entrar na base:** revalidar no POCO, com prancha Unity ×
+POCO, um objeto com Receive Shadows desligado e um com luz do sol excluída por
+Culling Mask/Rendering Layers; conferir se isso mexe na sombra lavada do V-1.
+
 ## V-2 — Noite que não parece noite
 
 **Sintoma (palavras do dono):** a noite "fica escura, blz", mas tudo continua com
