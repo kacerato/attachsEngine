@@ -2394,7 +2394,7 @@ void android_main(android_app *app) {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {
       shell.instancedRenderer.setPostIsolation(postIsolation);
-      __android_log_print(ANDROID_LOG_INFO,LogTag,"[PostIsolation] mask=%u (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez).",
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[PostIsolation] mask=%u (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez, 32 ambiente difuso, 64 reflexo do ambiente, 128 reflexo do céu desligado, 256 recaptura do céu a cada quadro).",
                           shell.instancedRenderer.postIsolation());
     }
   }

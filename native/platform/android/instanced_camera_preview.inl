@@ -75,7 +75,10 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else if(previewEnvironmentUsesPrimary_) {
     images[0]={dirtRoadResources_.environmentSampler(),dirtRoadResources_.environmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    images[1]={dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    // V-1: a câmera que usa o ambiente principal reflete o mesmo céu capturado.
+    images[1]=previewSkyReflection()?
+        VkDescriptorImageInfo{probeAtlasSampler_.handle(),skyReflection_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}:
+        VkDescriptorImageInfo{dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     images[2]={dirtRoadResources_.environmentBrdfSampler(),dirtRoadResources_.environmentBrdfView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else {
     images[0]={dirtRoadResources_.packagedEnvironmentSampler(),dirtRoadResources_.packagedEnvironmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -280,6 +283,11 @@ bool InstancedRenderer::prepareCameraPreview() {
       renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,cloudTimeSeconds_)) {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
+  }
+  if(previewSkyReflection()) {
+    frame.environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
+    frame.environment.parameters[3]=frame.environment.parameters[3]>1.5f?3.0f:1.0f;
+    frame.sceneAoDetail[3]=previewSceneEnvironment_.indirectSpecular;
   }
   renderer::LightBudgetReport previewLightBudget{};
   renderer::PunctualLight previewLights[renderer::MaximumPunctualLights]{};

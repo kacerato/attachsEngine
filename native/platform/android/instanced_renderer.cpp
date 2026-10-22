@@ -1187,6 +1187,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   VkDescriptorImageInfo specular{dirtRoadResources_.environmentSpecularSampler(),
                                  dirtRoadResources_.environmentSpecularView(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  environmentSpecularBound_ = specular.imageView;
   VkDescriptorImageInfo brdf{dirtRoadResources_.environmentBrdfSampler(),
                              dirtRoadResources_.environmentBrdfView(),
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -2462,7 +2463,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if (temporalDebugAvailable())
     push.texelFlags[3] += 4.0f * static_cast<float>(temporalDebugView_);
   push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
-  push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
+  push.bloom[1] = postIsolation_&4u?0.0f:authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
   // FSR 1 e os ampliadores temporais aplicam o próprio RCAS com esta nitidez.
   push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f;
   push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
@@ -5873,6 +5874,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=&images[i];
     }
     vkUpdateDescriptorSets(device_,3,writes,0,nullptr);
+    environmentSpecularBound_=images[1].imageView;
     activeEnvironmentMap_=std::move(selectedEnvironment);temporalHistoryInitialized_=false;
   }
   u32 imageIndex = 0;
@@ -6123,9 +6125,24 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
+    // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
+    // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
+    // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava
+    // a sombra cinza e um contorno claro em tudo, em qualquer hora do dia.
+    skyReflectionWanted_=hdrSceneColor_&&look.active&&look.sky!=renderer::SkyModel::Hdri&&!(postIsolation_&128u);
+    if(skyReflectionActive()) {
+      frame->environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
+      frame->environment.parameters[3]=frame->environment.parameters[3]>1.5f?3.0f:1.0f;
+      // A captura já está na radiância da cena: só o Intensity Multiplier.
+      frame->sceneAoDetail[3]=look.indirectSpecular;
+    }
+    if(!bindEnvironmentSpecular()) return rhi::SwapchainStatus::FatalError;
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
+    // V-1: ambiente difuso (céu/SH/sondas, todos escalados por .w) e reflexo do ambiente.
+    if(postIsolation_&32u) frame->environment.ambientColorStrength[3]=0.0f;
+    if(postIsolation_&64u) frame->sceneAoDetail[3]=0.0f;
     fogActiveThisFrame_=frame->sceneFog[0]>0.5f;
     aoActiveThisFrame_=frame->sceneAo[0]>0.5f;
     // HDR desligado na câmera: o shader de cena tonaliza na hora e nada passa

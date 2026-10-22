@@ -24,6 +24,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <string>
@@ -281,6 +282,32 @@ AE_TEST(probe_frame_selection_prefers_the_camera_room_and_budget) {
   AE_EXPECT_EQ(renderer::reflectionProbeBaseMip(128), 0u, "128 px por face ocupam o octaedro inteiro");
   AE_EXPECT_EQ(renderer::reflectionProbeBaseMip(32), 2u, "32 px começam dois mips acima");
   AE_EXPECT_EQ(renderer::reflectionProbeBaseMip(16), 3u, "16 px, três");
+}
+
+// --- V-1: reflexo do ambiente pelo céu ---------------------------------------
+
+AE_TEST(sky_reflection_captures_once_and_again_only_when_the_sky_changes) {
+  std::array<float, renderer::SkyReflectionKeySize> captured{};
+  for (u32 i = 0; i < captured.size(); ++i) captured[i] = 0.25f * static_cast<float>(i % 7);
+  captured[3] = 120000.0f; // sol em lux: a tolerância é relativa acima de 1
+  auto current = captured;
+  AE_EXPECT_TRUE(renderer::skyReflectionNeedsCapture(current, captured, false), "sem captura válida, captura");
+  AE_EXPECT_TRUE(!renderer::skyReflectionNeedsCapture(current, captured, true), "céu igual: o reflexo é reaproveitado");
+  current[0] += 0.0005f;
+  current[3] += 60.0f;
+  AE_EXPECT_TRUE(!renderer::skyReflectionNeedsCapture(current, captured, true),
+                 "ruído abaixo de um milésimo (relativo no sol em lux) não refaz");
+  current[1] += 0.01f;
+  AE_EXPECT_TRUE(renderer::skyReflectionNeedsCapture(current, captured, true), "o sol andou: refaz o reflexo");
+  current = captured;
+  current[62] *= 1.5f;
+  current[62] += 0.5f;
+  AE_EXPECT_TRUE(renderer::skyReflectionNeedsCapture(current, captured, true), "a exposição do céu mudou: refaz");
+  current = captured;
+  current[10] = std::numeric_limits<float>::quiet_NaN();
+  AE_EXPECT_TRUE(!renderer::skyReflectionNeedsCapture(current, captured, true), "céu inválido mantém a última captura");
+  AE_EXPECT_EQ(renderer::reflectionProbeBaseMip(renderer::SkyReflectionResolution), 0u,
+               "128 por face, como a Unity: o octaedro inteiro do atlas");
 }
 
 // --- Recursos assados -------------------------------------------------------
