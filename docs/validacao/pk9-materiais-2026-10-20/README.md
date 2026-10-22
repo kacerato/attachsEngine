@@ -46,14 +46,14 @@ texturas procedurais próprias e materiais `.mat` URP convertidos pelo importado
 
 `prancha-pk9.png`: frames da Unity (pasta `referencia-unity/`, com vídeo e tempo no nome) × capturas do POCO.
 
-### Julgamento contra a Unity (APK 0.3.0-dev.261022999-pk9-1245, base com G2, PK-6 e PK-7)
+### Julgamento contra a Unity (APK 0.3.0-dev.261022999-pk9-1423; tijolo, Multiplicar e grade sob céu procedural do 1245; base com G2, PK-6 e PK-7)
 
 `prancha-pk9.png`: os mesmos frames da Unity à esquerda (vídeo e tempo no nome, ou a página da documentação),
 o POCO à direita, e uma linha por item com o que ainda difere.
 
 | Item | Resultado no POCO | O que ainda difere |
 |---|---|---|
-| Metálico × Suavidade | Sob HDRI de campo (Hausdorf Clear Sky, Poly Haven, CC0; captura 10) o metal liso reflete céu e chão com o mesmo contraste das esferas URP Lit do LlamAcademy em campo aberto. Sob o céu procedural claro do cenário (11) a reflexão é de um céu quase uniforme. | Nada de material visível. O realce do sol na suavidade 1 mostra um padrão quadriculado de poucos pixels (12): pendente. |
+| Metálico × Suavidade | Sob HDRI de campo (Hausdorf Clear Sky, Poly Haven, CC0; captura 10) o metal liso reflete céu e chão com o mesmo contraste das esferas URP Lit do LlamAcademy em campo aberto. Sob o céu procedural claro do cenário (11) a reflexão é de um céu quase uniforme. | Nada de material visível. O realce do sol e o reflexo do sol do HDRI são lisos (19, 20); antes eram blocos quadriculados (12) e um ponto preto (21). |
 | Verniz (Complex Lit) | Sob o HDRI (13) o verniz reflete céu e horizonte numa camada lisa, com realce nítido por cima da base; sem verniz fica fosco, como no Clear Coat da Unity. | Luzes adicionais não acendem o verniz (declarado na capacidade). |
 | Tijolo: normal, altura, detalhe ×2, máscara, AO | Chanfros e relevo do sol, grão do detalhe só fora do círculo da máscara, argamassa funda pela AO (14). | A cor da argamassa é a da textura de teste, mais clara que a foto do vídeo. |
 | Multiplicar | O plano azul tinge céu, vidro e tijolo e escurece o que está atrás (15), como a imagem oficial de Blending Mode Multiply. | Nada visível. |
@@ -71,6 +71,12 @@ o POCO à direita, e uma linha por item com o que ainda difere.
 - **Verniz com aro escuro**: o reflexo do verniz vinha da LUT de split-sum e a atenuação da base, de Schlick puro;
   na silhueta a base sumia sem ganhar reflexo. Agora segue a URP (`EnvironmentBRDFClearCoat`, mesmo fresnelTerm).
 - **Brilho de suavidade 1 virava ponto preto** (09): GGX em highp e limitado antes do fp16.
+- **Realce do sol quadriculado** (12): n·h vinha de vetores mediump (degraus de ~1e-3 perto do pico) e o pico
+  com rugosidade 0,07 não cabia em fp16. Agora D_GGX na forma do Filament (1−(n·h)² de |n×h|², meio-vetor em
+  highp), rugosidade perceptual mínima 0,089 (Filament) e alpha mínimo HALF_MIN_SQRT (URP) — `9e73efb3`.
+- **Ponto preto no reflexo do sol do HDRI** (21): o sol do HDRI fica perto do teto do fp16 e a escala do reflexo em
+  mediump estourava para inf (depois NaN). Escala em highp e limite antes do mediump, e a saída da superfície
+  limitada ao teto antes do alvo HDR — `b4307c31`.
 - **Projeto de validação**: AO procedural no tijolo e opção `ASTRA_PK9_HDRI` no gerador para a comparação justa do metal.
 
 ## Custo no aparelho
