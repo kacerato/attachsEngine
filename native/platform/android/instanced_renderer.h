@@ -145,7 +145,7 @@ public:
   // conjunto tetraedralizado das sondas de luz chegam quando o editor os carrega.
   struct ProbeCaptureRequest {
     u64 id=0;
-    u32 kind=0; // 0 reflexo (bake de Reflection Probe), 1 irradiância (sonda de luz)
+    u32 kind=0; // 0 reflexo (bake de Reflection Probe), 1 irradiância (sonda de luz), 2 reflexo do céu
     u64 objectId=0,instance=0; // a sonda residente que já mostra o resultado
     float position[3]{};
     u32 resolution=128;
@@ -416,7 +416,7 @@ public:
   void setGpuCostIsolation(renderer::GpuCostIsolation mode) { gpuCostIsolation_ = mode; }
   // Diagnóstico do G1: desliga etapas do passe de pós para atribuir custo no
   // aparelho (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez). Nunca é opção de jogo.
-  void setPostIsolation(u32 mask) { postIsolation_ = mask & 31u; }
+  void setPostIsolation(u32 mask) { postIsolation_ = mask & 511u; }
   u32 postIsolation() const { return postIsolation_; }
   // G1: névoa resolvida uma vez por texel antes do pós. Ligada por padrão desde
   // o A/B de 17/10/2026; desligar só para comparação.
@@ -1011,6 +1011,20 @@ private:
   void recordProbes(float timeSeconds);
   void recordProbeFace(u32 face,float timeSeconds);
   rhi::VulkanImage probeAtlas_,probeScratch_,probeCapture_,probeCaptureDepth_,probeCaptureMaskA_,probeCaptureMaskB_;
+  // V-1, "Environment Reflections › Source: Skybox" da Unity: o céu da cena
+  // capturado só com o céu (sem objetos), filtrado em GGX num octaedro próprio
+  // e trocado pelo mapa especular empacotado no binding 3. Recapturado quando
+  // o sol ou o céu mudam, como o reflexo do céu do HDRP (On Changed).
+  rhi::VulkanImage skyReflection_;
+  bool skyReflectionWanted_=false,skyReflectionReady_=false,skyReflectionKeyValid_=false;
+  std::array<float,renderer::SkyReflectionKeySize> skyReflectionKey_{};
+  VkImageView environmentSpecularBound_=VK_NULL_HANDLE;
+  bool skyReflectionActive() const {return skyReflectionWanted_&&skyReflectionReady_;}
+  bool previewSkyReflection() const {
+    return skyReflectionActive()&&!previewEnvironmentMap_&&previewEnvironmentUsesPrimary_&&
+           previewSceneEnvironment_.active&&previewSceneEnvironment_.sky!=renderer::SkyModel::Hdri;
+  }
+  bool bindEnvironmentSpecular();
   rhi::VulkanSampler probeAtlasSampler_,probeCaptureSampler_;
   rhi::VulkanBuffer probeBlock_,probeDisabledBlock_,probeReadback_,probeUpload_;
   std::array<rhi::VulkanBuffer,6> probeFaceUniforms_{};

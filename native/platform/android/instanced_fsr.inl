@@ -136,7 +136,7 @@ void InstancedRenderer::recordFsr(u32 imageIndex,const platform::FreeCameraState
       (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
   const auto rect=physicalSceneViewport();
   Push push{{float(renderWidth()),float(renderHeight()),float(swapchain_->width()),float(swapchain_->height())},
-            {float(swapchain_->width()),float(swapchain_->height()),effects?renderingPolicy_.post.sharpen:0.0f,srgb?1.0f:0.0f},
+            {float(swapchain_->width()),float(swapchain_->height()),effects&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f,srgb?1.0f:0.0f},
             {rect.x,rect.y,rect.width,rect.height},
             {camera.yaw*37.0f+temporalCurrentJitter_[0]*8192.0f,
              camera.pitch*37.0f+temporalCurrentJitter_[1]*8192.0f,

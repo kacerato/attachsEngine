@@ -80,6 +80,19 @@ inline constexpr u32 ReflectionProbeNone = 15;         // "céu" na palavra do d
 // equador), limitado ao lado do atlas. Resolução menor começa num mip mais alto.
 u32 reflectionProbeBaseMip(u32 resolution) noexcept;
 
+// V-1: reflexo do ambiente pelo céu, como "Lighting › Environment Reflections ›
+// Source: Skybox" da Unity e o reflexo do céu do HDRP. Sem HDRI, o reflexo que
+// cada material lê (e que as sondas usam fora das caixas) é o próprio céu da
+// cena capturado sem objetos, na resolução padrão da Unity, filtrado em GGX no
+// octaedro do atlas. É refeito quando algo que muda a imagem do céu muda além
+// da tolerância (um milésimo, relativo acima de 1): sol, cores, atmosfera,
+// astros, nuvens, exposição. O vento das nuvens fica fora da chave.
+// Referência: https://docs.unity3d.com/6000.0/Documentation/Manual/lighting-window.html
+inline constexpr u32 SkyReflectionResolution = 128;
+inline constexpr u32 SkyReflectionKeySize = 64;
+bool skyReflectionNeedsCapture(std::span<const float> current, std::span<const float> captured,
+                               bool captureValid) noexcept;
+
 // Escolhe as sondas do quadro: primeiro as que contêm a câmera, depois por
 // importância e distância ao centro da caixa, até `capacity`.
 u32 selectFrameReflectionProbes(std::span<const SceneReflectionProbe> probes, const float camera[3],
