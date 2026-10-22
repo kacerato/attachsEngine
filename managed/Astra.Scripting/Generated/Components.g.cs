@@ -4159,6 +4159,30 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => new(Component.GetFloat("cloud_tint.r"), Component.GetFloat("cloud_tint.g"), Component.GetFloat("cloud_tint.b"));
         set => Component.SetVector3("cloud_tint", value);
     }
+    /// <summary>Céu. Cor sRGB, como o seletor; o motor converte para linear</summary>
+    public Vector3 AmbientSkyColor
+    {
+        get => new(Component.GetFloat("ambient_sky_color.r"), Component.GetFloat("ambient_sky_color.g"), Component.GetFloat("ambient_sky_color.b"));
+        set => Component.SetVector3("ambient_sky_color", value);
+    }
+    /// <summary>Equador. Cor sRGB, como o seletor; o motor converte para linear</summary>
+    public Vector3 AmbientEquatorColor
+    {
+        get => new(Component.GetFloat("ambient_equator_color.r"), Component.GetFloat("ambient_equator_color.g"), Component.GetFloat("ambient_equator_color.b"));
+        set => Component.SetVector3("ambient_equator_color", value);
+    }
+    /// <summary>Chão. Cor sRGB, como o seletor; o motor converte para linear</summary>
+    public Vector3 AmbientGroundColor
+    {
+        get => new(Component.GetFloat("ambient_ground_color.r"), Component.GetFloat("ambient_ground_color.g"), Component.GetFloat("ambient_ground_color.b"));
+        set => Component.SetVector3("ambient_ground_color", value);
+    }
+    /// <summary>Cor ambiente. Cor sRGB, como o seletor; o motor converte para linear</summary>
+    public Vector3 AmbientColor
+    {
+        get => new(Component.GetFloat("ambient_color.r"), Component.GetFloat("ambient_color.g"), Component.GetFloat("ambient_color.b"));
+        set => Component.SetVector3("ambient_color", value);
+    }
     /// <summary>Prioridade</summary>
     /// <remarks>Faixa válida: -1000 a 1000.</remarks>
     public float Priority
@@ -4166,14 +4190,14 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("priority");
         set => Component.SetFloat("priority", value);
     }
-    /// <summary>Força atmosférica</summary>
-    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    /// <summary>Espessura da atmosfera</summary>
+    /// <remarks>Faixa válida: 0 a 5.</remarks>
     public float Atmosphere
     {
         get => Component.GetFloat("atmosphere");
         set => Component.SetFloat("atmosphere", value);
     }
-    /// <summary>Diâmetro do sol (°)</summary>
+    /// <summary>Diâmetro do disco solar (°)</summary>
     /// <remarks>Faixa válida: 0.05 a 10.</remarks>
     public float SunDiskDegrees
     {
@@ -4320,15 +4344,15 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("sphere_radius");
         set => Component.SetFloat("sphere_radius", value);
     }
-    /// <summary>Difuso indireto (×)</summary>
-    /// <remarks>Faixa válida: 0 a 4.</remarks>
+    /// <summary>Intensidade (×)</summary>
+    /// <remarks>Faixa válida: 0 a 8.</remarks>
     public float IndirectDiffuse
     {
         get => Component.GetFloat("indirect_diffuse");
         set => Component.SetFloat("indirect_diffuse", value);
     }
-    /// <summary>Reflexo indireto (×)</summary>
-    /// <remarks>Faixa válida: 0 a 4.</remarks>
+    /// <summary>Intensidade dos reflexos (×)</summary>
+    /// <remarks>Faixa válida: 0 a 8.</remarks>
     public float IndirectSpecular
     {
         get => Component.GetFloat("indirect_specular");
@@ -4460,14 +4484,14 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("exposure_fixed");
         set => Component.SetFloat("exposure_fixed", value);
     }
-    /// <summary>Rotação HDRI (°)</summary>
+    /// <summary>Rotação (°)</summary>
     /// <remarks>Faixa válida: -360 a 360.</remarks>
     public float HdriRotationDegrees
     {
         get => Component.GetFloat("hdri_rotation_degrees");
         set => Component.SetFloat("hdri_rotation_degrees", value);
     }
-    /// <summary>Exposição HDRI (EV)</summary>
+    /// <summary>Exposição (EV)</summary>
     /// <remarks>Faixa válida: -16 a 16.</remarks>
     public float HdriExposureEv
     {
@@ -4705,13 +4729,41 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("bloom_clamp");
         set => Component.SetFloat("bloom_clamp", value);
     }
+    /// <summary>Exposição</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float SkyExposure
+    {
+        get => Component.GetFloat("sky_exposure");
+        set => Component.SetFloat("sky_exposure", value);
+    }
+    /// <summary>Tamanho do sol</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SunSize
+    {
+        get => Component.GetFloat("sun_size");
+        set => Component.SetFloat("sun_size", value);
+    }
+    /// <summary>Convergência do sol</summary>
+    /// <remarks>Faixa válida: 1 a 10.</remarks>
+    public float SunSizeConvergence
+    {
+        get => Component.GetFloat("sun_size_convergence");
+        set => Component.SetFloat("sun_size_convergence", value);
+    }
+    /// <summary>Fim (m)</summary>
+    /// <remarks>Faixa válida: 0 a 1000000.</remarks>
+    public float FogEnd
+    {
+        get => Component.GetFloat("fog_end");
+        set => Component.SetFloat("fog_end", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {
         get => Component.GetBool("enabled");
         set => Component.SetBool("enabled", value);
     }
-    /// <summary>Neblina. Aplica neblina exponencial uniforme ou com decaimento por altura</summary>
+    /// <summary>Neblina. Other Settings › Fog da janela Lighting: linear, exponencial ou exponencial ao quadrado</summary>
     public bool Fog
     {
         get => Component.GetBool("fog");
@@ -4839,15 +4891,62 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     }
     public enum SkyOption : uint
     {
-        HDRI = 0,
-        Atmosfera = 1,
-        AtmosferaFisica = 2,
+        PanoramicoHDRI = 0,
+        Procedural = 1,
+        Fisico = 2,
     }
-    /// <summary>Céu. Fonte visual do céu</summary>
+    /// <summary>Shader do céu. Procedural, Panorâmico (HDRI) ou Físico, como o shader do Material do céu</summary>
     public SkyOption Sky
     {
         get => (SkyOption)Component.GetEnum("sky");
         set => Component.SetEnum("sky", (uint)value);
+    }
+    public enum SunDiskOption : uint
+    {
+        Nenhum = 0,
+        Simples = 1,
+        AltaQualidade = 2,
+    }
+    /// <summary>Sol. Disco do sol no céu procedural: nenhum, simples ou alta qualidade</summary>
+    public SunDiskOption SunDisk
+    {
+        get => (SunDiskOption)Component.GetEnum("sun_disk");
+        set => Component.SetEnum("sun_disk", (uint)value);
+    }
+    public enum AmbientSourceOption : uint
+    {
+        CeuSkybox = 0,
+        Gradiente = 1,
+        Cor = 2,
+    }
+    /// <summary>Fonte. De onde vem a luz ambiente: do céu, de um gradiente ou de uma cor</summary>
+    public AmbientSourceOption AmbientSource
+    {
+        get => (AmbientSourceOption)Component.GetEnum("ambient_source");
+        set => Component.SetEnum("ambient_source", (uint)value);
+    }
+    public enum FogModeOption : uint
+    {
+        Linear = 0,
+        Exponencial = 1,
+        ExponencialAoQuadrado = 2,
+    }
+    /// <summary>Modo. Linear entre Início e Fim, ou exponencial pela densidade</summary>
+    public FogModeOption FogMode
+    {
+        get => (FogModeOption)Component.GetEnum("fog_mode");
+        set => Component.SetEnum("fog_mode", (uint)value);
+    }
+    public enum FogColorModeOption : uint
+    {
+        Cor = 0,
+        AcompanharOCeu = 1,
+    }
+    /// <summary>Modo de cor. A cor escolhida (o céu fica limpo), ou a mesma cor cobrindo o céu e apagando à noite</summary>
+    public FogColorModeOption FogColorMode
+    {
+        get => (FogColorModeOption)Component.GetEnum("fog_color_mode");
+        set => Component.SetEnum("fog_color_mode", (uint)value);
     }
     public enum ToneMapperOption : uint
     {
@@ -4944,6 +5043,9 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     /// <summary>Mapa HDRI. Recurso do projeto por slot</summary>
     public AssetGuid GetEnvironmentMap(uint slot = 0) => Component.GetResource("environment_map", slot);
     public void SetEnvironmentMap(AssetGuid value, uint slot = 0) => Component.SetResource("environment_map", value, slot);
+    /// <summary>Material do céu. Recurso do projeto por slot</summary>
+    public AssetGuid GetSkybox(uint slot = 0) => Component.GetResource("skybox", slot);
+    public void SetSkybox(AssetGuid value, uint slot = 0) => Component.SetResource("skybox", value, slot);
 }
 
 /// <summary>Luz: Direcional, pontual ou spot. Família Luz · Luzes.</summary>

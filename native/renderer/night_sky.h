@@ -40,6 +40,9 @@ struct NightSkyLighting {
   float sky[3]{};          // novo ambientColorStrength.rgb
   float ground[3]{};       // novo groundColorSaturation.rgb
   float specularScale = 1; // multiplicador do reflexo do ambiente
+  float nightSky[3]{};     // o céu da noite cheia, sem a mistura com o dia
+  float nightGround[3]{};
+  float night = 0;
 };
 
 // `ambient`/`ground`: ambiente do céu agora (já com o daylight do modo);
@@ -58,6 +61,8 @@ inline NightSkyLighting evaluateNightSkyLighting(const float ambient[3], const f
     const float moonSky = moonLuminance * NightMoonSkyFraction / pi;
     const float starlight = ambientLuminance * NightStarlightFraction;
     nightSky[c] = (moonSky + starlight) * NightSkyTint[c];
+    out.nightSky[c] = nightSky[c];
+    out.nightGround[c] = nightSky[c] * groundRatio;
     out.sky[c] = ambient[c] + (nightSky[c] - ambient[c]) * night;
     out.ground[c] = ground[c] + (nightSky[c] * groundRatio - ground[c]) * night;
   }
@@ -66,6 +71,7 @@ inline NightSkyLighting evaluateNightSkyLighting(const float ambient[3], const f
   const float nightRatio = std::clamp(nightLuminance(nightSky) / ambientLuminance, 0.0f, 1.0f);
   const float daylight = std::clamp(skyDaylight, 0.0f, 1.0f);
   out.specularScale = daylight * (1.0f + (nightRatio - 1.0f) * night);
+  out.night = night;
   return out;
 }
 

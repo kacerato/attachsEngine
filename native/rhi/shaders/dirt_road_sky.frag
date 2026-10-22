@@ -253,20 +253,25 @@ void main() {
     // chão autorais só deslocam o espectro e pintam o chão. Meio-dia, pôr do sol
     // e noite são o mesmo modelo -- girar a luz direcional muda o céu inteiro.
     vec3 sunDirection=skySunDirection();
+    vec3 mie;
     vec3 atmosphereSky=astraProceduralSky(visibleDirection,sunDirection,environment.celestialStars.yzw,
-        environment.skyParameters.rgb,environment.skyParameters.w,2.4);
-    float alignment=clamp(dot(visibleDirection,sunDirection),-1.0,1.0);
-    float angularDistance=acos(alignment);
-    float radius=max(environment.sceneSky.y,0.0001);
-    vec3 disc=celestialSunDisc(angularDistance,radius,pixelAngle);
-    float glare=celestialSunGlare(angularDistance,alignment,radius);
+        environment.skyParameters.rgb,environment.skyParameters.w,2.4,mie);
+    // Sun / Sun Size / Sun Size Convergence: a cor é a do sol atenuada pelo ar
+    // (cOut da Unity, 15x no High Quality, 27x no Simple), dividida pelo brilho
+    // da cor da luz como na Unity: a intensidade do sol não acende o disco.
+    float sunMode=environment.atmosphereDetail.w;
+    vec3 lightColor=max(environment.sunColorAngularRadius.rgb,vec3(0.0));
+    float lightBrightness=clamp(length(lightColor),0.25,1.0);
+    vec3 sunColor=(sunMode>1.5?15.0*clamp(mie,0.0,1.0):27.0*clamp(mie*8000.0,0.0,1.0))*lightColor/lightBrightness;
+    float attenuation=astraProceduralSunAttenuation(visibleDirection,sunDirection,sunMode,
+        environment.sceneSky.y,environment.sceneSky.z);
     // O disco some abaixo do horizonte, como o sol da Unity atrás do chão.
     float aboveGround=smoothstep(-0.01,0.01,visibleDirection.y);
-    atmosphereSky+=environment.sunColorAngularRadius.rgb*(disc+vec3(glare))*environment.sceneSky.z*aboveGround;
+    atmosphereSky+=sunColor*attenuation*aboveGround;
     color=mix(color,atmosphereSky,clamp(environment.sceneSky.x,0.0,1.0));
   }
-  // HDRI e o céu legado usam a proporção relativa skyScale. O modo físico já
-  // integra a intensidade atual do sol e não pode recebê-la uma segunda vez.
+  // PK-1: brilho do céu = Exposure do Skybox (procedural) ou EV do HDRI. O
+  // físico tem a própria intensidade e não recebe uma segunda escala.
   if(environment.sceneSky.w<1.5) color*=environment.sceneAoDetail.z;
   // Lua e estrelas sobre os céus procedural e físico (o HDRI já traz o seu).
   if(environment.sceneSky.w>0.5) {

@@ -103,6 +103,14 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     mixColor(result.skyHorizon,target.skyHorizon,amount);
     mixColor(result.ground,target.ground,amount);
     result.atmosphere=mix(result.atmosphere,target.atmosphere,amount);
+    result.skyExposure=mix(result.skyExposure,target.skyExposure,amount);
+    result.sunSize=mix(result.sunSize,target.sunSize,amount);
+    result.sunSizeConvergence=mix(result.sunSizeConvergence,target.sunSizeConvergence,amount);
+    // Environment Lighting acompanha o céu (é da janela Lighting, não do pós).
+    mixColor(result.ambientSkyColor,target.ambientSkyColor,amount);
+    mixColor(result.ambientEquatorColor,target.ambientEquatorColor,amount);
+    mixColor(result.ambientGroundColor,target.ambientGroundColor,amount);
+    mixColor(result.ambientColor,target.ambientColor,amount);
     result.sunDiskDegrees=mix(result.sunDiskDegrees,target.sunDiskDegrees,amount);
     result.sunDiskIntensity=mix(result.sunDiskIntensity,target.sunDiskIntensity,amount);
     result.sunGlare=mix(result.sunGlare,target.sunGlare,amount);
@@ -129,6 +137,8 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
       result.hdriRotationDegrees=target.hdriRotationDegrees;
       result.hdriExposureEv=target.hdriExposureEv;
       result.physicalAtmosphereHighQuality=target.physicalAtmosphereHighQuality;
+      result.sunDisk=target.sunDisk;result.ambientSource=target.ambientSource;
+      result.skybox=target.skybox;
     }
   }
   if(overrides&EnvironmentOverrideFog) {
@@ -138,7 +148,8 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.fogStart=mix(result.fogStart,target.fogStart,amount);
     result.fogBaseHeight=mix(result.fogBaseHeight,target.fogBaseHeight,amount);
     result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
-    if(amount>0.0f) result.fog=target.fog;
+    result.fogEnd=mix(result.fogEnd,target.fogEnd,amount);
+    if(amount>0.0f) {result.fog=target.fog;result.fogMode=target.fogMode;result.fogColorMode=target.fogColorMode;}
   }
   if(overrides&EnvironmentOverrideClouds) mixClouds(result.clouds,target.clouds,amount);
   if(overrides&EnvironmentOverrideIndirect) {
@@ -202,23 +213,9 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
 }
 } // namespace
 
-SceneEnvironment defaultSceneViewEnvironment() {
+SceneEnvironment defaultSceneEnvironment() {
   SceneEnvironment result{};
   result.active=true;
-  result.post=true;
-  result.bloom=true;
-  result.vignette=true;
-  result.ambientOcclusion=true;
-  result.exposureCompensation=-0.15f;
-  result.bloomThreshold=1.15f;
-  result.bloomIntensity=0.08f;
-  result.bloomScatter=0.0f; // o raio de 2 texels de antes: a Scene View não muda
-  result.contrast=1.06f;
-  result.saturation=1.04f;
-  result.vignetteIntensity=0.08f;
-  result.ambientOcclusionRadius=0.85f;
-  result.ambientOcclusionIntensity=0.85f;
-  result.ambientOcclusionPower=1.35f;
   return result;
 }
 
@@ -258,7 +255,7 @@ SceneEnvironment resolveSceneEnvironment(std::span<const SceneEnvironmentVolume>
     if(!initialized) {
       // Sem perfil global, grupos não sobrescritos herdam os padrões do mundo;
       // nunca vazam valores desmarcados só porque este foi o primeiro volume.
-      result=SceneEnvironment{};result.active=true;initialized=true;
+      result=defaultSceneEnvironment();initialized=true;
       blend(result,volume->environment,volume->overrides,amount);
     } else blend(result,volume->environment,volume->overrides,amount);
   }

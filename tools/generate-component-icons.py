@@ -517,6 +517,51 @@ def browser() -> str:
     raise SystemExit("Chrome/Edge não encontrado; defina ASTRA_HEADLESS_BROWSER")
 
 
+# PK-1/PK-2: janela Iluminação. A janela com o sol nascendo sobre o horizonte e
+# a faixa de neblina embaixo: céu, luz ambiente e neblina num quadro só.
+ICONS["lighting/window"] = (
+    f'<rect x="12" y="16" width="104" height="96" rx="12" {stroke(6)}/>'
+    f'<path d="M12 36h104" {stroke(5, extra='opacity=".6"')}/>'
+    f'<circle cx="22" cy="26" r="3" fill="{INK}"/><circle cx="32" cy="26" r="3" fill="{INK}" opacity=".6"/>'
+    f'<path d="M42 78a22 22 0 0 1 44 0" fill="{ACCENT}"/>'
+    f'<path d="M64 48v-6M40 58l-5-4M88 58l5-4" {stroke(4, ACCENT)}/>'
+    f'<path d="M24 78h80" {stroke(5)}/><path d="M32 92h64M44 102h40" {stroke(4, extra='opacity=".55"')}/>')
+# Material do céu (Skybox Material): a esfera de material com o céu dentro --
+# metade de cima em faixas de céu e o sol, metade de baixo o chão.
+ICONS["lighting/skybox-material"] = (
+    f'<circle cx="64" cy="64" r="46" {stroke(6)}/>'
+    f'<path d="M18 64h92" {stroke(5)}/>'
+    f'<path d="M26 44h40M34 30h30" {stroke(4, extra='opacity=".55"')}/>'
+    f'<circle cx="84" cy="40" r="10" fill="{ACCENT}"/>'
+    f'<path d="M26 80c12 6 64 6 76 0M38 96c10 4 42 4 52 0" {stroke(4, extra='opacity=".45"')}/>')
+# Fonte da luz ambiente (Environment Lighting › Source): a cúpula do céu
+# derramando luz de todos os lados sobre o ponto no chão.
+ICONS["lighting/ambient-source"] = (
+    f'<path d="M14 92a50 50 0 0 1 100 0" {stroke(6)}/>'
+    f'<path d="M64 34v26M36 46l14 18M92 46L78 64M22 72l20 8M106 72l-20 8" {stroke(4, ACCENT)}/>'
+    f'<circle cx="64" cy="88" r="9" fill="{ACCENT}"/>'
+    f'<path d="M8 100h112" {stroke(6)}/>')
+# Modo da neblina (Fog Mode): faixas que somem com a distância, mais curtas e
+# mais apagadas ao fundo -- linear, exponencial.
+ICONS["lighting/fog-mode"] = (
+    f'<path d="M12 30h104" {stroke(6)}/><path d="M24 52h80" {stroke(6, extra='opacity=".75"')}/>'
+    f'<path d="M36 74h56" {stroke(6, extra='opacity=".5"')}/><path d="M48 96h32" {stroke(6, extra='opacity=".3"')}/>'
+    f'<path d="M18 112c26-14 66-14 92 0" {stroke(5, ACCENT)}/>')
+# PK-2 (V-03/E-01): Criar › Volume. Global: o mundo inteiro dentro (globo com
+# meridianos); Caixa e Esfera: a forma tracejada com o objeto dentro.
+ICONS["volume/global"] = (
+    f'<circle cx="64" cy="64" r="46" {stroke(6)}/>'
+    f'<path d="M18 64h92M64 18c-18 20-18 72 0 92M64 18c18 20 18 72 0 92" {stroke(4, extra='opacity=".6"')}/>'
+    f'<path d="M30 36c20 8 48 8 68 0M30 92c20-8 48-8 68 0" {stroke(4, ACCENT)}/>')
+ICONS["volume/box"] = (
+    f'<path d="M30 42l34-18 34 18v44l-34 18-34-18z" {stroke(5, ACCENT, 'stroke-dasharray="8 7"')}/>'
+    f'<path d="M30 42l34 18 34-18M64 60v44" {stroke(4, ACCENT, 'opacity=".6" stroke-dasharray="6 6"')}/>'
+    f'<circle cx="64" cy="66" r="10" fill="{INK}"/>')
+ICONS["volume/sphere"] = (
+    f'<circle cx="64" cy="64" r="44" {stroke(5, ACCENT, 'stroke-dasharray="8 7"')}/>'
+    f'<path d="M20 64c14 12 74 12 88 0" {stroke(4, ACCENT, 'opacity=".6" stroke-dasharray="6 6"')}/>'
+    f'<circle cx="64" cy="64" r="10" fill="{INK}"/>')
+
 def rasterize(executable: str, svg: Path, png: Path) -> None:
     # Página HTML com o SVG em 512 px: o screenshot do headless tem o tamanho
     # da janela e fundo transparente com a cor de fundo zerada.

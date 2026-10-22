@@ -426,6 +426,7 @@ add_library(aether_renderer STATIC
   renderer/light_probes.cpp
   renderer/reflection_probes.cpp
   renderer/procedural_sky.cpp
+  renderer/environment_ambient.cpp
   renderer/cloud_layer.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
@@ -577,6 +578,7 @@ add_library(aether_runtime STATIC
   runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
   runtime/scene_environment.cpp
+  runtime/environment_migration.cpp
   runtime/scene_physics.cpp
   runtime/scene_dynamic_motor.cpp
   runtime/scene_physics_diagnostic.cpp
@@ -954,6 +956,7 @@ if(NOT ANDROID)
     ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_probes_unity.cpp
     ../tests/native/test_runtime_environment.cpp
+    ../tests/native/test_environment_lighting_window.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
     ../tests/native/test_night_sky.cpp
@@ -1180,7 +1183,7 @@ if(NOT ANDROID)
   # entire native test catalogue for a sky authoring change.
   add_executable(aether_environment_authoring_tests ../tests/native/family_base_main.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
-    ../tests/native/test_sky_celestial.cpp
+    ../tests/native/test_environment_lighting_window.cpp ../tests/native/test_sky_celestial.cpp
     ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp
     ../tests/native/test_night_sky.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)

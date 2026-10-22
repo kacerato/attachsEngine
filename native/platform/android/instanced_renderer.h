@@ -8,6 +8,7 @@
 #include "renderer/light_probes.h"
 #include "renderer/reflection_probes.h"
 #include "renderer/scene_environment.h"
+#include "renderer/environment_ambient.h"
 #include "renderer/color_grading.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
@@ -232,7 +233,15 @@ public:
     editorSceneLighting_=lighting;editorSceneEffects_=effects;editorSceneSky_=sky;
     editorSceneFog_=fog;editorScenePost_=post;
   }
-  void setEnvironmentAdjustment(const float values[4]) { std::copy(values,values+4,environmentAdjustment_); }
+  // A-05: cena sem Ambiente usa o ambiente padrão (Skybox procedural, luz
+  // ambiente do Skybox, pós neutro), igual no editor e no Play. Só um pacote de
+  // demonstração com ambiente cozido mantém o próprio panorama no Play.
+  renderer::SceneEnvironment effectiveSceneLook(const renderer::SceneEnvironment &environment) const {
+    if(environment.active) return environment;
+    return !editorBackground_&&dirtRoadResources_.packageFingerprint()?renderer::SceneEnvironment{}:
+        renderer::defaultSceneEnvironment();
+  }
+  renderer::SceneEnvironment effectiveSceneLook() const { return effectiveSceneLook(sceneEnvironment_); }
   void setSceneEnvironment(const renderer::SceneEnvironment &environment) {
     if (environment.valid()) sceneEnvironment_ = environment;
   }
@@ -739,7 +748,7 @@ private:
   bool uvTransformOverflowReported_ = false;
   bool lightmapUnsupportedReported_ = false;
   bool writeAuthoredUvTransforms();
-  float environmentAdjustment_[4]{1,1,1,0};
+  renderer::ProceduralAmbientProbeCache ambientProbeCache_,previewAmbientProbeCache_;
 
   void applyRuntimeRenderingPolicy(const renderer::ResolvedRenderingPolicy &policy,
                                    bool preserveDynamicScale);

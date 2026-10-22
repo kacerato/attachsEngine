@@ -394,8 +394,10 @@ namespace {
 // O que o perfil guarda: o `values` do componente, com ativo e prioridade
 // normalizados (são da instância). Uma propriedade é "do perfil" quando
 // escrevê-la muda esse conteúdo — descoberto pelo esquema, sem lista paralela.
-std::string profileContent(const scene::Environment &environment) {
-  resources::EnvironmentProfile probe;probe.values=environment.values;
+// O Material do céu (PK-2) guarda só o céu: o mesmo teste descobre os campos dele.
+std::string profileContent(const scene::Environment &environment,bool skybox) {
+  resources::EnvironmentProfile probe;probe.skybox=skybox;
+  probe.values=skybox?resources::skyboxMaterialValues(environment.values):environment.values;
   probe.values.active=true;probe.values.priority=0;probe.name="p";
   return probe.serialize();
 }
@@ -406,12 +408,12 @@ struct ProfileSchema {
   std::vector<const scene::ComponentTriple *> triples;
   bool environmentMap=false;
 };
-const ProfileSchema &profileSchema() {
-  static const ProfileSchema schema=[] {
+const ProfileSchema &profileSchema(bool skybox=false) {
+  const auto build=[](bool skybox) {
     ProfileSchema out;
     const auto &type=scene::Environment::descriptor;
-    scene::Environment base;const auto original=profileContent(base);
-    const auto changes=[&](auto &&write) {auto probe=base;write(probe);return profileContent(probe)!=original;};
+    scene::Environment base;const auto original=profileContent(base,skybox);
+    const auto changes=[&](auto &&write) {auto probe=base;write(probe);return profileContent(probe,skybox)!=original;};
     for(const auto &p:type.booleans) if(p.write && changes([&](scene::Environment &e){p.write(e,!p.read(base));}))
       out.booleans.push_back(&p);
     for(const auto &p:type.enums) if(p.write) for(const auto &option:p.options)
@@ -433,8 +435,9 @@ const ProfileSchema &profileSchema() {
     for(const auto &binding:type.resourceBindings) if(binding.kind==resources::AssetType::EnvironmentMap && binding.write &&
         changes([&](scene::Environment &e){binding.write(e,0,resources::assetGuidFromSeed("perfil:sonda"));})) out.environmentMap=true;
     return out;
-  }();
-  return schema;
+  };
+  static const ProfileSchema profile=build(false),material=build(true);
+  return skybox?material:profile;
 }
 const scene::ComponentNumber *numberById(std::string_view id) {
   for(const auto &p:scene::Environment::descriptor.numbers) if(p.id==id) return &p;
@@ -520,7 +523,7 @@ bool EditorSession::commitProfileBatch(const std::vector<resources::EnvironmentP
   const auto root=EditorImportTransaction::fromUtf8(files_.rootPath());
   for(const auto &candidate:candidates) {
     const auto *current=findEnvironmentProfile(candidate.guid);const auto *record=assets_.find(candidate.guid);
-    if(!candidate.valid() || !current || !record || record->type!=resources::AssetType::EnvironmentProfile ||
+    if(!candidate.valid() || !current || !record || record->type!=candidate.assetType() ||
        current->revision==std::numeric_limits<u32>::max() || candidate.revision!=current->revision+1) {
       diagnostic="Perfil ou revisão indisponível.";return false;
     }
@@ -592,7 +595,7 @@ void EditorSession::refreshProfileInspector() {
     if(const auto *environment=static_cast<const scene::Environment *>(entity->components.find(scene::Environment::descriptor));
        environment && environment->profile==profile->guid) state_.profileObjects.push_back(id);
   scene::Environment proxy;proxy.values=profile->values;
-  const auto &schema=profileSchema();
+  const auto &schema=profileSchema(profile->skybox);
   // Grupos na ordem em que aparecem no esquema.
   auto &groups=state_.profileGroups;groups.clear();
   const auto group=[&](std::string_view name) {
@@ -608,7 +611,7 @@ void EditorSession::refreshProfileInspector() {
   }
   for(const auto *p:schema.enums) group(p->presentation.group);
   for(const auto *p:schema.booleans) group(p->presentation.group);
-  if(schema.environmentMap) group("HDRI");
+  if(schema.environmentMap) group("Céu");
   state_.profileGroup=std::min<u32>(state_.profileGroup,groups.empty()?0:static_cast<u32>(groups.size()-1));
   const std::string current=groups.empty()?std::string():groups[state_.profileGroup];
   const auto in=[&](std::string_view name){return (name.empty()?std::string_view("Geral"):name)==current;};
@@ -641,7 +644,7 @@ void EditorSession::refreshProfileInspector() {
     row.value=std::string(text)+(p->presentation.unit.empty()?std::string():" "+std::string(p->presentation.unit));
     rows.push_back(std::move(row));
   }
-  if(schema.environmentMap && current=="HDRI") {
+  if(schema.environmentMap && current=="Céu") {
     Row row;row.kind=Row::Kind::EnvironmentMap;row.label="Mapa HDRI";
     const auto *map=proxy.values.environmentMap.valid()?assets_.find(proxy.values.environmentMap):nullptr;
     row.value=map?map->path.substr(map->path.rfind('/')+1):proxy.values.environmentMap.valid()?std::string("Mapa ausente"):std::string("Ambiente padrão");
