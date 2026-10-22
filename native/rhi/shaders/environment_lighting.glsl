@@ -162,8 +162,11 @@ mediump vec3 environmentRadianceUnscaled(highp vec3 direction,mediump float lod)
 // `sceneAoDetail.w` e a escala do reflexo do ambiente: a razao sol autorado / sol
 // do recurso (quando o sol da cena esta em lux) vezes o Reflexo indireto do
 // volume da camera. 1 no legado. Todo reflexo do ambiente passa por aqui.
+// O sol de um HDRI real chega a ~6e4 no mip 0, perto do teto do fp16 (65504):
+// a escala em mediump estourava para inf e, adiante, inf*0 virava NaN (pixel
+// preto no reflexo do sol). A escala fica em highp e o resultado é limitado.
 mediump vec3 environmentRadiance(highp vec3 direction,mediump float lod) {
-  return environmentRadianceUnscaled(direction,lod)*environment.sceneAoDetail.w;
+  return vec3(min(vec3(environmentRadianceUnscaled(direction,lod))*environment.sceneAoDetail.w,vec3(60000.0)));
 }
 
 mediump vec2 environmentBrdf(mediump float noV,mediump float roughness) {

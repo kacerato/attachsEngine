@@ -315,6 +315,9 @@ mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
 // multiplicar (mix(1, tinta, a): a tinta da superfície, sem luz, sobre o que está atrás).
 void aetherWriteSurface(mediump vec3 color,mediump vec3 specular,mediump float alpha,uint flags,uint blendOutput,uint shadingBits) {
   bool transparent=(flags&1u)!=0u;
+  // Nada acima do teto do fp16 chega ao alvo HDR: um inf aqui vira NaN no
+  // bloom/TAA e espalha um bloco preto.
+  color=min(color,vec3(AETHER_MEDIUMP_MAX));
   specular=min(specular,color);
   if(transparent && blendOutput==1u) color=(color-specular)*alpha+specular;
   else if(transparent && blendOutput==2u) color=(shadingBits&4u)!=0u?(color-specular)*alpha+specular:color*alpha;

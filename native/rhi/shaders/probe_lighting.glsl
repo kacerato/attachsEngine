@@ -68,7 +68,8 @@ mediump vec3 astraReflectionProbeSample(uint layer,highp vec3 position,highp vec
   mediump float lod=mix(base,last,clamp(roughness,0.0,1.0));
   mediump vec3 c=textureLod(reflectionProbeAtlas,vec3(astraOctahedralUv(d),float(layer)),lod).rgb;
   if(astraProbes.parameters[layer].y>0.5) c=min(c,vec3(1.0));
-  return c*astraProbes.boxMin[layer].w;
+  // Mesmo limite do environmentRadiance: escala em highp, sem inf em fp16.
+  return vec3(min(vec3(c)*astraProbes.boxMin[layer].w,vec3(60000.0)));
 }
 // Reflexo especular do ambiente com as sondas do desenho. Sem sonda (ou com o
 // desenho em "Desligado"), é exatamente o environmentRadiance de antes.
