@@ -4701,6 +4701,34 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("cloud_shadow_multiplier");
         set => Component.SetFloat("cloud_shadow_multiplier", value);
     }
+    /// <summary>Espessura (m). Altura dos cúmulos acima da base: base reta, topo alto; 0 é folha plana</summary>
+    /// <remarks>Faixa válida: 0 a 5000.</remarks>
+    public float CloudThickness
+    {
+        get => Component.GetFloat("cloud_thickness");
+        set => Component.SetFloat("cloud_thickness", value);
+    }
+    /// <summary>Fator de forma. Shape Factor: quanto o ruído 3D recorta a cobertura (mais alto, nuvens mais separadas)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudShapeFactor
+    {
+        get => Component.GetFloat("cloud_shape_factor");
+        set => Component.SetFloat("cloud_shape_factor", value);
+    }
+    /// <summary>Erosão. Erosion Factor: corrói as bordas em rolos finos</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float CloudErosion
+    {
+        get => Component.GetFloat("cloud_erosion");
+        set => Component.SetFloat("cloud_erosion", value);
+    }
+    /// <summary>Passos. Num Primary Steps: amostras por raio; mais custa mais GPU</summary>
+    /// <remarks>Faixa válida: 8 a 64.</remarks>
+    public float CloudSteps
+    {
+        get => Component.GetFloat("cloud_steps");
+        set => Component.SetFloat("cloud_steps", value);
+    }
     /// <summary>Pós-exposição (EV). Clareia ou escurece depois da exposição e antes do tonemap</summary>
     /// <remarks>Faixa válida: -16 a 16.</remarks>
     public float PostExposure
@@ -4960,6 +4988,17 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     {
         get => (ToneMapperOption)Component.GetEnum("tone_mapper");
         set => Component.SetEnum("tone_mapper", (uint)value);
+    }
+    public enum CloudTypeOption : uint
+    {
+        Camada2D = 0,
+        Volumetricas = 1,
+    }
+    /// <summary>Tipo. Camada 2D (Cloud Layer, barata) ou Volumétricas (Volumetric Clouds: cúmulos com volume)</summary>
+    public CloudTypeOption CloudType
+    {
+        get => (CloudTypeOption)Component.GetEnum("cloud_type");
+        set => Component.SetEnum("cloud_type", (uint)value);
     }
     public enum VolumeShapeOption : uint
     {

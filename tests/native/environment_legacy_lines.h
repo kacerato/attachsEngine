@@ -82,8 +82,7 @@ inline std::string componentAsV15(const std::string &line) {return componentBefo
 // Perfil v13 → v12: saem as 21 palavras da janela Lighting do fim.
 // Perfil v14 → v13: saem as 5 palavras das nuvens (espessura e Volumetric Clouds).
 inline std::string profileAsV13(std::string text) {
-  const bool newline=!text.empty()&&text.back()=='
-';
+  const bool newline=!text.empty()&&text.back()=='\n';
   if(newline) text.pop_back();
   size_t at=text.size();for(size_t i=0;i<5;++i) at=text.rfind(' ',at-1);
   text=text.substr(0,at);
@@ -91,8 +90,7 @@ inline std::string profileAsV13(std::string text) {
   if(text.rfind(magic,0)==0) text.replace(0,magic.size(),"ASTRA_ENVIRONMENT_PROFILE 13 ");
   const std::string skybox="ASTRA_SKYBOX_MATERIAL 14 ";
   if(text.rfind(skybox,0)==0) text.replace(0,skybox.size(),"ASTRA_SKYBOX_MATERIAL 13 ");
-  return newline?text+"
-":text;
+  return newline?text+"\n":text;
 }
 inline std::string profileAsV12(std::string text) {
   text=profileAsV13(text);

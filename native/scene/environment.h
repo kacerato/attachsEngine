@@ -22,7 +22,7 @@ inline bool environmentNumberSinceV18(std::string_view id) {
 class Environment final : public ComponentValue {
 public:
   Environment() { values.active = true; }
-  static constexpr u32 CurrentVersion = 18;
+  static constexpr u32 CurrentVersion = 19;
   renderer::SceneEnvironment values{};
   renderer::EnvironmentVolumeShape shape=renderer::EnvironmentVolumeShape::Global;
 
