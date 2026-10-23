@@ -74,7 +74,7 @@ AE_TEST(weather_component_is_registered_round_trips_and_refuses_unknown_data) {
   AE_EXPECT_TRUE(back.kind == scene::WeatherKind::Snow && back.intensity == 0.4f && back.rain == 7 && back.snow == 9 &&
                  !back.followCamera && back.lightningInterval == 20.0f, "mesmos valores");
   std::istringstream future(out.str());
-  AE_EXPECT_TRUE(!scene::Weather{}.read(future, 2), "versão futura recusada");
+  AE_EXPECT_TRUE(!scene::Weather{}.read(future, 3), "versão futura recusada");
   std::istringstream badKind("9 0 0 1 1 1 0.5 8 1800 700 10 0.02 9 3");
   AE_EXPECT_TRUE(!scene::Weather{}.read(badKind, 1), "tipo desconhecido recusado");
 }
@@ -104,8 +104,8 @@ AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   const auto &env = environmentOf(s.graph, s.weather);
   AE_EXPECT_TRUE(env.values.clouds.enabled && env.overrideClouds && env.values.clouds.coverage == look.coverage,
                  "nuvens do Ambiente com a cobertura da chuva");
-  AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.02f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
-  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 1750.0f, "3500/s × 0,5");
+  AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.03f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "7000/s × 0,5");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.snow).emissionRate.constantMax == 0.0f, "neve parada na chuva");
   // Vento padrão das nuvens (20 km/h para +X) × 0,35 inclina a gota pela
   // Velocidade no tempo em espaço Mundo; a neve é arrastada 1,6× mais.
@@ -135,7 +135,7 @@ AE_TEST(weather_transition_in_play_moves_from_rain_to_snow_over_time) {
   runtime::SceneWeather weather;
   const auto write = [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); };
   weather.advance(s.graph, 0, 0.016f, true, nullptr, write);
-  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "começa no clima autoral");
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 7000.0f, "começa no clima autoral");
   auto values = *s.graph.find(s.weather);
   static_cast<scene::Weather *>(values.components.edit(scene::Weather::descriptor))->kind = scene::WeatherKind::Snow;
   s.graph.applyEntityValues(s.weather, values);
@@ -143,11 +143,11 @@ AE_TEST(weather_transition_in_play_moves_from_rain_to_snow_over_time) {
   for (int i = 0; i < 60; ++i) weather.advance(s.graph, t += 1.0 / 60, 1.0f / 60, true, nullptr, write);
   const float rainMid = particlesOf(s.graph, s.rain).emissionRate.constantMax;
   const float snowMid = particlesOf(s.graph, s.snow).emissionRate.constantMax;
-  AE_EXPECT_TRUE(rainMid < 3500.0f && rainMid > 1200.0f && snowMid > 50.0f && snowMid < 700.0f,
+  AE_EXPECT_TRUE(rainMid < 7000.0f && rainMid > 2400.0f && snowMid > 90.0f && snowMid < 1300.0f,
                  "1 s de 8: chuva diminuindo, neve começando");
   for (int i = 0; i < 60 * 30; ++i) weather.advance(s.graph, t += 1.0 / 60, 1.0f / 60, true, nullptr, write);
   AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 0.0f, "a chuva para de verdade");
-  AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).emissionRate.constantMax - 1600.0f) < 1.0f, "neve cheia");
+  AE_EXPECT_TRUE(std::abs(particlesOf(s.graph, s.snow).emissionRate.constantMax - 3000.0f) < 1.0f, "neve cheia");
 }
 
 AE_TEST(weather_natural_variation_moves_intensity_only_in_play) {
@@ -159,15 +159,15 @@ AE_TEST(weather_natural_variation_moves_intensity_only_in_play) {
   runtime::SceneWeather edit, play;
   const auto write = [&](runtime::ObjectId id, const runtime::Transform &tr) { return writeTransform(s.graph, id, tr); };
   edit.advance(s.graph, 33.0, 0, false, nullptr, write);
-  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "na edição, a intensidade autoral");
+  AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 7000.0f, "na edição, a intensidade autoral");
   float low = 1e9f, high = 0;
   for (double t = 0; t < 120; t += 0.5) {
     play.advance(s.graph, t, 0.5f, true, nullptr, write);
     const float rate = particlesOf(s.graph, s.rain).emissionRate.constantMax;
     low = std::min(low, rate);high = std::max(high, rate);
   }
-  AE_EXPECT_TRUE(high <= 3500.0f + 1e-3f && low >= 1750.0f - 1e-3f, "fica entre metade e o autoral");
-  AE_EXPECT_TRUE(high - low > 700.0f, "pancadas e calmarias em dois minutos");
+  AE_EXPECT_TRUE(high <= 7000.0f + 1e-3f && low >= 3500.0f - 1e-3f, "fica entre metade e o autoral");
+  AE_EXPECT_TRUE(high - low > 1400.0f, "pancadas e calmarias em dois minutos");
 }
 
 AE_TEST(weather_storm_flashes_lightning_only_in_play_and_deterministically) {
@@ -232,4 +232,35 @@ AE_TEST(weather_recipe_creates_climate_with_linked_rain_and_snow) {
   AE_EXPECT_TRUE(environmentOf(graph, created).values.clouds.coverage ==
                  runtime::weatherTarget(scene::WeatherKind::Rain, 0.7f).coverage, "a edição já mostra o céu de chuva");
   AE_EXPECT_TRUE(session.history().undo(graph) && !graph.exists(created), "um desfazer remove clima e filhos");
+}
+
+// Superfícies (G4c+): molhado, poças e neve acumulada sobem com o tempo de
+// chuva/neve em Play, secam e derretem devagar, e na edição são instantâneas.
+AE_TEST(weather_surfaces_wet_puddle_and_snow_over_time_like_unity_weather) {
+  auto s = makeWeatherScene(scene::WeatherKind::Rain, 1.0f);
+  runtime::SceneWeather edit, play;
+  const auto write = [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); };
+  const auto instant = edit.advance(s.graph, 0, 0, false, nullptr, write);
+  AE_EXPECT_TRUE(instant.surface.wetness == 1.0f && std::abs(instant.surface.puddles - 0.6f) < 1e-5f && instant.surface.snow == 0.0f,
+                 "edição: chuva cheia molha tudo e enche as poças na hora");
+  runtime::SceneWeather::Report r;
+  double t = 0;
+  for (int i = 0; i < 10 * 10; ++i) r = play.advance(s.graph, t += 0.1, 0.1f, true, nullptr, write);
+  AE_EXPECT_TRUE(r.surface.wetness > 0.45f && r.surface.wetness < 0.55f, "10 s de 20: meio molhado");
+  AE_EXPECT_TRUE(r.surface.puddles <= r.surface.wetness && r.surface.puddles > 0.1f, "poças enchem atrás do molhado");
+  for (int i = 0; i < 30 * 10; ++i) r = play.advance(s.graph, t += 0.1, 0.1f, true, nullptr, write);
+  AE_EXPECT_TRUE(r.surface.wetness == 1.0f, "molhado completo");
+  auto values = *s.graph.find(s.weather);
+  auto *weather = static_cast<scene::Weather *>(values.components.edit(scene::Weather::descriptor));
+  weather->kind = scene::WeatherKind::Snow;weather->transitionSeconds = 0.1f;
+  s.graph.applyEntityValues(s.weather, values);
+  for (int i = 0; i < 30 * 10; ++i) r = play.advance(s.graph, t += 0.1, 0.1f, true, nullptr, write);
+  AE_EXPECT_TRUE(r.surface.snow > 0.45f && r.surface.snow < 0.55f, "30 s de 60: meia cobertura de neve");
+  AE_EXPECT_TRUE(r.surface.wetness < 1.0f && r.surface.wetness > 0.2f, "seca devagar com a neve (fica úmido)");
+  // Arquivo v1 (11 números) abre com as superfícies no padrão.
+  std::istringstream old("2 0 0 1 1 1 0.7 8 0.35 45 3500 1600 10 0.35 0.02 9 3");
+  scene::Weather fromV1;
+  AE_EXPECT_TRUE(fromV1.read(old, 1) && fromV1.rainRate == 3500 && fromV1.surfaceWetness == 1.0f &&
+                 std::abs(fromV1.surfacePuddles - 0.6f) < 1e-6f && fromV1.snowSeconds == 60.0f, "v1 abre com superfícies no padrão");
+  AE_EXPECT_EQ(scene::Weather::descriptor.version, 2u, "versão 2");
 }

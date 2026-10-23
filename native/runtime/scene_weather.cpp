@@ -169,16 +169,17 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.fog = lerp(0.15f, 0.3f, i);
     break;
   case scene::WeatherKind::Rain:
-    look.coverage = lerp(0.7f, 0.88f, i);
-    look.cirrus = 0.45f;
+    // Céu fechado por inteiro, como o Overcast do HDRP: sem buracos de céu azul.
+    look.coverage = lerp(0.88f, 0.98f, i);
+    look.cirrus = 0.6f;
     look.density = lerp(0.85f, 0.95f, i);
-    look.tint = lerp(0.8f, 0.6f, i);
+    look.tint = lerp(0.72f, 0.5f, i);
     look.rain = i;
     look.fog = lerp(0.3f, 0.7f, i);
     break;
   case scene::WeatherKind::Storm:
-    look.coverage = lerp(0.85f, 0.95f, i);
-    look.cirrus = 0.55f;
+    look.coverage = lerp(0.95f, 1.0f, i);
+    look.cirrus = 0.7f;
     look.density = lerp(0.95f, 1.0f, i);
     look.tint = lerp(0.55f, 0.4f, i);
     look.rain = lerp(0.5f, 1.0f, i);
@@ -186,8 +187,8 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.storm = 1.0f;
     break;
   case scene::WeatherKind::Snow:
-    look.coverage = lerp(0.68f, 0.85f, i);
-    look.cirrus = 0.5f;
+    look.coverage = lerp(0.85f, 0.97f, i);
+    look.cirrus = 0.6f;
     look.density = lerp(0.65f, 0.75f, i);
     look.tint = lerp(0.95f, 0.85f, i);
     look.snow = i;
@@ -261,6 +262,30 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       flash = lightningFlash(static_cast<u32>(id) * 2654435761U, seconds, weather.lightningInterval) * state.look.storm;
     report.flash = std::max(report.flash, flash);
     report.writes += applyEnvironment(graph, id, weather, state.look, flash);
+    // Superfícies, como o wetness/snow globais dos climas da Unity: molha com
+    // a chuva em Tempo para molhar, seca em Tempo para secar; a neve cobre em
+    // Tempo para acumular e derrete no dobro. As poças enchem atrás do molhado.
+    // Fora do Play é instantâneo, para o autor ver o resultado na edição.
+    {
+      const float wetTarget = weather.surfaceWetness * std::clamp(state.look.rain * 1.25f + state.look.snow * 0.2f, 0.0f, 1.0f);
+      const float puddleTarget = weather.surfacePuddles * std::clamp(state.look.rain * 1.25f, 0.0f, 1.0f);
+      const float snowTarget = weather.surfaceSnow * std::clamp(state.look.snow * 1.25f, 0.0f, 1.0f);
+      auto &surface = state.surface;
+      if (!live) surface = {wetTarget, puddleTarget, snowTarget};
+      else {
+        const float dt = std::max(deltaSeconds, 0.0f);
+        const auto approach = [&](float &value, float target, float riseSeconds, float fallSeconds) {
+          const float step = dt / std::max(target > value ? riseSeconds : fallSeconds, 0.1f);
+          value = target > value ? std::min(target, value + step) : std::max(target, value - step);
+        };
+        approach(surface.wetness, wetTarget, weather.wetSeconds, weather.drySeconds);
+        approach(surface.puddles, std::min(puddleTarget, surface.wetness), weather.wetSeconds * 2, weather.drySeconds);
+        approach(surface.snow, snowTarget, weather.snowSeconds, weather.snowSeconds * 2);
+      }
+      report.surface.wetness = std::max(report.surface.wetness, surface.wetness);
+      report.surface.puddles = std::max(report.surface.puddles, surface.puddles);
+      report.surface.snow = std::max(report.surface.snow, surface.snow);
+    }
     // Vento do Cloud Layer deste Ambiente (0° sopra para +X, como as nuvens).
     float wind[2]{0, 0};
     if (const auto *env = static_cast<const scene::Environment *>(object->components.find(scene::Environment::descriptor))) {

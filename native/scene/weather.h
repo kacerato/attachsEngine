@@ -42,16 +42,20 @@ public:
     for (const auto &p : descriptor.booleans) out << ' ' << p.read(*this);
     for (const auto &p : descriptor.numbers) out << ' ' << p.read(*this);
   }
+  // v2 (superfícies) só acrescenta números no fim; a v1 tinha os 11 primeiros.
+  static constexpr usize kVersion1Numbers = 11;
   bool read(std::istream &in, u32 version) override {
     u32 value = 0;
-    if (version != 1 || !(in >> value >> rain >> snow) || value > 4) return false;
+    if (version < 1 || version > 2 || !(in >> value >> rain >> snow) || value > 4) return false;
     kind = static_cast<WeatherKind>(value);
     for (const auto &p : descriptor.booleans) {
       bool flag = false;
       if (!(in >> flag)) return false;
       p.write(*this, flag);
     }
-    for (const auto &p : descriptor.numbers) if (!(in >> *p.write(*this))) return false;
+    const usize count = version == 1 ? kVersion1Numbers : descriptor.numbers.size();
+    for (usize i = 0; i < count && i < descriptor.numbers.size(); ++i)
+      if (!(in >> *descriptor.numbers[i].write(*this))) return false;
     return valid();
   }
 };
@@ -85,7 +89,7 @@ inline constexpr std::array<ComponentObjectReference, 2> weatherReferences{{
     "render.environment.weather", "runtime/scene_weather.cpp → runtime/scene_particles.cpp"}},
 }};
 inline const ComponentType Weather::descriptor{
-  "astra.environment.weather", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Weather>(); },
+  "astra.environment.weather", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Weather>(); },
   weatherNumbers, weatherBooleans, weatherEnums, nullptr, false, weatherReferences
 };
 } // namespace ae::scene

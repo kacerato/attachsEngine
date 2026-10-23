@@ -1053,6 +1053,11 @@ public:
   // Reinicia a prévia de todos os sistemas (botão do inspetor).
   void restartParticlePreview() { previewParticles_.restartAll(); }
   const runtime::SceneParticles &previewParticles() const noexcept { return previewParticles_; }
+  // G4c: molhado, poças e neve acumulada do quadro (Play ou prévia da edição),
+  // para o shader de superfície.
+  runtime::SceneWeather::Surface weatherSurface() const noexcept {
+    return isPlaying() && playScene_.active() ? playScene_.weatherReport().surface : previewWeatherReport_.surface;
+  }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
@@ -1624,6 +1629,7 @@ private:
   EditorPlayScene playScene_;
   runtime::SceneParticles previewParticles_;
   runtime::SceneWeather previewWeather_;
+  runtime::SceneWeather::Report previewWeatherReport_;
   u32 particleBudget_ = 100000;
   std::string reportedPhysicsConnectionDiagnostic_;
   std::string reportedEventConnectionDiagnostic_;

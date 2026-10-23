@@ -5148,6 +5148,48 @@ public readonly struct Weather : IComponentFacade<Weather>
         get => Component.GetFloat("lightning_brightness");
         set => Component.SetFloat("lightning_brightness", value);
     }
+    /// <summary>Molhado. Quanto a chuva escurece o chão e as paredes e deixa tudo liso e refletindo</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SurfaceWetness
+    {
+        get => Component.GetFloat("surface_wetness");
+        set => Component.SetFloat("surface_wetness", value);
+    }
+    /// <summary>Poças. Poças nos pisos planos: espelho d'água escuro que reflete o céu</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SurfacePuddles
+    {
+        get => Component.GetFloat("surface_puddles");
+        set => Component.SetFloat("surface_puddles", value);
+    }
+    /// <summary>Neve acumulada. Cobertura branca em telhados, chão e no topo dos objetos</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SurfaceSnow
+    {
+        get => Component.GetFloat("surface_snow");
+        set => Component.SetFloat("surface_snow", value);
+    }
+    /// <summary>Tempo para molhar (s). Segundos de chuva até o molhado completo (Play)</summary>
+    /// <remarks>Faixa válida: 1 a 600.</remarks>
+    public float WetSeconds
+    {
+        get => Component.GetFloat("wet_seconds");
+        set => Component.SetFloat("wet_seconds", value);
+    }
+    /// <summary>Tempo para secar (s). Segundos sem chuva até secar (Play)</summary>
+    /// <remarks>Faixa válida: 1 a 1200.</remarks>
+    public float DrySeconds
+    {
+        get => Component.GetFloat("dry_seconds");
+        set => Component.SetFloat("dry_seconds", value);
+    }
+    /// <summary>Tempo para acumular (s). Segundos de neve até a cobertura completa; derrete no dobro (Play)</summary>
+    /// <remarks>Faixa válida: 1 a 1200.</remarks>
+    public float SnowSeconds
+    {
+        get => Component.GetFloat("snow_seconds");
+        set => Component.SetFloat("snow_seconds", value);
+    }
     /// <summary>Ativo. Desligado, o clima não escreve mais nada; os valores ficam como estão</summary>
     public bool Enabled
     {

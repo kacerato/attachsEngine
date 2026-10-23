@@ -552,6 +552,15 @@ ICONS["lighting/weather"] = (
     f'<path d="M106 84v22M96 89l20 12M96 101l20-12" {stroke(4)}/>'
     f'<circle cx="106" cy="95" r="3" fill="#15191e"/>')
 
+# PK-10b/c: Faíscas. Quatro faíscas saindo de um ponto, cada uma com a trilha
+# em lima afinando para trás (Trails), e o halo da luz que elas acendem (Lights).
+ICONS["effects/sparks"] = (
+    f'<circle cx="46" cy="86" r="30" fill="{ACCENT}" opacity=".12"/>'
+    f'<path d="M46 86L96 30M46 86l60 4M46 86L74 18M46 86L22 34" {stroke(4, ACCENT, 'opacity=".55"')}/>'
+    f'<path d="M84 44L96 30M92 89l14 1M68 33l6-15M27 45l-5-11" {stroke(7)}/>'
+    f'<circle cx="46" cy="86" r="8" fill="{INK}"/>'
+    f'<path d="M30 110h32" {stroke(5, extra='opacity=".5"')}/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

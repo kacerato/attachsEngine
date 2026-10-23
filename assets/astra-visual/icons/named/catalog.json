@@ -2431,6 +2431,12 @@
       "name": "sphere",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "effects/sparks": {
+      "category": "effects",
+      "name": "sparks",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

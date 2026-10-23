@@ -135,7 +135,7 @@
             "cpp": "10"
           },
           "default": {
-            "cpp": "3500.0f"
+            "cpp": "7000.0f"
           },
           "presentation": {
             "group": "Precipitação",
@@ -166,7 +166,7 @@
             "cpp": "10"
           },
           "default": {
-            "cpp": "1600.0f"
+            "cpp": "3000.0f"
           },
           "presentation": {
             "group": "Precipitação",
@@ -256,7 +256,7 @@
             "cpp": ".001f"
           },
           "default": {
-            "cpp": "0.02f"
+            "cpp": "0.03f"
           },
           "presentation": {
             "group": "Atmosfera",
@@ -328,6 +328,174 @@
             },
             "visible": {
               "cpp": "weatherHasLightning"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_wetness",
+          "label": "Molhado",
+          "member": "surfaceWetness",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Quanto a chuva escurece o chão e as paredes e deixa tudo liso e refletindo",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_puddles",
+          "label": "Poças",
+          "member": "surfacePuddles",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "0.6f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Poças nos pisos planos: espelho d'água escuro que reflete o céu",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_snow",
+          "label": "Neve acumulada",
+          "member": "surfaceSnow",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Cobertura branca em telhados, chão e no topo dos objetos",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "wet_seconds",
+          "label": "Tempo para molhar",
+          "member": "wetSeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "600"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "20.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos de chuva até o molhado completo (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "dry_seconds",
+          "label": "Tempo para secar",
+          "member": "drySeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "1200"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "90.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos sem chuva até secar (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "snow_seconds",
+          "label": "Tempo para acumular",
+          "member": "snowSeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "1200"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "60.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos de neve até a cobertura completa; derrete no dobro (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
             }
           },
           "type": "Weather"
@@ -446,7 +614,13 @@
         "weatherNumbers/lightning_interval",
         "weatherNumbers/lightning_brightness",
         "weatherBooleans/follow_camera",
-        "weatherBooleans/lightning"
+        "weatherBooleans/lightning",
+        "weatherNumbers/surface_wetness",
+        "weatherNumbers/surface_puddles",
+        "weatherNumbers/surface_snow",
+        "weatherNumbers/wet_seconds",
+        "weatherNumbers/dry_seconds",
+        "weatherNumbers/snow_seconds"
       ]
     }
   ]

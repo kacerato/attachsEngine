@@ -3779,6 +3779,27 @@ AE_TEST(curve_editor_adds_moves_edits_keys_and_applies_once) {
 // G5 P1: Partículas criadas pela receita, curva do módulo editada pelo editor
 // de curvas do projeto em um passo de histórico, salva/reaberta e simulada na
 // prévia da cena.
+// PK-10b/c: Efeitos › Faíscas nasce com Trilhas, Luzes e a luz modelo como
+// filho desativado e ligado à referência; na prévia, trilhas e luzes saem.
+AE_TEST(particle_sparks_recipe_links_an_inactive_template_light_and_lights_up) {
+  Fixture f;auto &doc=f.session.document();
+  u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("effect.sparks",&recipe),"receita Efeitos › Faíscas");
+  const auto id=f.session.createRecipe(recipe,doc.root());
+  AE_EXPECT_TRUE(id!=0,"criado");
+  const auto &system=scene::particleSystem(*doc.find(id)->components.find(scene::ParticleSystem::descriptor));
+  const auto children=doc.childrenOf(id);
+  AE_EXPECT_TRUE(children.size()==1&&system.lightTemplate==children[0],"luz modelo ligada à referência");
+  AE_EXPECT_TRUE(!doc.find(children[0])->active&&doc.find(children[0])->components.find(scene::Light::descriptor),
+                 "luz modelo desativada: só é copiada");
+  AE_EXPECT_TRUE(system.trailsEnabled&&system.lightsEnabled,"Trilhas e Luzes ligadas");
+  const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
+  for(u32 i=0;i<40;++i) f.session.updateParticles(1.f/30,camera,frame);
+  AE_EXPECT_TRUE(frame.batches.size()==2&&!frame.lights.empty()&&frame.lights.size()<=6,"partículas, trilhas e até 6 luzes");
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(f.session.extractLights(lights)&&lights.empty(),"a luz modelo não ilumina sozinha");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&!doc.exists(id),"um desfazer remove faíscas e luz");
+}
+
 AE_TEST(particle_editor_creates_edits_curve_saves_and_previews) {
   Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
   u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("effect.particles",&recipe),"receita Efeitos › Partículas");

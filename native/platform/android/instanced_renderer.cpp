@@ -204,8 +204,12 @@ struct DirtRoadFrameUniform {
   float skyStarRotation[3][4]{};
   // V-2: brilho do céu noturno (o luar espalhado pelo ar), rgb; w reservado.
   float skyNight[4]{};
+  // G4c: superfícies do clima (dirt_road_shading.glsl): molhado, poças, neve
+  // acumulada, reservado. Fim do bloco: nenhum offset anterior muda.
+  float weatherSurface[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4256);
+static_assert(sizeof(DirtRoadFrameUniform) == 4272);
+static_assert(offsetof(DirtRoadFrameUniform, weatherSurface) == 4256);
 static_assert(offsetof(DirtRoadFrameUniform, skyNight) == 4240);
 static_assert(offsetof(DirtRoadFrameUniform, skySun) == 4160);
 static_assert(offsetof(DirtRoadFrameUniform, skyMoon) == 4176);
@@ -2079,8 +2083,10 @@ bool applySceneEnvironmentLook(
     const float shadowStrength=look.clouds.castShadows?look.clouds.shadowMultiplier:0.0f;
     const float sunHeight=std::max(frame.environment.sunDirectionIntensity[1],0.0f);
     const float sunLuminance=luminance(frame.environment.sunColorAngularRadius)*std::max(frame.environment.sunDirectionIntensity[3],0.0f);
-    constexpr float kCloudDiffuseTransmission=0.45f;
-    const float scattered=sunLuminance*sunHeight*occlusion*shadowStrength*kCloudDiffuseTransmission;
+    // Nuvem fina deixa passar metade em luz difusa; a de tempestade, densa,
+    // quase nada: o céu fechado escurece com a densidade, como na Unity.
+    const float diffuseTransmission=std::clamp(0.5f-0.35f*look.clouds.density,0.1f,0.5f);
+    const float scattered=sunLuminance*sunHeight*occlusion*shadowStrength*diffuseTransmission;
     if(scattered>0.0f) {
       const float sky[3]{scattered,scattered,scattered};
       const float equator[3]{scattered*0.7f,scattered*0.7f,scattered*0.7f};
@@ -6371,6 +6377,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_,ambientProbeCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
+    std::copy(std::begin(weatherSurface_),std::end(weatherSurface_),std::begin(frame->weatherSurface));
     // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
     // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
     // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava

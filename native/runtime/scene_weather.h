@@ -40,9 +40,16 @@ struct WeatherCamera {
 
 class SceneWeather final {
 public:
+  // Superfícies da cena neste quadro (o maior entre os climas ativos):
+  // molhado, poças e neve acumulada, 0..1. O renderer as lê no shader de
+  // superfície; nada disso é gravado na cena.
+  struct Surface {
+    float wetness = 0, puddles = 0, snow = 0;
+  };
   struct Report {
     u32 weathers = 0, writes = 0;
     float flash = 0;
+    Surface surface;
   };
   void reset() { states_.clear(); }
   // `live`: Play (transição e relâmpagos). `camera`: posição de mundo da câmera
@@ -56,6 +63,7 @@ public:
 private:
   struct State {
     WeatherLook look;
+    Surface surface;
     bool initialized = false;
   };
   std::map<std::pair<ObjectId, u64>, State> states_;

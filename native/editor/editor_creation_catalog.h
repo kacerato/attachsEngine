@@ -59,6 +59,8 @@ struct CreationChild {
   const char *name;
   std::span<const CreationComponent> components;
   std::string_view component{},property{};
+  // Filho que nasce desativado (a luz modelo das Faíscas: só é copiada).
+  bool active=true;
 };
 struct EditorCreationEntry {
   // Identidade persistente da receita: não muda com nome, ordem ou idioma.
@@ -173,15 +175,15 @@ inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{
 inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
   {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
-  {particleType,"start_speed",14.f},{particleType,"start_size",.018f},{particleType,"gravity_modifier",.3f},
-  {particleType,"max_particles",8000.f},{particleType,"emission_rate",3500.f},{particleType,"render_mode",u32{1}},
-  {particleType,"stretch_velocity_scale",.045f},{particleType,"stretch_length_scale",1.f},
+  {particleType,"start_speed",14.f},{particleType,"start_size",.022f},{particleType,"gravity_modifier",.3f},
+  {particleType,"max_particles",14000.f},{particleType,"emission_rate",7000.f},{particleType,"render_mode",u32{1}},
+  {particleType,"stretch_velocity_scale",.06f},{particleType,"stretch_length_scale",1.f},
   {particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},{particleType,"start_color_b",.88f},
-  {particleType,"start_color_a",.32f}};
+  {particleType,"start_color_a",.4f}};
 inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",24.f},
   {particleType,"shape_box_y",24.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
-  {particleType,"start_lifetime",5.f},{particleType,"start_speed",1.5f},{particleType,"start_size",.045f},
+  {particleType,"start_lifetime",5.f},{particleType,"start_speed",1.5f},{particleType,"start_size",.07f},
   {particleType,"gravity_modifier",.03f},{particleType,"max_particles",12000.f},{particleType,"emission_rate",0.f},
   {particleType,"start_color_a",.9f},{particleType,"noise_enabled",true},{particleType,"noise_strength",.8f},
   {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
@@ -353,6 +355,22 @@ inline const CreationComponent navigationLink[]{{navLink,navigationLinkValues}};
 inline constexpr std::string_view particleSystem="astra.effects.particle_system";
 inline const CreationValue particleValues[]{{particleSystem,"shape_rotation_x",-90.f}};
 inline const CreationComponent particles[]{{particleSystem,particleValues}};
+// PK-10b/c: Faíscas, como um efeito de faísca da Unity (Additive, esticado,
+// Trails e Lights com uma luz modelo). A luz modelo é um filho desativado: só
+// é copiada para as partículas sorteadas, nunca ilumina sozinha.
+inline const CreationValue sparkValues[]{{particleSystem,"shape_rotation_x",-90.f},{particleSystem,"shape_angle",30.f},
+  {particleSystem,"shape_radius",.1f},{particleSystem,"start_lifetime",.9f},{particleSystem,"start_speed",6.f},
+  {particleSystem,"start_size",.05f},{particleSystem,"gravity_modifier",1.f},{particleSystem,"emission_rate",40.f},
+  {particleSystem,"start_color_r",1.f},{particleSystem,"start_color_g",.55f},{particleSystem,"start_color_b",.15f},
+  {particleSystem,"color_over_lifetime_enabled",true},{particleSystem,"material_blend",u32{1}},
+  {particleSystem,"material_texture",u32{1}},{particleSystem,"material_emission",3.f},
+  {particleSystem,"trails_enabled",true},{particleSystem,"trail_lifetime",.35f},{particleSystem,"trail_min_vertex_distance",.05f},
+  {particleSystem,"trail_width",.8f},{particleSystem,"lights_enabled",true},{particleSystem,"light_ratio",.15f},
+  {particleSystem,"light_max",6.f},{particleSystem,"light_range_multiplier",1.f}};
+inline const CreationComponent sparks[]{{particleSystem,sparkValues}};
+inline const CreationValue sparkLightValues[]{{light,"range",3.f}};
+inline const CreationComponent sparkLight[]{{light,sparkLightValues}};
+inline const CreationChild sparkChildren[]{{"Luz modelo",sparkLight,particleSystem,"light_template",false}};
 } // namespace recipe
 
 inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu","Efeitos"};
@@ -366,7 +384,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
 inline constexpr unsigned kEffectsCreationCategory=11;
-inline const std::array<EditorCreationEntry,107> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,108> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -394,6 +412,10 @@ inline const std::array<EditorCreationEntry,107> editorCreationCatalog{{
     ui::UiIcon::ComponentParticleSystem,runtime::ObjectKind::Folder,recipe::particles,CreationPose::ViewTarget,0.5f,{},{},
     "ParticleSystem Shuriken GPUParticles3D CPUParticles3D VFX Efeito Fogo Faisca Fumaca Particulas",scene::PrimitiveType::Count,false,{},
     recipe::particleSystem},
+  {"effect.sparks",EditorWidget::None,kEffectsCreationCategory,"Faíscas","Faíscas com trilha que acendem luzes por onde passam.",
+    ui::UiIcon::EffectsSparks,runtime::ObjectKind::Folder,recipe::sparks,CreationPose::ViewTarget,0.5f,{},{},
+    "Sparks Trails Lights Faisca Trilha Rastro Luz Particulas",scene::PrimitiveType::Count,false,{},
+    recipe::particleSystem,scene::PrimitiveType::Count,false,recipe::sparkChildren},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,

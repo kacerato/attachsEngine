@@ -349,6 +349,10 @@ public:
   // simulação, já ordenado, trocado por valor a cada quadro; o que o passe
   // desenhou e quanto custou na GPU volta em `particleStats`.
   void queueParticles(renderer::particles::ParticleFrame &frame);
+  // G4c: superfícies do clima deste quadro (0..1 cada), lidas pelo shader de superfície.
+  void setWeatherSurface(float wetness, float puddles, float snow) {
+    weatherSurface_[0]=wetness;weatherSurface_[1]=puddles;weatherSurface_[2]=snow;
+  }
   const renderer::particles::ParticleRenderStats &particleStats() const;
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
@@ -1389,6 +1393,8 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
+  // G4c: molhado, poças e neve acumulada do clima, copiados para o quadro.
+  float weatherSurface_[4]{};
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;

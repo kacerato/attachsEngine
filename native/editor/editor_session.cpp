@@ -6202,6 +6202,7 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
           history_.cancel(document_);return refuse(std::string(child.name)+": valor inicial recusado ("+std::string(initial.property)+")");
         }
       assignEntityName(entity,child.name);
+      entity.active=child.active;
       const auto created=history_.createEntity(document_,id,runtime::ObjectKind::Folder,child.name);
       if(!created||!history_.applyValues(document_,created,entity)) {history_.cancel(document_);return refuse("Não foi possível criar "+std::string(child.name));}
       if(!child.component.empty() &&
@@ -6445,7 +6446,7 @@ void EditorSession::update() {
   if(!isPlaying()) {
     const auto camera=resolveSceneCamera(document_);
     runtime::WeatherCamera pose{{camera.position[0],camera.position[1],camera.position[2]},camera.yaw};
-    previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?&pose:nullptr,
+    previewWeatherReport_=previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?&pose:nullptr,
       [&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
   }
   refreshAnimationClip();

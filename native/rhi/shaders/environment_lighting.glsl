@@ -64,6 +64,8 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens (G4b)
   // para nenhum offset anterior mudar. Mesmo formato de `punctualLights`.
   layout(offset=3600) vec4 punctualLightsExtra[32];
+  // G4c: superfícies do clima -- molhado, poças, neve acumulada (0..1), reservado.
+  layout(offset=4256) vec4 weatherSurface;
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de

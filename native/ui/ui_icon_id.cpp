@@ -210,6 +210,7 @@ constexpr const char *kNames[] = {
     "editor/snap",
     "editor/space-world",
     "editor/undo",
+    "effects/sparks",
     "event/physics-connection",
     "event/physics-connection-2d",
     "event/sound-trigger",
