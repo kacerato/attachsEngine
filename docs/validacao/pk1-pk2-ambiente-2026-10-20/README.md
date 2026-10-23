@@ -20,13 +20,15 @@ itens A-01..A-06, A-08, V-03, E-01.
 
 | Arquivo | Vídeo | Tempo | O que mostra |
 |---|---|---|---|
-| u01-lighting-window-environment | https://www.youtube.com/watch?v=NOv31HSqs6U | 0:44 | Lighting › Environment: Skybox Material, Sun Source, Environment Lighting (Source, Intensity Multiplier), Reflections |
+| u01-lighting-window-environment | https://www.youtube.com/watch?v=NOv31HSqs6U | 0:44 | Window › Rendering › Lighting Settings: caminho até a janela Lighting (o painel Environment em si está em u12/u13) |
 | u02-skybox-procedural-material | https://www.youtube.com/watch?v=NOv31HSqs6U | 0:09 | Skybox/Procedural: Sun High Quality, Sun Size 0,04, Convergence 5, Atmosphere Thickness 1, Sky Tint, Ground, Exposure 1,3 |
 | u03-ceu-procedural-padrao | https://www.youtube.com/watch?v=YrvhyTnqT8k | 0:53 | Céu padrão do URP numa cena nova + Global Volume |
 | u04/u05/u06/u07 neblina | https://www.youtube.com/watch?v=RBI9hQWD_xY | 0:29, 0:31, 0:35, 0:51 | Sem neblina; Fog ligada (Exponential Squared, densidade 0,04); cor vermelha; cena com árvores |
 | u08-volume-global-modo | https://www.youtube.com/watch?v=YrvhyTnqT8k | 1:29 | Volume: Mode Global/Local, Weight, Priority, Profile |
 | u09-criar-volume-menu | https://www.youtube.com/watch?v=YrvhyTnqT8k | 0:37 | GameObject › Volume |
 | u10/u11 panorâmico | https://www.youtube.com/watch?v=arGL_eCqHFQ | 0:02, 1:57 | Skybox Panoramic (HDRI) e o material |
+| u12-environment-lighting-source-skybox | https://www.youtube.com/watch?v=MDwVMaJ4mFc | 0:20 | Lighting › Environment: Skybox Material, Sun Source, Environment Lighting Source = Skybox + Intensity Multiplier, Reflections |
+| u13-environment-lighting-source-color | https://www.youtube.com/watch?v=MDwVMaJ4mFc | 1:05 | Environment Lighting Source = Color: aparece só o Ambient Color |
 
 As pranchas lado a lado (`prancha-*.png`) e o julgamento estão na seção de validação no aparelho.
 
@@ -84,3 +86,20 @@ Vila devolvida a cada troca (md5 `2e2e996841f1f0eb5af1572c68dec3fc` conferido no
   - `11-modo-de-cor-cor.png` e `prancha-03b-neblina-vermelha-depois.png`: com Modo de cor = Cor, a neblina tinge a
     geometria e o céu fica limpo, como na Unity.
   - Vila devolvida (md5 `2e2e996841f1f0eb5af1572c68dec3fc`).
+
+### Depois do merge do PK-6 e do PK-7 (`fc0205f6`, base `eefdb1d6`)
+- Nativa 1644/1644, família de ambiente 58/58, gerenciada 523 verdes. SkyboxMaterial = 21 (ReflectionProbe 19,
+  LightProbes 20); uniform do quadro continua com 4160 bytes.
+- POCO com Astra Dev **261022094** (`0.3.0-dev.261022094-ambiente`, conferido com dumpsys), trava `astra-poco.lock`,
+  22/10 10:12–10:25. Primeiras capturas no aparelho do que antes só tinha host:
+  - `12-janela-iluminacao-pos-merge.png`: Vila abre e a janela Iluminação mostra o Ambiente da cena com as abas.
+  - `13-fonte-gradiente-no-aparelho.png` e `prancha-06-fonte-gradiente.png`: Fonte = Gradiente expõe Céu/Equador/Chão
+    com os padrões da Unity (0,212/0,227/0,259; 0,114/0,125/0,133; 0,047/0,043/0,035), como Source = Color expõe o
+    Ambient Color na Unity. A sombra do chafariz fecha visivelmente com o gradiente escuro padrão.
+  - `14-criar-volume-e-ceu-no-aparelho.png` e `prancha-07-criar-volume-no-aparelho.png`: Criar › Volume e céu com
+    Volume global, em caixa, em esfera, Ambiente e Volume de nuvens.
+  - `15-volume-em-caixa-criado.png`: o Volume em caixa nasce dentro da Atmosfera, a imagem não muda (perfil vazio,
+    como na Unity) e a janela Iluminação oferece "Abrir o Ambiente da cena".
+  - `16-play-vila-gradiente.png`: Play sem erros Vulkan no logcat.
+  - Vila devolvida (md5 `2e2e996841f1f0eb5af1572c68dec3fc` conferido no aparelho).
+- Continua sem captura no aparelho: criar um Material do céu (`.skybox`) e a fonte Cor.
