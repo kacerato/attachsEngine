@@ -75,7 +75,10 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else if(previewEnvironmentUsesPrimary_) {
     images[0]={dirtRoadResources_.environmentSampler(),dirtRoadResources_.environmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    images[1]={dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    // V-1: a câmera que usa o ambiente principal reflete o mesmo céu capturado.
+    images[1]=previewSkyReflection()?
+        VkDescriptorImageInfo{probeAtlasSampler_.handle(),skyReflection_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}:
+        VkDescriptorImageInfo{dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     images[2]={dirtRoadResources_.environmentBrdfSampler(),dirtRoadResources_.environmentBrdfView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else {
     images[0]={dirtRoadResources_.packagedEnvironmentSampler(),dirtRoadResources_.packagedEnvironmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -274,12 +277,17 @@ bool InstancedRenderer::prepareCameraPreview() {
   const bool editorPost=(!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&pendingPreview_.postProcessing;
   const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
       ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
-  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
-      previewSceneEnvironment_,mapDescription,static_cast<bool>(previewEnvironmentMap_) ||
-      (previewEnvironmentUsesPrimary_&&static_cast<bool>(activeEnvironmentMap_)),
-      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,cloudTimeSeconds_)) {
+  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),
+      effectiveSceneLook(previewSceneEnvironment_),mapDescription,
+      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,
+      previewAmbientProbeCache_,cloudTimeSeconds_)) {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
+  }
+  if(previewSkyReflection()) {
+    frame.environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
+    frame.environment.parameters[3]=frame.environment.parameters[3]>1.5f?3.0f:1.0f;
+    frame.sceneAoDetail[3]=previewSceneEnvironment_.indirectSpecular;
   }
   renderer::LightBudgetReport previewLightBudget{};
   renderer::PunctualLight previewLights[renderer::MaximumPunctualLights]{};
@@ -341,9 +349,8 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
       // R4: dupla face real. Só material que provou ordem de vértices (glTF de
       // uma face ou "Uma face" escolhida) descarta a face de trás.
       if(materialCulling_)
-        rhiDevice_->cmdSetCullMode(commandBuffer_,
-            (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
-                ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
+        rhiDevice_->cmdSetCullMode(commandBuffer_,renderer::materialCullMode(material.flags)==2u?VK_CULL_MODE_FRONT_BIT:
+            renderer::materialCullMode(material.flags)==1u?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE);
       if (!useBindless_) {
         const VkDescriptorSet set = standalone?standalonePreviewSet_:dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -388,13 +395,22 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
                          0,sizeof(push),&push);
     };
   std::vector<u32> transparent;
+  // PK-9: shader do Material só na pipeline geral; mistura pela saída pedida.
+  const auto previewPipeline=[&](u32 flags,bool blend,const renderer::MaterialShading &shading) {
+    if(blend && (flags&renderer::MapMaterialShadingExtension)) {
+      const u32 output=renderer::materialBlendOutput(shading);
+      if(output!=renderer::MaterialBlendOutputStraight && transparentBlendPipelines_[output]) return transparentBlendPipelines_[output];
+    }
+    const auto variant=renderer::materialFeatureVariant(flags);
+    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
+    if(!(flags&renderer::MapMaterialShadingExtension) && variants[variant]) return variants[variant];
+    return blend?transparentPipeline_:pipeline_;
+  };
   auto draw=[&](u32 index,bool blend) {
     const auto &record=dirtRoadResources_.draws()[index];
     auto material=dirtRoadResources_.materials()[record.materialIndex];
     if(index<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[index]);
-    const auto variant=renderer::materialFeatureVariant(material.flags);
-    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
-    const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
+    const auto pipeline=previewPipeline(material.flags,blend,index<authoredMaterials_.size()?authoredMaterials_[index].shading:renderer::MaterialShading{});
     vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
     pushMapMaterial(record.materialIndex,index);
     const auto geometry=drawGeometry(index);
@@ -404,9 +420,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   };
   const bool standaloneBlend=view.materialGeometry&&(standalonePreview_.material().flags&renderer::MapMaterialBlend);
   const auto drawStandalone=[&](bool blend) {
-    const auto variant=renderer::materialFeatureVariant(standalonePreview_.material().flags);
-    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
-    const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
+    const auto pipeline=previewPipeline(standalonePreview_.material().flags,blend,standalonePreview_.shading());
     vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);pushMapMaterial(0,0xffffffffu,true);
     const auto vertex=standalonePreview_.vertices(),instance=standalonePreview_.instance();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&vertex,&zero);vkCmdBindVertexBuffers(commandBuffer_,1,1,&instance,&zero);
@@ -450,7 +464,9 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   if(waterSubpassActive_) vkCmdNextSubpass(commandBuffer_,VK_SUBPASS_CONTENTS_INLINE);
   const auto distance=[&](u32 index){float result=0;const auto &r=dirtRoadResources_.draws()[index];
     for(u32 k=0;k<3;++k) {const float d=r.boundsCenter[k]-camera.position[k];result+=d*d;}return result;};
-  std::sort(transparent.begin(),transparent.end(),[&](u32 a,u32 b){return distance(a)>distance(b);});
+  const auto priority=[&](u32 index){return index<authoredMaterials_.size()?static_cast<int>(authoredMaterials_[index].shading.sortingPriority):0;};
+  std::sort(transparent.begin(),transparent.end(),[&](u32 a,u32 b){
+    return priority(a)!=priority(b)?priority(a)<priority(b):distance(a)>distance(b);});
   for(auto index:transparent) draw(index,true);
   if(standaloneBlend) drawStandalone(true);
   vkCmdEndRenderPass(commandBuffer_);

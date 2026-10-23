@@ -1,0 +1,54 @@
+{
+  "title": "V-2 · Noite: Unity (vídeos) × POCO (Vila Astra, câmera fixa do Play)",
+  "rows": [
+    {
+      "unity": "referencia-unity/unite2020-yqCHiZrgKzs-24m51s-noite-praca.jpg",
+      "device": "poco/08-22h-final-ceu60-limite-6.png",
+      "unity_caption": "Unite 2020 24:51 · praça com postes · quadro 88, céu 91, chão 49, B/R 1,44",
+      "device_caption": "POCO · APK noite-1408 · 22 h · quadro 66, céu 81, chão 52, B/R 1,86",
+      "verdict": "FINAL. Bate: céu azul-marinho com estrelas, praça nas poças dos postes, silhuetas e sombras pretas, cor fria. Exposição mede -7,7 e para em -6."
+    },
+    {
+      "unity": "referencia-unity/hdrp-ciclo-UqQsfRUdukE-00m00s-noite-lua-estrelas.jpg",
+      "device": "poco/09-02h-final-ceu60-limite-6.png",
+      "unity_caption": "Day/Night HDRP (Seta) 0:00 · céu azul-marinho com estrelas, B/R 2,8",
+      "device_caption": "POCO · APK noite-1408 · 2 h · mesma câmera, estrelas giradas",
+      "verdict": "FINAL. Mesmo brilho às 2 h; as estrelas giraram com a hora em torno do polo, como o Space Rotation do ciclo da Unity."
+    },
+    {
+      "unity": "referencia-unity/hdrp-noite-vnzt3aRTd5o-10m59s-final-lua-rio.jpg",
+      "device": "poco/00-22h-exposicao-fixa-da-vila.png",
+      "unity_caption": "HDRP Night (Seta) youtu.be/vnzt3aRTd5o 10:59 · luar, sRGB 35",
+      "device_caption": "POCO · Vila 22 h · Exposição Fixa -0,41 herdada · sRGB 1",
+      "verdict": "Exposição fixa calibrada para o dia: com a noite física a Vila some. A Unity também exige Automática ou um EV de noite."
+    },
+    {
+      "unity": "referencia-unity/unite2020-yqCHiZrgKzs-24m51s-noite-praca.jpg",
+      "device": "poco/01-22h-fixa-para-automatica-limite-vila-8.26.png",
+      "unity_caption": "Unite 2020 youtu.be/yqCHiZrgKzs 24:51 · praça com postes, sRGB 88",
+      "device_caption": "POCO · Automática, limite da Vila -8,26 · sRGB 138",
+      "verdict": "O defeito relatado pelo dono: a exposição adapta até o cinza médio e a noite vira dia cinza, com faixa clara de neblina."
+    },
+    {
+      "unity": "referencia-unity/hdrp-noite-vnzt3aRTd5o-00m02s-floresta-lua.jpg",
+      "device": "poco/05-22h-ceu-glow12-limite-6.png",
+      "unity_caption": "HDRP Night (Seta) 0:02 · floresta ao luar, sRGB 38, B/R 2,0",
+      "device_caption": "POCO · APK 1312 · 22 h, limite -6 · quadro 38, chão 52",
+      "verdict": "Bate: brilho do quadro, praça nas poças dos postes, silhuetas, sombras pretas, estrelas por magnitude. Não bate: céu escuro demais e B/R 0,46 (postes 2300 K da Vila)."
+    },
+    {
+      "unity": "referencia-unity/hdrp-ciclo-UqQsfRUdukE-00m00s-noite-lua-estrelas.jpg",
+      "device": "poco/06-02h-ceu-glow12-limite-6.png",
+      "unity_caption": "Day/Night HDRP (Seta) youtu.be/UqQsfRUdukE 0:00 · céu azul-marinho, sRGB 15",
+      "device_caption": "POCO · APK 1312 · 2 h · estrelas giradas pela hora",
+      "verdict": "Estrelas giram com a hora em torno do polo (posições diferentes das 22 h). Céu ainda mais escuro que o azul-marinho da Unity."
+    },
+    {
+      "unity": "referencia-unity/pbsky-estrelas-tpTzwyiGByE-06m02s-ceu-estrelas.jpg",
+      "device": "poco/07-22h-ceu-glow300-passou.png",
+      "unity_caption": "PBSky com estrelas (Connor Zelinsky) youtu.be/tpTzwyiGByE 6:02",
+      "device_caption": "POCO · APK 1347 · brilho do céu 300 · céu sRGB 182",
+      "verdict": "Passou do ponto: céu de anoitecer. A calibração final (60) espera captura no aparelho."
+    }
+  ]
+}

@@ -4,6 +4,7 @@ namespace ae::ui { class UiDrawList; }
 #include <functional>
 
 #include "resources/physics_material.h"
+#include "resources/material_asset.h"
 #include "resources/library_index.h"
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
@@ -1014,6 +1015,12 @@ struct EditorScreenState final {
     std::string normalFlipLabel,normalFlipOrigin,alphaSourceLabel,alphaSourceOrigin,isolateLabel;
     // G3a: rugosidade direta ou suavidade (Standard da Unity) e de onde vem.
     std::string roughnessSourceLabel,roughnessSourceOrigin;
+    // PK-9: o material do projeto aberto, inteiro, para o Inspector por shader
+    // (editor_material_fields.h), e o nome da textura de cada binding do
+    // seletor (0..3 do pacote, 4 oclusão, 5..9 altura, detalhe e verniz).
+    bool assetValid=false;
+    resources::MaterialAsset asset{};
+    std::string fieldTextures[10];
   };
   MaterialSlotView materialSlotView;
   // Material do projeto aberto em Propriedades (tocar num .material em
@@ -1096,6 +1103,12 @@ struct EditorScreenState final {
   }
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
+  // PK-9: rolagem do Inspector do Material, seções recolhidas (bit por
+  // MaterialSection), a lista aberta de um campo de escolha (índice + 1) e o
+  // valor de um slider enquanto o dedo o arrasta (campo + 1).
+  float materialInspectorScroll=0;
+  u32 materialSectionsCollapsed=0,materialChoiceField=0,materialSliderField=0;
+  float materialSliderValue=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.
   u8 materialIsolate=0;
   // R4: textura escolhida em Arquivos mostrada em Propriedades e gerenciador de texturas.

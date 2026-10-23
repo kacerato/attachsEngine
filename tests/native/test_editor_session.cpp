@@ -21,6 +21,7 @@
 #include "scene/environment.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
+#include "editor/editor_material_fields.h"
 #include "editor/editor_component_visuals.h"
 #include "scene/light.h"
 #include "renderer/water_authoring_geometry.h"
@@ -988,17 +989,34 @@ UiPoint locateWidget(EditorSession &session,u32 widget) {
   if(at.x>=0) return at;
   // O Inspector é uma coluna rolável: desce como o dedo até o widget aparecer.
   const auto window=layout.inspectorScrollWindow;const float content=layout.inspectorScrollContent;
-  if(window.isEmpty() || content<=window.height) return at;
   auto &state=const_cast<EditorScreenState &>(session.screen());
-  const float original=state.inspectorScroll,limit=content-window.height,step=std::max(40.f,window.height*.6f);
-  for(float offset=0;;offset=std::min(limit,offset+step)) {
-    state.inspectorScroll=offset;
-    at=scanWidget(session,widget,layout);
-    if(at.x>=0) {session.update();return at;}
-    if(offset>=limit) break;
+  if(!window.isEmpty() && content>window.height) {
+    const float original=state.inspectorScroll,limit=content-window.height,step=std::max(40.f,window.height*.6f);
+    for(float offset=0;;offset=std::min(limit,offset+step)) {
+      state.inspectorScroll=offset;
+      at=scanWidget(session,widget,layout);
+      if(at.x>=0) {session.update();return at;}
+      if(offset>=limit) break;
+    }
+    state.inspectorScroll=original;session.update();
+    scanWidget(session,widget,layout);
   }
-  state.inspectorScroll=original;session.update();
+  // PK-9: o Inspector do material do projeto rola à parte.
+  if(state.materialInspector.valid() && layout.materialInspectorContent>layout.materialInspectorWindow) {
+    const float materialLimit=layout.materialInspectorContent-layout.materialInspectorWindow,original2=state.materialInspectorScroll;
+    for(float offset=0;;offset=std::min(materialLimit,offset+std::max(40.f,layout.materialInspectorWindow*.6f))) {
+      state.materialInspectorScroll=offset;
+      at=scanWidget(session,widget,layout);
+      if(at.x>=0) {session.update();return at;}
+      if(offset>=materialLimit) break;
+    }
+    state.materialInspectorScroll=original2;session.update();
+  }
   return at;
+}
+// PK-9: widget de um campo do Inspector do material por shader.
+u32 materialField(std::string_view key,MaterialFieldPart part,u32 option=0) {
+  return materialFieldWidget(materialFieldIndex(*findMaterialField(key)),part,option);
 }
 void importWaterResources(Fixture &fixture) {
   std::vector<u8> vertices;std::vector<u32> indices;
@@ -1374,12 +1392,27 @@ AE_TEST(session_material_and_environment_numeric_controls_use_the_same_history_p
   tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+1);tapWidget(f,widgetId(EditorWidget::NumericApply));
   AE_EXPECT_EQ(meshMaterial(*f.session.document().find(f.cube)).roughness,.2f,"exact roughness");
   AE_EXPECT_EQ(f.session.document().find(f.cube)->transform.position[0],0.0f,"transform untouched");
+  // PK-1/PK-2: a janela Iluminação não edita mais multiplicadores da raiz.
+  // Sem Ambiente ela mostra o padrão e "Personalizar", que cria o Ambiente da
+  // cena (Volume global de prioridade mínima) pelo mesmo histórico.
   tapWidget(f,widgetId(EditorWidget::TabLighting));
-  tapWidget(f,widgetId(EditorWidget::TransformFieldBase)+20);
-  tapWidget(f,widgetId(EditorWidget::NumericKeyBase)+2);tapWidget(f,widgetId(EditorWidget::NumericApply));
-  AE_EXPECT_EQ(f.session.document().find(f.session.document().root())->environment[0],3.0f,"sun belongs to scene root");
+  AE_EXPECT_TRUE(f.session.screen().workspace==EditorWorkspace::Lighting,"janela Iluminação aberta");
+  tapWidget(f,widgetId(EditorWidget::LightingCreateEnvironment));
+  const auto *root=f.session.document().find(f.session.document().root());
+  const auto *environment=static_cast<const scene::Environment*>(root->components.find(scene::Environment::descriptor));
+  AE_EXPECT_TRUE(environment&&environment->values.priority==-1000.0f&&
+                 environment->shape==renderer::EnvironmentVolumeShape::Global,"Ambiente da cena na raiz, prioridade mínima");
+  AE_EXPECT_EQ(f.session.screen().expandedNative,environment->instanceId(),"a janela passa a editar esse Ambiente");
+  AE_EXPECT_EQ(root->environment[0],1.0f,"raiz sem multiplicadores");
+  // Os controles do cartão respondem dentro da janela (antes só no workspace Cena).
+  u32 componentIndex=0,skyEnum=0;
+  for(u32 i=0;i<root->components.size();++i) if(root->components.at(i)==environment) componentIndex=i;
+  for(u32 i=0;i<scene::Environment::descriptor.enums.size();++i) if(scene::Environment::descriptor.enums[i].id=="sky") skyEnum=i;
+  tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+componentIndex+(skyEnum<<8));
+  AE_EXPECT_TRUE(f.session.screen().enumPicker!=0,"Shader do céu abre o seletor na janela Iluminação");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo environment");
-  AE_EXPECT_EQ(f.session.document().find(f.session.document().root())->environment[0],1.0f,"lighting restored");
+  AE_EXPECT_TRUE(!f.session.document().find(f.session.document().root())->components.find(scene::Environment::descriptor),
+                 "desfazer volta ao ambiente padrão");
 }
 
 AE_TEST(session_frame_group_uses_descendants_instead_of_empty_group_origin) {
@@ -4376,19 +4409,16 @@ AE_TEST(project_material_opens_in_properties_and_edits_every_use) {
   const auto material=[&]{return f.session.findMaterialAsset(guid);};
   // Superfície: alfa passa pelo mesmo comando do alcance Compartilhado.
   const auto alpha=material()->surface.alphaMode;
-  revealProperty(f,widgetId(EditorWidget::MaterialAlphaCycle));
-  tapWidget(f,widgetId(EditorWidget::MaterialAlphaCycle));
+  tapWidget(f,materialField("pk9.surface",MaterialFieldPart::Option,1));
   AE_EXPECT_TRUE(material()->surface.alphaMode!=alpha,"modo de alfa do recurso mudou");
   AE_EXPECT_EQ(history.undoDepth(),1u,"um passo de Desfazer");
   // Número pelo teclado numérico.
-  revealProperty(f,widgetId(EditorWidget::MaterialNumberBase));
-  tapWidget(f,widgetId(EditorWidget::MaterialNumberBase));
+  tapWidget(f,materialField("pk9.metallic",MaterialFieldPart::Value));
   AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.25",true),"número aceito sem objeto");
-  scene::MeshRenderer probe;probe.material=material()->values;
-  AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.25f)<1e-5f,"valor gravado no recurso");
+  AE_EXPECT_TRUE(std::abs(material()->values.metallic-.25f)<1e-5f,"valor gravado no recurso");
   // Textura: Sem textura na cor base (as texturas estão na primeira página).
   while(locateWidget(f.session,widgetId(EditorWidget::PropertyPrevious)).x>=0) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
-  tapWidget(f,widgetId(EditorWidget::MaterialTextureBase));
+  tapWidget(f,materialField("pk9.base_map",MaterialFieldPart::Main));
   AE_EXPECT_TRUE(state.texturePicker,"seletor de textura");
   tapWidget(f,widgetId(EditorWidget::TextureUseNone));
   AE_EXPECT_TRUE(material()->textures[0]==scene::MaterialTextureNone,"cor base sem textura no recurso");
@@ -4670,26 +4700,25 @@ AE_TEST(focused_window_holds_a_project_asset_beside_the_main_inspector) {
   // Alfa do material pela janela; o perfil não muda.
   const auto alpha=f.session.findMaterialAsset(material)->surface.alphaMode;
   const auto profileRevision=f.session.findEnvironmentProfile(profile)->revision;
-  for(u32 page=0;page<6 && inWindow(widgetId(EditorWidget::MaterialAlphaCycle)).x<0;++page) {
-    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
-  }
-  const auto alphaRow=inWindow(widgetId(EditorWidget::MaterialAlphaCycle));
+  // O Inspector do material rola: desce até o Tipo de superfície aparecer na janela.
+  for(u32 step=0;step<24 && inWindow(materialField("pk9.surface",MaterialFieldPart::Option,1)).x<0;++step)
+    const_cast<EditorScreenState &>(f.session.screen()).materialInspectorScroll+=40;
+  const auto alphaRow=inWindow(materialField("pk9.surface",MaterialFieldPart::Option,1));
   AE_EXPECT_TRUE(alphaRow.x>=0,"alfa na janela");
   tapAt(alphaRow);
   AE_EXPECT_TRUE(f.session.findMaterialAsset(material)->surface.alphaMode!=alpha,"material editado pela janela");
   AE_EXPECT_EQ(f.session.findEnvironmentProfile(profile)->revision,profileRevision,"o perfil do principal não muda");
   AE_EXPECT_TRUE(state.profileInspector==profile,"principal continua no perfil");
   // Número pelo teclado aberto na janela.
-  for(u32 page=0;page<6 && inWindow(widgetId(EditorWidget::MaterialNumberBase)).x<0;++page) {
-    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
-  }
-  const auto numberRow=inWindow(widgetId(EditorWidget::MaterialNumberBase));
+  const auto metallicValue=materialField("pk9.metallic",MaterialFieldPart::Value);
+  for(u32 step=0;step<24 && inWindow(metallicValue).x<0;++step)
+    const_cast<EditorScreenState &>(f.session.screen()).materialInspectorScroll+=40;
+  const auto numberRow=inWindow(metallicValue);
   AE_EXPECT_TRUE(numberRow.x>=0,"número na janela");
   tapAt(numberRow);
-  AE_EXPECT_TRUE(state.numericField==widgetId(EditorWidget::MaterialNumberBase),"teclado aberto");
+  AE_EXPECT_TRUE(state.numericField==metallicValue,"teclado aberto");
   AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.35",true),"valor aceito");
-  scene::MeshRenderer probe;probe.material=f.session.findMaterialAsset(material)->values;
-  AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.35f)<1e-5f,"número no material da janela");
+  AE_EXPECT_TRUE(std::abs(f.session.findMaterialAsset(material)->values.metallic-.35f)<1e-5f,"número no material da janela");
   // Persistência: a aba de recurso volta com o projeto.
   AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto reaberto");
   AE_EXPECT_TRUE(state.focusedInspectors.size()==1 && state.focusedInspectors[0].kind==EditorScreenState::FocusedAsset::Material &&
@@ -5877,8 +5906,8 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   const auto other=history.duplicateEntity(doc,f.cube);
   const auto b=session.createMaterialFromSlot(other,0,diagnostic);
   AE_EXPECT_TRUE(a.valid() && b.valid() && a!=b,"dois materiais reais");
-  AE_EXPECT_TRUE(session.setSlotMaterialValue(f.cube,0,EditorSession::MaterialScope::Shared,0,.2f,diagnostic),diagnostic.c_str());
-  AE_EXPECT_TRUE(session.setSlotMaterialValue(other,0,EditorSession::MaterialScope::Shared,0,.8f,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(f.cube,0,EditorSession::MaterialScope::Shared,4,.2f,diagnostic),diagnostic.c_str());
+  AE_EXPECT_TRUE(session.setSlotMaterialValue(other,0,EditorSession::MaterialScope::Shared,4,.8f,diagnostic),diagnostic.c_str());
   AE_EXPECT_TRUE(session.setSlotMaterialValue(other,0,EditorSession::MaterialScope::Shared,1,.7f,diagnostic),diagnostic.c_str());
   scene::MaterialSampling sampling;sampling.offset[0]=.4f;sampling.scale[1]=2;
   AE_EXPECT_TRUE(session.setSlotSampling(other,0,0,EditorSession::MaterialScope::Shared,sampling,diagnostic),diagnostic.c_str());
@@ -5888,22 +5917,22 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   auto &state=const_cast<EditorScreenState&>(session.screen());
   state.selectedFiles={pathA,pathB};state.filesMultiSelect=true;session.update();history.clear();
   AE_EXPECT_TRUE(state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Materials,"Inspector conjunto");
-  AE_EXPECT_TRUE(state.materialMixedHas("num0"),"valor misto");
+  AE_EXPECT_TRUE(state.materialMixedHas("num4"),"valor misto");
   const auto read=[&](resources::AssetGuid guid,u32 index) {
     scene::MeshRenderer probe;probe.material=session.findMaterialAsset(guid)->values;
     return scene::meshRendererNumbers[index].read(probe);
   };
   const auto editNumber=[&](const char *text) {
-    revealProperty(f,widgetId(EditorWidget::MaterialNumberBase));tapWidget(f,widgetId(EditorWidget::MaterialNumberBase));
+    tapWidget(f,materialField("pk9.metallic",MaterialFieldPart::Value));
     return session.completeTextEdit(session.pendingTextEdit(),text,true);
   };
   AE_EXPECT_TRUE(editNumber("0.2"),"atribuir o valor que o ativo já possui");session.update();
-  AE_EXPECT_TRUE(std::abs(read(a,0)-.2f)<1e-5f && std::abs(read(b,0)-.2f)<1e-5f,"todos recebem o valor explícito");
+  AE_EXPECT_TRUE(std::abs(read(a,4)-.2f)<1e-5f && std::abs(read(b,4)-.2f)<1e-5f,"todos recebem o valor explícito");
   AE_EXPECT_TRUE(std::abs(read(b,1)-.7f)<1e-5f,"outra propriedade preservada");
   AE_EXPECT_EQ(history.undoDepth(),1u,"um passo para o conjunto");
-  AE_EXPECT_TRUE(!state.materialMixedHas("num0"),"valor deixou de ser misto");
+  AE_EXPECT_TRUE(!state.materialMixedHas("num4"),"valor deixou de ser misto");
   AE_EXPECT_TRUE(history.undo(doc),"desfazer");session.update();
-  AE_EXPECT_TRUE(std::abs(read(b,0)-.8f)<1e-5f && state.materialMixedHas("num0"),"diferença restaurada");
+  AE_EXPECT_TRUE(std::abs(read(b,4)-.8f)<1e-5f && state.materialMixedHas("num4"),"diferença restaurada");
   AE_EXPECT_TRUE(history.redo(doc),"refazer");session.update();
   // Alteração em ambos exercita o journal com arquivos companheiros.
   AE_EXPECT_TRUE(editNumber("0.35"),"editar ambos");session.update();
@@ -5943,10 +5972,10 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   const auto tapAt=[&](UiPoint p){f.down(140,p);f.up(140,p);f.session.update();};
   const auto aBeforeFocus=session.findMaterialAsset(a)->serialize();
   const auto bAlpha=session.findMaterialAsset(b)->surface.alphaMode;
-  for(u32 page=0;page<8 && inWindow(widgetId(EditorWidget::MaterialAlphaCycle)).x<0;++page) {
-    const auto next=inWindow(widgetId(EditorWidget::PropertyNext));if(next.x<0) break;tapAt(next);
-  }
-  const auto alphaRow=inWindow(widgetId(EditorWidget::MaterialAlphaCycle));
+  // O Inspector do material rola: desce até o Tipo de superfície aparecer na janela.
+  for(u32 step=0;step<24 && inWindow(materialField("pk9.surface",MaterialFieldPart::Option,1)).x<0;++step)
+    const_cast<EditorScreenState &>(f.session.screen()).materialInspectorScroll+=40;
+  const auto alphaRow=inWindow(materialField("pk9.surface",MaterialFieldPart::Option,1));
   AE_EXPECT_TRUE(alphaRow.x>=0,"alfa na janela focada");tapAt(alphaRow);
   AE_EXPECT_TRUE(session.findMaterialAsset(b)->surface.alphaMode!=bAlpha,"só o material da janela mudou");
   AE_EXPECT_EQ(session.findMaterialAsset(a)->serialize(),aBeforeFocus,"principal não foi replicado");
@@ -5954,18 +5983,16 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   AE_EXPECT_EQ(session.findMaterialAsset(b)->surface.alphaMode,bAlpha,"replay exato da janela");
   state.focusedInspectors.clear();state.focusedActive=0;session.update();
   // Copiar um valor misto do próprio ativo também precisa atingir o conjunto.
-  revealProperty(f,widgetId(EditorWidget::MaterialNumberBase)+1);
-  const auto mixedPoint=locateWidget(session,widgetId(EditorWidget::MaterialNumberBase)+1);
+  const auto mixedPoint=locateWidget(session,materialField("pk9.base_color",MaterialFieldPart::Value));
   f.down(141,mixedPoint);session.handlePointer({141,UiPointerPhase::Up,mixedPoint,1.0});session.update();
-  AE_EXPECT_TRUE(state.setValueMenu.key=="asset.mat.num1","menu do campo misto");
+  AE_EXPECT_TRUE(state.setValueMenu.key=="asset.mat.pk9.base_color","menu do campo misto");
   tapWidget(f,widgetId(EditorWidget::SetValueRowBase));
   AE_EXPECT_TRUE(std::abs(read(a,1)-read(b,1))<1e-5f,"valor do ativo copiado");
   AE_EXPECT_TRUE(history.undo(doc),"desfazer cópia");session.update();
   // Zerar UV quando o ativo já está zerado ainda zera o outro, em um passo.
   // O corpo rola em landscape curto sem esconder o cabeçalho.
   session.setSurface({0,0,853,394},{});session.update();
-  while(locateWidget(session,widgetId(EditorWidget::PropertyPrevious)).x>=0) tapWidget(f,widgetId(EditorWidget::PropertyPrevious));
-  tapWidget(f,widgetId(EditorWidget::MaterialTextureBase));
+  tapWidget(f,materialField("pk9.base_map",MaterialFieldPart::Main));
   AE_EXPECT_TRUE(state.materialMixedHas("uv0.offset0"),"diferença da amostragem identificada");
   for(u32 drag=0;drag<5 && locateWidget(session,widgetId(EditorWidget::TextureUvReset)).x<0;++drag) {
     auto start=locateWidget(session,widgetId(EditorWidget::TexturePickerScroll));
@@ -5983,7 +6010,7 @@ AE_TEST(multiple_material_assets_edit_one_property_atomically_and_keep_focused_s
   // A biblioteca consumida pelo desenho resolve o novo valor, não só a UI.
   for(const auto id:{f.cube,other}) {
     scene::MeshRenderer probe;probe.material=session.mapScene().slotMaterial(*meshRenderer(*doc.find(id)),0);
-    AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[0].read(probe)-.35f)<1e-5f,"consumidor de render atualizado");
+    AE_EXPECT_TRUE(std::abs(scene::meshRendererNumbers[4].read(probe)-.35f)<1e-5f,"consumidor de render atualizado");
   }
   tapWidget(f,widgetId(EditorWidget::MaterialInspectorClose));session.update();
   AE_EXPECT_TRUE(!state.materialInspector.valid() && state.selectedFiles.empty(),"fechar não reabre o conjunto no quadro seguinte");

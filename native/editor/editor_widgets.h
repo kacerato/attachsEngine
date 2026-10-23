@@ -19,6 +19,15 @@ enum class EditorWidget : u32 {
   LibraryAuditBase=0xCD170000u,
   // G3a: origem da rugosidade no cartão Canais do material.
   MaterialRoughnessSourceCycle=0xCD180000u,
+  // PK-9: campos do Inspector do Material por shader (editor_material_fields.h):
+  // base + índice do campo × 16 + parte (MaterialFieldPart).
+  MaterialFieldBase=0xCD190000u,
+  // Seção recolhível (+ MaterialSection), rolagem, opções da lista aberta (+
+  // índice) e fechar a lista.
+  MaterialSectionBase=0xCD1A0000u,MaterialInspectorScroll=0xCD1A0100u,MaterialChoiceOptionBase=0xCD1A0200u,
+  MaterialChoiceClose=0xCD1A0300u,
+  // PK-2: janela Iluminação (Ambiente da cena e Material do céu).
+  LightingCreateEnvironment=0xCD1B0000u,LightingCreateSkybox,LightingEditSkybox,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
@@ -537,6 +546,15 @@ enum class EditorWidget : u32 {
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
+// PK-9: partes de um campo do Inspector do Material. 1..8 são as opções de
+// um campo Segment (índice + 1).
+enum class MaterialFieldPart : u32 {Main=0,Option=1,Track=9,Value=10,Minus=11,Plus=12};
+inline constexpr u32 materialFieldWidget(u32 field,MaterialFieldPart part,u32 option=0) noexcept {
+  return widgetId(EditorWidget::MaterialFieldBase)+field*16u+static_cast<u32>(part)+option;
+}
+inline constexpr bool isMaterialFieldWidget(u32 widget) noexcept {
+  return widget>=widgetId(EditorWidget::MaterialFieldBase) && widget<widgetId(EditorWidget::MaterialFieldBase)+0x1000u;
+}
 // Atalhos do seletor de máscara (enum com `flags`), depois de qualquer índice de opção.
 inline constexpr u32 kEnumMaskNothing=0xFFF0u,kEnumMaskEverything=0xFFF1u;
 // Cada faixa-base (id + índice) reserva um intervalo inteiro de ids. Duas

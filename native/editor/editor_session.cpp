@@ -1,3 +1,4 @@
+#include "editor/editor_screen_internal.h"
 #include "editor/editor_session_internal.h"
 #include "editor/editor_humanoid_bones.h"
 #include "editor/editor_screen.h"
@@ -20,8 +21,10 @@
 #include "renderer/primitive_geometry.h"
 #include "runtime/scene_time_of_day.h"
 #include "runtime/scene_weather.h"
+#include "scene/time_of_day.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
+#include "editor/editor_screen_internal.h"
 #include "editor/editor_studio_tools.h"
 #include "editor/editor_studio_state.h"
 #include "editor/editor_texture_history.h"
@@ -158,6 +161,8 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         if(record&&record->type!=binding->kind) break;
         if(binding->kind==resources::AssetType::EnvironmentProfile&&
            (!record||record->type!=resources::AssetType::EnvironmentProfile)) break;
+        if(binding->kind==resources::AssetType::SkyboxMaterial&&
+           (!record||record->type!=resources::AssetType::SkyboxMaterial||!findEnvironmentProfile(request.componentResource))) break;
         if(binding->kind==resources::AssetType::PhysicsMaterial&&
            (!record||record->type!=resources::AssetType::PhysicsMaterial||!findPhysicsMaterial(request.componentResource))) break;
         if(binding->kind==resources::AssetType::AnimatorController&&
@@ -204,6 +209,15 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
         if(environment->values.environmentMap.valid()&&
            !findEnvironmentMap(environment->values.environmentMap)) break;
+      }
+      // PK-2: o Material do céu escolhido traz o céu dele na mesma transação; a
+      // cópia na instância é o fallback gravado se o recurso sumir.
+      if(binding->kind==resources::AssetType::SkyboxMaterial&&authored.valid()) {
+        auto *environment=&candidate->type()==&scene::Environment::descriptor?
+            static_cast<scene::Environment*>(candidate):nullptr;
+        const auto *material=findEnvironmentProfile(authored);
+        if(!environment||!material||!material->skybox) break;
+        environment->values=resources::applySkyboxMaterial(environment->values,*material);
       }
       if(candidate&&candidate->valid()) {
         if(binding->kind==resources::AssetType::Texture && authored.valid() &&
@@ -1986,6 +2000,11 @@ bool EditorSession::completeTextEditNow(const EditorTextEdit &edit,std::string_v
     double evaluated=0;std::string reason;
     const auto *entity=document_.find(edit.entity);
     state_.numericError=true;
+    // PK-9: campo do Inspector do Material por shader (um, dois ou três números).
+    if(isMaterialFieldWidget(edit.field)) {
+      if(!commitMaterialFieldText(edit.field,value)) return false;
+      state_.numericError=false;close();return true;
+    }
     const bool assetNumber=materialAssetMode() && edit.field>=widgetId(EditorWidget::MaterialNumberBase) &&
         edit.field-widgetId(EditorWidget::MaterialNumberBase)<scene::meshRendererNumbers.size();
     // Perfil de ambiente: número ou trio ("r g b") da linha aberta.
@@ -2514,7 +2533,7 @@ void EditorSession::refreshMultiAsset() {
     const auto type=record?record->type:resources::AssetType{};
     const u32 kind=record&&type==resources::AssetType::Texture?0u:record&&type==resources::AssetType::Material?1u:
         record&&type==resources::AssetType::Mesh?2u:record&&type==resources::AssetType::EnvironmentMap?3u:
-        record&&type==resources::AssetType::EnvironmentProfile?4u:path.ends_with(".cs")?5u:path.ends_with(".aescene")?6u:
+        record&&(type==resources::AssetType::EnvironmentProfile||type==resources::AssetType::SkyboxMaterial)?4u:path.ends_with(".cs")?5u:path.ends_with(".aescene")?6u:
         (path.ends_with(".glb")||path.ends_with(".gltf"))?2u:7u;
     ++counts[kind];multiAssetGroups_.push_back(kind);
     EditorScreenState::MultiAssetView::Item item;
@@ -2932,7 +2951,8 @@ void EditorSession::openProjectFile(const EditorFileEntry &entry) {
       std::any_of(importedSources_.begin(),importedSources_.end(),[&](const auto &source){return source.guid==record->guid&&!source.animations.empty();})) {
     std::string diagnostic;if(!openModelTakes(record->guid,diagnostic))state_.status=diagnostic;
   }
-  else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::EnvironmentProfile) {
+  else if(const auto *record=assets_.findByPath(entry.relativePath);record && (record->type==resources::AssetType::EnvironmentProfile||
+                                                                            record->type==resources::AssetType::SkyboxMaterial)) {
     if(!openProfileInspector(record->guid)) state_.status="Perfil registrado, mas o arquivo não pôde ser lido";
   }
   else if(const auto *record=assets_.findByPath(entry.relativePath);record && record->type==resources::AssetType::PhysicsMaterial) {
@@ -4538,7 +4558,7 @@ u32 EditorSession::textureUsersOf(const resources::AssetGuid &guid) const {
   if(!guid.valid() || guid==scene::MaterialTextureNone) return 0;
   u32 users=sceneUsersOf(guid);
   for(const auto &material:materials_)
-    if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) ++users;
+    if(material.usesTexture(guid)) ++users;
   return users;
 }
 
@@ -4664,7 +4684,7 @@ bool EditorSession::deleteResource(const std::string &relative,bool force,
         for(const auto &identity:source.identities) report.sceneUsers+=sceneUsersOf(identity);
     // R4: materiais do projeto que usam esta textura dependem dela.
     for(const auto &material:materials_) {
-      if(std::find(material.textures.begin(),material.textures.end(),guid)==material.textures.end() && material.occlusionTexture!=guid) continue;
+      if(!material.usesTexture(guid)) continue;
       if(std::find(doomed.begin(),doomed.end(),material.guid)==doomed.end()) ++report.registryDependents;
     }
     for(const auto &dependent:assets_.dependents(guid)) {
@@ -6191,6 +6211,31 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
     }
     if(!history_.applyValues(document_,id,parentValues)) {history_.cancel(document_);return refuse("Não foi possível ligar os filhos");}
   }
+  // V-2: "Sol com dia e noite" traz a Lua (o par Sun/Moon do ciclo do HDRP):
+  // uma direcional irmã, girada pela Hora do dia do sol. Desfazer leva os dois.
+  std::string moonNote;
+  if(recipe.id==recipe::dayNightRecipe) {
+    EditorEntity moon;
+    for(const auto &part:recipe::dayNightMoon) {
+      auto plan=scene::planComponentAddition(moon.components,part.type);
+      if(!plan.ready) {history_.cancel(document_);return refuse("Não foi possível compor a Lua");}
+      moon.components=std::move(plan.candidate);
+      for(const auto &initial:part.values)
+        if(scene::setComponentProperty(moon.components,initial.component,initial.property,initial.value)!=
+           scene::ComponentPropertyStatus::Applied) {history_.cancel(document_);return refuse("Lua: valor inicial recusado");}
+    }
+    moon.transform=document_.find(id)->transform;
+    assignEntityName(moon,"Lua");
+    const auto moonId=history_.createEntity(document_,parent,runtime::ObjectKind::Light,"Lua");
+    auto sun=*document_.find(id);
+    if(!moonId||!history_.applyValues(document_,moonId,moon)||
+       scene::setComponentProperty(sun.components,scene::TimeOfDay::descriptor.id,"moon_light",
+                                   scene::ObjectReference{moonId})!=scene::ComponentPropertyStatus::Applied||
+       !history_.applyValues(document_,id,sun)) {
+      history_.cancel(document_);return refuse("Não foi possível criar a Lua");
+    }
+    moonNote=" · Lua criada e ligada em Hora do dia";
+  }
   // Cinemachine: a primeira câmera virtual põe um Cérebro na câmera principal.
   // Mesma transação: desfazer remove a câmera virtual e o Cérebro juntos.
   std::string brainNote;
@@ -6236,7 +6281,7 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   if(!recipe.pathPoints.empty()){
     refreshPathEditorState();state_.pathEditorOpen=true;state_.pathPointList=false;
   }
-  state_.status=std::string("Objeto criado: ")+recipe.name+brainNote;
+  state_.status=std::string("Objeto criado: ")+recipe.name+brainNote+moonNote;
   return id;
 }
 
@@ -7134,6 +7179,16 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
       state_.textureUvLabels[4]=number("Rot. %.0f°",sampling.rotation);
     }
   }
+  // PK-9: o recurso inteiro para o Inspector por shader e o nome da textura
+  // de cada binding do seletor (pacote, oclusão, altura, detalhe e verniz).
+  view.assetValid=true;view.asset=material;
+  for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) view.fieldTextures[binding]=view.textureNames[binding];
+  view.fieldTextures[scene::MaterialOcclusionTextureBinding]=view.occlusionTextureLabel;
+  for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra) {
+    const auto &texture=material.extraTextures[extra];
+    const auto *found=texture.valid()?findProjectTexture(texture):nullptr;
+    view.fieldTextures[scene::MaterialExtraTextureBindingBase+extra]=found?found->name:texture.valid()?std::string("Textura ausente"):std::string("Nenhuma");
+  }
   scene::MeshRenderer probe;probe.material=material.values;
   for(u32 field=0;field<scene::meshRendererNumbers.size() && field<std::size(view.values);++field)
     view.values[field]=scene::meshRendererNumbers[field].read(probe);
@@ -7142,6 +7197,7 @@ void EditorSession::refreshMaterialAssetView(const resources::MaterialAsset &mat
 bool EditorSession::openMaterialInspector(const resources::AssetGuid &guid) {
   if(!findMaterialAsset(guid)) return false;
   state_.materialInspector=guid;state_.materialShared=true;state_.materialInspectorUse=0;state_.environmentInspector={};
+  state_.materialInspectorScroll=0;state_.materialChoiceField=0;state_.materialSliderField=0;
   state_.profileInspector={};
   state_.materialPicker=false;state_.texturePicker=false;state_.textureViewer=false;
   state_.textureInspector=false;state_.textureManager=false;state_.propertyPage=0;state_.propertyQuery.clear();
@@ -7156,7 +7212,7 @@ void EditorSession::publishMaterialLibrary() {
   library.reserve(materials_.size());
   for(const auto &material:materials_)
     library.push_back({material.guid,{material.values,material.textures,material.surface,material.sampling,material.channels,
-                                      material.occlusionTexture}});
+                                      material.occlusionTexture,material.shading,material.extraTextures}});
   mapScene_.setMaterialLibrary(std::move(library));
   appearanceChanged_=true;
 }
@@ -7226,7 +7282,7 @@ void EditorSession::refreshTexturePanels() {
       state_.textureUserEntities.push_back(id);
     }
     for(const auto &material:materials_)
-      if(std::find(material.textures.begin(),material.textures.end(),guid)!=material.textures.end() || material.occlusionTexture==guid) {
+      if(material.usesTexture(guid)) {
         state_.textureUserLabels.push_back("Material do projeto: "+material.name);
         state_.textureUserEntities.push_back(kInvalidEntity);
       }
@@ -7588,6 +7644,11 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
     for(u32 binding=0;binding<scene::MaterialTextureCount;++binding) add(material.textures[binding],binding,material.sampling[binding]);
   // Oclusão própria: dado linear, amostrada como o metal/rugosidade (binding 2).
   for(const auto &material:materials_) add(material.occlusionTexture,2,material.sampling[2]);
+  // PK-9: altura, máscara e clear coat seguem a cor base; o detalhe tem os seus.
+  for(const auto &material:materials_)
+    for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+      add(material.extraTextures[extra],scene::materialExtraPublicationBinding(extra),
+          extra==scene::MaterialExtraDetailAlbedo||extra==scene::MaterialExtraDetailNormal?material.shading.detailSampling:material.sampling[0]);
   // Texturas da cena que ainda vai ser aberta (reabertura do projeto).
   for(const auto &item:anticipatedTextures_)
     if(std::find(out.begin(),out.end(),item)==out.end()) out.push_back(item);
@@ -7605,6 +7666,10 @@ void EditorSession::collectUsedTextures(std::vector<UsedTexture> &out) const {
         add(mapScene_.slotTexture(*render,slot,binding),binding,mapScene_.slotSampling(*render,slot,binding));
     for(u32 slot=0;slot<render->slotCount();++slot)
       add(mapScene_.slotOcclusionTexture(*render,slot),2,mapScene_.slotSampling(*render,slot,2));
+    for(u32 slot=0;slot<render->slotCount();++slot)
+      if(const auto *shared=mapScene_.sharedMaterial(render->slotMaterialAsset(slot)))
+        for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+          add(shared->extraTextures[extra],scene::materialExtraPublicationBinding(extra),mapScene_.extraTextureSampling(*render,slot,extra));
     for(u32 slot=0;slot<render->slotCount();++slot)
       add(render->slotLightmap(slot).texture,2,scene::lightmapSampling());
   }
@@ -7734,6 +7799,7 @@ bool EditorSession::repairSharedTexture(resources::AssetGuid material,resources:
   auto candidate=*current;u32 changed=0;
   for(auto &texture:candidate.textures) if(texture==from) {texture=to;++changed;}
   if(candidate.occlusionTexture==from) {candidate.occlusionTexture=to;++changed;}
+  for(auto &texture:candidate.extraTextures) if(texture==from) {texture=to;++changed;}
   if(!changed) {diagnostic="O material não usa essa textura.";return false;}
   ++candidate.revision;
   if(!commitSharedMaterial(candidate,diagnostic)) return false;
@@ -7780,7 +7846,11 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
   if(isPlaying() || history_.isOpen()) {diagnostic="Finalize a edição antes de trocar a textura.";return false;}
   // O binding logo depois dos quatro do pacote é a textura de oclusão própria.
   const bool assetShared=scope==MaterialScope::Shared && materialAssetMode();
-  if((!assetShared && (!render || slot>=render->slotCount())) || binding>scene::MaterialOcclusionTextureBinding) {diagnostic="Binding de textura inexistente.";return false;}
+  if((!assetShared && (!render || slot>=render->slotCount())) ||
+     binding>=scene::MaterialExtraTextureBindingBase+scene::MaterialExtraTextureCount) {diagnostic="Binding de textura inexistente.";return false;}
+  if(binding>=scene::MaterialExtraTextureBindingBase && scope!=MaterialScope::Shared) {
+    diagnostic="Altura, detalhe e clear coat são do material do projeto (como na Unity); edite o material compartilhado.";return false;
+  }
   if(texture.valid() && texture!=scene::MaterialTextureNone && !findProjectTexture(texture)) {diagnostic="Textura fora do projeto.";return false;}
   if(scope==MaterialScope::Shared) {
     const auto guid=assetShared?state_.materialInspector:render->slotMaterialAsset(slot);
@@ -7791,10 +7861,15 @@ bool EditorSession::setSlotTexture(EditorEntityId id,u32 slot,u32 binding,Materi
     const auto *record=assets_.find(guid);
     if(!record) {diagnostic="Material fora do registro.";return false;}
     auto candidate=*found;
-    if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
+    // PK-9: as texturas extras (altura, detalhe, clear coat) só existem no
+    // recurso; "none" nelas é ausência.
+    if(binding>=scene::MaterialExtraTextureBindingBase && binding<scene::MaterialExtraTextureBindingBase+scene::MaterialExtraTextureCount)
+      candidate.extraTextures[binding-scene::MaterialExtraTextureBindingBase]=texture==scene::MaterialTextureNone?resources::AssetGuid{}:texture;
+    else if(binding==scene::MaterialOcclusionTextureBinding) candidate.occlusionTexture=texture;
     else candidate.textures[binding]=texture;
     ++candidate.revision;
-    if(!commitSharedMaterial(candidate,diagnostic,true,binding==scene::MaterialOcclusionTextureBinding?"ch1":"tex"+std::to_string(binding))) return false;
+    if(!commitSharedMaterial(candidate,diagnostic,true,binding>=scene::MaterialExtraTextureBindingBase?"x"+std::to_string(binding-scene::MaterialExtraTextureBindingBase):
+                             binding==scene::MaterialOcclusionTextureBinding?"ch1":"tex"+std::to_string(binding))) return false;
   } else {
     auto values=*entity;
     if(binding==scene::MaterialOcclusionTextureBinding) *editMeshRenderer(values)->editSlotOcclusionTexture(slot)=texture;
@@ -7919,13 +7994,13 @@ void EditorSession::loadEnvironmentProfiles() {
   const auto root=files_.rootPath();
   if(root.empty()) return;
   for(const auto &record:assets_.records()) {
-    if(record.type!=resources::AssetType::EnvironmentProfile) continue;
+    if(record.type!=resources::AssetType::EnvironmentProfile&&record.type!=resources::AssetType::SkyboxMaterial) continue;
     std::filesystem::path absolute;std::vector<u8> bytes;resources::EnvironmentProfile profile;
     if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(root),record.path,absolute) ||
        !EditorImportTransaction::read(absolute,bytes,64u*1024u) ||
        !resources::EnvironmentProfile::deserialize(
           std::string_view(reinterpret_cast<const char*>(bytes.data()),bytes.size()),profile) ||
-       profile.guid!=record.guid) {
+       profile.guid!=record.guid||profile.assetType()!=record.type) {
       reportProblem(EditorConsoleSeverity::Warning,
                     "Perfil de ambiente ilegível ou ausente: "+record.path+"; o volume conserva sua cópia local.");
       continue;
@@ -7962,6 +8037,10 @@ void EditorSession::synchronizeEnvironmentProfile(const resources::EnvironmentPr
       auto *component=values.components.editInstance(values.components.at(index)->instanceId());
       if(!component||&component->type()!=&scene::Environment::descriptor) continue;
       auto &environment=static_cast<scene::Environment&>(*component);
+      if(profile.skybox) {
+        if(environment.values.skybox!=profile.guid) continue;
+        environment.values=resources::applySkyboxMaterial(environment.values,profile);changed=true;continue;
+      }
       if(environment.profile!=profile.guid) continue;
       environment.values=resources::applyEnvironmentProfile(environment.values,profile);changed=true;
     }
@@ -8089,6 +8168,9 @@ bool EditorSession::commitMaterialBatch(const std::vector<resources::MaterialAss
       diagnostic="Textura do material ausente ou com tipo incompatível.";return false;
     }
     if(!append(candidate.occlusionTexture)) {diagnostic="Textura de oclusão ausente ou incompatível.";return false;}
+    for(const auto &texture:candidate.extraTextures) if(!append(texture)) {
+      diagnostic="Textura de altura, detalhe ou clear coat ausente ou incompatível.";return false;
+    }
     const auto text=candidate.serialize();
     const std::span<const u8> bytes{reinterpret_cast<const u8*>(text.data()),text.size()};
     if(!nextAssets.publishImport(candidate.guid,Sha256::hex(bytes),record->importerVersion,
@@ -8598,7 +8680,8 @@ bool EditorSession::resolveComponentResources(scene::ComponentValue &value,const
         error="Controller do recurso ausente ou inválido";return false;
       }
       if(binding.kind==resources::AssetType::AudioClip && !audioClipAvailable(asset,error)) return false;
-      if(binding.kind==resources::AssetType::EnvironmentProfile && !findEnvironmentProfile(asset)) {
+      if((binding.kind==resources::AssetType::EnvironmentProfile||binding.kind==resources::AssetType::SkyboxMaterial) &&
+         !findEnvironmentProfile(asset)) {
         error="Perfil de ambiente do recurso não está carregado";return false;
       }
       if(binding.kind==resources::AssetType::Mesh) {
@@ -8806,6 +8889,70 @@ bool EditorSession::applyComponentPreset(u64 preset,EditorEntityId entity,u64 in
                  :std::string("Preset aplicado; disponível em Desfazer");
   if(&replacement->type()==&scene::MeshRenderer::descriptor) {std::string publication;if(!ensureTexturesPublished(publication)) error+="; publicação pendente: "+publication;}
   return true;
+}
+
+
+// PK-2 (A-06): Material do céu. Como Assets › Create › Material com o shader
+// Skybox/Procedural na Unity, mas nasce do céu que o Ambiente já mostra (nada
+// muda na tela) e fica escolhido nele, como arrastar o material para a janela
+// Lighting. Daí em diante editar o material muda todo Ambiente que o usa.
+resources::AssetGuid EditorSession::createSkyboxMaterial(EditorEntityId id,u64 instance,std::string &diagnostic) {
+  diagnostic.clear();const auto *entity=document_.find(id);
+  const auto *component=entity?entity->components.findInstance(instance):nullptr;
+  const auto *environment=component && &component->type()==&scene::Environment::descriptor?
+      static_cast<const scene::Environment*>(component):nullptr;
+  if(isPlaying()||history_.isOpen()||!environment) {diagnostic="Ambiente indisponível.";return {};}
+  resources::EnvironmentProfile material;material.skybox=true;
+  material.name=environment->values.sky==renderer::SkyModel::Hdri?"Céu panorâmico":
+      environment->values.sky==renderer::SkyModel::PhysicalAtmosphere?"Céu físico":"Céu procedural";
+  material.values=resources::skyboxMaterialValues(environment->values);
+  std::string path="Céus/"+material.name+".skybox";
+  for(u32 n=2;assets_.findByPath(path)||files_.exists(path);++n)
+    path="Céus/"+material.name+" "+std::to_string(n)+".skybox";
+  material.guid=resources::assetGuidFromSeed("skybox:"+path+":"+
+      std::to_string(std::chrono::system_clock::now().time_since_epoch().count())+":"+
+      std::to_string(++importInstanceCounter_));
+  if(!material.valid()) {diagnostic="Valores de céu inválidos.";return {};}
+  const auto serialized=material.serialize();resources::AssetRecord record;
+  record.guid=material.guid;record.type=resources::AssetType::SkyboxMaterial;record.path=path;
+  record.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(serialized.data()),serialized.size()));
+  if(material.values.environmentMap.valid()) {
+    const auto *map=assets_.find(material.values.environmentMap);
+    if(!map||map->type!=resources::AssetType::EnvironmentMap) {diagnostic="O mapa HDRI não pertence ao projeto.";return {};}
+    record.dependencies.push_back(material.values.environmentMap);
+  }
+  auto nextAssets=assets_;if(!nextAssets.add(record)) {diagnostic="O registro recusou o material do céu.";return {};}
+  auto values=*entity;auto *editable=static_cast<scene::Environment*>(values.components.editInstance(instance));
+  if(!editable) {diagnostic="O Ambiente mudou durante a criação.";return {};}
+  editable->values.skybox=material.guid;
+  auto stagedDocument=document_;auto stagedHistory=history_;
+  if(!stagedHistory.applyValues(stagedDocument,id,values)) {diagnostic="O histórico recusou o material do céu.";return {};}
+  if(!writeEnvironmentProfile(material,path,diagnostic)) return {};
+  document_=std::move(stagedDocument);history_=std::move(stagedHistory);
+  assets_=std::move(nextAssets);assetRegistryDirty_=true;environmentProfiles_.push_back(material);files_.rebuildTree();
+  diagnostic="Material do céu criado: "+path;return material.guid;
+}
+
+// A-05/V-03: a cena sem Ambiente mostra o padrão; "Personalizar" materializa o
+// mesmo padrão como o Volume global da cena, na raiz, com a prioridade mínima:
+// qualquer outro Volume global ou local continua por cima dele.
+bool EditorSession::createSceneEnvironment(std::string &diagnostic) {
+  if(isPlaying()||history_.isOpen()) {diagnostic="Finalize a edição antes.";return false;}
+  u64 instance=0;
+  if(const auto existing=sceneLightingEnvironment(document_,&instance);existing!=kInvalidEntity) {
+    state_.selection=existing;state_.expandedNative=instance;state_.componentSelection=existing;
+    diagnostic="A cena já tem Ambiente";return true;
+  }
+  auto values=*document_.find(document_.root());
+  auto *environment=static_cast<scene::Environment*>(values.components.add(scene::Environment::descriptor));
+  if(!environment) {diagnostic="A raiz não aceita mais componentes.";return false;}
+  environment->values=renderer::defaultSceneEnvironment();
+  environment->values.priority=-1000.0f;
+  instance=environment->instanceId();
+  if(!history_.applyValues(document_,document_.root(),values)) {diagnostic="O histórico recusou o Ambiente da cena.";return false;}
+  state_.selection=document_.root();state_.expandedNative=instance;state_.componentSelection=document_.root();
+  state_.componentGroup="Céu";
+  diagnostic="Ambiente da cena criado na raiz";return true;
 }
 
 } // namespace ae::editor

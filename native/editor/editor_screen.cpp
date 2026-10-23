@@ -8,6 +8,8 @@
 #include "editor/editor_value_library.h"
 #include "editor/editor_curve_view.h"
 #include <sstream>
+#include <tuple>
+#include "editor/editor_material_fields.h"
 #include <iomanip>
 #include "scene/event_connection.h"
 #include "scene/tween_sequence.h"
@@ -2442,10 +2444,297 @@ void buildMaterialSlots(ScreenBuilder &builder,UiRect content,std::string_view q
   }
 }
 
+// PK-9: Inspector do Material por shader (Unity 6/URP Lit, Complex Lit,
+// Simple Lit, Unlit e Particles). O Shader no topo e as seções em cartões
+// recolhíveis com o ícone da seção; cada linha tem o rótulo em português e o
+// nome da Unity embaixo, e o controle à direita: segmentos, interruptor,
+// slider que segue o dedo (o valor abre o teclado), textura (abre o
+// seletor), cor e pares de números. Só aparecem os campos que o shader
+// escolhido lê (editor_material_fields.h). Os canais da Astra, que a Unity
+// não tem, ficam no último cartão.
+void buildMaterialShadingInspector(ScreenBuilder &builder,UiRect content) {
+  const auto &theme=builder.theme;const auto &state=builder.state;auto &list=builder.list;
+  const auto &view=state.materialSlotView;
+  if(!view.assetValid || content.height<60) return;
+  const auto &asset=view.asset;
+  constexpr float rowHeight=40,headerHeight=30,pad=8,gap=6;
+  constexpr UiTypeStyle rowLabel{11.0f,0.0f,1.2f,false,true};
+  constexpr UiTypeStyle unityLabel{8.5f,0.1f,1.2f,false,true};
+  constexpr UiTypeStyle sectionTitle{11.5f,0.0f,1.2f,false,true};
+  const bool manyMaterials=!builder.focusedWindow && !state.materialMixed.empty();
+  const auto mixed=[&](std::string_view key) {return manyMaterials && state.materialMixedHas(key);};
+  static const std::string dash="\xE2\x80\x94";
+  const UiRect window=content;
+  builder.router.addRegion(window,widgetId(EditorWidget::MaterialInspectorScroll));
+  const auto region=[&](const UiRect &rect,u32 widget) {
+    const auto hit=intersect(rect,window);
+    if(!hit.isEmpty()) builder.router.addRegion(hit,widget);
+  };
+  if(builder.layout) builder.layout->materialSliders.clear();
+  list.pushClip(window);
+  UiRect column{window.x,window.y-state.materialInspectorScroll,window.width-5,1.0e6f};
+  const float start=column.y;
+  const auto number=[](float value,const char *format="%.3g") {
+    char text[32];std::snprintf(text,sizeof(text),format,static_cast<double>(value));return std::string(text);
+  };
+  const auto srgbByte=[](float linear) {
+    const float v=std::clamp(linear,0.0f,1.0f);
+    const float s=v<=.0031308f?v*12.92f:1.055f*std::pow(v,1/2.4f)-.055f;
+    return static_cast<u32>(std::clamp(s,0.0f,1.0f)*255+.5f);
+  };
+  const auto swatch=[&](const float rgb[3]) {
+    return 0xff000000u|srgbByte(rgb[0])<<16|srgbByte(rgb[1])<<8|srgbByte(rgb[2]);
+  };
+  static constexpr UiIcon sectionIcons[]{UiIcon::AssetsMaterialShader,UiIcon::AssetsMaterialSurfaceOptions,UiIcon::AssetsMaterialSurfaceInputs,
+                                         UiIcon::AssetsMaterialDetail,UiIcon::AssetsMaterialParticles,UiIcon::AssetsMaterialAdvanced};
+  // Lista de escolha aberta (Shader, Modo de cor): as opções em linhas, a atual marcada.
+  const auto choiceList=[&](UiRect &body,const MaterialFieldSpec &field,u32 selected) {
+    for(u32 option=0;option<field.options.size();++option) {
+      auto line=takeTop(body,32);takeTop(body,2);
+      const bool on=option==selected;
+      const u32 widget=widgetId(EditorWidget::MaterialChoiceOptionBase)+option;
+      list.addRect(line,on?withAlpha(theme.color.accent,.16f):builder.isPressed(widget)?theme.color.line:theme.color.canvas,theme.radius.control);
+      auto inner=deflate(line,UiInsets::symmetric(10,0));
+      if(on) list.addImage(centred(takeRight(inner,14),12,12),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.accent);
+      builder.label(inner,field.options[option],on?theme.color.accent:theme.color.text,rowLabel);
+      region(line,widget);
+    }
+  };
+  const auto fieldHeight=[&](const MaterialFieldSpec &field) {
+    const u32 index=materialFieldIndex(field);
+    float height=rowHeight;
+    if(field.kind==MaterialFieldKind::Choice && state.materialChoiceField==index+1) height+=field.options.size()*34.0f+4;
+    return height;
+  };
+  const auto drawField=[&](UiRect &body,const MaterialFieldSpec &field) {
+    const u32 index=materialFieldIndex(field);
+    auto row=takeTop(body,rowHeight);
+    const bool different=mixed(field.key);
+    float value[3]{};
+    if(field.read) field.read(asset,value);
+    if(field.kind==MaterialFieldKind::Slider && state.materialSliderField==index+1) value[0]=state.materialSliderValue;
+    auto labelBox=takeLeft(row,std::min(row.width*.40f,150.0f));
+    builder.label({labelBox.x,labelBox.y+5,labelBox.width,16},field.label,theme.color.textDim,rowLabel);
+    builder.label({labelBox.x,labelBox.y+21,labelBox.width,13},field.unity,theme.color.textFaint,unityLabel);
+    auto control=deflate(row,UiInsets{4,5,0,5});
+    switch(field.kind) {
+    case MaterialFieldKind::Segment: {
+      const u32 count=static_cast<u32>(field.options.size());
+      const float width=(control.width-(count-1)*3)/count;
+      list.addRect(control,theme.color.canvas,theme.radius.control);
+      for(u32 option=0;option<count;++option) {
+        const UiRect cell{control.x+option*(width+3),control.y,width,control.height};
+        const bool on=!different && static_cast<int>(value[0]+.5f)==static_cast<int>(option) && value[0]>-.5f;
+        const u32 widget=materialFieldWidget(index,MaterialFieldPart::Option,option);
+        if(on) list.addRect(cell,theme.color.accent,theme.radius.control);
+        else if(builder.isPressed(widget)) list.addRect(cell,theme.color.line,theme.radius.control);
+        builder.label(deflate(cell,UiInsets::symmetric(3,0)),field.options[option],on?theme.color.accentInk:theme.color.textDim,
+                      theme.type.caption,UiAlign::Center);
+        region(cell,widget);
+      }
+      break;
+    }
+    case MaterialFieldKind::Toggle: {
+      if(different) builder.mixedToggle(control,materialFieldWidget(index,MaterialFieldPart::Main));
+      else {
+        const bool on=value[0]>.5f;
+        builder.label(takeLeft(control,control.width-kToggleWidth-6),on?"Ligado":"Desligado",on?theme.color.text:theme.color.textMuted,
+                      theme.type.caption,UiAlign::End);
+        builder.toggle(control,on,0,false);
+        region({control.right()-kToggleWidth-8,control.y,kToggleWidth+8,control.height},materialFieldWidget(index,MaterialFieldPart::Main));
+      }
+      break;
+    }
+    case MaterialFieldKind::Slider: {
+      auto valueBox=takeRight(control,54);takeRight(control,6);
+      const u32 valueWidget=materialFieldWidget(index,MaterialFieldPart::Value);
+      list.addRect(valueBox,builder.isPressed(valueWidget)?theme.color.line:theme.color.raised,theme.radius.control);
+      builder.label(valueBox,different?dash:number(value[0],field.maximum<=.1f?"%.3f":"%.2f"),theme.color.text,theme.type.numeric,UiAlign::Center);
+      region(valueBox,valueWidget);
+      const UiRect track{control.x,control.y+control.height*.5f-3,control.width,6};
+      const float t=std::clamp((value[0]-field.minimum)/std::max(field.maximum-field.minimum,1e-6f),0.0f,1.0f);
+      list.addRect(track,theme.color.track,3);
+      if(!different) list.addRect({track.x,track.y,track.width*t,track.height},theme.color.accent,3);
+      if(!different) list.addRect(centred({track.x+track.width*t-9,track.y-6,18,18},16,16),theme.color.text,8);
+      region({control.x-4,control.y,control.width+8,control.height},materialFieldWidget(index,MaterialFieldPart::Track));
+      if(builder.layout) builder.layout->materialSliders.push_back({index,track});
+      break;
+    }
+    case MaterialFieldKind::Texture: {
+      const u32 widget=materialFieldWidget(index,MaterialFieldPart::Main);
+      list.addRect(control,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+      auto inner=deflate(control,UiInsets::symmetric(6,0));
+      const auto &name=field.binding<std::size(view.fieldTextures)?view.fieldTextures[field.binding]:std::string();
+      const bool empty=name.empty() || name=="Nenhuma" || name=="Sem textura";
+      list.addImage(centred(takeLeft(inner,20),16,16),static_cast<UiImageId>(UiIcon::AssetsTexture),
+                    empty?theme.color.textFaint:theme.color.accent);
+      takeLeft(inner,4);
+      list.addImage(centred(takeRight(inner,12),10,10),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textMuted);
+      builder.label(inner,different?dash:empty?std::string("Nenhuma textura"):name,empty?theme.color.textMuted:theme.color.text,
+                    theme.type.caption);
+      region(control,widget);
+      break;
+    }
+    case MaterialFieldKind::Color: {
+      const u32 widget=materialFieldWidget(index,MaterialFieldPart::Value);
+      list.addRect(control,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+      auto inner=deflate(control,UiInsets::symmetric(4,4));
+      const auto box=takeLeft(inner,inner.height*1.6f);
+      list.addRect(box,different?theme.color.canvas:swatch(value),theme.radius.control);
+      list.addBorder(box,theme.color.lineSoft,1,theme.radius.control);
+      takeLeft(inner,6);
+      builder.label(inner,different?dash:number(value[0],"%.2f")+"  "+number(value[1],"%.2f")+"  "+number(value[2],"%.2f"),
+                    theme.color.text,theme.type.numeric);
+      region(control,widget);
+      break;
+    }
+    case MaterialFieldKind::Pair: {
+      const u32 widget=materialFieldWidget(index,MaterialFieldPart::Value);
+      const float half=(control.width-4)*.5f;
+      for(u32 axis=0;axis<2;++axis) {
+        const UiRect cell{control.x+axis*(half+4),control.y,half,control.height};
+        list.addRect(cell,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+        auto inner=deflate(cell,UiInsets::symmetric(6,0));
+        builder.label(takeLeft(inner,12),axis?"Y":"X",axis?theme.color.axisY:theme.color.axisX,theme.type.caption);
+        builder.label(inner,different?dash:number(value[axis],"%.3g"),theme.color.text,theme.type.numeric,UiAlign::End);
+      }
+      region(control,widget);
+      break;
+    }
+    case MaterialFieldKind::Stepper: {
+      const auto minus=takeLeft(control,36),plus=takeRight(control,36);
+      for(const auto &[box,part,icon]:{std::tuple{minus,MaterialFieldPart::Minus,"-"},std::tuple{plus,MaterialFieldPart::Plus,"+"}}) {
+        const u32 widget=materialFieldWidget(index,part);
+        list.addRect(deflate(box,UiInsets::all(1)),builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+        builder.label(box,icon,theme.color.text,theme.type.body,UiAlign::Center);
+        region(box,widget);
+      }
+      const u32 widget=materialFieldWidget(index,MaterialFieldPart::Value);
+      list.addRect(deflate(control,UiInsets::symmetric(3,0)),theme.color.canvas,theme.radius.control);
+      builder.label(control,different?dash:number(value[0],"%.0f"),theme.color.text,theme.type.numeric,UiAlign::Center);
+      region(control,widget);
+      break;
+    }
+    case MaterialFieldKind::Choice: {
+      const u32 widget=materialFieldWidget(index,MaterialFieldPart::Main);
+      const bool open=state.materialChoiceField==index+1;
+      list.addRect(control,open?withAlpha(theme.color.accent,.16f):builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+      auto inner=deflate(control,UiInsets::symmetric(8,0));
+      list.addImage(centred(takeRight(inner,12),10,10),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),theme.color.textMuted);
+      const u32 selected=static_cast<u32>(std::clamp(value[0]+.5f,0.0f,static_cast<float>(field.options.size()-1)));
+      builder.label(inner,different?dash:std::string(field.options[selected]),theme.color.text,theme.type.caption);
+      region(control,widget);
+      if(open) {takeTop(body,2);choiceList(body,field,selected);}
+      break;
+    }
+    }
+  };
+  const auto sectionCard=[&](MaterialSection section,std::string_view title,UiIcon icon,float bodyHeight,UiRect &body,std::string_view note={}) {
+    const u32 bit=1u<<static_cast<u32>(section);
+    const bool open=!(state.materialSectionsCollapsed&bit);
+    auto frame=takeTop(column,headerHeight+(open?bodyHeight+pad:0.0f));
+    takeTop(column,gap);
+    list.addRect(frame,theme.color.surface,theme.radius.card);
+    list.addBorder(frame,theme.color.lineSoft,1.0f,theme.radius.card);
+    const auto header=takeTop(frame,headerHeight);
+    auto inner=deflate(header,UiInsets::symmetric(pad,0));
+    list.addImage(centred(takeLeft(inner,22),20,20),static_cast<UiImageId>(icon),theme.color.text);
+    takeLeft(inner,6);
+    list.addImage(centred(takeRight(inner,14),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                  theme.color.textMuted);
+    if(!note.empty()) builder.label(takeRight(inner,inner.width*.45f),note,theme.color.accent,theme.type.caption,UiAlign::End);
+    builder.label(inner,title,theme.color.text,sectionTitle);
+    region(header,widgetId(EditorWidget::MaterialSectionBase)+static_cast<u32>(section));
+    body=open?deflate(frame,UiInsets{pad,0,pad,pad}):UiRect{};
+  };
+  // Shader: o cartão de topo é a escolha do shader, sempre aberta.
+  {
+    const auto &field=materialFieldSpecs[0];
+    float value[3]{};field.read(asset,value);
+    const u32 selected=static_cast<u32>(value[0]+.5f);
+    const bool open=state.materialChoiceField==1;
+    auto frame=takeTop(column,50+(open?field.options.size()*34.0f+6:0.0f));
+    takeTop(column,gap);
+    list.addRect(frame,theme.color.surface,theme.radius.card);
+    list.addBorder(frame,open?theme.color.accent:theme.color.lineSoft,1.0f,theme.radius.card);
+    auto head=takeTop(frame,50);
+    auto inner=deflate(head,UiInsets::symmetric(pad,6));
+    list.addImage(centred(takeLeft(inner,34),30,30),static_cast<UiImageId>(sectionIcons[0]),theme.color.text);
+    takeLeft(inner,8);
+    list.addImage(centred(takeRight(inner,14),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),theme.color.textMuted);
+    builder.label({inner.x,inner.y,inner.width,inner.height*.45f},"Shader",theme.color.textMuted,theme.type.caption);
+    builder.label({inner.x,inner.y+inner.height*.42f,inner.width,inner.height*.58f},
+                  mixed(field.key)?dash:std::string(inner.width>=300?"Universal Render Pipeline/":"URP/")+std::string(field.options[std::min<u32>(selected,5)]),
+                  theme.color.text,theme.type.cardName);
+    region(head,materialFieldWidget(0,MaterialFieldPart::Main));
+    if(open) {auto options=deflate(frame,UiInsets{pad,0,pad,6});choiceList(options,field,selected);}
+  }
+  for(u32 s=1;s<static_cast<u32>(MaterialSection::Count);++s) {
+    const auto section=static_cast<MaterialSection>(s);
+    std::vector<const MaterialFieldSpec*> fields;
+    for(const auto &field:materialFieldSpecs)
+      if(field.section==section && (!field.visible || field.visible(asset))) fields.push_back(&field);
+    if(fields.empty()) continue;
+    float height=0;
+    for(const auto *field:fields) height+=fieldHeight(*field);
+    UiRect body;
+    std::string note;
+    if(section==MaterialSection::SurfaceOptions && asset.surface.alphaMode==scene::MaterialAlphaBlend) note="fila Transparent";
+    sectionCard(section,materialSectionTitles[s],sectionIcons[s],height,body,note);
+    if(body.isEmpty()) continue;
+    for(const auto *field:fields) drawField(body,*field);
+  }
+  // Canais da Astra (R4/G3a): a Unity não tem; ficam no fim, com os controles de antes.
+  {
+    struct Legacy {const char *label,*unity;const std::string *value;EditorWidget widget;};
+    const Legacy rows[]{{"Origem da oclusão","Astra",&view.occlusionLabel,EditorWidget::MaterialOcclusionSourceCycle},
+                        {"Mapa normal","Y OpenGL/DirectX",&view.normalFlipLabel,EditorWidget::MaterialNormalFlipCycle},
+                        {"Origem do alfa","Astra",&view.alphaSourceLabel,EditorWidget::MaterialAlphaSourceCycle}};
+    UiRect body;
+    sectionCard(MaterialSection::Count,"Canais (Astra)",UiIcon::UiSliders,rowHeight*4,body);
+    if(!body.isEmpty()) {
+      auto channels=takeTop(body,rowHeight);
+      auto labelBox=takeLeft(channels,std::min(channels.width*.40f,150.0f));
+      builder.label({labelBox.x,labelBox.y+5,labelBox.width,16},"Canais do mapa",theme.color.textDim,rowLabel);
+      builder.label({labelBox.x,labelBox.y+21,labelBox.width,13},"rugosidade · metal · oclusão",theme.color.textFaint,unityLabel);
+      auto boxes=deflate(channels,UiInsets{4,5,0,5});
+      const float third=(boxes.width-6)/3;
+      for(u32 channel=0;channel<3;++channel) {
+        const UiRect box{boxes.x+channel*(third+3),boxes.y,third,boxes.height};
+        const u32 widget=widgetId(EditorWidget::MaterialChannelRoughness)+channel;
+        list.addRect(box,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+        builder.label(box,mixed("ch3."+std::to_string(channel))?dash:view.channelLabels[channel],theme.color.text,theme.type.caption,UiAlign::Center);
+        region(box,widget);
+      }
+      for(const auto &legacy:rows) {
+        auto row=takeTop(body,rowHeight);
+        auto labelArea=takeLeft(row,std::min(row.width*.40f,150.0f));
+        builder.label({labelArea.x,labelArea.y+5,labelArea.width,16},legacy.label,theme.color.textDim,rowLabel);
+        builder.label({labelArea.x,labelArea.y+21,labelArea.width,13},legacy.unity,theme.color.textFaint,unityLabel);
+        auto control=deflate(row,UiInsets{4,5,0,5});
+        const u32 widget=widgetId(legacy.widget);
+        list.addRect(control,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+        auto inner=deflate(control,UiInsets::symmetric(8,0));
+        list.addImage(centred(takeRight(inner,12),10,10),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.textMuted);
+        builder.label(inner,*legacy.value,theme.color.text,theme.type.caption);
+        region(control,widget);
+      }
+    }
+  }
+  const float height=column.y-start;
+  list.popClip();
+  if(builder.layout) {builder.layout->materialInspectorContent=height;builder.layout->materialInspectorWindow=window.height;}
+  if(height>window.height+1) {
+    const float thumb=std::max(24.0f,window.height*window.height/height);
+    const float travel=window.height-thumb;
+    const float offset=std::clamp(state.materialInspectorScroll/(height-window.height),0.0f,1.0f)*travel;
+    list.addRect({window.right()-3,window.y+offset,3,thumb},theme.color.line,1.5f);
+  }
+}
+
 // Material do projeto em Propriedades (Unity 6000.0 Material Inspector): o
 // cartão do recurso (nome, caminho, revisão e usos na cena, com Ping a cada
-// toque) e, embaixo, os mesmos campos do alcance Compartilhado de um slot —
-// texturas e amostragem, superfície, canais e números. Toda edição muda todos
+// toque) e, embaixo, o Inspector por shader do PK-9. Toda edição muda todos
 // os slots que usam o material, pelo histórico.
 void buildTexturePicker(ScreenBuilder &builder,UiRect content);
 void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
@@ -2507,7 +2796,8 @@ void buildMaterialAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
       action(actions,label.c_str(),EditorWidget::MaterialInspectorApply,UiIcon::None);
     } else builder.label(actions,"Material",theme.color.textDim,theme.type.caption);
   }
-  buildMaterialSlots(builder,content);
+  takeTop(content,4);
+  buildMaterialShadingInspector(builder,content);
 }
 
 // Mapa HDRI do projeto em Propriedades (Unity 6000.0 Texture Import Settings
@@ -2793,11 +3083,12 @@ void buildMaterialPicker(ScreenBuilder &builder,UiRect content) {
 // o material compartilhado do slot).
 void buildTexturePicker(ScreenBuilder &builder,UiRect content) {
   const auto &theme=builder.theme;const auto &state=builder.state;
-  static constexpr const char *bindings[scene::MaterialTextureCount+1]{"cor base","normal","metal/rugosidade","emissão","oclusão"};
+  static constexpr const char *bindings[]{"cor base","normal","metal/rugosidade","emissão","oclusão","altura","máscara de detalhe",
+                                          "detalhe de cor","normal de detalhe","verniz"};
   auto title=takeTop(content,36),back=takeLeft(title,36);
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   builder.router.addRegion(back,widgetId(EditorWidget::TexturePickerClose));
-  builder.label(title,std::string("Textura de ")+bindings[std::min(state.textureBinding,scene::MaterialTextureCount)]+
+  builder.label(title,std::string("Textura de ")+bindings[std::min<u32>(state.textureBinding,std::size(bindings)-1)]+
                 (state.materialInspector.valid()?" · material do projeto":state.materialShared?" · compartilhado":" · esta instância"),
                 theme.color.text,theme.type.caption);
   const UiRect window=content;
@@ -4690,7 +4981,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   // Malha já navega entre Geometria e o editor de Material por slot acima.
   // As abas refletidas repetiriam esses nomes sem acrescentar controles.
   const auto groups=mesh?std::vector<std::string_view>{}:constantForce?
-    std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component);
+    std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*component,builder.state.workspace==EditorWorkspace::Lighting);
   std::string_view group=mesh?std::string_view{builder.state.meshTab==2?"Lightmap":builder.state.meshTab==3?"Iluminação":"Geometria"}:
       std::string_view{builder.state.componentGroup};
   if(constantForce) {if(group=="Torque mundo") group="Força mundo";else if(group=="Torque local") group="Força local";}
@@ -4860,6 +5151,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const bool lightmap=binding.kind==resources::AssetType::Texture&&binding.id=="texture.lightmap";
     if((mesh&&!searching&&!lightmap)||(binding.kind!=resources::AssetType::Mesh&&!lightmap&&
              binding.kind!=resources::AssetType::EnvironmentProfile&&
+             binding.kind!=resources::AssetType::SkyboxMaterial&&
              binding.kind!=resources::AssetType::EnvironmentMap&&
              binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::AudioClip&&binding.kind!=resources::AssetType::UiDocument&&
              binding.kind!=resources::AssetType::PhysicsMaterial&&binding.kind!=resources::AssetType::AnimatorController)||!show(binding.presentation)) continue;
@@ -4977,6 +5269,27 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     const auto rank=[&](const Field &f){
       if(f.kind==0) {const auto id=entry.type->booleans[f.index].id;return id=="enabled"||id=="avoid_obstacles"?0:3;}
       return f.kind==1?1:f.kind==4?4:2;};
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
+  }
+  // PK-1/PK-2: ordem da janela Lighting e do Skybox/Procedural da Unity 6.
+  // Céu: Material do céu primeiro, depois o shader e os campos dele na ordem
+  // do material (Sun, Sun Size, Convergence, Atmosphere Thickness, Sky Tint,
+  // Ground, Exposure); Luz ambiente: Source, cores, Intensity Multiplier;
+  // Neblina: Fog, Mode, cor, Density/Start/End.
+  if(entry.type==&scene::Environment::descriptor&&!searching) {
+    static constexpr std::string_view order[]{"skybox","sky","sun_disk","sun_size","sun_size_convergence","atmosphere",
+        "sky_zenith","ground","sky_exposure","environment_map","hdri_rotation_degrees","hdri_exposure_ev",
+        "ambient_source","ambient_sky_color","ambient_equator_color","ambient_ground_color","ambient_color",
+        "indirect_diffuse","indirect_specular",
+        "fog","fog_mode","fog_color_mode","fog_color","fog_light_energy","fog_density","fog_start","fog_end",
+        "fog_base_height","fog_height_falloff"};
+    const auto rank=[&](const Field &f)->usize{
+      const std::string_view id=f.kind==0?entry.type->booleans[f.index].id:f.kind==1?entry.type->enums[f.index].id:
+          f.kind==2?entry.type->numbers[f.index].id:f.kind==5?entry.type->triples[f.index].id:
+          f.kind==6?entry.type->resourceBindings[f.index].id:std::string_view{};
+      for(usize i=0;i<std::size(order);++i) if(order[i]==id) return i;
+      return std::size(order);
+    };
     std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){return rank(a)<rank(b);});
   }
   if((std::string_view(entry.type->id).starts_with("astra.constraint.")||std::string_view(entry.type->id).starts_with("astra.spring."))&&!searching) {
@@ -5719,6 +6032,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       std::string value;
       if(!asset.valid()) {
         value=binding.kind==resources::AssetType::EnvironmentProfile?"Sem perfil":
+              binding.kind==resources::AssetType::SkyboxMaterial?"Céu deste Ambiente":
               binding.kind==resources::AssetType::PhysicsMaterial?(entry.type==&scene::Collider::descriptor?"Sem material · valores desta forma":"Sem material · valores deste corpo"):
               binding.kind==resources::AssetType::EnvironmentMap?"Ambiente padrão":
               binding.kind==resources::AssetType::AnimatorController?"Grafo local":
@@ -5903,6 +6217,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   auto search=takeTop(content,36);builder.list.addRect(search,theme.color.raised,theme.radius.control);
   builder.label(search,state.meshQuery.empty()?
       (resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Buscar perfil":
+       resourceBinding&&resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Buscar material do céu":
        resourceBinding&&resourceBinding->kind==resources::AssetType::EnvironmentMap?"Buscar mapa HDRI":
        resourceBinding&&resourceBinding->kind==resources::AssetType::Texture?"Buscar textura":
        resourceBinding&&resourceBinding->kind==resources::AssetType::AudioClip?"Buscar WAV":
@@ -5914,6 +6229,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
   builder.router.addRegion(search,widgetId(EditorWidget::MeshSearch));
   auto footer=takeBottom(content,36),previous=takeLeft(footer,36),next=takeRight(footer,36);
   if(resourceBinding&&(resourceBinding->kind==resources::AssetType::EnvironmentProfile||
+                       resourceBinding->kind==resources::AssetType::SkyboxMaterial||
                        resourceBinding->kind==resources::AssetType::EnvironmentMap||
                        resourceBinding->kind==resources::AssetType::Texture||resourceBinding->kind==resources::AssetType::AudioClip||resourceBinding->kind==resources::AssetType::UiDocument||
                        resourceBinding->kind==resources::AssetType::PhysicsMaterial||resourceBinding->kind==resources::AssetType::AnimatorController)) {
@@ -5927,6 +6243,23 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       builder.label(label,selectedResource.valid()?"Atualizar material com os valores deste corpo":"Criar material com os valores deste corpo",
                     theme.color.accentInk,theme.type.caption,UiAlign::Center);
       builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::PhysicsMaterialUpdate:EditorWidget::PhysicsMaterialCreate));
+    }
+    if(resourceBinding->kind==resources::AssetType::SkyboxMaterial&&state.workspace!=EditorWorkspace::Play) {
+      // Unity: Assets › Create › Material com shader Skybox/*. Aqui nasce do céu
+      // atual deste Ambiente e já fica escolhido; editar abre o material.
+      auto row=deflate(takeTop(content,44),UiInsets::all(2));
+      auto edit=selectedResource.valid()?takeRight(row,row.width*.42f):UiRect{};
+      builder.list.addRect(row,theme.color.accent,theme.radius.control);
+      auto label=row;
+      builder.list.addImage(centred(takeLeft(label,34),20,20),static_cast<UiImageId>(UiIcon::LightingSkyboxMaterial),theme.color.accentInk);
+      builder.label(label,"Novo material do céu",theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(row,widgetId(EditorWidget::LightingCreateSkybox));
+      if(selectedResource.valid()) {
+        edit=deflate(edit,UiInsets{4,0,0,0});
+        builder.list.addRect(edit,theme.color.raised,theme.radius.control);
+        builder.label(edit,"Editar material",theme.color.text,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(edit,widgetId(EditorWidget::LightingEditSkybox));
+      }
     }
     if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
       const auto action=deflate(takeTop(content,40),UiInsets::all(2));
@@ -5948,6 +6281,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     const u32 page=std::min(state.meshPage,pages-1);
     auto clear=takeTop(content,34);builder.label(clear,
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?"Sem perfil · conservar cópia local":
+        resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Sem material · céu deste Ambiente":
         resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Sem material · conservar os valores do corpo":
         resourceBinding->kind==resources::AssetType::AnimatorController?"Desvincular · incorporar o grafo resolvido":
         resourceBinding->kind==resources::AssetType::Texture?"Sem textura":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum clipe WAV":resourceBinding->kind==resources::AssetType::UiDocument?"Sem documento UI · canvas inativo":"Sem mapa HDRI",
@@ -5958,7 +6292,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
       auto slot=takeTop(content,50);const auto hit=slot;
       builder.list.addRect(deflate(slot,UiInsets::all(2)),theme.color.raised,theme.radius.control);
       if(selectedResource==record.guid) builder.list.addRect({slot.x,slot.y+4,3,slot.height-8},theme.color.accent,1);
-      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:resourceBinding->kind==resources::AssetType::AnimatorController?UiIcon::AnimationController:UiIcon::LightingSun),0xffffffff);
+      builder.list.addImage(centred(takeLeft(slot,40),28,28),static_cast<UiImageId>(resourceBinding->id=="texture.lightmap"?UiIcon::LightingLightmap:resourceBinding->kind==resources::AssetType::AudioClip?UiIcon::AudioClip:resourceBinding->kind==resources::AssetType::Texture?UiIcon::AssetsTexture:resourceBinding->kind==resources::AssetType::UiDocument?UiIcon::UiInterfaceCanvas:resourceBinding->kind==resources::AssetType::AnimatorController?UiIcon::AnimationController:resourceBinding->kind==resources::AssetType::SkyboxMaterial?UiIcon::LightingSkyboxMaterial:UiIcon::LightingSun),0xffffffff);
       const auto slash=record.path.find_last_of('/');const auto name=record.path.substr(slash==std::string::npos?0:slash+1);
       builder.label(takeTop(slot,25),name.c_str(),theme.color.text,theme.type.body);
       builder.label(slot,("GUID "+record.guid.text().substr(0,8)+" · compartilhado").c_str(),theme.color.textMuted,theme.type.caption);
@@ -5967,7 +6301,7 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
     if(matches.empty()) builder.label(content,resourceCount&& !query.empty()?
         (resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV corresponde à busca":"Nenhum recurso corresponde à busca"):
         resourceBinding->kind==resources::AssetType::EnvironmentProfile?
-        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::AnimatorController?"Crie um recurso no grafo do Animator":resourceBinding->kind==resources::AssetType::Texture?
+        "Nenhum perfil no projeto":resourceBinding->kind==resources::AssetType::SkyboxMaterial?"Nenhum material do céu no projeto":resourceBinding->kind==resources::AssetType::PhysicsMaterial?"Nenhum material físico no projeto":resourceBinding->kind==resources::AssetType::AnimatorController?"Crie um recurso no grafo do Animator":resourceBinding->kind==resources::AssetType::Texture?
         "Nenhuma textura no projeto":resourceBinding->kind==resources::AssetType::AudioClip?"Nenhum WAV importado no projeto":resourceBinding->kind==resources::AssetType::UiDocument?"Salve uma interface .aeui para registrar o documento":"Nenhum mapa HDRI no projeto",theme.color.textMuted,theme.type.caption);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
     builder.label(next,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
@@ -7167,7 +7501,7 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
     items.push_back({UiIcon::SceneObject,"Voltar à edição",widgetId(EditorWidget::TabScene),state.workspace!=EditorWorkspace::Scene});
     items.push_back({UiIcon::AssetsFileMesh,"Malhas do projeto",widgetId(EditorWidget::TabAssets),state.assetCount!=0});
     items.push_back({UiIcon::AssetsSourcePackage,"Biblioteca de pacotes",widgetId(EditorWidget::LibraryOpen)});
-    items.push_back({UiIcon::LightingSky,"Ambiente da cena",widgetId(EditorWidget::TabLighting)});
+    items.push_back({UiIcon::LightingWindow,"Iluminação",widgetId(EditorWidget::TabLighting)});
     items.push_back({UiIcon::UiSliders,"Configurações do projeto",widgetId(EditorWidget::TabProject)});
     items.push_back({UiIcon::UiInterfaceCanvas,"Interface (UI + ImGui)",widgetId(EditorWidget::TabGui)});
     items.push_back({UiIcon::UiAutoLayout,"Layout dos painéis",widgetId(EditorWidget::LayoutsOpen)});
@@ -9748,8 +10082,66 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     return;
   }
   if(builder.state.workspace==EditorWorkspace::Lighting) {
-    builder.label(takeTop(content,38),"Ambiente",theme.color.text,theme.type.body);
-    buildPropertyPage(builder,content,*builder.state.document->find(builder.state.document->root()),EditorPropertyGroup::Environment);
+    // PK-1/PK-2: janela Iluminação (Window › Rendering › Lighting › Environment
+    // da Unity 6). Edita o Ambiente da cena -- o Volume global de menor
+    // prioridade -- nos grupos da janela: Céu (Skybox Material, shader e sol),
+    // Luz ambiente (Source, Intensity Multiplier, reflexos) e Neblina
+    // (Other Settings › Fog). Os multiplicadores antigos da raiz não existem mais.
+    u64 instance=0;
+    const auto owner=sceneLightingEnvironment(*builder.state.document,&instance);
+    auto banner=takeTop(content,48);takeTop(content,6);
+    builder.list.addRect(banner,theme.color.raised,theme.radius.control);
+    builder.list.addRect({banner.x,banner.y+6,3,banner.height-12},theme.color.accent,1);
+    auto bannerText=deflate(banner,UiInsets{10,4,8,4});
+    builder.list.addImage(centred(takeLeft(bannerText,34),24,24),static_cast<UiImageId>(UiIcon::LightingWindow),theme.color.accent);
+    builder.label(takeTop(bannerText,22),"Iluminação",theme.color.text,theme.type.body);
+    if(owner!=kInvalidEntity&&owner==target&&instance) {
+      const auto *ownerEntity=builder.state.document->find(owner);
+      builder.label(bannerText,fitMiddle(builder.list,std::string("Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),
+                    bannerText.width,theme.type.caption),theme.color.textDim,theme.type.caption);
+      builder.onlyComponent=instance;
+      buildComponents(builder,content,*entity);
+      builder.onlyComponent=onlyComponent;
+      return;
+    }
+    if(owner!=kInvalidEntity) {
+      // A seleção mudou na hierarquia: o Ambiente da cena continua a um toque.
+      const auto *ownerEntity=builder.state.document->find(owner);
+      builder.label(bannerText,"Outro objeto selecionado",theme.color.textDim,theme.type.caption);
+      const auto back=takeTop(content,46);
+      builder.list.addRect(back,theme.color.accent,theme.radius.control);
+      auto backText=back;
+      builder.list.addImage(centred(takeLeft(backText,40),20,20),static_cast<UiImageId>(UiIcon::LightingSky),theme.color.accentInk);
+      builder.label(backText,fitMiddle(builder.list,std::string("Abrir o Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),
+                    backText.width,theme.type.caption),theme.color.accentInk,theme.type.caption,UiAlign::Center);
+      builder.router.addRegion(back,widgetId(EditorWidget::TabLighting));
+      return;
+    }
+    builder.label(bannerText,"Ambiente padrão da cena",theme.color.textDim,theme.type.caption);
+    // Sem Ambiente: o mesmo padrão do Play e da Scene View, descrito pelo que é
+    // (Default-Skybox procedural, luz ambiente do céu, sem neblina), e o botão
+    // que o transforma no Ambiente da cena para editar.
+    const struct {UiIcon icon;const char *name;const char *value;} defaults[]{
+        {UiIcon::LightingSkyboxMaterial,"Céu","Procedural · Exposição 1,3"},
+        {UiIcon::LightingAmbientSource,"Luz ambiente","Do céu · intensidade 1"},
+        {UiIcon::LightingFogMode,"Neblina","Desligada"}};
+    for(const auto &item:defaults) {
+      auto row=takeTop(content,46);takeTop(content,4);
+      builder.list.addRect(row,theme.color.silhouette,theme.radius.control);
+      builder.list.addImage(centred(takeLeft(row,40),22,22),static_cast<UiImageId>(item.icon),theme.color.text);
+      builder.label(takeTop(row,22),item.name,theme.color.text,theme.type.caption);
+      builder.label(row,item.value,theme.color.textMuted,theme.type.caption);
+    }
+    takeTop(content,6);
+    const auto action=takeTop(content,46);
+    const bool editable=builder.state.workspace!=EditorWorkspace::Play;
+    builder.list.addRect(action,editable?theme.color.accent:theme.color.raised,theme.radius.control);
+    auto actionText=action;
+    builder.list.addImage(centred(takeLeft(actionText,40),20,20),static_cast<UiImageId>(UiIcon::LightingSky),
+                          editable?theme.color.accentInk:theme.color.textMuted);
+    builder.label(actionText,"Personalizar o ambiente da cena",editable?theme.color.accentInk:theme.color.textMuted,
+                  theme.type.caption,UiAlign::Center);
+    if(editable) builder.router.addRegion(action,widgetId(EditorWidget::LightingCreateEnvironment));
     return;
   }
   if(builder.state.inspectorSurface==EditorInspectorSurface::Components && !onlyComponent && !builder.focusedWindow) {

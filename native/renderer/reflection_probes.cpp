@@ -25,6 +25,16 @@ u64 reflectionProbeCaptureKey(const SceneReflectionProbe &probe) noexcept {
   return key;
 }
 
+bool skyReflectionNeedsCapture(std::span<const float> current, std::span<const float> captured,
+                               bool captureValid) noexcept {
+  if (!captureValid || current.size() != captured.size()) return true;
+  for (usize i = 0; i < current.size(); ++i) {
+    if (!std::isfinite(current[i])) return false; // céu inválido: mantém a última captura
+    if (std::abs(current[i] - captured[i]) > 1e-3f * std::max(1.0f, std::abs(captured[i]))) return true;
+  }
+  return false;
+}
+
 u32 reflectionProbeBaseMip(u32 resolution) noexcept {
   const u32 octahedron = std::min<u32>(std::max<u32>(resolution, 16u) * 2u, ReflectionProbeAtlasSize);
   u32 mip = 0;

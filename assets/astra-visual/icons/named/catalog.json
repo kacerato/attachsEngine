@@ -2342,6 +2342,42 @@
       "dark_ui_ready": true,
       "generation": "component-v1"
     },
+    "assets/material-shader": {
+      "category": "assets",
+      "name": "material-shader",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-surface-options": {
+      "category": "assets",
+      "name": "material-surface-options",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-surface-inputs": {
+      "category": "assets",
+      "name": "material-surface-inputs",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-detail": {
+      "category": "assets",
+      "name": "material-detail",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-particles": {
+      "category": "assets",
+      "name": "material-particles",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "assets/material-advanced": {
+      "category": "assets",
+      "name": "material-advanced",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
     "lighting/reflection-probe": {
       "category": "lighting",
       "name": "reflection-probe",
@@ -2351,6 +2387,48 @@
     "lighting/light-probe-group": {
       "category": "lighting",
       "name": "light-probe-group",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/window": {
+      "category": "lighting",
+      "name": "window",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/skybox-material": {
+      "category": "lighting",
+      "name": "skybox-material",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/ambient-source": {
+      "category": "lighting",
+      "name": "ambient-source",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/fog-mode": {
+      "category": "lighting",
+      "name": "fog-mode",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/global": {
+      "category": "volume",
+      "name": "global",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/box": {
+      "category": "volume",
+      "name": "box",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/sphere": {
+      "category": "volume",
+      "name": "sphere",
       "dark_ui_ready": true,
       "generation": "component-v1"
     }

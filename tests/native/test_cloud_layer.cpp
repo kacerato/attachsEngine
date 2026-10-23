@@ -128,8 +128,8 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 17u, "Ambiente v17");
-  AE_EXPECT_TRUE(reread.read(in, 17), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 18u, "Ambiente v18");
+  AE_EXPECT_TRUE(reread.read(in, 18), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da

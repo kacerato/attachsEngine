@@ -272,16 +272,13 @@ AE_TEST(daylight_authoring_colours_survive_profile_archive_and_runtime_resolutio
   AE_EXPECT_TRUE(resolved.active&&resolved.skyZenith[2]==.32f&&resolved.ground[2]==renderer::SceneEnvironment{}.ground[2],
                  "runtime volume resolver consumes the persisted colours");
 }
-AE_TEST(scene_view_default_is_coherent_and_does_not_change_scene_defaults) {
+AE_TEST(scene_default_is_the_component_default_and_is_valid) {
   const renderer::SceneEnvironment authored{};
-  const auto view=renderer::defaultSceneViewEnvironment();
-  AE_EXPECT_TRUE(!authored.active&&view.active,"fallback só existe para a Scene View");
-  AE_EXPECT_TRUE(view.post&&view.bloom&&view.vignette&&view.ambientOcclusion,
-                 "look inicial tem uma cadeia visual completa");
-  AE_EXPECT_TRUE(view.valid()&&view.skyHorizon[2]>view.skyHorizon[0],
-                 "look inicial é válido e mantém horizonte azulado");
-  AE_EXPECT_TRUE(view.ground[0]>=.10f&&view.ground[1]>=.10f&&view.ground[2]>=.10f,
-                 "hemisfério inferior preserva leitura de superfícies verticais");
+  const auto view=renderer::defaultSceneEnvironment();
+  AE_EXPECT_TRUE(!authored.active&&view.active,"o padrão da cena é o contrato do componente, ativo");
+  auto same=view;same.active=false;
+  AE_EXPECT_TRUE(view.valid()&&same.post==authored.post&&same.sky==authored.sky&&same.exposureCompensation==authored.exposureCompensation,
+                 "editor e Play usam o mesmo padrão, sem ajuste exclusivo da Scene View");
 }
 
 AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
@@ -320,7 +317,7 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
 // Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
 static bool newerThanV12(std::string_view id) {
   return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity"||
-         scene::environmentNumberSinceV17(id);
+         scene::environmentNumberSinceV17(id)||scene::environmentNumberSinceV18(id);
 }
 
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
@@ -385,10 +382,10 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   std::vector<std::string> fields;
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
-  // v7..v12 acrescentaram no fim: 11 de exposição (v12; eram 9 na v7) + energia
-  // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11)
-  // e 10 de Color Adjustments/Bloom (v12).
-  fields[1]="6";fields.resize(fields.size()-74);
+  // v7..v13 acrescentaram no fim: 11 de exposição (v12; eram 9 na v7) + energia
+  // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11),
+  // 10 de Color Adjustments/Bloom (v12) e 21 da janela Lighting (v13).
+  fields[1]="6";fields.resize(fields.size()-95);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;
@@ -417,7 +414,8 @@ AE_TEST(auto_exposure_v15_scene_migrates_to_hdrp_histogram_in_ev100) {
      <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" - 1 1";
   for(const auto &property:scene::Environment::descriptor.numbers)
-    if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")&&!scene::environmentNumberSinceV17(property.id))
+    if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")&&!scene::environmentNumberSinceV17(property.id)&&
+       !scene::environmentNumberSinceV18(property.id))
       old<<' '<<property.read(source);
   scene::Environment restored;
   std::istringstream input(old.str());

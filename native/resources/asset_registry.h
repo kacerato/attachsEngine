@@ -63,7 +63,8 @@ enum class AssetType : u32 {
   RigPose = 17, // pose reutilizável mascarada por IDs de junta
   RetargetProfile = 18, // correspondência entre duas revisões de rig
   ReflectionProbe = 19, // cubemap octaédrico assado por uma Sonda de reflexo (.aeprobe)
-  LightProbes = 20 // SH L2 por ponto assado por um Grupo de sondas de luz (.aelightprobes)
+  LightProbes = 20, // SH L2 por ponto assado por um Grupo de sondas de luz (.aelightprobes)
+  SkyboxMaterial = 21 // PK-2: Material do céu (Procedural, Panorâmico ou Físico) da janela Iluminação
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

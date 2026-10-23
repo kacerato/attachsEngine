@@ -1,0 +1,322 @@
+[
+  {
+    "arquivo": "hdrp-noite-vnzt3aRTd5o-00m02s-floresta-lua.jpg",
+    "recorte": "inteiro",
+    "quadro": {
+      "luminancia": 0.01917,
+      "srgb_medio": 37.8,
+      "cor_srgb": [
+        28.9,
+        39.4,
+        43.6
+      ],
+      "azul_vermelho": 2.03,
+      "sombra_srgb": 10.5,
+      "p99_srgb": 87.0
+    },
+    "ceu": {
+      "luminancia": 0.02498,
+      "srgb_medio": 43.8,
+      "cor_srgb": [
+        34.4,
+        45.2,
+        52.9
+      ],
+      "azul_vermelho": 2.17,
+      "sombra_srgb": 16.6,
+      "p99_srgb": 93.9
+    },
+    "chao": {
+      "luminancia": 0.01278,
+      "srgb_medio": 29.7,
+      "cor_srgb": [
+        22.1,
+        31.7,
+        28.6
+      ],
+      "azul_vermelho": 1.48,
+      "sombra_srgb": 6.9,
+      "p99_srgb": 89.0
+    }
+  },
+  {
+    "arquivo": "hdrp-noite-vnzt3aRTd5o-10m59s-final-lua-rio.jpg",
+    "recorte": "inteiro",
+    "quadro": {
+      "luminancia": 0.01709,
+      "srgb_medio": 35.3,
+      "cor_srgb": [
+        27.5,
+        37.0,
+        39.0
+      ],
+      "azul_vermelho": 1.8,
+      "sombra_srgb": 12.7,
+      "p99_srgb": 82.5
+    },
+    "ceu": {
+      "luminancia": 0.02052,
+      "srgb_medio": 39.2,
+      "cor_srgb": [
+        31.3,
+        40.8,
+        44.7
+      ],
+      "azul_vermelho": 1.86,
+      "sombra_srgb": 15.9,
+      "p99_srgb": 94.1
+    },
+    "chao": {
+      "luminancia": 0.01198,
+      "srgb_medio": 28.5,
+      "cor_srgb": [
+        21.3,
+        30.4,
+        28.6
+      ],
+      "azul_vermelho": 1.58,
+      "sombra_srgb": 9.1,
+      "p99_srgb": 71.4
+    }
+  },
+  {
+    "arquivo": "hdrp-noite-vnzt3aRTd5o-10m05s-editor-floresta.jpg",
+    "recorte": "243,62,980,450",
+    "quadro": {
+      "luminancia": 0.01221,
+      "srgb_medio": 28.9,
+      "cor_srgb": [
+        23.6,
+        29.7,
+        34.9
+      ],
+      "azul_vermelho": 1.88,
+      "sombra_srgb": 5.7,
+      "p99_srgb": 91.0
+    },
+    "ceu": {
+      "luminancia": 0.02275,
+      "srgb_medio": 41.6,
+      "cor_srgb": [
+        36.7,
+        42.2,
+        48.6
+      ],
+      "azul_vermelho": 1.66,
+      "sombra_srgb": 6.6,
+      "p99_srgb": 208.7
+    },
+    "chao": {
+      "luminancia": 0.00552,
+      "srgb_medio": 16.8,
+      "cor_srgb": [
+        11.1,
+        17.9,
+        20.2
+      ],
+      "azul_vermelho": 2.1,
+      "sombra_srgb": 4.5,
+      "p99_srgb": 41.2
+    }
+  },
+  {
+    "arquivo": "hdrp-ciclo-UqQsfRUdukE-00m00s-noite-lua-estrelas.jpg",
+    "recorte": "inteiro",
+    "quadro": {
+      "luminancia": 0.00484,
+      "srgb_medio": 15.2,
+      "cor_srgb": [
+        10.6,
+        15.3,
+        23.7
+      ],
+      "azul_vermelho": 2.78,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 58.2
+    },
+    "ceu": {
+      "luminancia": 0.00493,
+      "srgb_medio": 15.4,
+      "cor_srgb": [
+        9.5,
+        15.3,
+        27.7
+      ],
+      "azul_vermelho": 3.95,
+      "sombra_srgb": 0.7,
+      "p99_srgb": 32.9
+    },
+    "chao": {
+      "luminancia": 0.00388,
+      "srgb_medio": 12.6,
+      "cor_srgb": [
+        12.1,
+        12.9,
+        10.6
+      ],
+      "azul_vermelho": 0.87,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 79.3
+    }
+  },
+  {
+    "arquivo": "hdrp-ciclo-UqQsfRUdukE-09m25s-noite-azul.jpg",
+    "recorte": "290,62,928,450",
+    "quadro": {
+      "luminancia": 0.00479,
+      "srgb_medio": 15.0,
+      "cor_srgb": [
+        10.7,
+        15.2,
+        23.4
+      ],
+      "azul_vermelho": 2.7,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 80.0
+    },
+    "ceu": {
+      "luminancia": 0.00738,
+      "srgb_medio": 20.8,
+      "cor_srgb": [
+        16.2,
+        20.7,
+        31.7
+      ],
+      "azul_vermelho": 2.69,
+      "sombra_srgb": 0.8,
+      "p99_srgb": 93.0
+    },
+    "chao": {
+      "luminancia": 0.00251,
+      "srgb_medio": 8.3,
+      "cor_srgb": [
+        6.2,
+        8.9,
+        8.4
+      ],
+      "azul_vermelho": 1.36,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 56.9
+    }
+  },
+  {
+    "arquivo": "builtin-ciclo-Y7PVrTbBNqI-00m29s-lua-mar.jpg",
+    "recorte": "0,40,1280,576",
+    "quadro": {
+      "luminancia": 0.00744,
+      "srgb_medio": 20.9,
+      "cor_srgb": [
+        19.7,
+        20.6,
+        26.6
+      ],
+      "azul_vermelho": 1.57,
+      "sombra_srgb": 0.3,
+      "p99_srgb": 29.1
+    },
+    "ceu": {
+      "luminancia": 0.01123,
+      "srgb_medio": 27.4,
+      "cor_srgb": [
+        29.4,
+        26.7,
+        28.7
+      ],
+      "azul_vermelho": 0.96,
+      "sombra_srgb": 1.9,
+      "p99_srgb": 149.9
+    },
+    "chao": {
+      "luminancia": 0.00794,
+      "srgb_medio": 21.8,
+      "cor_srgb": [
+        17.2,
+        22.1,
+        30.3
+      ],
+      "azul_vermelho": 2.32,
+      "sombra_srgb": 7.9,
+      "p99_srgb": 41.7
+    }
+  },
+  {
+    "arquivo": "unite2020-yqCHiZrgKzs-24m51s-noite-praca.jpg",
+    "recorte": "210,90,850,525",
+    "quadro": {
+      "luminancia": 0.09794,
+      "srgb_medio": 88.2,
+      "cor_srgb": [
+        84.4,
+        87.9,
+        100.6
+      ],
+      "azul_vermelho": 1.44,
+      "sombra_srgb": 0.5,
+      "p99_srgb": 186.0
+    },
+    "ceu": {
+      "luminancia": 0.10461,
+      "srgb_medio": 91.0,
+      "cor_srgb": [
+        74.6,
+        91.9,
+        119.2
+      ],
+      "azul_vermelho": 2.66,
+      "sombra_srgb": 0.7,
+      "p99_srgb": 168.3
+    },
+    "chao": {
+      "luminancia": 0.03063,
+      "srgb_medio": 48.9,
+      "cor_srgb": [
+        55.1,
+        47.4,
+        44.2
+      ],
+      "azul_vermelho": 0.66,
+      "sombra_srgb": 0.3,
+      "p99_srgb": 167.3
+    }
+  },
+  {
+    "arquivo": "pbsky-estrelas-tpTzwyiGByE-06m02s-ceu-estrelas.jpg",
+    "recorte": "404,58,1280,552",
+    "quadro": {
+      "luminancia": 0.03067,
+      "srgb_medio": 49.0,
+      "cor_srgb": [
+        48.8,
+        49.1,
+        48.1
+      ],
+      "azul_vermelho": 0.97,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 240.1
+    },
+    "ceu": {
+      "luminancia": 0.04564,
+      "srgb_medio": 60.3,
+      "cor_srgb": [
+        60.4,
+        60.5,
+        57.6
+      ],
+      "azul_vermelho": 0.91,
+      "sombra_srgb": 2.2,
+      "p99_srgb": 232.9
+    },
+    "chao": {
+      "luminancia": 0.003,
+      "srgb_medio": 9.9,
+      "cor_srgb": [
+        9.9,
+        9.9,
+        9.5
+      ],
+      "azul_vermelho": 0.97,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 29.0
+    }
+  }
+]

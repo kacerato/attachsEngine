@@ -12,27 +12,31 @@ layout(location=6) in mediump float vDither;
 // Ver dirt_road_vertex.glsl: luzes aceitas que alcancam este desenho e as
 // flags autorais (Receive Shadows, sol pelas mascaras).
 layout(location=11) flat in highp uint vLightMask;
-const uint DRAW_NO_SHADOWS=131072u; // renderer::DrawLightingNoShadows
-const uint DRAW_NO_SUN=262144u;     // renderer::DrawLightingNoSun
+// highp nas constantes: este arquivo declara `precision mediump int`, e uma
+// constante declarada depois herda a precisão relaxada. A Adreno materializa
+// a constante com 16 bits, então 1u<<17, 1u<<18, 1u<<20 e a máscara 0xffffffff
+// viravam 0/0xffff: o teste de flag dava falso mesmo com o uint em highp.
+const highp uint DRAW_NO_SHADOWS=131072u; // renderer::DrawLightingNoShadows
+const highp uint DRAW_NO_SUN=262144u;     // renderer::DrawLightingNoSun
 layout(location=0) out vec4 outColor;
 #include "temporal_masks.glsl"
-layout(constant_id=0) const uint GPU_COST_ISOLATION=0u;
-layout(constant_id=1) const uint MATERIAL_FEATURE_MASK=0xffffffffu;
+layout(constant_id=0) const highp uint GPU_COST_ISOLATION=0u;
+layout(constant_id=1) const highp uint MATERIAL_FEATURE_MASK=0xffffffffu;
 // Projecao da sonda de ambiente resolvida em tempo de compilacao de pipeline.
 // O ramo legado equirect custa atan/acos/fract e, sobretudo, registradores em
 // TODO fragmento enquanto for um uniform -- o driver nao pode provar que ele e
 // morto. Como spec constant ele desaparece do binario do perfil que usa AEEN v3.
 // Zero e "decidir em runtime", preservando o comportamento anterior.
-layout(constant_id=2) const uint ENVIRONMENT_PROJECTION=0u;
+layout(constant_id=2) const highp uint ENVIRONMENT_PROJECTION=0u;
 // Only solid, non-transitioning draws may omit the clipping contract.
-layout(constant_id=3) const uint OPAQUE_NO_CLIP=0u;
-layout(constant_id=4) const uint FULL_DETAIL_SAMPLING=0u;
+layout(constant_id=3) const highp uint OPAQUE_NO_CLIP=0u;
+layout(constant_id=4) const highp uint FULL_DETAIL_SAMPLING=0u;
 // Only selected when every uploaded punctual light is a point without an
 // allocated local shadow. Directional lighting and its cascades stay intact.
-layout(constant_id=5) const uint UNSHADOWED_POINT_LIGHTING=0u;
+layout(constant_id=5) const highp uint UNSHADOWED_POINT_LIGHTING=0u;
 const float PI=3.141592653589793;
-const uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
-const uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
+const highp uint MATERIAL_IMPOSTOR=256u; // renderer::MapMaterialImpostor
+const highp uint MATERIAL_WATER=512u; // renderer::MapMaterialWater
 // Precisa casar com renderer::MaximumPunctualLights. Os dois lados leem a mesma
 // memoria; divergir aqui leria alem do array ou apagaria luzes que couberam.
 const int PUNCTUAL_LIGHT_LIMIT=16;
@@ -50,12 +54,54 @@ const int PUNCTUAL_LIGHT_BANK=8; // renderer::PunctualLightBankSize
 #include "impostor_view.glsl"
 #include "material_uv_transform.glsl"
 #include "world_uv.glsl"
+const highp uint MATERIAL_SHADING_EXTENSION=1048576u; // renderer::MapMaterialShadingExtension
+const float AETHER_MEDIUMP_MAX=60000.0;          // abaixo do maior finito do fp16 (65504)
+// PK-9: estado do Material por desenho que a BRDF consulta (uniforme no
+// desenho). Fora da extensão valem os padrões do Lit e nada muda.
+uint aetherShadingModel=0u;                // 0 GGX (Lit), 1 Blinn-Phong (Simple Lit)
+mediump float aetherHighlightWeight=1.0;    // Specular Highlights
+highp float aetherBlinnExponent=2.0;
+mediump vec3 aetherSpecularSum=vec3(0.0);   // só o especular, para Preserve Specular
+highp vec2 aetherParallaxOffset=vec2(0.0);  // Height Map, somado ao UV de cada mapa
+// Multiply: a cena é HDR antes da exposição (o sol físico passa de 100), então
+// o fator não pode ser a cor iluminada; é a tinta da superfície (cor base ×
+// textura), um vidro colorido que escurece o que está atrás.
+mediump vec3 aetherMultiplyTint=vec3(1.0);
 highp vec2 selectedUv(uint slot) {
   uint set=(frame.materialFlags.y>>(slot*2))&3u;
-  return aetherTransformUv(slot,set==2u?aetherWorldUv(vPosition,vNormal):set==1u?vUv1:vUv0);
+  return set==2u?aetherTransformUv(slot,aetherWorldUv(vPosition,vNormal)):
+                 aetherTransformUv(slot,set==1u?vUv1:vUv0)+aetherParallaxOffset;
 }
-bool hasMaterialFeature(uint flags,uint feature) {
-  uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
+// Color Mode dos shaders de partícula da URP (ParticlesInput.hlsl): como a cor
+// do vértice entra na cor base. 0 multiplicar, 1 somar, 2 subtrair, 3 overlay,
+// 4 cor (matiz e saturação do vértice, valor da textura), 5 diferença.
+mediump vec3 aetherRgbToHsv(mediump vec3 c) {
+  mediump vec4 k=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0);
+  mediump vec4 p=mix(vec4(c.bg,k.wz),vec4(c.gb,k.xy),step(c.b,c.g));
+  mediump vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));
+  mediump float d=q.x-min(q.w,q.y);
+  return vec3(abs(q.z+(q.w-q.y)/(6.0*d+1.0e-4)),d/(q.x+1.0e-4),q.x);
+}
+mediump vec3 aetherHsvToRgb(mediump vec3 c) {
+  mediump vec3 p=abs(fract(c.xxx+vec3(1.0,2.0/3.0,1.0/3.0))*6.0-3.0);
+  return c.z*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),c.y);
+}
+mediump vec4 aetherParticleColor(mediump vec4 albedo,mediump vec4 color,uint mode) {
+  if(mode==1u) albedo.rgb+=color.rgb;
+  else if(mode==2u) albedo.rgb-=color.rgb;
+  else if(mode==3u) albedo.rgb=mix(1.0-2.0*(1.0-albedo.rgb)*(1.0-color.rgb),2.0*albedo.rgb*color.rgb,step(albedo.rgb,vec3(0.5)));
+  else if(mode==4u) {mediump vec3 a=aetherRgbToHsv(albedo.rgb),b=aetherRgbToHsv(color.rgb);albedo.rgb=aetherHsvToRgb(vec3(b.x,b.y,a.z));}
+  else if(mode==5u) albedo.rgb=abs(albedo.rgb-color.rgb);
+  else albedo.rgb*=color.rgb;
+  albedo.a*=color.a;
+  albedo.rgb=max(albedo.rgb,vec3(0.0));
+  return albedo;
+}
+// highp: o arquivo usa `precision mediump int`, e a Adreno lê um uint relaxado
+// com 16 bits. As flags passam do bit 15 (MATERIAL_SHADING_EXTENSION é o bit 20);
+// em mediump o bit some, o PK-9 inteiro desliga e o Multiply vira um clarão.
+bool hasMaterialFeature(highp uint flags,highp uint feature) {
+  highp uint selected=MATERIAL_FEATURE_MASK==0xffffffffu?flags:MATERIAL_FEATURE_MASK;
   return (selected&feature)!=0u;
 }
 mediump float materialDetailWeight(highp float cameraDistance, highp float maximumDistance) {
@@ -96,14 +142,33 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
   // folhas esta de costas para o sol -- e nao muda um unico valor final.
   highp float nl=dot(n,l);
   if(nl<=0.0) return vec3(0.0);
-  highp float nv=max(dot(n,v),1e-4);mediump vec3 h=normalize(v+l);
-  highp float nh=max(dot(n,h),0);mediump float lh=max(dot(l,h),0);
-  mediump vec3 f=fresnel(f0,f90,lh);highp float alpha=rough*rough;
+  if(aetherShadingModel==1u) {
+    // PK-9 Simple Lit: Lambert e Blinn-Phong normalizado ((e+8)/8π), para que
+    // o mesmo sol ilumine com a mesma energia do Lit; f0 é a cor especular.
+    highp vec3 hb=normalize(v+l);
+    highp float nhb=max(dot(n,hb),0.0);
+    highp float lobe=pow(nhb,aetherBlinnExponent)*(aetherBlinnExponent+8.0)/(8.0*PI)*aetherHighlightWeight;
+    highp vec3 incoming=vec3(radiance)*nl;
+    mediump vec3 specularTerm=vec3(min(vec3(f0)*lobe*incoming,vec3(AETHER_MEDIUMP_MAX)));
+    aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
+    return min(vec3(base/PI)*incoming+vec3(specularTerm),vec3(AETHER_MEDIUMP_MAX));
+  }
+  // highp no meio-vetor e piso de alpha em HALF_MIN_SQRT (URP, roughness2):
+  // ver distributionGGXStable.
+  highp vec3 hn=vec3(n);
+  highp float nv=max(dot(hn,vec3(v)),1e-4);highp vec3 h=normalize(vec3(v)+vec3(l));
+  highp float nh=max(dot(hn,h),0.0);mediump float lh=max(dot(vec3(l),h),0.0);
+  mediump vec3 f=fresnel(f0,f90,lh);highp float alpha=max(rough*rough,0.0078125);
   mediump float fd90=.5+2*rough*lh*lh;
   mediump float fd=(1+(fd90-1)*pow5(1-float(nl)))*(1+(fd90-1)*pow5(1-float(nv)))/PI;
-  mediump float specular=f90>0.0?
-      float(distribution(nh,alpha)*visibility(nv,nl,alpha)):0.0;
-  return ((1-f)*(1-metal)*base*fd+specular*f)*radiance*float(nl);
+  // O pico do GGX com rugosidade mínima passa de 10^4 e, vezes a radiância do
+  // sol, estoura o fp16 (65504): o brilho virava inf/NaN, um ponto preto. O
+  // lóbulo fica em highp e só desce para mediump já limitado.
+  highp float lobe=f90>0.0?distributionGGXStable(hn,h,nh,alpha)*visibility(nv,nl,alpha):0.0;
+  // PK-9: Specular Highlights desligado tira só o lóbulo direto.
+  mediump vec3 specularTerm=vec3(min(lobe*vec3(f)*aetherHighlightWeight*vec3(radiance)*nl,vec3(AETHER_MEDIUMP_MAX)));
+  aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
+  return min((1-f)*(1-metal)*base*fd*radiance*float(nl)+specularTerm,vec3(AETHER_MEDIUMP_MAX));
 }
 // Luzes pontuais e spot da cena, com a mesma BRDF do sol -- nao ha um segundo
 // modelo de iluminacao escondido aqui. O laco tem limite constante para o
@@ -245,9 +310,27 @@ mediump vec3 shadeWater(highp vec3 position,mediump vec3 n) {
   foam*=clamp(environment.waterDeepColorFoam.w,0.0,1.0);
   return mix(color,vec3(0.92,0.97,1.0),foam);
 }
+// Saída da superfície. No transparente, PK-9: premultiplicado (difuso·a +
+// especular), aditivo (cor·a, ou o especular inteiro com Preserve Specular) e
+// multiplicar (mix(1, tinta, a): a tinta da superfície, sem luz, sobre o que está atrás).
+void aetherWriteSurface(mediump vec3 color,mediump vec3 specular,mediump float alpha,uint flags,uint blendOutput,uint shadingBits) {
+  bool transparent=(flags&1u)!=0u;
+  // Nada acima do teto do fp16 chega ao alvo HDR: um inf aqui vira NaN no
+  // bloom/TAA e espalha um bloco preto.
+  color=min(color,vec3(AETHER_MEDIUMP_MAX));
+  specular=min(specular,color);
+  if(transparent && blendOutput==1u) color=(color-specular)*alpha+specular;
+  else if(transparent && blendOutput==2u) color=(shadingBits&4u)!=0u?(color-specular)*alpha+specular:color*alpha;
+  if(transparent && blendOutput==3u) color=mix(vec3(1.0),aetherMultiplyTint,alpha);
+  else color=toneMapEnvironment(color);
+  if((frame.materialFlags.z&1u)!=0u) color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
+                                             greaterThan(color,vec3(.0031308)));
+  outColor=vec4(color,transparent?alpha:1.0);
+  if(transparent) aetherBlendedTemporalMasks(alpha);
+}
 void main() {
   if(OPAQUE_NO_CLIP==0u && aetherLodDitherDiscard(gl_FragCoord.xy,vDither)) discard;
-  uint flags=frame.materialFlags.x;
+  highp uint flags=frame.materialFlags.x;
   uint isolation=GPU_COST_ISOLATION;
   aetherWriteTemporalMasks(0.0,0.0);
   // The specialized solid family has already validated water/impostor/LOD
@@ -275,6 +358,37 @@ void main() {
         vec2(textureSize(BASE_MAP,0)),frame.materialFlags.y>>16u,
         float(textureQueryLevels(BASE_MAP)-1));
   }
+  // PK-9: shader e opções do Material, só nos desenhos com a flag. As variantes
+  // especializadas por textura não têm a flag na máscara e eliminam tudo isto.
+  bool shadingExtension=generalSurface && !impostor && hasMaterialFeature(flags,MATERIAL_SHADING_EXTENSION) &&
+                        aetherHasMaterialExtension();
+  uint shaderModel=0u,workflow=0u,blendOutput=0u,shadingBits=3u;
+  if(shadingExtension) {
+    highp vec4 shaderRow=aetherMaterialRow(13u);
+    shaderModel=uint(shaderRow.x+0.5);workflow=uint(shaderRow.y+0.5);
+    blendOutput=uint(shaderRow.z+0.5);shadingBits=uint(shaderRow.w+0.5);
+#ifdef OCCLUSION_MAP
+    // Height Map (URP ParallaxOffset1Step): um passo de paralaxe no espaço
+    // tangente, altura no canal G, centrada em meia amplitude. O UV da cor
+    // base mede a altura; o deslocamento vale para todos os mapas.
+    highp vec4 heightRow=aetherMaterialRow(15u);
+    if(heightRow.x>=0.0) {
+      mediump vec3 geometricNormal=normalize(vNormal);
+      mediump vec3 tangentAxisH=vTangent.xyz-geometricNormal*dot(geometricNormal,vTangent.xyz);
+      if(dot(tangentAxisH,tangentAxisH)>1.0e-6) {
+        mediump vec3 th=normalize(tangentAxisH);
+        mediump vec3 bh=cross(geometricNormal,th)*vTangent.w;
+        highp vec3 toEye=normalize(frame.cameraPositionNear.xyz-vPosition);
+        // O eixo b do normal map aponta para o "alto" da imagem, que é -v.
+        highp vec3 viewTs=vec3(dot(toEye,th),-dot(toEye,bh),dot(toEye,geometricNormal));
+        highp float amplitude=heightRow.y;
+        highp float height=texture(OCCLUSION_MAP(uint(heightRow.x+0.5)),selectedUv(0)).g*amplitude-amplitude*0.5;
+        viewTs.z+=0.42;
+        aetherParallaxOffset=height*(viewTs.xy/viewTs.z);
+      }
+    }
+#endif
+  }
   mediump vec4 baseSample=impostor?
       textureGrad(BASE_MAP,impostorUv,impostorDx,impostorDy):texture(BASE_MAP,selectedUv(0));
   // R4: origem do alfa do material, antes do corte (igual à cobertura e à sombra).
@@ -285,6 +399,18 @@ void main() {
   if(!impostor) baseSample.a=aetherAlphaFromSource(baseSample);
   mediump vec4 vertexColor=impostor?vec4(vColor.rgb,1.0):vColor;
   mediump vec4 base=baseSample*frame.baseColorFactor*vertexColor;
+  if(shadingExtension) {
+    // Particles Lit/Unlit: Color Mode da cor do vértice.
+    if(shaderModel>=4u) base=aetherParticleColor(baseSample*frame.baseColorFactor,vertexColor,uint(aetherMaterialRow(20u).x+0.5));
+    // Camera Fading: some perto da câmera, entre "de" e "até".
+    if((shadingBits&16u)!=0u) {
+      highp vec4 fadeRow=aetherMaterialRow(20u);
+      base.a*=clamp((length(frame.cameraPositionNear.xyz-vPosition)-fadeRow.y)/max(fadeRow.z-fadeRow.y,1.0e-4),0.0,1.0);
+    }
+    // Alpha Clipping no Transparent.
+    if((shadingBits&8u)!=0u && base.a<aetherMaterialRow(14u).w) discard;
+    aetherMultiplyTint=clamp(base.rgb,0.0,1.0);
+  }
   // O depth-only de coverage já descartou estes texels, mas discard no shader
   // impede early-Z em parte dos drivers tile-based. Reaplicar o mesmo cutoff
   // imediatamente após o único sample obrigatório evita executar normal, MR,
@@ -307,6 +433,34 @@ void main() {
                 greaterThan(color,vec3(.0031308)));
     outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
     if((flags&1u)!=0u) aetherBlendedTemporalMasks(base.a);
+    return;
+  }
+#ifdef OCCLUSION_MAP
+  // PK-9 Detail Inputs (URP Lit): máscara no canal A, com o UV da cor base;
+  // Base Map de detalhe ×2 no espaço da Unity (cinza sRGB 0,5 é neutro: o
+  // linear vezes unity_ColorSpaceDouble 4,5948), visibilidade como escala.
+  mediump float detailMask=0.0;
+  highp vec2 detailUv=vec2(0.0);
+  if(shadingExtension) {
+    highp vec4 detailRow=aetherMaterialRow(15u),detailNormalRow=aetherMaterialRow(16u);
+    if(detailRow.w>=0.0 || detailNormalRow.x>=0.0) {
+      detailMask=detailRow.z>=0.0?texture(OCCLUSION_MAP(uint(detailRow.z+0.5)),selectedUv(0)).a:1.0;
+      highp vec3 point=vec3(detailNormalRow.w>0.5?vUv1:vUv0,1.0);
+      detailUv=vec2(dot(aetherMaterialRow(17u).xyz,point),dot(aetherMaterialRow(18u).xyz,point))+aetherParallaxOffset;
+      if(detailRow.w>=0.0) {
+        mediump vec3 detailAlbedo=texture(OCCLUSION_MAP(uint(detailRow.w+0.5)),detailUv).rgb*4.59479380;
+        detailAlbedo=max(mix(vec3(1.0),detailAlbedo,detailNormalRow.y),vec3(0.0));
+        base.rgb*=mix(vec3(1.0),detailAlbedo,detailMask);
+      }
+    }
+  }
+#endif
+  // PK-9 Unlit e Particles Unlit: cor base sem luz (a partícula soma emissão).
+  if(shadingExtension && (shaderModel==3u || shaderModel==5u)) {
+    mediump vec3 unlit=base.rgb;
+    if(shaderModel==5u && hasMaterialFeature(flags,8u))
+      unlit+=texture(EMISSIVE_MAP,selectedUv(3)).rgb*frame.emissiveFactorStrength.rgb*frame.emissiveFactorStrength.a;
+    aetherWriteSurface(unlit,vec3(0.0),base.a,flags,blendOutput,shadingBits);
     return;
   }
   highp vec3 eye=frame.cameraPositionNear.xyz;
@@ -343,7 +497,9 @@ void main() {
       rough=1.0-(1.0-frame.materialFactors.x)*smoothness;
     }
   }
-  rough=clamp(rough,.07,1);
+  // Rugosidade perceptual mínima do Filament para mediump (MIN_PERCEPTUAL_ROUGHNESS
+  // 0,089): abaixo disso o pico do GGX não cabe em fp16 com o sol físico.
+  rough=clamp(rough,.089,1);
   mediump float metal=clamp(mr[metallicChannel]*frame.materialFactors.y,0,1);
   // R4: oclusão empacotada no canal R do mapa metal/rugosidade (ORM do glTF),
   // só quando o importador provou mesma textura e mesmo UV. Atenua a luz
@@ -391,6 +547,22 @@ void main() {
                 mix(1.0,detail.z,normalDetailWeight));
     n=impostor?normalize(detail):worldNormal?normalize(aetherWorldUvBasis(n)*detail):normalize(mat3(t,b,n)*detail);
   }
+#ifdef OCCLUSION_MAP
+  // PK-9 Detail Normal Map: reorientado sobre o normal já perturbado (a base
+  // tangente acompanha n), na força do detalhe e pela máscara.
+  if(shadingExtension && isolation!=1u && aetherMaterialRow(16u).x>=0.0 && detailMask>0.0 && dot(tangentAxis,tangentAxis)>1.0e-6) {
+    highp vec4 detailNormalRow=aetherMaterialRow(16u);
+    mediump vec3 detailTs=texture(OCCLUSION_MAP(uint(detailNormalRow.x+0.5)),detailUv).xyz*2.0-1.0;
+    if(materialExtension && aetherMaterialRow(9u).w>0.5) detailTs.y=-detailTs.y;
+    mediump vec3 td=vTangent.xyz-n*dot(n,vTangent.xyz);
+    if(dot(td,td)>1.0e-6) {
+      td=normalize(td);
+      mediump vec3 bd=cross(n,td)*vTangent.w;
+      mediump vec3 perturbed=normalize(td*detailTs.x*detailNormalRow.z+bd*detailTs.y*detailNormalRow.z+n*max(detailTs.z,1.0e-3));
+      n=normalize(mix(n,perturbed,detailMask));
+    }
+  }
+#endif
   // A subtração fica em highp: `eye` e `vPosition` são coordenadas de mundo e o
   // mapa se estende por centenas de unidades, onde fp16 já perde resolução. Só
   // o resultado normalizado, que vive em [-1,1], desce para mediump.
@@ -398,6 +570,21 @@ void main() {
   mediump float dielectricSpecular=clamp(frame.materialFactors.w,0.0,1.0);
   mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
   mediump float f90=mix(dielectricSpecular,1.0,metal);
+  if(shadingExtension) {
+    aetherHighlightWeight=(shadingBits&1u)!=0u?1.0:0.0;
+    // Workflow Specular (e Simple Lit): o RGB do binding 2 é o Specular Map,
+    // vezes a cor especular; sem metálico. O Lit especular conserva energia
+    // como a URP (difuso vezes 1 - refletividade); o Simple Lit não.
+    if(workflow==1u || shaderModel==2u) {
+      f0=aetherMaterialRow(14u).rgb*(hasMaterialFeature(flags,4u)?mr.rgb:vec3(1.0));
+      f90=1.0;metal=0.0;
+      if(shaderModel!=2u) base.rgb*=1.0-max(f0.r,max(f0.g,f0.b));
+    }
+    if(shaderModel==2u) {
+      aetherShadingModel=1u;
+      aetherBlinnExponent=exp2(10.0*(1.0-rough)+1.0);
+    }
+  }
   // Culling Mask/Rendering Layers do sol que recusam o objeto apagam a luz
   // direta dele aqui; Receive Shadows desligado pula a busca nas cascatas.
   mediump vec3 sunRadiance=(vLightMask&DRAW_NO_SUN)!=0u?vec3(0.0):
@@ -411,6 +598,7 @@ void main() {
       directionalShadow(vPosition,n,viewDepth):1.0;
   mediump vec3 color=directLight(n,v,environment.sunDirectionIntensity.xyz,sunRadiance,
                          base.rgb,f0,f90,metal,rough)*sunVisibility;
+  aetherSpecularSum*=sunVisibility;
   if(isolation!=4u) color+=punctualLighting(vPosition,n,v,base.rgb,f0,f90,metal,rough);
   mediump float nv=max(dot(n,v),0.0);
   // PK-6: com Light Probes = Misturar sondas e um bake na cena, o ambiente
@@ -435,7 +623,10 @@ void main() {
   // on wet, polished and metallic surfaces.
   mediump float specularDetailWeight=environment.quality.w>0.5?
       materialDetailWeight(cameraDistance,environment.quality.y):0.0;
-  if(isolation!=2u && f90>0.0 && environment.quality.w>0.5) {
+  // PK-9: o Simple Lit não reflete o ambiente (URP); Environment Reflections
+  // desligado troca a sonda pela cor do ambiente na direção do reflexo (o
+  // _GlossyEnvironmentColor da URP).
+  if(!(shadingExtension && shaderModel==2u) && isolation!=2u && f90>0.0 && environment.quality.w>0.5) {
     mediump vec3 reflection=reflect(-v,n);
     // Fade angular detail into the coarsest prefiltered probe, retaining
     // reflected energy. Roughness is continuous; it must not switch IBL off.
@@ -444,7 +635,9 @@ void main() {
     // PK-6: as sondas de reflexo do desenho (box projection por pixel) e o céu
     // no que sobra dos pesos. A rugosidade efetiva segue o mesmo esmaecimento
     // de detalhe por distância que escolhe o mip do céu.
-    mediump vec3 specularEnvironment=astraSpecularRadiance(vPosition,reflection,probeLod,
+    // PK-9: Environment Reflections desligado troca as sondas pela cor do ambiente.
+    mediump vec3 specularEnvironment=shadingExtension && (shadingBits&2u)==0u?
+        environmentAmbientDiffuse(reflection):astraSpecularRadiance(vPosition,reflection,probeLod,
         mix(1.0,rough,specularDetailWeight));
     mediump vec2 integratedBrdf=environmentBrdf(nv,rough);
     // The split-sum LUT already integrates Schlick's angular term. Applying
@@ -463,7 +656,52 @@ void main() {
     mediump float horizon=min(1.0+dot(reflection,normalize(vNormal)),1.0);
     mediump float specularOcclusion=horizon*horizon*
         clamp(pow(nv+occlusion,exp2(-16.0*rough-1.0))-1.0+occlusion,0.0,1.0);
-    color+=specularEnvironment*integratedSpecular*specularOcclusion;
+    mediump vec3 environmentSpecular=specularEnvironment*integratedSpecular*specularOcclusion;
+    color+=environmentSpecular;
+    aetherSpecularSum+=environmentSpecular;
+  }
+  // PK-9 Clear Coat (Complex Lit): verniz dielétrico (F0 0,04) liso sobre a
+  // camada de baixo, com o normal da geometria. A camada de baixo recebe o
+  // que o verniz deixa passar; o verniz reflete o sol e o ambiente.
+  if(shadingExtension && (shadingBits&32u)!=0u) {
+    highp vec4 coatRow=aetherMaterialRow(19u);
+    mediump float coatMask=clamp(coatRow.x,0.0,1.0),coatSmoothness=clamp(coatRow.y,0.0,1.0);
+#ifdef OCCLUSION_MAP
+    if(coatRow.z>=0.0) {
+      mediump vec2 coatTexel=texture(OCCLUSION_MAP(uint(coatRow.z+0.5)),selectedUv(0)).rg;
+      coatMask*=coatTexel.r;coatSmoothness*=coatTexel.g;
+    }
+#endif
+    mediump vec3 coatNormal=normalize(vNormal);
+    mediump float coatRough=clamp(1.0-coatSmoothness,.089,1.0);
+    highp float coatNv=max(dot(coatNormal,v),1e-4);
+    // URP (BRDF.hlsl/GlobalIllumination.hlsl, ClearCoat): o mesmo fresnelTerm
+    // (1-N.V)^4 atenua a base e escolhe o reflexo do ambiente, que tende a
+    // grazingTerm na borda. Com a LUT de split-sum no reflexo e Schlick puro na
+    // atenuação, a silhueta perdia a base sem ganhar o reflexo: aro escuro.
+    mediump float coatFresnelTerm=1.0-float(coatNv);coatFresnelTerm*=coatFresnelTerm;coatFresnelTerm*=coatFresnelTerm;
+    mediump float coatFresnel=.04+.96*coatFresnelTerm;
+    color*=1.0-coatMask*coatFresnel;
+    aetherSpecularSum*=1.0-coatMask*coatFresnel;
+    mediump vec3 coatLight=vec3(0.0);
+    highp float coatNl=dot(coatNormal,environment.sunDirectionIntensity.xyz);
+    if(coatNl>0.0) {
+      highp vec3 coatHalf=normalize(vec3(v)+environment.sunDirectionIntensity.xyz);
+      highp float coatAlpha=max(coatRough*coatRough,0.0078125);
+      mediump float coatF=.04+.96*pow5(1.0-clamp(dot(vec3(v),coatHalf),0.0,1.0));
+      highp vec3 coatN=vec3(coatNormal);
+      coatLight+=vec3(min(distributionGGXStable(coatN,coatHalf,max(dot(coatN,coatHalf),0.0),coatAlpha)*visibility(coatNv,coatNl,coatAlpha)*coatNl*
+                 coatF*vec3(sunRadiance)*sunVisibility*aetherHighlightWeight,vec3(AETHER_MEDIUMP_MAX)));
+    }
+    if(environment.quality.w>0.5) {
+      mediump float coatAlphaSq=coatRough*coatRough;
+      mediump float coatSurfaceReduction=1.0/(coatAlphaSq*coatAlphaSq+1.0);
+      mediump float coatGrazing=clamp(coatSmoothness+.04,0.0,1.0);
+      coatLight+=environmentRadiance(reflect(-v,coatNormal),coatRough*environment.parameters.z)*
+                 (coatSurfaceReduction*mix(.04,coatGrazing,coatFresnelTerm))*occlusion;
+    }
+    color+=coatLight*coatMask;
+    aetherSpecularSum+=coatLight*coatMask;
   }
   mediump float emissiveDetailWeight=materialDetailWeight(
       cameraDistance,environment.materialDistanceParameters.y);
@@ -482,9 +720,5 @@ void main() {
       return;
     }
   }
-  color=toneMapEnvironment(color);
-  if((frame.materialFlags.z&1u)!=0u) color=mix(12.92*color,1.055*pow(color,vec3(1.0/2.4))-.055,
-                                             greaterThan(color,vec3(.0031308)));
-  outColor=vec4(color,(flags&1u)!=0u?base.a:1.0);
-  if((flags&1u)!=0u) aetherBlendedTemporalMasks(base.a);
+  aetherWriteSurface(color,aetherSpecularSum,base.a,flags,blendOutput,shadingBits);
 }

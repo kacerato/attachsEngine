@@ -43,6 +43,24 @@ struct ProbeFilterPush {
 constexpr float ProbeFaceYaw[6]{1.57079633f, -1.57079633f, 0.0f, 0.0f, 0.0f, 3.14159265f};
 constexpr float ProbeFacePitch[6]{0.0f, 0.0f, -1.57079633f, 1.57079633f, 0.0f, 0.0f};
 u64 probeLayerKey(u64 objectId, u64 instance) { return objectId * 1000003ull ^ instance; }
+// Tudo o que muda a imagem do céu (sol, cores, atmosfera, astros, nuvens), sem
+// o deslocamento do vento: as nuvens andando não refazem o reflexo a cada quadro.
+std::array<float, renderer::SkyReflectionKeySize> skyReflectionKey(const DirtRoadFrameUniform &frame) {
+  std::array<float, renderer::SkyReflectionKeySize> key{};
+  const float *rows[16]{frame.environment.sunDirectionIntensity, frame.environment.sunColorAngularRadius,
+                        frame.environment.skyZenithCloudCoverage, frame.environment.skyHorizonCloudDensity,
+                        frame.environment.groundColorSaturation, frame.environment.cloudLightWindSpeed,
+                        frame.sceneSky, frame.celestialParameters, frame.celestialStars, frame.skyParameters,
+                        frame.atmosphereScattering, frame.atmosphereGeometry, frame.atmosphereDetail,
+                        frame.cloudParameters, frame.cloudTint, frame.environment.parameters};
+  for (u32 row = 0; row < 16; ++row) std::copy_n(rows[row], 4, key.data() + row * 4);
+  // LOD e projeção do ambiente: quem decide é o próprio reflexo. No lugar, a
+  // exposição do céu (sceneAoDetail.z: Exposure do Skybox ou do HDRI).
+  key[62] = frame.sceneAoDetail[2];
+  key[63] = 0;
+  return key;
+}
+
 void probeImageBarrier(VkCommandBuffer command, VkImage image, VkImageLayout from, VkImageLayout to, VkAccessFlags srcAccess,
                   VkAccessFlags dstAccess, VkPipelineStageFlags srcStage, VkPipelineStageFlags dstStage, u32 baseMip,
                   u32 mips, u32 baseLayer, u32 layers) {
@@ -104,6 +122,11 @@ bool InstancedRenderer::createProbeResources() {
   atlas.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   atlas.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   if (!memoryAllocator_->createImage(atlas, &probeAtlas_)) return false;
+  rhi::ImageDesc sky = atlas;
+  sky.arrayLayers = 1;
+  sky.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  if (!memoryAllocator_->createImage(sky, &skyReflection_)) return false;
+  skyReflectionReady_ = skyReflectionKeyValid_ = false;
   rhi::SamplerDesc sampler{};
   sampler.addressU = sampler.addressV = sampler.addressW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   sampler.maxLod = static_cast<float>(renderer::ReflectionProbeAtlasMips - 1);
@@ -245,6 +268,8 @@ void InstancedRenderer::destroyProbeResources() {
   probeFilterSets_.fill(VK_NULL_HANDLE);
   probeScratch_.reset();
   probeAtlas_.reset();
+  skyReflection_.reset();
+  skyReflectionReady_ = skyReflectionKeyValid_ = false;
   probeAtlasSampler_.shutdown();
   probeBlock_.reset();
   probeDisabledBlock_.reset();
@@ -523,6 +548,31 @@ void InstancedRenderer::scheduleProbeWork() {
     if (wasReady || texture) ++probeLayerRevision_;
   }
   if (probeJob_.active) return;
+  // O reflexo do céu antes de tudo: as sondas e todo material leem dele o que
+  // sobra dos pesos. Só o céu, sem objetos, na resolução padrão da Unity (128).
+  if (skyReflectionWanted_ && skyReflection_.isReady() && probeAtlasInitialized_) {
+    const auto key = skyReflectionKey(*static_cast<const DirtRoadFrameUniform *>(environmentUniform_.mappedData()));
+    // postIsolation 256: recaptura a cada quadro, o pior caso de um céu que
+    // muda o tempo todo (ciclo de dia acelerado), para medir o custo.
+    if (renderer::skyReflectionNeedsCapture(key, skyReflectionKey_, skyReflectionKeyValid_) || (postIsolation_ & 256u)) {
+      ProbeJob job;
+      job.active = true;
+      job.request.kind = 2;
+      job.request.cullingMask = 0;
+      job.request.staticOnly = false;
+      job.request.solidBackground = false;
+      job.request.hdr = true;
+      job.request.resolution = renderer::SkyReflectionResolution;
+      job.size = renderer::SkyReflectionResolution;
+      job.slicing = renderer::ReflectionProbeSlicing::NoTimeSlicing;
+      job.baseMip = renderer::reflectionProbeBaseMip(job.size);
+      job.nextMip = job.baseMip;
+      skyReflectionKey_ = key;
+      skyReflectionKeyValid_ = true;
+      probeJob_ = job;
+      return;
+    }
+  }
   // Pedidos do editor (bake) primeiro, depois as sondas de tempo real.
   if (!probeCaptureQueue_.empty()) {
     ProbeJob job;
@@ -859,7 +909,7 @@ void InstancedRenderer::recordProbeFace(u32 face, float timeSeconds) {
     const auto range = drawIndexRange(index);
     vkCmdDrawIndexed(commandBuffer_, range.indexCount, 1, range.firstIndex, geometry.vertexOffset, index);
   };
-  for (u32 i = 0; i < dirtRoadResources_.draws().size(); ++i) {
+  for (u32 i = 0; request.kind != 2 && i < dirtRoadResources_.draws().size(); ++i) {
     if (!authoredVisibility_.empty() && !authoredVisibility_[i]) continue;
     const renderer::DrawLightingKey key = i < authoredLighting_.size() ? authoredLighting_[i] : renderer::DrawLightingKey{};
     // Culling Mask da sonda e, no bake, só o que é Static — como a Unity.
@@ -914,6 +964,13 @@ void InstancedRenderer::recordProbes(float timeSeconds) {
     probeImageBarrier(commandBuffer_, probeAtlas_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                  VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                  VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, mips, 0, layers);
+    probeImageBarrier(commandBuffer_, skyReflection_.handle(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
+                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, mips, 0, 1);
+    const VkImageSubresourceRange skyRange{VK_IMAGE_ASPECT_COLOR_BIT, 0, mips, 0, 1};
+    vkCmdClearColorImage(commandBuffer_, skyReflection_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &black, 1, &skyRange);
+    probeImageBarrier(commandBuffer_, skyReflection_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, mips, 0, 1);
     probeAtlasInitialized_ = true;
   }
   // Recursos assados que entraram na residência neste quadro.
@@ -1087,6 +1144,28 @@ void InstancedRenderer::recordProbes(float timeSeconds) {
     ++probeLayerRevision_;
     editorSceneCacheValid_ = false;
   }
+  if (job.request.kind == 2) {
+    const VkImage sky = skyReflection_.handle();
+    probeImageBarrier(commandBuffer_, sky, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                 VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                 VK_PIPELINE_STAGE_TRANSFER_BIT, 0, renderer::ReflectionProbeAtlasMips, 0, 1);
+    std::vector<VkImageCopy> copies;
+    for (u32 mip = base; mip < renderer::ReflectionProbeAtlasMips; ++mip) {
+      VkImageCopy copy{};
+      copy.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
+      copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, mip, 0, 1};
+      const u32 side = std::max<u32>(renderer::ReflectionProbeAtlasSize >> mip, 1u);
+      copy.extent = {side, side, 1};
+      copies.push_back(copy);
+    }
+    vkCmdCopyImage(commandBuffer_, scratch, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, sky, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                   static_cast<u32>(copies.size()), copies.data());
+    probeImageBarrier(commandBuffer_, sky, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                 VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, renderer::ReflectionProbeAtlasMips, 0, 1);
+    skyReflectionReady_ = true;
+    editorSceneCacheValid_ = false;
+  }
   if (job.bake) {
     renderer::ReflectionProbeTexture texture;
     texture.guid = {};
@@ -1125,6 +1204,32 @@ void InstancedRenderer::recordProbes(float timeSeconds) {
     }
   }
   job = {};
+}
+
+// Binding 3 do conjunto do quadro: o reflexo do céu quando pronto, senão o mapa
+// especular do ambiente (empacotado ou HDRI autoral). Troca rara (o céu fica
+// pronto, a cena troca de céu), por isso a espera do device, como na troca de HDRI.
+bool InstancedRenderer::bindEnvironmentSpecular() {
+  if (environmentSet_ == VK_NULL_HANDLE) return true;
+  const bool sky = skyReflectionActive();
+  const VkImageView view = sky ? skyReflection_.view() : dirtRoadResources_.environmentSpecularView();
+  if (view == environmentSpecularBound_) return true;
+  if (vkDeviceWaitIdle(device_) != VK_SUCCESS) return false;
+  const VkDescriptorImageInfo image{sky ? probeAtlasSampler_.handle() : dirtRoadResources_.environmentSpecularSampler(), view,
+                                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkWriteDescriptorSet write{};
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.dstSet = environmentSet_;
+  write.dstBinding = 3;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  write.pImageInfo = &image;
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+  environmentSpecularBound_ = view;
+  editorSceneCacheValid_ = false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[SkyReflection] reflexo do ambiente: %s.",
+                      sky ? "céu da cena (capturado, GGX)" : "mapa do ambiente");
+  return true;
 }
 
 bool InstancedRenderer::ensureProbeReadback(u64 bytes) {

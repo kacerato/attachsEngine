@@ -47,7 +47,7 @@ bool EnvironmentProfile::valid() const {
 std::string EnvironmentProfile::serialize() const {
   std::ostringstream out;out.imbue(std::locale::classic());
   out<<std::setprecision(std::numeric_limits<float>::max_digits10);
-  out<<"ASTRA_ENVIRONMENT_PROFILE "<<FormatVersion<<' '<<guid.text()<<' '<<revision<<' '<<std::quoted(name)
+  out<<(skybox?"ASTRA_SKYBOX_MATERIAL ":"ASTRA_ENVIRONMENT_PROFILE ")<<FormatVersion<<' '<<guid.text()<<' '<<revision<<' '<<std::quoted(name)
      <<' '<<values.fog<<' '<<values.post<<' '<<values.bloom<<' '<<values.vignette
      <<' '<<values.filmGrain
      <<' '<<values.ambientOcclusion<<' '<<static_cast<u32>(values.sky)<<' '
@@ -86,6 +86,13 @@ std::string EnvironmentProfile::serialize() const {
   // v12: Color Adjustments e Bloom completos, no fim da linha.
   out<<' '<<values.postExposure;writeColor(out,values.colorFilter);out<<' '<<values.hueShift
      <<' '<<values.bloomScatter;writeColor(out,values.bloomTint);out<<' '<<values.bloomClamp;
+  // v13 (PK-1/PK-2): janela Lighting e Skybox/Procedural.
+  out<<' '<<values.skyExposure<<' '<<static_cast<u32>(values.sunDisk)<<' '<<values.sunSize
+     <<' '<<values.sunSizeConvergence<<' '<<static_cast<u32>(values.ambientSource);
+  writeColor(out,values.ambientSkyColor);writeColor(out,values.ambientEquatorColor);
+  writeColor(out,values.ambientGroundColor);writeColor(out,values.ambientColor);
+  out<<' '<<static_cast<u32>(values.fogMode)<<' '<<static_cast<u32>(values.fogColorMode)<<' '<<values.fogEnd
+     <<' '<<(values.skybox.valid()?values.skybox.text():"-");
   out<<'\n';
   return out.str();
 }
@@ -95,7 +102,8 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
   std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
   EnvironmentProfile candidate;std::string magic,guid;u32 version=0,sky=0,tone=0;
   if(!(in>>magic>>version>>guid>>candidate.revision>>std::quoted(candidate.name)) ||
-     magic!="ASTRA_ENVIRONMENT_PROFILE"||(version<1||version>FormatVersion)||
+     (magic!="ASTRA_ENVIRONMENT_PROFILE"&&!(magic=="ASTRA_SKYBOX_MATERIAL"&&version>=13))||
+     (version<1||version>FormatVersion)||
      !AssetGuid::parse(guid,candidate.guid) ||
      !(in>>candidate.values.fog>>candidate.values.post>>candidate.values.bloom>>
        candidate.values.vignette))
@@ -167,6 +175,23 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
        !readColor(in,x.bloomTint)||!(in>>x.bloomClamp)) return false;
   } else candidate.values.bloomScatter=0; // perfil antigo: o raio de bloom de antes
   if(version<12) renderer::migrateLegacyExposure(v,version>=7,legacyAuto,legacyCenter);
+  candidate.skybox=magic=="ASTRA_SKYBOX_MATERIAL";
+  if(version>=13) {
+    auto &w=candidate.values;u32 sun=0,ambient=0,fogMode=0,fogColor=0;std::string skybox;
+    if(!(in>>w.skyExposure>>sun>>w.sunSize>>w.sunSizeConvergence>>ambient) ||
+       !readColor(in,w.ambientSkyColor)||!readColor(in,w.ambientEquatorColor)||
+       !readColor(in,w.ambientGroundColor)||!readColor(in,w.ambientColor)||
+       !(in>>fogMode>>fogColor>>w.fogEnd>>skybox)||sun>2||ambient>2||fogMode>2||fogColor>1||
+       (skybox!="-"&&!AssetGuid::parse(skybox,w.skybox))) return false;
+    w.sunDisk=static_cast<renderer::SunDiskMode>(sun);w.ambientSource=static_cast<renderer::AmbientSource>(ambient);
+    w.fogMode=static_cast<renderer::FogMode>(fogMode);w.fogColorMode=static_cast<renderer::FogColorMode>(fogColor);
+  } else {
+    // Perfil antigo: o céu e a neblina de antes (como a migração do Ambiente v18).
+    candidate.values.atmosphere=1.0f;
+    candidate.values.sunDisk=candidate.values.sunDiskIntensity>0.0f?renderer::SunDiskMode::HighQuality:renderer::SunDiskMode::None;
+    candidate.values.fogMode=renderer::FogMode::Exponential;
+    candidate.values.fogColorMode=renderer::FogColorMode::SkyLight;
+  }
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -185,7 +210,16 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
                                const EnvironmentProfile &profile) {
   auto normalized=instance;normalized.active=true;normalized.priority=0;
   auto expected=profile.values;expected.active=true;expected.priority=0;
-  return normalized.environmentMap==expected.environmentMap&&
+  return normalized.skyExposure==expected.skyExposure&&normalized.sunDisk==expected.sunDisk&&
+      normalized.sunSize==expected.sunSize&&normalized.sunSizeConvergence==expected.sunSizeConvergence&&
+      normalized.ambientSource==expected.ambientSource&&
+      std::equal(std::begin(normalized.ambientSkyColor),std::end(normalized.ambientSkyColor),expected.ambientSkyColor)&&
+      std::equal(std::begin(normalized.ambientEquatorColor),std::end(normalized.ambientEquatorColor),expected.ambientEquatorColor)&&
+      std::equal(std::begin(normalized.ambientGroundColor),std::end(normalized.ambientGroundColor),expected.ambientGroundColor)&&
+      std::equal(std::begin(normalized.ambientColor),std::end(normalized.ambientColor),expected.ambientColor)&&
+      normalized.fogMode==expected.fogMode&&normalized.fogColorMode==expected.fogColorMode&&
+      normalized.fogEnd==expected.fogEnd&&normalized.skybox==expected.skybox&&
+      normalized.environmentMap==expected.environmentMap&&
       normalized.hdriRotationDegrees==expected.hdriRotationDegrees&&normalized.hdriExposureEv==expected.hdriExposureEv&&
       normalized.fog==expected.fog&&normalized.post==expected.post&&
       normalized.bloom==expected.bloom&&normalized.vignette==expected.vignette&&
@@ -239,5 +273,31 @@ bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
       std::equal(std::begin(normalized.colorFilter),std::end(normalized.colorFilter),expected.colorFilter)&&
       normalized.bloomScatter==expected.bloomScatter&&normalized.bloomClamp==expected.bloomClamp&&
       std::equal(std::begin(normalized.bloomTint),std::end(normalized.bloomTint),expected.bloomTint);
+}
+renderer::SceneEnvironment applySkyboxMaterial(const renderer::SceneEnvironment &instance,
+                                               const EnvironmentProfile &material) {
+  auto result=instance;const auto &sky=material.values;
+  result.sky=sky.sky;result.environmentMap=sky.environmentMap;
+  result.hdriRotationDegrees=sky.hdriRotationDegrees;result.hdriExposureEv=sky.hdriExposureEv;
+  std::copy_n(sky.skyZenith,3,result.skyZenith);std::copy_n(sky.ground,3,result.ground);
+  result.atmosphere=sky.atmosphere;result.skyExposure=sky.skyExposure;
+  result.sunDisk=sky.sunDisk;result.sunSize=sky.sunSize;result.sunSizeConvergence=sky.sunSizeConvergence;
+  result.sunDiskDegrees=sky.sunDiskDegrees;result.sunDiskIntensity=sky.sunDiskIntensity;result.sunGlare=sky.sunGlare;
+  result.moonPhase=sky.moonPhase;result.moonSizeDegrees=sky.moonSizeDegrees;
+  result.moonIntensity=sky.moonIntensity;result.starIntensity=sky.starIntensity;
+  result.physicalAtmosphereHighQuality=sky.physicalAtmosphereHighQuality;
+  result.physicalSkyIntensity=sky.physicalSkyIntensity;result.airDensity=sky.airDensity;
+  result.aerosolDensity=sky.aerosolDensity;result.aerosolAnisotropy=sky.aerosolAnisotropy;
+  result.planetRadiusKm=sky.planetRadiusKm;result.observerHeightKm=sky.observerHeightKm;
+  result.rayleighScaleHeightKm=sky.rayleighScaleHeightKm;result.aerosolScaleHeightKm=sky.aerosolScaleHeightKm;
+  result.atmosphereHeightKm=sky.atmosphereHeightKm;result.groundAlbedo=sky.groundAlbedo;
+  result.skybox=material.guid;
+  return result;
+}
+
+renderer::SceneEnvironment skyboxMaterialValues(const renderer::SceneEnvironment &values) {
+  auto result=applySkyboxMaterial(renderer::SceneEnvironment{},EnvironmentProfile{{},1,{},true,values});
+  result.active=true;result.priority=0;result.skybox={};
+  return result;
 }
 } // namespace ae::resources

@@ -2397,7 +2397,7 @@ void android_main(android_app *app) {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {
       shell.instancedRenderer.setPostIsolation(postIsolation);
-      __android_log_print(ANDROID_LOG_INFO,LogTag,"[PostIsolation] mask=%u (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez).",
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[PostIsolation] mask=%u (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez, 32 ambiente difuso, 64 reflexo do ambiente, 128 reflexo do céu desligado, 256 recaptura do céu a cada quadro).",
                           shell.instancedRenderer.postIsolation());
     }
   }
@@ -2969,7 +2969,6 @@ void android_main(android_app *app) {
         shell.instancedRenderer.setTemporalDebugView(static_cast<ae::platform::android::TemporalDebugView>(
             !editorPlaying && shell.editorSession.screen().workspace==ae::editor::EditorWorkspace::Scene
                 ? std::min(shell.editorSession.screen().qualityTemporalDebug,6u) : 0u));
-        shell.instancedRenderer.setEnvironmentAdjustment(shell.editorSession.document().find(shell.editorSession.document().root())->environment);
         const float editorWallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now()-shell.shellStartTime).count();
         if(!shell.editorSession.requestedScenePath().empty() && !editorPlaying && !shell.editorSession.history().isOpen()) {
           const auto requested=shell.editorSession.requestedScenePath();

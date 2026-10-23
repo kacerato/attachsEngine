@@ -1,6 +1,7 @@
 #include "editor/editor_screen.h"
 #include "resources/model_import.h"
 #include "resources/unity_material_import.h"
+#include "editor/editor_material_fields.h"
 #include "scene/path.h"
 #include "scene/animation.h"
 #include "editor/editor_component_impact.h"
@@ -348,6 +349,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(!field.empty() && state_.materialMixedHas(field)) {
       state_.setValueMenu.key="asset.mat."+field;state_.setValueMenu.label="Valor do material";
       if(field.starts_with("num")) state_.setValueMenu.label=scene::meshRendererNumbers[std::stoul(field.substr(3))].name;
+      else if(const auto *spec=findMaterialField(field)) state_.setValueMenu.label=std::string(spec->label);
       state_.setValueMenu.rows.clear();
       for(u32 i=0;i<multiMaterials_.size();++i) if(const auto *material=findMaterialAsset(multiMaterials_[i])) {
         auto value=materialFieldText(*material,field);
@@ -554,6 +556,11 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(handleRigTool(routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
+  // PK-9: Inspector do Material por shader (campos, seções, lista, rolagem).
+  if(!state_.numericField && state_.materialInspector.valid() && !state_.texturePicker && !isPlaying() &&
+     (isMaterialFieldWidget(routing.widgetId) ||
+      (routing.widgetId>=widgetId(EditorWidget::MaterialSectionBase) && routing.widgetId<=widgetId(EditorWidget::MaterialChoiceClose))) &&
+     handleMaterialFieldPointer(event,routing)) return true;
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(routing.tapped&&probe_widget::owns(routing.widgetId)) {handleProbeWidget(routing.widgetId);return true;}
@@ -1418,6 +1425,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       if(bindingIndex>=component->type().resourceBindings.size()) return true;
       const auto &binding=component->type().resourceBindings[bindingIndex];
       if((binding.kind!=resources::AssetType::Mesh&&binding.kind!=resources::AssetType::EnvironmentProfile&&
+          binding.kind!=resources::AssetType::SkyboxMaterial&&
           binding.kind!=resources::AssetType::EnvironmentMap&&binding.kind!=resources::AssetType::AnimationClip&&binding.kind!=resources::AssetType::Texture&&binding.kind!=resources::AssetType::UiDocument&&
           binding.kind!=resources::AssetType::PhysicsMaterial&&binding.kind!=resources::AssetType::AnimatorController)||
          slot>=binding.slotCount(*component)||
@@ -1997,6 +2005,26 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
       return true;
     }
+    // PK-2: janela Iluminação. Material do céu novo (do céu atual), editar o
+    // escolhido, e criar o Ambiente da cena quando ela só tem o padrão.
+    if(key==widgetId(EditorWidget::LightingCreateSkybox)) {
+      std::string diagnostic;
+      const bool ok=createSkyboxMaterial(state_.selection,state_.resourceInstance?state_.resourceInstance:state_.expandedNative,diagnostic).valid();
+      state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
+      return true;
+    }
+    if(key==widgetId(EditorWidget::LightingEditSkybox)) {
+      const auto *object=document_.find(state_.selection);
+      const auto *component=object?object->components.findInstance(state_.resourceInstance?state_.resourceInstance:state_.expandedNative):nullptr;
+      const auto *environment=component&&&component->type()==&scene::Environment::descriptor?
+          static_cast<const scene::Environment*>(component):nullptr;
+      state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();
+      if(!environment||!openProfileInspector(environment->values.skybox)) state_.status="Material do céu indisponível";
+      return true;
+    }
+    if(key==widgetId(EditorWidget::LightingCreateEnvironment)) {
+      std::string diagnostic;createSceneEnvironment(diagnostic);state_.status=diagnostic;return true;
+    }
     if(key==widgetId(EditorWidget::EnvironmentProfileCreate)||key==widgetId(EditorWidget::EnvironmentProfileUpdate)) {
       std::string diagnostic;
       const bool created=key==widgetId(EditorWidget::EnvironmentProfileCreate);
@@ -2046,6 +2074,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
           if(component) for(const auto &candidate:component->type().resourceBindings)
             if(candidate.id==state_.resourceProperty) {binding=&candidate;break;}
           if(binding&&(binding->kind==resources::AssetType::EnvironmentProfile||
+                      binding->kind==resources::AssetType::SkyboxMaterial||
                       binding->kind==resources::AssetType::EnvironmentMap||binding->kind==resources::AssetType::Texture||binding->kind==resources::AssetType::AudioClip||binding->kind==resources::AssetType::UiDocument||
                       binding->kind==resources::AssetType::PhysicsMaterial||binding->kind==resources::AssetType::AnimatorController)) {
             const auto index=request.property-1;
@@ -2429,7 +2458,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(const auto *record=assets_.findByPath(entry.relativePath)) {
       const Kind kind=record->type==resources::AssetType::Material?Kind::Material:
           record->type==resources::AssetType::EnvironmentMap?Kind::EnvironmentMap:
-          record->type==resources::AssetType::EnvironmentProfile?Kind::EnvironmentProfile:Kind::None;
+          (record->type==resources::AssetType::EnvironmentProfile||record->type==resources::AssetType::SkyboxMaterial)?
+          Kind::EnvironmentProfile:Kind::None;
       if(kind!=Kind::None && openFocusedAsset(kind,record->guid)) return true;
     }
   }
