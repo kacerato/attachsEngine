@@ -8860,7 +8860,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importFbxDeformation==state.importPreparedFbxDeformation &&
                             state.importFbxReduceWeights==state.importPreparedFbxReduceWeights &&
                             state.importFbxApproximateSteps==state.importPreparedFbxApproximateSteps &&
-                            state.importFbxBakeRate==state.importPreparedFbxBakeRate;
+                            state.importFbxBakeRate==state.importPreparedFbxBakeRate &&
+                            state.importLightmapUvs==state.importPreparedLightmapUvs &&
+                            state.importLightmapHardAngle==state.importPreparedLightmapHardAngle &&
+                            state.importLightmapPackMargin==state.importPreparedLightmapPackMargin;
 
   const bool focal=state.workspace==EditorWorkspace::Library&&!state.importTexture&&!state.importEnvironment&&!state.importBatch;
   auto sourceExtension=std::filesystem::path(state.importPath).extension().string();
@@ -9288,7 +9291,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
     enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Streaming,StreamingPriority,Normals,Weighting,Smoothing,
-                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,FbxDeformation,FbxWeights,FbxSteps,FbxRate,ProfileRowCount};
+                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,LightmapUvs,LightmapAngle,LightmapMargin,
+                             FbxDeformation,FbxWeights,FbxSteps,FbxRate,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(staticFbx?ProfileRowCount:FbxDeformation,focal?48:40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       const bool fbxControl=widget==EditorWidget::ImportFbxDeformation||widget==EditorWidget::ImportFbxWeights||widget==EditorWidget::ImportFbxSteps||widget==EditorWidget::ImportFbxRate;
@@ -9387,6 +9391,35 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                            EditorWidget::ImportLodLevelsCycle);break;
       case PolygonOrder:cycle(row,"Otimizar ordem dos polígonos",state.importOptimizeOrder?"Sim":"Não",
                               EditorWidget::ImportOptimizeOrderToggle);break;
+      // G3c: Generate Lightmap UVs do Model Importer da Unity, com Hard Angle
+      // e Pack Margin; o lightmap assado lê esta UV2.
+      case LightmapUvs: {
+        builder.label(takeLeft(row,row.width*.45f),"Gerar UV de lightmap",theme.color.text,theme.type.caption);
+        const auto cell=deflate(row,UiInsets::all(2));
+        list.addRect(cell,state.importLightmapUvs?theme.color.accent:theme.color.raised,theme.radius.control);
+        builder.label(cell,state.importLightmapUvs?"Gerar (xatlas)":"Não gerar",state.importLightmapUvs?theme.color.accentInk:theme.color.text,
+                      theme.type.caption,UiAlign::Center);
+        router.addRegion(focal?deflate(cell,UiInsets::all(-2)):cell,lightmap_widget::id(lightmap_widget::ImportUvs));
+        break;
+      }
+      case LightmapAngle:
+      case LightmapMargin: {
+        const bool angle=index==LightmapAngle;
+        const bool enabled=state.importLightmapUvs;
+        builder.label(takeLeft(row,row.width*.45f),angle?"Ângulo vivo":"Margem entre ilhas",enabled?theme.color.text:theme.color.textMuted,theme.type.caption);
+        if(!enabled) {builder.label(row,"Ative Gerar UV de lightmap",theme.color.textMuted,theme.type.caption,UiAlign::Center);break;}
+        const auto down=deflate(takeLeft(row,focal?48:36),UiInsets::all(2)),up=deflate(takeRight(row,focal?48:36),UiInsets::all(2));
+        const u32 downCode=angle?lightmap_widget::ImportHardAngleDown:lightmap_widget::ImportMarginDown;
+        const u32 upCode=angle?lightmap_widget::ImportHardAngleUp:lightmap_widget::ImportMarginUp;
+        for(const auto &[rect,label,code]:{std::tuple{down,"-",downCode},std::tuple{up,"+",upCode}}) {
+          list.addRect(rect,theme.color.raised,theme.radius.control);
+          builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
+          router.addRegion(focal?deflate(rect,UiInsets::all(-2)):rect,lightmap_widget::id(code));
+        }
+        builder.label(row,angle?std::to_string(state.importLightmapHardAngle)+"°":std::to_string(state.importLightmapPackMargin)+" px",
+                      theme.color.text,theme.type.body,UiAlign::Center);
+        break;
+      }
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
       case Lights:cycle(row,"Importar luzes",state.importLights?"Sim":"Não",EditorWidget::ImportLightsToggle);break;
       case FbxDeformation:cycle(row,"FBX rig/takes/morph",state.importFbxDeformation?"Importar":"Perfil estático",EditorWidget::ImportFbxDeformation);break;
@@ -9830,6 +9863,107 @@ void buildObjectGroups(ScreenBuilder &builder,UiRect content,const EditorEntity 
   builder.label(footer,std::to_string(names.size())+" / 32 associações",theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
+// G3c: janela Iluminação › Lightmaps (aba Scene da Lighting window da Unity:
+// Lightmapping Settings + Generate Lighting). Cartão de estado do recurso,
+// o que o bake vai encontrar, a ação principal com progresso e as
+// Configurações de iluminação da cena com os controles de sempre.
+void buildLightmapPanel(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,EditorEntityId target) {
+  namespace lw=lightmap_widget;
+  const auto &theme=builder.theme;
+  const auto *view=builder.state.lightmapView;
+  if(!view) return;
+  const bool authoring=builder.state.workspace!=EditorWorkspace::Play;
+  const auto megabytes=[](u64 bytes){char t[32];std::snprintf(t,sizeof t,"%.1f MB",static_cast<double>(bytes)/(1024.0*1024.0));return std::string(t);};
+  const auto duration=[](float seconds){
+    char t[32];
+    if(seconds<60) std::snprintf(t,sizeof t,"%.0f s",static_cast<double>(seconds));
+    else std::snprintf(t,sizeof t,"%u min %02u s",static_cast<u32>(seconds/60),static_cast<u32>(seconds)%60u);
+    return std::string(t);};
+  // 1. Estado do recurso em vigor.
+  {
+    std::string title,detail;UiColor tone=theme.color.textDim;
+    if(view->baking) {
+      title=view->stage.empty()?"Gerando iluminação":view->stage;tone=theme.color.accent;
+      char t[96];
+      if(view->passes>1&&view->pass) std::snprintf(t,sizeof t,"Rebote %u de %u · %.0f%%",view->pass,view->passes,static_cast<double>(view->progress*100));
+      else std::snprintf(t,sizeof t,"%.0f%%",static_cast<double>(view->progress*100));
+      detail=t;
+    } else if(view->missing) {
+      title="Recurso de lightmap ausente";tone=theme.color.warning;detail="Gere de novo para recriar "+view->path;
+    } else if(view->hasData) {
+      title=view->stale?"Lightmaps desatualizados":"Lightmaps em dia";tone=view->stale?theme.color.warning:theme.color.accent;
+      char t[160];
+      std::snprintf(t,sizeof t,"%u página(s) de %u px · %s · %s",view->pages,view->pageSize,megabytes(view->gpuBytes).c_str(),
+                    view->compressed?"comprimido":"meia precisão");
+      detail=t;
+    } else {
+      title="Sem iluminação assada";detail="Luz local e céu em tempo real; os objetos Static não têm lightmap";
+    }
+    inspectorStatusCard(builder,content,UiIcon::LightingLightmapBaked,title,detail,tone,view->baking?view->progress:-1);
+  }
+  // 2. O que o próximo bake vai encontrar, em blocos.
+  {
+    auto row=takeTop(content,58);takeTop(content,6);
+    struct Chip {const char *label;std::string value;bool warning;};
+    const Chip chips[]{
+      {"Static com GI",std::to_string(view->contributors),view->contributors==0},
+      {"Recebem lightmap",std::to_string(view->receivers),false},
+      {"Sem UV2",std::to_string(view->receiversWithoutUv),view->receiversWithoutUv>0},
+      {"Luzes assadas",std::to_string(view->bakedLights)+" + "+std::to_string(view->mixedLights)+" mistas",false}};
+    const float width=row.width/4;
+    for(const auto &chip:chips) {
+      auto cell=deflate(takeLeft(row,width),UiInsets{2,0,2,0});
+      builder.list.addRect(cell,theme.color.silhouette,theme.radius.control);
+      if(chip.warning) builder.list.addBorder(cell,theme.color.warning,1,theme.radius.control);
+      auto inner=deflate(cell,UiInsets{6,6,6,4});
+      builder.label(takeTop(inner,24),fitMiddle(builder.list,chip.value,inner.width,theme.type.body),
+                    chip.warning?theme.color.warning:theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(inner,fitMiddle(builder.list,chip.label,inner.width,theme.type.caption),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    }
+  }
+  if(view->receiversWithoutUv>0) {
+    auto note=takeTop(content,22);takeTop(content,4);
+    builder.label(note,fitMiddle(builder.list,"Objetos sem UV2 ficam com as sondas: ligue Gerar UV de lightmap na importação da fonte",note.width,
+                  theme.type.caption),theme.color.warning,theme.type.caption);
+  }
+  // 3. A ação principal e as secundárias.
+  if(authoring) {
+    auto row=takeTop(content,48);takeTop(content,4);
+    if(view->baking) {
+      const auto primary=takeLeft(row,row.width*.62f);
+      auto progress=deflate(primary,UiInsets{2,0,2,4});
+      builder.list.addRect(progress,theme.color.raised,theme.radius.control);
+      builder.list.addRect({progress.x,progress.y,progress.width*std::clamp(view->progress,0.f,1.f),progress.height},
+                           withAlpha(theme.color.accent,.35f),theme.radius.control);
+      std::string text=duration(view->elapsedSeconds);
+      if(view->remainingSeconds>=0) text+=" · faltam "+duration(view->remainingSeconds);
+      builder.label(progress,fitMiddle(builder.list,text,progress.width-8,theme.type.caption),theme.color.text,theme.type.caption,UiAlign::Center);
+      probeActionButton(builder,row,UiIcon::UiClose,"Cancelar",lw::id(lw::Cancel),false,true);
+    } else {
+      const auto primary=takeLeft(row,view->hasData?row.width*.62f:row.width);
+      probeActionButton(builder,primary,UiIcon::LightingGenerateLighting,view->hasData?"Gerar de novo":"Gerar iluminação",lw::id(lw::Generate),true,
+                        view->bakedGi&&view->contributors>0);
+      if(view->hasData) probeActionButton(builder,row,UiIcon::UiRemove,"Limpar",lw::id(lw::Clear),false,true);
+    }
+  }
+  if(view->hasData&&!view->baking) {
+    auto row=takeTop(content,20);takeTop(content,6);
+    char t[160];
+    std::snprintf(t,sizeof t,"%u objetos · %.1f M texels · %.0f M raios · %s · %u desenhos com lightmap",view->entries,
+                  static_cast<double>(view->texels)/1e6,static_cast<double>(view->rays)/1e6,duration(view->bakeSeconds).c_str(),view->drawsLightmapped);
+    builder.label(row,fitMiddle(builder.list,t,row.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+  }
+  // 4. Configurações (Lightmapping Settings), no componente da cena.
+  if(!view->settingsExist) {
+    auto row=takeTop(content,44);
+    if(authoring) probeActionButton(builder,row,UiIcon::ComponentAdd,"Criar configurações de iluminação",lw::id(lw::CreateSettings),false,true);
+    return;
+  }
+  if(static_cast<EditorEntityId>(view->settingsEntity)!=target) return;
+  builder.onlyComponent=view->settingsInstance;
+  buildComponents(builder,content,entity);
+}
+
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent) {
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(target);
@@ -9939,7 +10073,35 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.list.addRect({banner.x,banner.y+6,3,banner.height-12},theme.color.accent,1);
     auto bannerText=deflate(banner,UiInsets{10,4,8,4});
     builder.list.addImage(centred(takeLeft(bannerText,34),24,24),static_cast<UiImageId>(UiIcon::LightingWindow),theme.color.accent);
+    // G3c: abas da Lighting window -- Ambiente (Environment) e Lightmaps (Scene),
+    // num seletor segmentado no próprio cabeçalho: nenhuma linha a mais na janela.
+    {
+      namespace lw=lightmap_widget;
+      auto tabs=takeRight(bannerText,std::min(236.0f,bannerText.width*.58f));
+      tabs=deflate(tabs,UiInsets{4,4,0,4});
+      builder.list.addRect(tabs,theme.color.silhouette,theme.radius.control);
+      const struct {UiIcon icon;const char *name;u32 code;} entries[]{
+          {UiIcon::LightingSky,"Ambiente",lw::TabEnvironment},{UiIcon::LightingLightmapBaked,"Lightmaps",lw::TabLightmaps}};
+      const float width=tabs.width/2;
+      for(u32 i=0;i<2;++i) {
+        auto tab=takeLeft(tabs,width);
+        const bool active=builder.state.lightingTab==i;
+        const auto hit=tab;
+        if(active) builder.list.addRect(deflate(tab,UiInsets::all(2)),theme.color.accent,theme.radius.control);
+        auto inner=deflate(tab,UiInsets{6,0,6,0});
+        builder.list.addImage(centred(takeLeft(inner,22),16,16),static_cast<UiImageId>(entries[i].icon),
+                              active?theme.color.accentInk:theme.color.textMuted);
+        builder.label(inner,entries[i].name,active?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(hit,lw::id(entries[i].code));
+      }
+    }
     builder.label(takeTop(bannerText,22),"Iluminação",theme.color.text,theme.type.body);
+    if(builder.state.lightingTab==1) {
+      builder.label(bannerText,"Lightmaps · Gerar iluminação",theme.color.textDim,theme.type.caption);
+      buildLightmapPanel(builder,content,*entity,target);
+      builder.onlyComponent=onlyComponent;
+      return;
+    }
     if(owner!=kInvalidEntity&&owner==target&&instance) {
       const auto *ownerEntity=builder.state.document->find(owner);
       builder.label(bannerText,fitMiddle(builder.list,std::string("Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),

@@ -1,0 +1,198 @@
+// G3c: variante de validação do Sponza para o lightmap assado.
+//
+// Lê a cena importada do projeto Sponza (uma cópia puxada do aparelho, nunca o
+// original) e escreve outra pasta com:
+//  - a arquitetura marcada Static, com Contribuir para iluminação global e
+//    Receber = Lightmaps (o padrão da Unity para um objeto Static);
+//  - o sol com Hora do dia (e a Lua), que continua em tempo real com sombra;
+//  - três lanternas quentes em modo Assado na arcada norte e uma em modo Misto
+//    na arcada sul, para o rebote local aparecer debaixo do teto;
+//  - as Configurações de iluminação com valores de cena média para o aparelho
+//    (8 texels/m, 1024 px, 2 rebotes, 128/128 amostras);
+//  - um Grupo de sondas de luz de 50 pontos (o do PK-6) e uma esfera fosca
+//    dinâmica na arcada, que recebe a luz assada pelas sondas;
+//  - os perfis de importação das fontes com Gerar UV de lightmap ligado.
+// Uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia]
+//      (minutos-por-dia > 0 faz o Play andar as 24 h: o passeio da validação)
+#include "editor/editor_archive.h"
+#include "resources/asset_registry.h"
+#include "resources/import_profile.h"
+#include "scene/camera.h"
+#include "scene/light.h"
+#include "scene/light_probe_group.h"
+#include "scene/lighting_settings.h"
+#include "scene/mesh_renderer.h"
+#include "scene/time_of_day.h"
+
+#include <filesystem>
+#include <fstream>
+#include <iostream>
+#include <sstream>
+
+using namespace ae;
+using namespace ae::editor;
+
+namespace {
+[[noreturn]] void fail(const std::string &message) {
+  std::cerr << message << '\n';
+  std::exit(20);
+}
+std::string readText(const std::filesystem::path &p) {
+  std::ifstream in(p, std::ios::binary);
+  return {std::istreambuf_iterator<char>(in), {}};
+}
+EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, u32 mode) {
+  const auto id = doc.createEntity(parent, EditorEntityKind::Folder, name);
+  auto values = *doc.find(id);
+  values.transform.position[0] = x; values.transform.position[1] = y; values.transform.position[2] = z;
+  values.isStatic = true;
+  auto *light = static_cast<scene::Light *>(values.components.add(scene::Light::descriptor));
+  scene::applyLightDefault(*light, scene::LightKind::Point);
+  light->useColorTemperature = true;
+  light->colorTemperature = 2700;
+  light->intensity = 2500; // lúmens: uma lanterna forte, visível com o sol baixo
+  light->range = 7;
+  light->shadowMode = 2;
+  light->lightmapMode = mode;
+  if (!light->valid() || !doc.applyEntityValues(id, values)) fail(std::string("lanterna recusada: ") + name);
+  return id;
+}
+} // namespace
+
+int main(int argc, char **argv) {
+  if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia]\n"; return 1; }
+  const std::filesystem::path root = std::filesystem::absolute(argv[1]), output = std::filesystem::absolute(argv[2]);
+  const float hour = argc >= 4 ? std::stof(argv[3]) : 10.0f;
+  const float dayMinutes = argc == 5 ? std::stof(argv[4]) : 0.0f;
+  EditorDocument doc;
+  if (!loadEditorDocument((root / "scenes/editor.aescene").string().c_str(), 0, doc)) fail("cena recusada");
+  std::vector<EditorEntityId> ids;
+  doc.collectSubtree(doc.root(), ids);
+  u32 statics = 0;
+  for (auto id : ids) {
+    const auto *object = doc.find(id);
+    if (!object || id == doc.root()) continue;
+    if (!object->components.find(scene::MeshRenderer::descriptor)) continue;
+    auto values = *object;
+    values.isStatic = true;
+    auto *render = static_cast<scene::MeshRenderer *>(values.components.edit(scene::MeshRenderer::descriptor));
+    render->contributeGlobalIllumination = true;
+    render->receiveGlobalIllumination = 0;
+    if (!doc.applyEntityValues(id, values)) fail("Static recusado");
+    ++statics;
+  }
+  // Sol e Lua da Hora do dia, em tempo real (o lightmap nunca guarda o sol).
+  EditorEntityId sunId = 0;
+  for (auto id : ids) {
+    const auto *object = doc.find(id);
+    const auto *light = object ? static_cast<const scene::Light *>(object->components.find(scene::Light::descriptor)) : nullptr;
+    if (light && light->kind == scene::LightKind::Directional) { sunId = id; break; }
+  }
+  if (!sunId) {
+    sunId = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Sol");
+    auto sun = *doc.find(sunId);
+    auto *light = static_cast<scene::Light *>(sun.components.add(scene::Light::descriptor));
+    scene::applyLightDefault(*light, scene::LightKind::Directional);
+    light->shadowMode = 2;
+    if (!doc.applyEntityValues(sunId, sun)) fail("sol recusado");
+  }
+  const auto moonId = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Lua");
+  {
+    auto moon = *doc.find(moonId);
+    auto *moonLight = static_cast<scene::Light *>(moon.components.add(scene::Light::descriptor));
+    scene::applyLightDefault(*moonLight, scene::LightKind::Directional);
+    moonLight->unit = scene::kMoonLightDefault.unit;
+    moonLight->intensity = scene::kMoonLightDefault.intensity;
+    moonLight->useColorTemperature = true;
+    moonLight->colorTemperature = scene::kMoonColorTemperature;
+    moonLight->shadowMode = scene::kMoonLightDefault.shadowMode;
+    if (!moonLight->valid() || !doc.applyEntityValues(moonId, moon)) fail("Lua recusada");
+  }
+  {
+    auto sun = *doc.find(sunId);
+    auto *time = static_cast<scene::TimeOfDay *>(sun.components.find(scene::TimeOfDay::descriptor) ?
+        sun.components.edit(scene::TimeOfDay::descriptor) : sun.components.add(scene::TimeOfDay::descriptor));
+    if (!time) fail("Hora do dia recusada");
+    time->hour = hour; time->dayLengthMinutes = dayMinutes; time->dayOfYear = 172.0f; time->latitude = -15.0f; time->moonLight = moonId;
+    if (!time->valid() || !doc.applyEntityValues(sunId, sun)) fail("Hora do dia recusada");
+  }
+  // Lanternas: três Assadas na arcada norte, uma Mista na sul.
+  const auto lights = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Lanternas (G3c)");
+  lantern(doc, lights, "Lanterna assada oeste", -6.5f, 2.3f, 4.9f, 2);
+  lantern(doc, lights, "Lanterna assada centro", 0.5f, 2.3f, 4.9f, 2);
+  lantern(doc, lights, "Lanterna assada leste", 7.5f, 2.3f, 4.9f, 2);
+  lantern(doc, lights, "Lanterna mista sul", 0.5f, 2.3f, -4.9f, 1);
+  // Configurações de iluminação na raiz (o Lighting Settings da cena).
+  {
+    auto rootValues = *doc.find(doc.root());
+    auto *settings = static_cast<scene::LightingSettings *>(rootValues.components.find(scene::LightingSettings::descriptor) ?
+        rootValues.components.edit(scene::LightingSettings::descriptor) : rootValues.components.add(scene::LightingSettings::descriptor));
+    if (!settings) fail("Configurações recusadas");
+    settings->lightmapResolution = 8;
+    settings->lightmapPadding = 2;
+    settings->maxLightmapSize = 2;
+    settings->indirectSamples = 128;
+    settings->environmentSamples = 128;
+    settings->directSamples = 16;
+    settings->bounces = 2;
+    if (!settings->valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("Configurações recusadas");
+  }
+  // Sondas de luz do PK-6 e uma esfera móvel na arcada.
+  const auto groupId = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Sondas de luz do pátio");
+  {
+    auto groupValues = *doc.find(groupId);
+    auto *group = static_cast<scene::LightProbeGroup *>(groupValues.components.add(scene::LightProbeGroup::descriptor));
+    group->points.clear();
+    group->nextPointId = 1;
+    for (float x : {-8.f, -4.f, 0.f, 4.f, 8.f})
+      for (float y : {.4f, 2.4f})
+        for (float z : {-2.5f, 0.f, 2.5f, 4.3f, 5.6f}) {
+          const float p[3]{x, y, z};
+          if (!group->addPoint(p)) fail("sonda de luz recusada");
+        }
+    if (!doc.applyEntityValues(groupId, groupValues)) fail("grupo recusado");
+  }
+  {
+    const auto id = doc.createEntity(doc.root(), EditorEntityKind::Mesh, "Esfera móvel na arcada");
+    auto values = *doc.find(id);
+    values.transform.position[0] = 1.5f; values.transform.position[1] = .5f; values.transform.position[2] = 4.9f;
+    for (u32 k = 0; k < 3; ++k) values.transform.scale[k] = .9f;
+    auto *mesh = static_cast<scene::MeshRenderer *>(values.components.edit(scene::MeshRenderer::descriptor));
+    mesh->asset = resources::assetGuidFromSeed("astra:builtin:sphere:v1");
+    mesh->mesh = 1;
+    mesh->material.enabled = true;
+    mesh->material.baseColor[0] = mesh->material.baseColor[1] = mesh->material.baseColor[2] = .9f;
+    mesh->material.roughness = .9f;
+    mesh->lightProbes = 1;
+    if (!doc.applyEntityValues(id, values)) fail("esfera recusada");
+  }
+  // Câmera de validação: da arcada norte olhando o pátio e o beiral.
+  {
+    const auto cameraId = doc.createEntity(doc.root(), EditorEntityKind::Camera, "Câmera de validação G3c");
+    auto camera = *doc.find(cameraId);
+    camera.transform.position[0] = -7.5f; camera.transform.position[1] = 1.7f; camera.transform.position[2] = 4.6f;
+    camera.transform.rotationDegrees[0] = 4; camera.transform.rotationDegrees[1] = 95;
+    if (!doc.applyEntityValues(cameraId, camera)) fail("câmera recusada");
+  }
+  std::filesystem::create_directories(output / "scenes");
+  std::filesystem::create_directories(output / ".astra/imports");
+  const auto authored = serializeEditorDocument(doc, 0);
+  if (!saveEditorDocument((output / "scenes/editor.aescene").string().c_str(), doc, 0)) fail("gravação recusada");
+  EditorDocument restored;
+  if (!loadEditorDocument((output / "scenes/editor.aescene").string().c_str(), 0, restored) ||
+      serializeEditorDocument(restored, 0) != authored) fail("ida e volta da cena divergiu");
+  // Perfis das fontes: Gerar UV de lightmap ligado (Hard Angle 88°, margem 4 px).
+  u32 profiles = 0;
+  std::error_code e;
+  for (const auto &entry : std::filesystem::directory_iterator(root / ".astra/imports", e)) {
+    if (entry.path().extension() != ".profile") continue;
+    resources::ImportProfile profile;
+    if (!resources::parseImportProfile(readText(entry.path()), profile)) { std::cerr << "perfil ilegível: " << entry.path() << '\n'; continue; }
+    profile.generateLightmapUvs = true;
+    std::ofstream(output / ".astra/imports" / entry.path().filename(), std::ios::binary) << resources::serializeImportProfile(profile);
+    ++profiles;
+  }
+  std::cout << "Static: " << statics << " · lanternas: 3 assadas + 1 mista · sondas: 50 · perfis com UV de lightmap: " << profiles
+            << " · hora " << hour << '\n';
+  return 0;
+}

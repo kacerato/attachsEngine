@@ -835,7 +835,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabLighting: {
       // Janela Iluminação: abre no Ambiente da cena (ou na raiz, que mostra o
       // padrão e o botão de personalizar), na aba do céu.
-      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;
+      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;state.lightingTab=0;
       u64 instance=0;const auto target=sceneLightingEnvironment(document,&instance);
       state.selection=target!=kInvalidEntity?target:document.root();
       state.expandedNative=instance;state.componentSelection=state.selection;

@@ -136,6 +136,9 @@ std::string importCacheKey(std::string_view sourceContentHash, const GltfImportL
                      (limits.generateLods || limits.optimizePolygonOrder
                           ? "|lods=" + number(limits.generateLods ? 1 : 0) + "," + number(limits.optimizePolygonOrder ? 1 : 0) +
                                 "," + number(limits.maximumLodLevels) + "|meshlod=1"
+                          : std::string()) +
+                     (limits.generateLightmapUvs
+                          ? "|lightmapuv=xatlas-f700c77," + number(limits.lightmapHardAngle) + "," + number(limits.lightmapPackMargin)
                           : std::string());
   return Sha256::hex(std::span<const u8>(reinterpret_cast<const u8 *>(text.data()), text.size()));
 }

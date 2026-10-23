@@ -376,6 +376,8 @@ enum class EditorWidget : u32 {
   ContextMenuBase=0xE8000000u,
   // PK-6: Sonda de reflexo e Grupo de sondas de luz no Inspector: + código de probe_widget.
   ProbeBase=0xE9000000u,
+  // G3c: janela Iluminação › Lightmaps e o UV de lightmap da importação: + código de lightmap_widget.
+  LightmapBase=0xEC000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -612,6 +614,15 @@ inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ProbeB
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ProbeBase);}
 inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
 } // namespace probe_widget
+namespace lightmap_widget {
+// Abas da janela Iluminação, Gerar/Cancelar/Limpar, criar as Configurações e
+// os controles de UV de lightmap do perfil de importação.
+enum Code : u32 {TabEnvironment=1,TabLightmaps=2,Generate=3,Cancel=4,Clear=5,CreateSettings=6,
+                 ImportUvs=0x20,ImportHardAngleDown=0x21,ImportHardAngleUp=0x22,ImportMarginDown=0x23,ImportMarginUp=0x24};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::LightmapBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::LightmapBase);}
+inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
+} // namespace lightmap_widget
 namespace context_menu_widget {
 // Fundo (fecha), voltar, abrir Criar, objeto vazio, a folha com todas as
 // receitas e as categorias de criação (+ índice). As ações em si usam os

@@ -7,6 +7,7 @@
 #include "renderer/punctual_lights.h"
 #include "renderer/light_probes.h"
 #include "renderer/reflection_probes.h"
+#include "renderer/lightmap_data.h"
 #include "renderer/scene_environment.h"
 #include "renderer/environment_ambient.h"
 #include "renderer/color_grading.h"
@@ -174,6 +175,10 @@ public:
   bool takeProbeCaptureResult(ProbeCaptureResult &out);
   bool probeCaptureBusy() const noexcept {return !probeCaptureQueue_.empty()||probeJob_.active||probeReadbackPending_;}
   const ProbeFrameStats &probeStats() const noexcept {return probeStats_;}
+  // G3c: lightmaps assados (recurso .aelightmap) e o que custam no quadro.
+  struct LightmapFrameStats {u32 pages=0,drawsLightmapped=0;u64 gpuBytes=0;float uploadMs=0;};
+  void setLightmapData(std::shared_ptr<const renderer::LightmapData> data);
+  const LightmapFrameStats &lightmapStats() const noexcept {return lightmapStats_;}
   // Conta-gotas do editor (Unity: eyedropper da janela de cor): um pixel da
   // imagem final, depois da interface, copiado para a CPU e lido no quadro
   // seguinte. Coordenadas da interface (as mesmas do toque). Falso quando a
@@ -1007,6 +1012,10 @@ private:
     u64 lightRevision=0,layerRevision=0;
     u8 lightProbes=0,reflectionProbes=0;
     bool valid=false;
+    // G3c: o lightmap que o registro tem escrito.
+    u64 lightmapRevision=0;
+    u16 lightmapPage=0;
+    float lightmapScaleOffset[4]{};
   };
   bool createProbeResources();
   void destroyProbeResources();
@@ -1021,6 +1030,19 @@ private:
   bool prepareProbes(const platform::FreeCameraState &camera);
   void recordProbes(float timeSeconds);
   void recordProbeFace(u32 face,float timeSeconds);
+  bool createLightmapResources();
+  void destroyLightmapResources();
+  void writeLightmapDescriptors();
+  bool prepareLightmaps();
+  void recordLightmaps();
+  rhi::VulkanImage lightmapAtlas_,lightmapRetired_;
+  rhi::VulkanSampler lightmapSampler_;
+  rhi::VulkanBuffer lightmapUpload_;
+  std::shared_ptr<const renderer::LightmapData> lightmapData_,lightmapResident_;
+  u32 lightmapLayers_=0;
+  u64 lightmapRevision_=1;
+  bool lightmapUploadPending_=false;
+  LightmapFrameStats lightmapStats_{};
   rhi::VulkanImage probeAtlas_,probeScratch_,probeCapture_,probeCaptureDepth_,probeCaptureMaskA_,probeCaptureMaskB_;
   // V-1, "Environment Reflections › Source: Skybox" da Unity: o céu da cena
   // capturado só com o céu (sem objetos), filtrado em GGX num octaedro próprio

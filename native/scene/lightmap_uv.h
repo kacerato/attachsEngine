@@ -53,7 +53,7 @@ inline bool overlaps(const LightmapUvTriangle &a,const LightmapUvTriangle &b) {
 // Import-time bounded analysis. No allocations, sorting or pair tests on the
 // render hot path. Unknown is explicit and fails closed for lightmap sampling.
 inline LightmapUvStatus auditLightmapUv(std::span<const LightmapUvTriangle> input) {
-  constexpr usize MaximumTriangles=65536,MaximumPairs=1000000;
+  constexpr usize MaximumTriangles=1u<<20,MaximumPairs=60000000;
   if(input.empty()) return LightmapUvStatus::MissingGeometry;
   if(input.size()>MaximumTriangles) return LightmapUvStatus::AnalysisLimit;
   struct Triangle {LightmapUvTriangle uv;float lowX,highX,lowY,highY;};

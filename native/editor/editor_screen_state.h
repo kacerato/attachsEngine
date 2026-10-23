@@ -9,6 +9,7 @@ namespace ae::ui { class UiDrawList; }
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
 #include "editor/editor_probes.h"
+#include "editor/editor_lightmaps.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_selection.h"
 #include "resources/animation_clip_clipboard.h"
@@ -293,6 +294,10 @@ struct EditorScreenState final {
   const EditorNavigationView *navigationView=nullptr;
   // PK-6: a sonda (de reflexo ou grupo de luz) selecionada no Inspector.
   const EditorProbeView *probeView=nullptr;
+  // G3c: janela Iluminação › Lightmaps (Generate Lighting) e a aba aberta
+  // (0 Ambiente, 1 Lightmaps).
+  const EditorLightmapView *lightmapView=nullptr;
+  u8 lightingTab=0;
   const runtime::SceneNavigation *navigationRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
@@ -971,6 +976,10 @@ struct EditorScreenState final {
   bool importFbxReduceWeights=false,importPreparedFbxReduceWeights=false;
   bool importFbxApproximateSteps=false,importPreparedFbxApproximateSteps=false;
   u8 importFbxBakeRate=30,importPreparedFbxBakeRate=30;
+  // G3c: Generate Lightmap UVs + Hard Angle + Pack Margin; pedem nova preparação.
+  bool importLightmapUvs=false,importPreparedLightmapUvs=false;
+  u8 importLightmapHardAngle=88,importPreparedLightmapHardAngle=88;
+  u8 importLightmapPackMargin=4,importPreparedLightmapPackMargin=4;
   bool importRetryable=false,importPublishedView=false;
   struct ImportTakeRow {std::string name;float duration=0;u32 channels=0,morphChannels=0;};
   std::vector<ImportTakeRow> importTakes;

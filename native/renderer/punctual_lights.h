@@ -59,6 +59,9 @@ inline bool unshadowedPointLighting(std::span<const PunctualLight> lights) noexc
 struct PunctualLightFilter {
   u32 cullingMask = ~0u;
   u32 renderingLayers = 1u;
+  // G3c: luz em modo Assado. A luz dela já está no lightmap de quem o recebe;
+  // nesses desenhos o tempo real a pula (os que se movem continuam com ela).
+  bool baked = false;
 };
 // O lado do desenho: camada do objeto e Rendering Layer Mask do renderer.
 struct DrawLightingKey {
@@ -70,10 +73,16 @@ struct DrawLightingKey {
   u8 lightProbes = 1;      // 0 Desligado, 1 Misturar sondas
   u8 reflectionProbes = 1; // 0 Desligado, 1 Misturar, 2 Misturar e céu, 3 Simples
   bool isStatic = false;
+  // G3c: lightmap assado deste slot (página + 1; 0 sem lightmap) e o
+  // lightmapScaleOffset da Unity (uv = uv2 * xy + zw).
+  u16 lightmapPage = 0;
+  float lightmapScaleOffset[4]{1, 1, 0, 0};
+  bool lightmapped() const noexcept { return lightmapPage != 0; }
 };
 inline constexpr bool lightFilterAccepts(const PunctualLightFilter &filter, const DrawLightingKey &key) noexcept {
   const u32 layerBit = key.objectLayer < 32 ? 1u << key.objectLayer : 0u;
-  return (filter.cullingMask & layerBit) != 0 && (filter.renderingLayers & key.renderingLayers) != 0;
+  return (filter.cullingMask & layerBit) != 0 && (filter.renderingLayers & key.renderingLayers) != 0 &&
+         !(filter.baked && key.lightmapPage != 0);
 }
 
 namespace detail {
@@ -200,6 +209,8 @@ struct SceneLight {
   // chão ao sol daquela hora, e `celestialSphere` (linhas mundo -> esfera das
   // estrelas, renderer/time_of_day.h) gira as estrelas com a hora.
   CelestialLightBody celestialBody = CelestialLightBody::None;
+  // G3c: 0 Tempo real, 1 Misto, 2 Assado (o astro da Hora do dia é sempre 0).
+  u8 lightmapMode = 0;
   float celestialToSun[3]{0, 1, 0};
   float celestialSphere[3][3]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 };

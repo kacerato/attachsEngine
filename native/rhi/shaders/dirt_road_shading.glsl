@@ -608,6 +608,19 @@ void main() {
   mediump vec3 diffuseIrradiance=(astraLightProbesActive()?
       astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
       environmentAmbientDiffuse(n))*occlusion;
+  // G3c: lightmap assado (Receive GI = Lightmaps). O RGB é a irradiância das
+  // luzes locais assadas (direta das Assadas, rebote das Assadas e Mistas,
+  // emissivos); o alfa é a visibilidade do céu, que escala o ambiente do céu
+  // DA HORA ATUAL -- o sol não está no lightmap e o meio-dia não congela.
+  // A visibilidade também oclui o reflexo do céu: debaixo do beiral e dentro
+  // da arcada o céu não chega (G3a item 1, "visibilidade do céu").
+  if(astraLightmapActive()) {
+    highp vec4 baked=astraLightmapTexel(vUv1);
+    mediump float skyVisibility=clamp(baked.a,0.0,4.0);
+    diffuseIrradiance=(vec3(min(baked.rgb*0.31830988618,vec3(AETHER_MEDIUMP_MAX)))+
+        environmentAmbientDiffuse(n)*skyVisibility)*occlusion;
+    astraSkySpecularOcclusion=clamp(skyVisibility*2.0,0.0,1.0);
+  }
 #ifdef OCCLUSION_MAP
   // External lightmaps contain linear indirect irradiance E, not reflected color.
   // Replace ambient diffuse to avoid counting indirect lighting twice; retain

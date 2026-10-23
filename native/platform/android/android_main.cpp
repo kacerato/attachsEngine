@@ -140,6 +140,8 @@ struct AndroidShell final {
   // PK-6: sondas publicadas para o renderer e o que já foi entregue a ele.
   std::vector<ae::renderer::SceneReflectionProbe> authoredReflectionProbes;
   ae::u64 publishedProbeTextures=0;
+  // G3c: revisão do lightmap em vigor publicada no renderer.
+  ae::u64 publishedLightmapRevision=0;
   std::shared_ptr<const ae::renderer::LightProbeSet> publishedLightProbes;
   std::vector<ae::editor::EditorProbeCaptureRequest> probeRequests;
   float probeStatsLogClock=0;
@@ -3893,6 +3895,12 @@ void android_main(android_app *app) {
           }
         }
         // PK-6: recursos assados, pedidos de captura do bake e o retorno deles.
+        // G3c: o lightmap das Configurações de iluminação da cena.
+        if(shell.editorSession.lightmapDataRevision()!=shell.publishedLightmapRevision) {
+          shell.publishedLightmapRevision=shell.editorSession.lightmapDataRevision();
+          shell.instancedRenderer.setLightmapData(shell.editorSession.lightmapData());
+        }
+        shell.editorSession.setLightmapRendererStats(shell.instancedRenderer.lightmapStats().drawsLightmapped);
         if(shell.editorSession.reflectionProbeTexturesRevision()!=shell.publishedProbeTextures) {
           shell.publishedProbeTextures=shell.editorSession.reflectionProbeTexturesRevision();
           shell.instancedRenderer.setReflectionProbeTextures(shell.editorSession.reflectionProbeTextures());

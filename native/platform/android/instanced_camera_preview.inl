@@ -150,7 +150,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
-    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,12},
+    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,13},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,7},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
     VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool.maxSets=1;pool.poolSizeCount=4;pool.pPoolSizes=sizes;
@@ -214,7 +214,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     copies.push_back(copy);
   }
   // PK-6: a câmera da cena vê as mesmas sondas que a vista principal.
-  for(u32 binding:{24u,25u}) {
+  for(u32 binding:{24u,25u,26u}) {
     VkCopyDescriptorSet copy{};copy.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
     copy.srcSet=environmentSet_;copy.dstSet=previewSet_;copy.srcBinding=copy.dstBinding=binding;copy.descriptorCount=1;
     copies.push_back(copy);

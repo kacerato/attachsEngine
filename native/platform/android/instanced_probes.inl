@@ -21,7 +21,7 @@
 
 namespace {
 constexpr u32 ProbeHeaderBytes = 528;
-constexpr u32 ProbeDrawBytes = 160;
+constexpr u32 ProbeDrawBytes = 176;
 struct ProbeHeaderGpu {
   u32 header[4];
   float boxMin[8][4];
@@ -32,7 +32,8 @@ struct ProbeHeaderGpu {
 static_assert(sizeof(ProbeHeaderGpu) == ProbeHeaderBytes);
 struct ProbeDrawGpu {
   float sh[9][4];
-  u32 reflection[4];
+  u32 reflection[4]; // x mistura de reflexo; y página do lightmap + 1; z faixa (bits float)
+  float lightmap[4]; // G3c: lightmapScaleOffset
 };
 static_assert(sizeof(ProbeDrawGpu) == ProbeDrawBytes);
 struct ProbeFilterPush {
@@ -366,7 +367,7 @@ bool InstancedRenderer::ensureProbeCaptureTarget(u32 size) {
     uniform.preferDeviceMemory = false;
     if (!memoryAllocator_->createBuffer(uniform, &probeFaceUniforms_[face])) return false;
   }
-  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 6}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6 * 12},
+  VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 6}, {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 6 * 13},
                                {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 6 * 7}, {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 6}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -426,6 +427,8 @@ bool InstancedRenderer::writeProbeFaceSets() {
     atlas.dstSet = probeFaceSets_[face];
     atlas.srcBinding = atlas.dstBinding = 25;
     atlas.descriptorCount = 1;
+    copies.push_back(atlas);
+    atlas.srcBinding = atlas.dstBinding = 26; // G3c: a captura vê os lightmaps
     copies.push_back(atlas);
     VkDescriptorBufferInfo uniform{probeFaceUniforms_[face].handle(), 0, sizeof(DirtRoadFrameUniform)};
     VkDescriptorBufferInfo disabled{probeDisabledBlock_.handle(), 0, probeDisabledBlock_.sizeBytes()};
@@ -643,6 +646,7 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
   probeFrameFinish_ = false;
   if (!dirtRoadPreview_ || !probeAtlas_.isReady() || environmentSet_ == VK_NULL_HANDLE) return true;
   if (!ensureProbeDrawCapacity(std::max<u32>(instanceCount_, 1))) return false;
+  if (!prepareLightmaps()) return false;
   updateProbeResidency(camera.position);
   scheduleProbeWork();
 
@@ -745,7 +749,8 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
   }
   const auto *set = lightProbeSet_.get();
   const bool lightProbes = set && !set->empty();
-  header.header[0] = (anyReady ? 1u : 0u) | (lightProbes ? 2u : 0u);
+  const bool lightmaps = lightmapLayers_ > 0 && lightmapResident_;
+  header.header[0] = (anyReady ? 1u : 0u) | (lightProbes ? 2u : 0u) | (lightmaps ? 4u : 0u);
   header.header[1] = frameCount;
   const auto &draws = dirtRoadResources_.draws();
   if (probeDrawCache_.size() != draws.size()) probeDrawCache_.assign(draws.size(), {});
@@ -759,8 +764,24 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
                        cache.lightProbes != key.lightProbes || cache.reflectionProbes != key.reflectionProbes;
     const bool reflectionDirty = moved || cache.layerRevision != probeLayerRevision_;
     const bool lightDirty = moved || cache.lightRevision != lightProbeRevision_;
-    if (!reflectionDirty && !lightDirty) continue;
+    const bool lightmapDirty = !cache.valid || cache.lightmapRevision != lightmapRevision_ || cache.lightmapPage != key.lightmapPage ||
+                               std::memcmp(cache.lightmapScaleOffset, key.lightmapScaleOffset, sizeof(cache.lightmapScaleOffset)) != 0;
+    if (!reflectionDirty && !lightDirty && !lightmapDirty) continue;
     auto &entry = entries[i];
+    if (lightmapDirty) {
+      // G3c: página e lightmapScaleOffset do slot; faixa da página comprimida.
+      const bool resident = lightmaps && key.lightmapPage != 0 && key.lightmapPage <= lightmapLayers_;
+      entry.reflection[1] = resident ? key.lightmapPage : 0u;
+      entry.reflection[2] = 0;
+      if (resident) {
+        const auto &page = lightmapResident_->pages[key.lightmapPage - 1];
+        if (page.format == renderer::LightmapPage::FormatSqrtRgba8) entry.reflection[2] = std::bit_cast<u32>(page.range);
+        std::copy(key.lightmapScaleOffset, key.lightmapScaleOffset + 4, entry.lightmap);
+      }
+      cache.lightmapRevision = lightmapRevision_;
+      cache.lightmapPage = key.lightmapPage;
+      std::copy(key.lightmapScaleOffset, key.lightmapScaleOffset + 4, cache.lightmapScaleOffset);
+    }
     if (reflectionDirty) {
       const auto blend = renderer::blendReflectionProbes(frameSpan, draw.boundsCenter,
                                                          static_cast<renderer::ReflectionProbeUsage>(key.reflectionProbes));
@@ -795,6 +816,7 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
   for (u32 i = 0; i < draws.size() && i < probeBlockCapacity_; ++i) {
     if (entries[i].sh[0][3] > 0.5f) ++probeStats_.drawsWithLightProbes;
     if ((entries[i].reflection[0] >> 8) != 0) ++probeStats_.drawsWithReflection;
+    if (entries[i].reflection[1] != 0) ++lightmapStats_.drawsLightmapped;
   }
   if (!memoryAllocator_->flushBuffer(probeBlock_)) return false;
 
@@ -953,6 +975,7 @@ void InstancedRenderer::recordProbeFace(u32 face, float timeSeconds) {
 }
 
 void InstancedRenderer::recordProbes(float timeSeconds) {
+  recordLightmaps();
   if (!probeAtlas_.isReady()) return;
   if (!probeAtlasInitialized_) {
     const u32 layers = renderer::MaximumFrameReflectionProbes, mips = renderer::ReflectionProbeAtlasMips;
