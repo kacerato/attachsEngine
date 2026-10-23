@@ -1,6 +1,7 @@
 // G4d: Volumetric Clouds (HDRP 17). O raymarch (rhi/shaders/cloud_volume.frag)
-// roda num alvo de 1/4 da resolução em cada eixo — 1/16 dos pixels por quadro,
-// como o modo de desempenho do HDRP — antes do passe da cena. O próprio
+// roda num alvo de meia resolução em cada eixo e marcha 1 pixel de cada bloco
+// 2x2 por quadro — 1/16 dos pixels da tela, como o modo de desempenho do HDRP —
+// antes do passe da cena. O próprio
 // fragmento mistura a amostra nova com o histórico reprojetado; o resultado é
 // copiado para o histórico e o céu o lê (binding 19) já integrado.
 //
@@ -10,7 +11,7 @@
 
 bool InstancedRenderer::createVolumetricCloudResources() {
   if (cloudVolumeTarget_.isReady()) return true;
-  const u32 width = std::max(1u, renderWidth() / 4u), height = std::max(1u, renderHeight() / 4u);
+  const u32 width = std::max(1u, renderWidth() / 2u), height = std::max(1u, renderHeight() / 2u);
   rhi::ImageDesc target{};
   target.width = width; target.height = height;
   target.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -25,12 +26,16 @@ bool InstancedRenderer::createVolumetricCloudResources() {
 
   // Ruídos 3D de forma e erosão (renderer/cloud_noise.cpp), sobem no 1º quadro.
   std::vector<u8> shape, erosion;
-  if (!renderer::buildCloudShapeNoise(renderer::CloudShapeNoiseSize, 7u, shape) ||
-      !renderer::buildCloudErosionNoise(renderer::CloudErosionNoiseSize, 13u, erosion)) return false;
+  std::vector<u8> shapeLevel0, erosionLevel0;
+  if (!renderer::buildCloudShapeNoise(renderer::CloudShapeNoiseSize, 7u, shapeLevel0) ||
+      !renderer::buildCloudErosionNoise(renderer::CloudErosionNoiseSize, 13u, erosionLevel0) ||
+      !renderer::buildCloudNoiseMips(shapeLevel0, renderer::CloudShapeNoiseSize, shape) ||
+      !renderer::buildCloudNoiseMips(erosionLevel0, renderer::CloudErosionNoiseSize, erosion)) return false;
   const auto noiseImage = [&](u32 size, rhi::VulkanImage &image, rhi::VulkanBuffer &staging,
                               const std::vector<u8> &texels) {
     rhi::ImageDesc desc{};
     desc.width = desc.height = desc.depth = size;
+    desc.mipLevels = renderer::cloudNoiseMipCount(size);
     desc.format = VK_FORMAT_R8G8B8A8_UNORM;
     desc.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     desc.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -57,6 +62,8 @@ bool InstancedRenderer::createVolumetricCloudResources() {
   rhi::SamplerDesc repeat = clamp;
   repeat.addressU = repeat.addressV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
   repeat.addressW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  repeat.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+  repeat.maxLod = static_cast<float>(renderer::cloudNoiseMipCount(renderer::CloudShapeNoiseSize) - 1);
   if (!cloudNoiseSampler_.initialize(device_, repeat)) return false;
 
   VkAttachmentDescription color{};
@@ -96,7 +103,7 @@ bool InstancedRenderer::createVolumetricCloudResources() {
   framebuffer.attachmentCount = 1; framebuffer.pAttachments = &view;
   framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
   if (vkCreateFramebuffer(device_, &framebuffer, nullptr, &cloudVolumeFramebuffer_) != VK_SUCCESS) return false;
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "[Clouds] volumétricas: alvo %ux%u (1/16 dos pixels), ruído %u³ + %u³.",
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[Clouds] volumétricas: alvo %ux%u (meia resolução, 2x2 por quadro), ruído %u³ + %u³ com mips.",
                       width, height, renderer::CloudShapeNoiseSize, renderer::CloudErosionNoiseSize);
   return true;
 }
@@ -190,15 +197,33 @@ void InstancedRenderer::recordVolumetricClouds(const platform::FreeCameraState &
   };
   if (!cloudNoiseUploaded_) {
     const auto upload = [&](rhi::VulkanImage &image, rhi::VulkanBuffer &staging, u32 size) {
-      imageBarrier(image.handle(), VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 0,
-                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT);
-      VkBufferImageCopy copy{};
-      copy.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
-      copy.imageExtent = {size, size, size};
-      vkCmdCopyBufferToImage(commandBuffer_, staging.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
-      imageBarrier(image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                   VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                   VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+      const u32 levels = renderer::cloudNoiseMipCount(size);
+      VkImageMemoryBarrier barrier{};
+      barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+      barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      barrier.image = image.handle();
+      barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, levels, 0, 1};
+      vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                           0, 0, nullptr, 0, nullptr, 1, &barrier);
+      std::vector<VkBufferImageCopy> copies(levels);
+      VkDeviceSize offset = 0;
+      for (u32 level = 0, n = size; level < levels; ++level, n = std::max(1u, n / 2)) {
+        copies[level].bufferOffset = offset;
+        copies[level].imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level, 0, 1};
+        copies[level].imageExtent = {n, n, n};
+        offset += static_cast<VkDeviceSize>(n) * n * n * 4;
+      }
+      vkCmdCopyBufferToImage(commandBuffer_, staging.handle(), image.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                             levels, copies.data());
+      barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+      barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+      barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+      vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                           0, 0, nullptr, 0, nullptr, 1, &barrier);
     };
     upload(cloudShapeNoise_, cloudShapeStaging_, renderer::CloudShapeNoiseSize);
     upload(cloudErosionNoise_, cloudErosionStaging_, renderer::CloudErosionNoiseSize);

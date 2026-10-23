@@ -4,6 +4,7 @@
 #include "editor/editor_session.h"
 #include "renderer/cloud_layer.h"
 #include "renderer/cloud_noise.h"
+#include "rhi/memory_allocator.h"
 #include "renderer/scene_environment.h"
 #include "resources/environment_profile.h"
 #include "runtime/scene_environment.h"
@@ -283,6 +284,24 @@ AE_TEST(volumetric_clouds_noise_tiles_and_v18_scenes_keep_the_2d_layer) {
                           renderer::tileableWorley(1.001f, 0.3f, 0.6f, 4, 1u)) < 1e-4f, "Worley repete em X");
   AE_EXPECT_TRUE(std::abs(renderer::tileableWorley(0.2f, 0.3f, 0.0005f, 8, 1u) -
                           renderer::tileableWorley(0.2f, 0.3f, 1.0005f, 8, 1u)) < 1e-4f, "Worley repete em Z");
+  // Mips dos ruídos (sem eles o ruído longe vira moiré): cadeia até 1³, média preservada.
+  std::vector<u8> chain;
+  AE_EXPECT_TRUE(renderer::buildCloudNoiseMips(shape, n, chain), "mips da forma");
+  usize expected = 0;
+  for (u32 side = n; side >= 1; side /= 2) expected += static_cast<usize>(side) * side * side * 4;
+  AE_EXPECT_EQ(chain.size(), expected, "níveis 64³..1³");
+  AE_EXPECT_EQ(renderer::cloudNoiseMipCount(n), 7u, "7 níveis");
+  double mean = 0;
+  for (usize i = 0; i < shape.size(); i += 4) mean += shape[i];
+  mean /= static_cast<double>(shape.size() / 4);
+  AE_EXPECT_TRUE(std::abs(static_cast<double>(chain[chain.size() - 4]) - mean) < 3.0, "1³ é a média do volume");
+  rhi::ImageDesc volume{};
+  volume.width = volume.height = volume.depth = n;volume.mipLevels = renderer::cloudNoiseMipCount(n);
+  volume.format = VK_FORMAT_R8G8B8A8_UNORM;volume.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  volume.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  AE_EXPECT_TRUE(rhi::isImageDescValid(volume), "imagem 3D amostrável com mips");
+  volume.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  AE_EXPECT_TRUE(!rhi::isImageDescValid(volume), "3D continua sem anexo");
   // Tipo volumétrico vai para a GPU; cena v18 abre como camada 2D.
   renderer::CloudLayer clouds;clouds.enabled = true;clouds.type = 1;clouds.steps = 32.0f;clouds.shapeFactor = 0.7f;
   const auto rows = renderer::packCloudLayer(clouds, true, 0.0);

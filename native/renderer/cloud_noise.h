@@ -21,6 +21,12 @@ inline constexpr u32 CloudErosionNoiseSize = 32;
 bool buildCloudShapeNoise(u32 size, u32 seed, std::vector<u8> &output);
 bool buildCloudErosionNoise(u32 size, u32 seed, std::vector<u8> &output);
 
+// Cadeia de mips de um volume RGBA8 cúbico e repetível (caixa 2x2x2): o nível
+// 0 seguido dos menores, até 1x1x1, no layout que vkCmdCopyBufferToImage lê
+// nível a nível. Sem mips o ruído longe vira moiré.
+bool buildCloudNoiseMips(const std::vector<u8> &level0, u32 size, std::vector<u8> &output);
+inline u32 cloudNoiseMipCount(u32 size) noexcept { u32 n = 1; while (size > 1) { size >>= 1; ++n; } return n; }
+
 // Worley repetível (1 = sobre um ponto de célula, 0 = longe), período `cells`.
 float tileableWorley(float x, float y, float z, u32 cells, u32 seed) noexcept;
 

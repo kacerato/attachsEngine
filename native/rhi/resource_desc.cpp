@@ -28,12 +28,13 @@ bool isImageDescValid(const ImageDesc &desc) {
     return false;
   }
   if (desc.depth == 0 ||
-      (desc.depth > 1 && (desc.transient || desc.mipLevels != 1 || (desc.usage & kAttachmentUsage) != 0))) {
+      (desc.depth > 1 && (desc.transient || (desc.usage & kAttachmentUsage) != 0))) {
     return false;
   }
   return desc.width > 0 && desc.height > 0 && desc.format != VK_FORMAT_UNDEFINED &&
          desc.usage != 0 && desc.aspectMask != 0 && validMemoryClass &&
-         desc.mipLevels > 0 && desc.mipLevels <= static_cast<u32>(std::bit_width(std::max(desc.width, desc.height)));
+         desc.mipLevels > 0 &&
+         desc.mipLevels <= static_cast<u32>(std::bit_width(std::max({desc.width, desc.height, desc.depth})));
 }
 
 bool isSamplerDescValid(const SamplerDesc &desc) {

@@ -322,7 +322,13 @@ void main() {
       float distanceKm=volume.b/volume.a;
       float fade=mix(1.0,0.1,1.0-exp(-distanceKm/55.0))*smoothstep(-0.002,0.03,visibleDirection.y)*
                  environment.cloudParameters.x;
-      vec3 cloud=(sunRadiance*volume.r+skyAmbient*volume.g)*environment.cloudTint.rgb;
+      // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
+      // cor de base e de topo interpoladas pela altura): topo com o céu, base
+      // cinza-azulada (sombra do próprio cúmulo).
+      vec3 ambientTop=skyAmbient*1.1;
+      vec3 ambientBottom=skyAmbient*vec3(0.62,0.68,0.78);
+      vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
+                 environment.cloudTint.rgb;
       color=color*(1.0-volume.a*fade)+cloud*fade;
     } else
       color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient,pixelAngle);

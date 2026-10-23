@@ -68,42 +68,56 @@ float cloudVolumePatch(vec2 weatherUv,float lod) {
 }
 
 // Densidade (0..1) num ponto a `p` km do observador, com altura relativa
-// `height` na camada e `distanceKm` do olho. `cheap` pula a erosão (marcha de luz).
-float cloudVolumeDensity(vec3 p,float height,float lod,float distanceKm,bool cheap) {
+// `height` na camada. `noiseLod` é o mip dos ruídos 3D pela área do pixel (sem
+// mip, o ruído longe vira moiré). `cheap` pula a erosão (marcha de luz).
+// Modelo de Schneider (Horizon Zero Dawn), base das Volumetric Clouds do HDRP.
+// Perfil de altura e ambiente topo/base portados do UniStorm 5.3.1 (Black
+// Horizon Studios, licença company do dono do projeto), arquivo
+// Assets/UniStorm Weather System/Resources/Clouds/cloudsInclude.cginc,
+// funções cloudMapBase, cloudGradient e o ambiente de renderCloudsInternal;
+// adaptado ao ruído 3D e à casca esférica da Astra.
+float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap) {
   float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0),lod);
   if(patchValue<=0.0) return 0.0;
-  // Cobertura local abaixo de ~0,6: o ruído 3D recorta cúmulos separados.
-  float coverage=patchValue*(0.05+0.6*environment.cloudParameters.y);
-  // Perfil de cúmulo: base reta e rápida, topo que sobe onde a mancha é densa.
-  float top=0.45+0.55*patchValue;
-  float profile=smoothstep(0.0,0.07,height)*smoothstep(top,top*0.5,height);
+  // Cobertura local: o ruído 3D recorta cúmulos separados dentro da mancha.
+  float coverage=patchValue*(0.12+0.45*environment.cloudParameters.y);
+  // UniStorm cloudGradient: sobe de 0 a 5% da camada e cai de 80% a 120%.
+  float profile=clamp(height/0.05,0.0,1.0)-clamp((height-0.8)/0.4,0.0,1.0);
   if(profile<=0.0) return 0.0;
-  // Forma (Schneider): Perlin-Worley remapeado pelo fBm de Worley; repete a
-  // cada metade do mapa e anda com o mesmo vento. Longe o detalhe some (o ruído
-  // 3D não tem mips): sem moiré no horizonte.
-  float detail=exp(-distanceKm/25.0);
   vec3 world=vec3(p.x*1000.0-environment.cloudShape.z,p.y*1000.0,p.z*1000.0-environment.cloudShape.w);
   vec3 q=world*environment.cloudShape.x*2.0;
-  vec4 n=textureLod(cloudShapeNoise,q,0.0);
+  vec4 n=textureLod(cloudShapeNoise,q,noiseLod);
   float fbm=n.g*0.625+n.b*0.25+n.a*0.125;
-  float shape=mix(0.62,clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0),detail);
+  float shape=clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0);
+  // UniStorm cloudMapBase: corta h² + (1-h)^36 da forma — cúpula arredondada no
+  // alto, base plana embaixo — e reestica o que sobra.
+  float cut=(height*height+pow(1.0-height,36.0))*0.9;
+  shape=clamp(remapValue(shape-cut,0.0,1.0-cut,0.0,1.0),0.0,1.0);
   float base=mix(1.0,shape,environment.cloudVolume.x)*profile;
   float cloud=clamp(remapValue(base,1.0-coverage,1.0,0.0,1.0),0.0,1.0)*coverage;
   if(cloud<=0.0 || cheap) return cloud;
-  // Erosão: rolos finos no topo, fiapos na base.
-  vec3 e3=textureLod(cloudErosionNoise,q*5.0,0.0).rgb;
+  // Erosão por Worley 6x mais fino: couve-flor no topo, fiapos na base.
+  vec3 e3=textureLod(cloudErosionNoise,q*6.0,noiseLod+3.585).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
-  erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0))*detail;
-  return clamp(remapValue(cloud,erosion*environment.cloudVolume.y*0.45,1.0,0.0,1.0),0.0,1.0);
+  erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
+  return clamp(remapValue(cloud,erosion*environment.cloudVolume.y*0.5,1.0,0.0,1.0),0.0,1.0);
 }
 
 void main() {
   vec3 viewDirection=normalize(vDirection);
   // Saída sem unidade, somada pela opacidade de cada amostra: r = luz do sol
-  // (transmitância rumo ao sol x fase), g = luz ambiente, b = distância (km),
-  // a = cobertura. O céu converte em cor com as mesmas radiâncias da camada 2D.
+  // (transmitância rumo ao sol x fase), g = altura (topo 1, base 0), b =
+  // distância (km), a = cobertura. O céu converte em cor com as mesmas
+  // radiâncias da camada 2D.
+  // Alvo em meia resolução; cada quadro marcha 1 pixel de cada bloco 2x2 (os
+  // outros três vêm do histórico): o custo de 1/16 dos pixels da tela com a
+  // nitidez de meia resolução, como o modo de desempenho do HDRP.
+  float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
+  ivec2 cell=ivec2(gl_FragCoord.xy)&1;
+  int phaseIndex=int(mod(frameIndex,4.0));
+  bool march=environment.cloudVolume.z<0.5 || (cell.x+2*cell.y)==phaseIndex;
   vec4 result=vec4(0.0);
-  if(viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
+  if(march && viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
     float y=max(viewDirection.y,0.0);
     float baseKm=environment.cloudShape.y*0.001;
     float thicknessKm=max(environment.cloudShadow.y,200.0)*0.001;
@@ -115,7 +129,6 @@ void main() {
     float stepKm=pathKm/float(steps);
     // Ruído de gradiente intercalado que muda a cada quadro: o acúmulo
     // temporal soma posições diferentes dentro do passo.
-    float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
     float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy+5.588238*frameIndex,vec2(0.06711056,0.00583715))));
     vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
     float extinction=mix(8.0,48.0,environment.cloudParameters.w);   // por km com densidade 1
@@ -125,6 +138,7 @@ void main() {
     float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
     float pixelAngle=2.0/(focal*float(textureSize(cloudHistory,0).y));
     float texelKm=1.0/(environment.cloudShape.x*1000.0*256.0);
+    float noiseTexelKm=1.0/(environment.cloudShape.x*1000.0*2.0*64.0);
     float transmittance=1.0;
     vec3 sums=vec3(0.0);
     for(int i=0;i<64;++i) {
@@ -134,7 +148,8 @@ void main() {
       float height=(cloudPointHeightKm(p)-baseKm)/thicknessKm;
       if(height<0.0 || height>1.0) continue;
       float lod=clamp(log2(max(t*pixelAngle,1e-6)/texelKm)-1.0,0.0,2.0);
-      float density=cloudVolumeDensity(p,height,lod,t,false);
+      float noiseLod=max(log2(max(t*pixelAngle,1e-6)/noiseTexelKm),0.0);
+      float density=cloudVolumeDensity(p,height,lod,noiseLod,false);
       if(density<=0.003) continue;
       // Marcha de luz: 4 passos crescentes rumo ao sol, sem erosão.
       float optical=0.0;
@@ -143,14 +158,15 @@ void main() {
         vec3 lp=p+toSun*d;
         float lh=(cloudPointHeightKm(lp)-baseKm)/thicknessKm;
         if(lh>1.0) break;
-        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,t,true)*thicknessKm*0.14;
+        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.14;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
       float od=optical*extinction;
       float beer=exp(-od)+0.5*exp(-od*0.25)+0.25*exp(-od*0.0625);
       float powder=1.0-exp(-density*extinction*0.08-0.05);
       float sunLight=beer*(0.6+0.4*powder)*(0.5+0.5*phase);
-      float ambientLight=(0.15+0.85*height)*(0.75+0.25*(1.0-density));
+      // Ambiente por altura: o céu converte em topo azul-claro e base cinza-azulada.
+      float ambientLight=height;
       float sampleTransmittance=exp(-density*extinction*stepKm);
       float absorbed=transmittance*(1.0-sampleTransmittance);
       sums+=absorbed*vec3(sunLight,ambientLight,t);
@@ -176,7 +192,8 @@ void main() {
     vec2 previousUv=uv+(previousNdc-currentNdc)*0.5;
     if(previous.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       vec4 history=textureLod(cloudHistory,previousUv,0.0);
-      result=mix(result,history,0.9);
+      // Pixel marchado neste quadro pesa mais; os outros só reprojetam.
+      result=march?mix(result,history,0.6):history;
     }
   }
   outCloud=result;

@@ -93,6 +93,29 @@ bool buildCloudShapeNoise(u32 size, u32 seed, std::vector<u8> &output) {
   return true;
 }
 
+bool buildCloudNoiseMips(const std::vector<u8> &level0, u32 size, std::vector<u8> &output) {
+  if (size == 0 || (size & (size - 1)) || level0.size() != static_cast<usize>(size) * size * size * 4) return false;
+  std::vector<u8> result(level0);
+  std::vector<u8> previous(level0);
+  for (u32 n = size; n > 1; n >>= 1) {
+    const u32 m = n >> 1;
+    std::vector<u8> next(static_cast<usize>(m) * m * m * 4);
+    for (u32 z = 0; z < m; ++z) for (u32 y = 0; y < m; ++y) for (u32 x = 0; x < m; ++x)
+      for (u32 c = 0; c < 4; ++c) {
+        u32 sum = 0;
+        for (u32 k = 0; k < 8; ++k) {
+          const u32 sx = 2 * x + (k & 1), sy = 2 * y + ((k >> 1) & 1), sz = 2 * z + (k >> 2);
+          sum += previous[((static_cast<usize>(sz) * n + sy) * n + sx) * 4 + c];
+        }
+        next[((static_cast<usize>(z) * m + y) * m + x) * 4 + c] = static_cast<u8>((sum + 4) / 8);
+      }
+    result.insert(result.end(), next.begin(), next.end());
+    previous = std::move(next);
+  }
+  output = std::move(result);
+  return true;
+}
+
 bool buildCloudErosionNoise(u32 size, u32 seed, std::vector<u8> &output) {
   if (size < 8 || size > 128 || (size & (size - 1))) return false;
   std::vector<u8> result(static_cast<usize>(size) * size * size * 4);
