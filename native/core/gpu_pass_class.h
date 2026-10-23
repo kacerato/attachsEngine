@@ -23,6 +23,7 @@ namespace ae {
 // relatório. Zero é um dado ("não custou nada nesta pose"); ausência não é.
 enum class GpuPassClass : u32 {
   Skinning,    // compute de skin: pose atual e anterior antes de qualquer desenho
+  Probes,      // PK-6: faces, mips e filtro das sondas de reflexo e de luz
   CameraPreview, // renderização independente da câmera fixada
   WaterSimulation, // spectral evolution, inverse FFT and foam before graphics
   Shadow,      // atlas CSM do sol, fora do render pass principal
@@ -48,7 +49,7 @@ constexpr u32 GpuPassClassCount = static_cast<u32>(GpuPassClass::Count);
 // Nome curto do marcador de debug. É o texto que aparece na árvore de uma
 // captura AGI/RenderDoc; sem ele a captura é um bloco único e não atribui
 // custo a nada.
-constexpr const char *GpuPassClassLabels[] = {"Skinning", "CameraPreview", "WaterSimulation", "Shadow", "LocalShadow", "Culling", "Opaque", "Coverage", "Sky",
+constexpr const char *GpuPassClassLabels[] = {"Skinning", "Probes", "CameraPreview", "WaterSimulation", "Shadow", "LocalShadow", "Culling", "Opaque", "Coverage", "Sky",
                                               "Transparent", "Motion", "AutoExposure", "TemporalUpscale", "Post", "FsrEasu", "FsrRcas", "UI", "HZB", "Clouds"};
 
 // Nome da métrica no relatório de perfil. Fica ao lado do rótulo de propósito:
@@ -56,6 +57,7 @@ constexpr const char *GpuPassClassLabels[] = {"Skinning", "CameraPreview", "Wate
 // verificar o outro.
 constexpr const char *GpuPassClassMetricNames[] = {
     "gpu_skinning_ms",
+    "gpu_probes_ms",
     "gpu_camera_preview_ms",
     "gpu_water_simulation_ms",
     "gpu_shadow_ms", "gpu_local_shadow_ms", "gpu_culling_ms", "gpu_opaque_ms", "gpu_coverage_ms", "gpu_sky_ms",
@@ -66,6 +68,7 @@ constexpr const char *GpuPassClassMetricNames[] = {
 // compartilha a família roxa do HZB porque é o consumidor da mesma pirâmide.
 constexpr float GpuPassClassLabelColors[][3] = {
     {0.74f, 0.52f, 0.34f},
+    {0.86f, 0.80f, 0.42f},
     {0.30f, 0.64f, 0.78f},
     {0.12f, 0.60f, 0.72f},
     {0.24f, 0.20f, 0.32f}, {0.36f, 0.28f, 0.42f}, {0.45f, 0.30f, 0.78f}, {0.24f, 0.52f, 0.86f},

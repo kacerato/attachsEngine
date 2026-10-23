@@ -144,6 +144,25 @@ inline std::string componentEnumLabel(const ComponentEnum &property,u32 value) {
   if((value&all)==all) return "Tudo";
   return count>3?"Misto":names;
 }
+inline u32 componentEnumFlagBits(const ComponentEnum &property) {
+  u32 bits=0;for(const auto &option:property.options) bits|=option.value;return bits;
+}
+inline bool componentEnumAccepts(const ComponentEnum &property,u32 value) {return property.accepts(value);}
+// O mesmo texto de componentEnumLabel numa máscara, com o rótulo de cada bit
+// trocável (nomes de camada do projeto na Culling Mask).
+template<class Name>
+inline std::string componentEnumMaskLabel(const ComponentEnum &property,u32 value,const Name &name) {
+  const u32 all=componentEnumFlagBits(property);
+  if(!(value&all)) return "Nada";
+  if((value&all)==all) return "Tudo";
+  u32 count=0;std::string names;
+  for(const auto &option:property.options)
+    if(option.value&&(value&option.value)==option.value) {
+      if(count<3) names+=(count?", ":"")+name(option);
+      ++count;
+    }
+  return count>3?"Misto":names;
+}
 // Descendant: um objeto ABAIXO deste na hierarquia, nunca ele mesmo — é o que
 // um LOD Group pede para cada nível (os renderers LOD0, LOD1... são filhos).
 enum class ObjectReferenceScope { Any, SelfOrAncestor, Other, Descendant, OtherNonDescendant };

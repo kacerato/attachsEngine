@@ -37,6 +37,7 @@ if ($All) {
         editor_grid = @('vert', 'frag')
         exposure_histogram = @('comp')
         exposure_reduce = @('comp')
+        reflection_probe_filter = @('comp')
         fsr_easu = @('frag')
         fsr_rcas = @('frag')
         hzb_reduce_first = @('vert', 'frag')

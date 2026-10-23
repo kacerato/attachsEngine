@@ -80,7 +80,7 @@ inline constexpr std::array<ComponentEnumOption,39> eventConnectionEvents{{
   {36,"Interação: objeto levantado"},
   {37,"Interação: entrou no gatilho"},{38,"Interação: saiu do gatilho"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,34> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,35> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -115,8 +115,9 @@ inline constexpr std::array<EventConnectionMethodKey,34> eventConnectionMethodKe
   {32,"astra.ik.recoil","fire"},
   {33,"astra.ik.hit_reaction","hit_front"},
   {34,"astra.physics.character","set_vertical"},
+  {35,"astra.render.reflection_probe","render_probe"},
 }};
-inline constexpr std::array<ComponentEnumOption,35> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,36> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -129,6 +130,7 @@ inline constexpr std::array<ComponentEnumOption,35> eventConnectionMethods{{
   {28,"Snapshot: transicionar"},{29,"Snapshot: aplicar"},
   {30,"Agente: parar"},{31,"Agente: retomar"},
   {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},{34,"Personagem: subir/descer"},
+  {35,"Sonda de reflexo: capturar agora"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},

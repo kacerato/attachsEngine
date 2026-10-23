@@ -8,11 +8,13 @@
 //   10    dado isolado na prévia, origem da rugosidade (0 canal, 1 suavidade no canal, 2 suavidade no alfa da cor base)
 //   11    lightmap ativo, índice bindless, intensidade, reservado
 //   12    escala UV1 xy, deslocamento zw
-//   13    reservada
+//   13..20 PK-9 (só com MapMaterialShadingExtension): shader, workflow, saída da
+//         mistura, bits; cor especular e corte; altura, máscara e detalhe de cor;
+//         normal de detalhe e escalas; UV do detalhe (2 linhas); clear coat; partícula
 // Precisa casar com renderer::materialExtensionEntry.
 layout(std430,set=1,binding=16) readonly buffer MaterialUvTransforms { highp vec4 materialUvTransforms[]; };
 
-const uint AETHER_MATERIAL_EXTENSION_ROWS=14u;
+const uint AETHER_MATERIAL_EXTENSION_ROWS=21u;
 
 bool aetherHasMaterialExtension() { return (frame.materialFlags.z>>1u)!=0u; }
 

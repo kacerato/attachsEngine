@@ -380,7 +380,7 @@ bool InstancedRenderer::recordTemporalUpscale(const platform::FreeCameraState &c
   dispatch.frameTimeDeltaMs=std::clamp(delta,0.1f,100.0f);
   temporalPreviousTime_=timeSeconds;
   const bool effects=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
-  dispatch.sharpness=effects?std::clamp(renderingPolicy_.post.sharpen,0.0f,1.0f):0.0f;
+  dispatch.sharpness=effects&&!(postIsolation_&16u)?std::clamp(renderingPolicy_.post.sharpen,0.0f,1.0f):0.0f;
   dispatch.sharpen=dispatch.sharpness>0.0f;
   dispatch.reset=!temporalHistoryInitialized_;
   dispatch.cameraNear=sceneNearPlane();dispatch.cameraFar=sceneFarPlane();

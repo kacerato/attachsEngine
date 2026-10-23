@@ -91,6 +91,9 @@ layout(location=10) out highp vec3 vMotionWorldDelta;
 // a palavra, bits 0..15 as luzes, bit 17 "nao recebe sombra" e bit 18 "o sol
 // nao ilumina". highp: o mediump uint pode ter so 16 bits.
 layout(location=11) flat out highp uint vLightMask;
+// PK-6: o índice do desenho no buffer de sondas (probe_lighting.glsl). O
+// firstInstance de todo desenho do mapa é o drawIndex.
+layout(location=12) flat out highp uint vDrawIndex;
 #ifdef AETHER_WATER_RIPPLES
 layout(location=9) out highp vec2 vRippleGeometrySlope;
 #endif
@@ -105,6 +108,7 @@ void main() {
     highp uint encoded=uint(max(inNormalColumn2.w,0.0)+0.5);
     vLightMask=((encoded&65536u)!=0u?(encoded&65535u):65535u)|(encoded&(131072u|262144u));
   }
+  vDrawIndex=uint(gl_InstanceIndex);
 #ifdef AETHER_WATER_RIPPLES
   vRippleGeometrySlope=vec2(0);
 #endif

@@ -4,7 +4,8 @@ namespace Astra;
 
 public enum MaterialTextureBinding : uint { BaseColor, Normal, MetallicRoughness, Emissive, Occlusion }
 public enum MaterialAlphaMode : uint { Inherit, Opaque, Mask, Blend }
-public enum MaterialSides : uint { Inherit, Single, Double }
+/// <summary>Render Face da Unity: Single = Front, Double = Both, Back = só a face de trás.</summary>
+public enum MaterialSides : uint { Inherit, Single, Double, Back }
 public enum MaterialChannel : uint { Inherit, R, G, B, A }
 public enum MaterialOcclusionSource : uint { Inherit, None, Packed, Texture }
 public enum MaterialToggle : uint { Inherit, Off, On }
@@ -59,6 +60,8 @@ public readonly struct MaterialSlot(Component component,uint slot)
     public bool Override { get=>component.GetSlotEnum("material.override",slot)!=0; set=>component.SetSlotEnum("material.override",value?1u:0u,slot); }
     public Vector3 BaseColor { get=>new(F("material.base_color.r"),F("material.base_color.g"),F("material.base_color.b")); set {Range(value,0,1,nameof(BaseColor));F("material.base_color.r",value.X);F("material.base_color.g",value.Y);F("material.base_color.b",value.Z);} }
     public float Roughness { get=>F("material.roughness"); set=>F("material.roughness",value); }
+    /// <summary>Smoothness da URP: 1 - rugosidade. O arquivo guarda rugosidade; escrever ativa o override local.</summary>
+    public float Smoothness { get=>1-F("material.roughness"); set {Range(value,0,1,nameof(Smoothness));F("material.roughness",1-value);} }
     public float Metallic { get=>F("material.metallic"); set=>F("material.metallic",value); }
     public float NormalScale { get=>F("material.normal_scale"); set=>F("material.normal_scale",value); }
     public float Specular { get=>F("material.specular"); set=>F("material.specular",value); }

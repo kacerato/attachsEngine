@@ -3,6 +3,7 @@
 #include "renderer/scene_environment.h"
 #include "resources/environment_profile.h"
 #include "scene/environment.h"
+#include "environment_legacy_lines.h"
 
 #include <iomanip>
 #include <limits>
@@ -14,20 +15,6 @@
 using namespace ae;
 
 namespace {
-// Linha v15 a partir da atual: sem os 4 campos das nuvens depois da exposição
-// automática (palavras 20..23: 3 interruptores da v16 e o tipo da v18) e sem
-// os 18 números delas no fim (14 da v16, espessura da v17, 3 da v18).
-inline std::string withoutClouds(const std::string &text) {
-  std::istringstream in(text);std::vector<std::string> words;std::string word;
-  while (in >> word) words.push_back(word);
-  std::string out;
-  for (usize i = 0; i + 18 < words.size(); ++i) {
-    if (i >= 20 && i <= 23) continue;
-    if (!out.empty()) out += ' ';
-    out += words[i];
-  }
-  return out;
-}
 std::string writeEnvironment(const scene::Environment &environment) {
   std::ostringstream out;out.imbue(std::locale::classic());
   out << std::setprecision(9);
@@ -68,7 +55,7 @@ AE_TEST(sky_celestial_round_trips_and_v13_scenes_receive_the_new_defaults) {
                  reread.values.moonSizeDegrees == 2.0f && reread.values.moonIntensity == 0.5f &&
                  reread.values.starIntensity == 3.0f, "corpos celestes atravessam a cena");
   scene::Environment old;
-  std::istringstream oldIn(dropTail(withoutClouds(text), 5));oldIn.imbue(std::locale::classic());
+  std::istringstream oldIn(dropTail(environment_legacy::componentAsV15(text), 5));oldIn.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(oldIn, 13), "v13 lido");
   const renderer::SceneEnvironment defaults{};
   AE_EXPECT_TRUE(old.values.sunGlare == defaults.sunGlare && old.values.moonIntensity == defaults.moonIntensity &&
@@ -86,10 +73,9 @@ AE_TEST(sky_celestial_profile_v10_round_trips_and_v9_reads_with_defaults) {
   resources::EnvironmentProfile parsed;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(), parsed), "v10 relido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == 0.1f && parsed.values.starIntensity == 2.0f, "perfil guarda lua e estrelas");
-  auto text = profile.serialize();
-  text.replace(text.find(" 13 "), 4, " 9 ");
-  // v9: sem os 21 das nuvens (v11..v13) e os 5 dos corpos celestes (v10).
-  text = dropTail(text.substr(0, text.size() - 1), 26) + "\n";
+  auto text = environment_legacy::profileAsV10(profile.serialize());
+  text.replace(text.find(" 10 "), 4, " 9 ");
+  text = dropTail(text.substr(0, text.size() - 1), 5) + "\n";
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v9 lido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == renderer::SceneEnvironment{}.moonPhase, "v9 recebe os padrões");
 }

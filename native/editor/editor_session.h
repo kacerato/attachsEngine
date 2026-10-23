@@ -52,6 +52,8 @@
 #include "editor/editor_console.h"
 #include "editor/editor_grid.h"
 #include "editor/editor_map_scene.h"
+#include "editor/editor_probes.h"
+#include <deque>
 #include "resources/gltf_import.h"
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
@@ -802,6 +804,11 @@ public:
   }
   resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
+  // PK-2: Material do céu (.skybox) a partir do céu do Ambiente, já escolhido
+  // nele; e o Ambiente da cena (Volume global de prioridade mínima na raiz)
+  // para a janela Iluminação quando a cena só tem o ambiente padrão.
+  resources::AssetGuid createSkyboxMaterial(EditorEntityId id,u64 instance,std::string &diagnostic);
+  bool createSceneEnvironment(std::string &diagnostic);
   // Material físico (editor_physics_materials.cpp): mesmo modelo do perfil de
   // ambiente; o corpo ou o colisor com material próprio guarda a cópia e o GUID.
   const std::vector<resources::PhysicsMaterialAsset> &physicsMaterials() const {return physicsMaterials_;}
@@ -1040,6 +1047,15 @@ public:
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
+  // Câmeras visíveis no Play, de baixo para cima (Depth/Priority). Vazio fora do Play.
+  std::vector<SceneCameraPose> sceneCameraStack() const {
+    if(!isPlaying()||!playScene_.active()) return {};
+    return resolveSceneCameraStack(playScene_.document());
+  }
+  // Vista independente da câmera de cima quando há mais de uma na tela: o
+  // retângulo dela em pixels, a lente efetiva e a saída (fundo, máscara, pós).
+  bool playStackView(renderer::RenderViewSnapshot &out);
+  void setPlayStackImage(bool ready) {state_.playStackReady=ready&&!state_.playStackRect.isEmpty();}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
@@ -1624,6 +1640,8 @@ private:
   EditorCamera camera_;
   renderer::PerspectiveVisibilitySettings projection_{};
   float pixelsPerUnit_=1,dpi_=0;
+  u64 playStackSerial_=0;
+  bool playStackWarned_=false;
   std::string scenePath_;
   // Impressão digital com que a cena aberta foi lida/salva; cenas carregadas
   // em Play são lidas com a mesma. Distinta de packageFingerprint_ (primitivas).
@@ -1794,7 +1812,51 @@ private:
   EditorNavigationView navigationView_;
   u64 navigationViewRevision_=~u64{0};
   resources::AssetGuid navigationOverlayGuid_{};
+  // PK-6: sondas (editor_probes.cpp). Recursos .aeprobe e .aelightprobes do
+  // projeto, bake pedido ao renderer do aparelho e o cartão do Inspector.
+  struct ProbeBakeJob;
+  void loadProbeAssets();
+  void refreshProbeView();
+  bool handleProbeWidget(u32 widget);
+  void probeResourcePath(resources::AssetType type,const resources::AssetGuid &current,std::string_view name,
+                         std::string_view extension,resources::AssetGuid &guid,std::string &path);
+  bool commitProbeFile(resources::AssetType type,const resources::AssetGuid &guid,const std::string &path,
+                       const std::vector<u8> &bytes,usize maximum);
+  bool commitReflectionBake(ProbeBakeJob &job,renderer::ReflectionProbeTexture texture);
+  bool commitLightProbeBake(ProbeBakeJob &job);
+  bool clearProbeBake(EditorEntityId entity,u64 instance);
+  std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> reflectionProbeTextures_;
+  u64 reflectionProbeTexturesRevision_=1;
+  std::vector<renderer::LightProbeBakeData> lightProbeBakes_;
+  u64 lightProbeBakesRevision_=1;
+  mutable std::shared_ptr<const renderer::LightProbeSet> lightProbeSet_;
+  mutable u64 lightProbeSetKey_=0;
+  std::shared_ptr<ProbeBakeJob> probeBake_;
+  std::deque<EditorProbeCaptureRequest> probeRequests_;
+  EditorProbeView probeView_;
+  EditorProbeRendererStats probeRendererStats_;
+  u64 nextProbeRequestId_=1;
 public:
+  bool extractReflectionProbes(std::vector<renderer::SceneReflectionProbe> &out) const;
+  // Mesma identidade enquanto grupos e recursos assados não mudam: o renderer
+  // só recalcula os desenhos quando o ponteiro muda.
+  std::shared_ptr<const renderer::LightProbeSet> lightProbeSet() const;
+  const std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> &reflectionProbeTextures() const noexcept {
+    return reflectionProbeTextures_;
+  }
+  u64 reflectionProbeTexturesRevision() const noexcept {return reflectionProbeTexturesRevision_;}
+  void takeProbeCaptureRequests(std::vector<EditorProbeCaptureRequest> &out);
+  void deliverProbeCaptureResult(EditorProbeCaptureResult result);
+  void setProbeRendererStats(const EditorProbeRendererStats &stats) noexcept {probeRendererStats_=stats;}
+  bool bakeReflectionProbe(EditorEntityId entity,u64 instance);
+  bool bakeLightProbes();
+  bool probeBaking() const noexcept;
+  // 0 adicionar, 1 duplicar a selecionada, 2 apagar a selecionada.
+  bool editLightProbePoints(EditorEntityId entity,u64 instance,u32 operation);
+  // No modo Editar sondas, o toque no viewport escolhe a sonda mais próxima.
+  bool pickLightProbePoint(ui::UiPoint at);
+  const EditorProbeView &probeView() const noexcept {return probeView_;}
+  EditorProbeView &probeViewForEdit() noexcept {return probeView_;}
   const std::vector<navigation::NavMeshData> &navMeshes() const noexcept {return navMeshes_;}
   bool bakeNavigation(EditorEntityId surface,u64 instance) {return startNavigationBake(surface,instance);}
   bool navigationBaking() const noexcept;
@@ -2032,6 +2094,13 @@ public:
     return render && state_.materialSlot<render->slotCount()?render->slotMaterialAsset(state_.materialSlot):resources::AssetGuid{};
   }
   void refreshMaterialAssetView(const resources::MaterialAsset &material);
+  // PK-9: um campo do Inspector do Material (editor_material_fields.h) no
+  // material do projeto aberto, pelo histórico; `preview` só republica a
+  // biblioteca na GPU (arraste do slider), sem arquivo nem histórico.
+  bool setMaterialField(std::string_view key,const float value[3],std::string &diagnostic);
+  void previewMaterialField(std::string_view key,const float value[3]);
+  bool handleMaterialFieldPointer(const ui::UiPointerEvent &event,const ui::UiPointerRouting &routing);
+  bool commitMaterialFieldText(u32 widget,std::string_view text);
   // Aplica um arranjo de painéis e o guarda como o atual do projeto.
   void applyLayout(const EditorLayout &layout);
   bool openSearchResult(u32 index);

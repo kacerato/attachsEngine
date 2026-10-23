@@ -145,6 +145,9 @@ public:
     scene::SlotSampling sampling{};
     scene::MaterialChannels channels{};
     resources::AssetGuid occlusionTexture{};
+    // PK-9: shader e opções do recurso, e as texturas extras por identidade.
+    scene::MaterialShading shading{};
+    std::array<resources::AssetGuid,scene::MaterialExtraTextureCount> extraTextures{};
   };
   void setMaterialLibrary(std::vector<std::pair<resources::AssetGuid,SharedMaterial>> library) {materialLibrary_=std::move(library);}
   const SharedMaterial *sharedMaterial(const resources::AssetGuid &guid) const {
@@ -277,7 +280,21 @@ public:
     }
     const auto surface=slotSurface(render,slot);
     value.alphaMode=surface.alphaMode;value.sides=surface.sides;value.alphaCutoff=surface.alphaCutoff;
+    // PK-9: o shader é do Material (como na Unity); a instância não o troca.
+    if(const auto *shared=sharedMaterial(render.slotMaterialAsset(slot))) {
+      value.shading=shared->shading;
+      for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra)
+        value.extraTextures[extra]=resolveTexture(shared->extraTextures[extra],scene::materialExtraPublicationBinding(extra),
+                                                  samplerFlags(extraTextureSampling(render,slot,extra)));
+    }
     return value;
+  }
+  // PK-9: amostragem de uma textura extra: o detalhe tem tiling, UV e
+  // sampler próprios; altura, máscara e clear coat seguem a cor base.
+  scene::MaterialSampling extraTextureSampling(const scene::MeshRenderer &render,u32 slot,u32 extra) const {
+    const auto *shared=sharedMaterial(render.slotMaterialAsset(slot));
+    if(shared && (extra==scene::MaterialExtraDetailAlbedo || extra==scene::MaterialExtraDetailNormal)) return shared->shading.detailSampling;
+    return slotSampling(render,slot,0);
   }
   // R4: superfície efetiva de um slot, campo a campo: a trocada nesta instância,
   // senão a do material compartilhado, senão herdar (a fonte decide). O corte

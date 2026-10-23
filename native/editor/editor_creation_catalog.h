@@ -107,18 +107,64 @@ inline const CreationComponent directional[]{{light,directionalLight}};
 inline const CreationValue timeOfDayStart[]{{"astra.render.time_of_day","hour",10.f}};
 // O mesmo sol da Luz direcional: a hora do dia só gira e tinge.
 inline const CreationComponent dayNightSun[]{{light,directionalLight},{"astra.render.time_of_day",timeOfDayStart}};
+// V-2: a Lua que nasce junto com o sol (Sun e Moon do ciclo do HDRP), na mesma
+// transação, já ligada em Hora do dia › Lua. Ver EditorSession::createRecipe.
+inline constexpr std::string_view dayNightRecipe="light.day_night";
+inline const CreationValue moonLight[]{{light,"kind",static_cast<u32>(scene::kMoonLightDefault.kind)},
+  {light,"unit",static_cast<u32>(scene::kMoonLightDefault.unit)},{light,"intensity",scene::kMoonLightDefault.intensity},
+  {light,"use_color_temperature",true},{light,"color_temperature",scene::kMoonColorTemperature},
+  {light,"shadow_mode",scene::kMoonLightDefault.shadowMode}};
+inline const CreationComponent dayNightMoon[]{{light,moonLight}};
 // Configurações de iluminação da cena (janela Lighting da Unity): a Fonte do
 // sol nasce vazia, que é a regra automática.
 inline const CreationComponent lightingSettings[]{{"astra.render.lighting_settings",{}}};
+// PK-6: GameObject › Light › Reflection Probe e Light Probe Group da Unity. A
+// sonda nasce Assada, caixa de 10 m e 128 px; o grupo, com 8 sondas num cubo.
+inline const CreationComponent reflectionProbe[]{{"astra.render.reflection_probe",{}}};
+inline const CreationComponent lightProbeGroup[]{{"astra.render.light_probe_group",{}}};
 inline const CreationComponent point[]{{light,pointLight}};
 // G4b: como um Volume global da Unity com só o override Cloud Layer: acima do
 // Ambiente da cena (prioridade 1), não mexe no céu, na neblina nem no pós dele.
 inline constexpr std::string_view environmentType="astra.render.environment";
 inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
-  {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"clouds",true},
   {environmentType,"priority",1.f}};
 inline const CreationComponent cloudVolume[]{{environmentType,cloudVolumeValues}};
 inline const CreationComponent spot[]{{light,spotLight}};
+// PK-2 (V-03/E-01): GameObject › Volume da Unity. Um Volume novo não muda nada
+// sozinho (na Unity nasce com perfil vazio): nasce com todos os grupos
+// desligados, acima do Ambiente da cena; o autor liga os que quiser.
+// Global vale em toda a vista; Caixa e Esfera pelo Transform, com mistura de 1 m.
+inline const CreationValue globalVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"override_clouds",false},{environmentType,"priority",1.f}};
+inline const CreationComponent globalVolume[]{{environmentType,globalVolumeValues}};
+inline const CreationValue boxVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"override_clouds",false},{environmentType,"priority",1.f},
+  {environmentType,"volume_shape",u32{1}},{environmentType,"blend_distance",1.f}};
+inline const CreationComponent boxVolume[]{{environmentType,boxVolumeValues}};
+inline const CreationValue sphereVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"override_clouds",false},{environmentType,"priority",1.f},
+  {environmentType,"volume_shape",u32{2}},{environmentType,"blend_distance",1.f}};
+inline const CreationComponent sphereVolume[]{{environmentType,sphereVolumeValues}};
+// Ambiente completo: céu, luz ambiente, neblina e pós num Volume global, o que
+// antes só nascia por Adicionar componente.
+inline const CreationComponent sceneEnvironment[]{{environmentType}};
 
 #define AE_BODY_RECIPE(name,motion,shape,isSensor) \
   inline const CreationValue name##Body[]{{body,"motion",motion},{body,"sensor",isSensor}}; \
@@ -251,16 +297,17 @@ inline const CreationValue navigationLinkValues[]{{navLink,"start_z",-1.5f},{nav
 inline const CreationComponent navigationLink[]{{navLink,navigationLinkValues}};
 } // namespace recipe
 
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem"};
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu"};
 // Ícones das categorias no trilho da folha de criação (nomes do catálogo do atlas).
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
-  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface","component/character"};
+  "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface","component/character",
+  "volume/global"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // Categoria Personagem: receitas sobre o personagem selecionado (ação
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,105> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -286,12 +333,26 @@ inline const std::array<EditorCreationEntry,99> editorCreationCatalog{{
   {"basic.scene_template",EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
-  {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol movido pela hora, data e latitude; crepúsculo e noite com lua e estrelas.",ui::UiIcon::LightingTimeOfDay,
+  {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,
     runtime::ObjectKind::Light,recipe::dayNightSun,CreationPose::ViewTargetTilted,0,{},{},"TimeOfDay DayNight Ciclo dia noite Sol"},
-  {"light.clouds",EditorWidget::None,4,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
+  {"volume.global",EditorWidget::None,10,"Volume global","Vale em toda a vista; ligue no Inspector os grupos que ele sobrescreve.",ui::UiIcon::VolumeGlobal,
+    runtime::ObjectKind::Folder,recipe::globalVolume,CreationPose::ViewTarget,0,{},{},"Global Volume URP HDRP Post Processing Pós-processamento Profile"},
+  {"volume.box",EditorWidget::None,10,"Volume em caixa","Muda a imagem só com a câmera dentro da caixa, misturando em 1 m.",ui::UiIcon::VolumeBox,
+    runtime::ObjectKind::Folder,recipe::boxVolume,CreationPose::ViewTarget,0,{},{},"Box Volume Local Caixa Interior"},
+  {"volume.sphere",EditorWidget::None,10,"Volume em esfera","Muda a imagem só com a câmera dentro da esfera, misturando em 1 m.",ui::UiIcon::VolumeSphere,
+    runtime::ObjectKind::Folder,recipe::sphereVolume,CreationPose::ViewTarget,0,{},{},"Sphere Volume Local Esfera"},
+  {"volume.environment",EditorWidget::None,10,"Ambiente","Céu, luz ambiente, neblina e pós num Volume global da cena.",ui::UiIcon::LightingSky,
+    runtime::ObjectKind::Folder,recipe::sceneEnvironment,CreationPose::ViewTarget,0,{},{},"Environment Skybox Lighting Ambiente Céu Fog Neblina"},
+  {"light.clouds",EditorWidget::None,10,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
     runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
   {"light.lighting_settings",EditorWidget::None,4,"Iluminação da cena","Escolhe qual luz direcional é o sol: a das cascatas e do céu.",ui::UiIcon::LightingSunSource,
     runtime::ObjectKind::Folder,recipe::lightingSettings,CreationPose::ViewTarget,0,{},{},"Lighting Settings Sun Source RenderSettings Fonte do sol"},
+  {"light.reflection_probe",EditorWidget::None,4,"Sonda de reflexo","Captura o cômodo para metal e vidro refletirem a sala, não o céu.",
+    ui::UiIcon::LightingReflectionProbe,runtime::ObjectKind::Folder,recipe::reflectionProbe,CreationPose::ViewTarget,1,{},{},
+    "Reflection Probe ReflectionProbe Cubemap Reflexo Box Projection"},
+  {"light.light_probe_group",EditorWidget::None,4,"Grupo de sondas de luz","Pontos que guardam a luz da cena para iluminar o que se move.",
+    ui::UiIcon::LightingLightProbeGroup,runtime::ObjectKind::Folder,recipe::lightProbeGroup,CreationPose::ViewTarget,1,{},{},
+    "Light Probe Group LightProbeGroup Light Probes Sondas de luz"},
   {"light.point",EditorWidget::None,4,"Luz pontual","Emite em todas as direções a partir da posição.",ui::UiIcon::LightPoint,
     runtime::ObjectKind::Light,recipe::point,CreationPose::ViewTarget,2,{},{},"Point Light Omni"},
   {"light.spot",EditorWidget::None,4,"Luz spot","Emite dentro de um cone orientável.",ui::UiIcon::LightSpot,

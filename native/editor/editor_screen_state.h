@@ -4,9 +4,11 @@ namespace ae::ui { class UiDrawList; }
 #include <functional>
 
 #include "resources/physics_material.h"
+#include "resources/material_asset.h"
 #include "resources/library_index.h"
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
+#include "editor/editor_probes.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_selection.h"
 #include "resources/animation_clip_clipboard.h"
@@ -289,6 +291,8 @@ struct EditorScreenState final {
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const EditorNavigationView *navigationView=nullptr;
+  // PK-6: a sonda (de reflexo ou grupo de luz) selecionada no Inspector.
+  const EditorProbeView *probeView=nullptr;
   const runtime::SceneNavigation *navigationRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
@@ -734,6 +738,10 @@ struct EditorScreenState final {
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
   bool cameraPreviewReady=false,cameraPreviewFailed=false;
+  // Play com duas câmeras na tela (PK-7): o retângulo da câmera de cima na
+  // vista de jogo e se a imagem dela já foi desenhada pelo renderer.
+  ui::UiRect playStackRect{};
+  bool playStackReady=false;
   bool cameraPreviewMaterial=false;
   bool cameraPreviewActive=false,cameraPreviewStandalone=false;
   u8 materialPreviewShape=0;
@@ -1004,6 +1012,12 @@ struct EditorScreenState final {
     std::string normalFlipLabel,normalFlipOrigin,alphaSourceLabel,alphaSourceOrigin,isolateLabel;
     // G3a: rugosidade direta ou suavidade (Standard da Unity) e de onde vem.
     std::string roughnessSourceLabel,roughnessSourceOrigin;
+    // PK-9: o material do projeto aberto, inteiro, para o Inspector por shader
+    // (editor_material_fields.h), e o nome da textura de cada binding do
+    // seletor (0..3 do pacote, 4 oclusão, 5..9 altura, detalhe e verniz).
+    bool assetValid=false;
+    resources::MaterialAsset asset{};
+    std::string fieldTextures[10];
   };
   MaterialSlotView materialSlotView;
   // Material do projeto aberto em Propriedades (tocar num .material em
@@ -1086,6 +1100,12 @@ struct EditorScreenState final {
   }
   std::vector<std::string> projectMaterials;
   u32 materialSlot=0,materialPage=0;
+  // PK-9: rolagem do Inspector do Material, seções recolhidas (bit por
+  // MaterialSection), a lista aberta de um campo de escolha (índice + 1) e o
+  // valor de um slider enquanto o dedo o arrasta (campo + 1).
+  float materialInspectorScroll=0;
+  u32 materialSectionsCollapsed=0,materialChoiceField=0,materialSliderField=0;
+  float materialSliderValue=0;
   // R4: dado do material isolado na prévia (MaterialIsolate*); transitório.
   u8 materialIsolate=0;
   // R4: textura escolhida em Arquivos mostrada em Propriedades e gerenciador de texturas.

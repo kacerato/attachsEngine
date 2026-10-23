@@ -22,6 +22,16 @@ struct RenderViewSnapshot {
   u32 resourceRevision=0;
   std::shared_ptr<const MaterialPreviewGeometry> materialGeometry;
   MaterialOverride previewMaterial{};
+  // Saída da câmera autorada (PK-7). Os padrões reproduzem a prévia antiga:
+  // todas as camadas, céu de fundo, pós ligado e cena HDR.
+  u32 cullingMask=~0u;
+  u32 background=0;              // 0 céu, 1 cor sólida, 2 não inicializado
+  float backgroundColor[3]{};    // RGB linear
+  bool postProcessing=true,hdr=true;
+  u32 antialiasing=0;            // 0 do projeto, 1 nenhum, 2 FXAA
+  float projectionAspect=0;      // zero: width/height; senão Gate Fit None
+  // Vista contínua de Play (segunda câmera na tela): pede de novo a cada quadro.
+  bool continuous=false;
   bool valid() const {return frustum.valid && width>0 && height>0 && requestId!=0;}
 };
 struct PreviewViewBudget {

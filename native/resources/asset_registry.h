@@ -61,7 +61,10 @@ enum class AssetType : u32 {
   NavMesh = 15, // camadas de tile assadas pela Superfície de navegação (.navmesh)
   Rig = 16, // controle/referência genérica; não substitui o esqueleto da skin
   RigPose = 17, // pose reutilizável mascarada por IDs de junta
-  RetargetProfile = 18 // correspondência entre duas revisões de rig
+  RetargetProfile = 18, // correspondência entre duas revisões de rig
+  ReflectionProbe = 19, // cubemap octaédrico assado por uma Sonda de reflexo (.aeprobe)
+  LightProbes = 20, // SH L2 por ponto assado por um Grupo de sondas de luz (.aelightprobes)
+  SkyboxMaterial = 21 // PK-2: Material do céu (Procedural, Panorâmico ou Físico) da janela Iluminação
 };
 const char *assetTypeName(AssetType type);
 bool parseAssetType(std::string_view text, AssetType &out);

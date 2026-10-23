@@ -70,6 +70,57 @@ TimeOfDayState evaluateTimeOfDay(const TimeOfDayInput &input) noexcept {
   return state;
 }
 
+MoonState evaluateMoon(const TimeOfDayState &sun) noexcept {
+  MoonState moon{};
+  const float *s = sun.toSun;
+  // eixo = normalize(cross(toSun, up)); cross(a, (0,1,0)) = (-a.z, 0, a.x).
+  float axis[3]{-s[2], 0.0f, s[0]};
+  float length = std::sqrt(axis[0] * axis[0] + axis[2] * axis[2]);
+  if (length < 1e-3f) { axis[0] = 1.0f; axis[2] = 0.0f; length = 1.0f; }
+  axis[0] /= length; axis[2] /= length;
+  const float angle = 2.0f * Pi * sun.moonPhase;
+  const float c = std::cos(angle), sn = std::sin(angle);
+  const float turned[3]{axis[1] * s[2] - axis[2] * s[1], axis[2] * s[0] - axis[0] * s[2],
+                        axis[0] * s[1] - axis[1] * s[0]};
+  for (u32 i = 0; i < 3; ++i) moon.toMoon[i] = s[i] * c + turned[i] * sn;
+  const float norm = std::sqrt(moon.toMoon[0] * moon.toMoon[0] + moon.toMoon[1] * moon.toMoon[1] +
+                               moon.toMoon[2] * moon.toMoon[2]);
+  if (norm > 1e-6f) for (float &v : moon.toMoon) v /= norm;
+  moon.elevation = moon.toMoon[1];
+  moon.illuminated = 0.5f * (1.0f - c);
+  const float above = smoothstep(-0.04f, 0.06f, moon.elevation);
+  const float sunDown = 1.0f - smoothstep(-0.10f, 0.02f, sun.elevation);
+  moon.intensity = above * sunDown * moon.illuminated * moon.illuminated * moon.illuminated;
+  return moon;
+}
+
+void celestialSphereRows(const TimeOfDayInput &input, float rows[3][3]) noexcept {
+  const float hour = std::isfinite(input.hour) ? input.hour : 12.0f;
+  const float day = std::isfinite(input.dayOfYear) ? input.dayOfYear : 172.0f;
+  const float latitude = std::clamp(std::isfinite(input.latitude) ? input.latitude : 0.0f, -90.0f, 90.0f) * Radians;
+  const float north = (std::isfinite(input.northDegrees) ? input.northDegrees : 0.0f) * Radians;
+  // Mesmas convenções de evaluateTimeOfDay: azimute a partir do norte (-Z),
+  // crescendo para o leste (+X), girado por northDegrees.
+  const float n[3]{std::sin(north), 0.0f, -std::cos(north)};
+  const float east[3]{std::cos(north), 0.0f, std::sin(north)};
+  const float up[3]{0.0f, 1.0f, 0.0f};
+  float pole[3], equator[3], west[3];
+  for (u32 i = 0; i < 3; ++i) {
+    pole[i] = n[i] * std::cos(latitude) + up[i] * std::sin(latitude);
+    equator[i] = up[i] * std::cos(latitude) - n[i] * std::sin(latitude);
+    west[i] = -east[i];
+  }
+  // Ângulo sideral local: ângulo horário do sol mais a ascensão reta dele
+  // (zero no equinócio de março, dia 80).
+  const float sidereal = (hour - 12.0f) * 15.0f * Radians + 2.0f * Pi * (day - 80.0f) / 365.2422f;
+  const float c = std::cos(sidereal), s = std::sin(sidereal);
+  for (u32 i = 0; i < 3; ++i) {
+    rows[0][i] = c * equator[i] + s * west[i];
+    rows[1][i] = s * equator[i] - c * west[i];
+    rows[2][i] = pole[i];
+  }
+}
+
 float advanceTimeOfDayHour(float authoredHour, float dayLengthMinutes, double elapsedSeconds) noexcept {
   double hour = std::isfinite(authoredHour) ? authoredHour : 12.0;
   if (dayLengthMinutes > 0.0f && std::isfinite(dayLengthMinutes) && std::isfinite(elapsedSeconds))

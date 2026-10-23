@@ -30,11 +30,26 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
       if(found!=profiles.end()&&resources::sameEnvironmentAppearance(component->values,*found))
         volume.environment=resources::applyEnvironmentProfile(component->values,*found);
     }
+    // PK-2: Material do céu compartilhado, lido do recurso a cada coleta (editar
+    // o material muda todo Ambiente que o usa). Ausente: o céu da instância.
+    if(volume.environment.skybox.valid()) {
+      const auto found=std::find_if(profiles.begin(),profiles.end(),[&](const auto &profile) {
+        return profile.skybox&&profile.guid==volume.environment.skybox;
+      });
+      if(found!=profiles.end()) volume.environment=resources::applySkyboxMaterial(volume.environment,*found);
+    }
     volume.shape=component->shape;
     volume.overrides=(component->overrideSky?renderer::EnvironmentOverrideSky:0u)|
                      (component->overrideFog?renderer::EnvironmentOverrideFog:0u)|
                      (component->overridePost?renderer::EnvironmentOverridePost:0u)|
                      (component->overrideIndirect?renderer::EnvironmentOverrideIndirect:0u)|
+                     (component->overrideExposure?renderer::EnvironmentOverrideExposure:0u)|
+                     (component->overrideBloom?renderer::EnvironmentOverrideBloom:0u)|
+                     (component->overrideVignette?renderer::EnvironmentOverrideVignette:0u)|
+                     (component->overrideColorAdjustments?renderer::EnvironmentOverrideColorAdjustments:0u)|
+                     (component->overrideColorGrading?renderer::EnvironmentOverrideColorGrading:0u)|
+                     (component->overrideFilmGrain?renderer::EnvironmentOverrideFilmGrain:0u)|
+                     (component->overrideAmbientOcclusion?renderer::EnvironmentOverrideAmbientOcclusion:0u)|
                      (component->overrideClouds?renderer::EnvironmentOverrideClouds:0u);
     volume.layer=component->layer;volume.stableId=id;volume.weight=component->weight;
     volume.blendDistance=component->blendDistance;volume.sphereRadius=component->sphereRadius;

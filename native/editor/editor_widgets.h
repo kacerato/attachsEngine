@@ -19,6 +19,15 @@ enum class EditorWidget : u32 {
   LibraryAuditBase=0xCD170000u,
   // G3a: origem da rugosidade no cartão Canais do material.
   MaterialRoughnessSourceCycle=0xCD180000u,
+  // PK-9: campos do Inspector do Material por shader (editor_material_fields.h):
+  // base + índice do campo × 16 + parte (MaterialFieldPart).
+  MaterialFieldBase=0xCD190000u,
+  // Seção recolhível (+ MaterialSection), rolagem, opções da lista aberta (+
+  // índice) e fechar a lista.
+  MaterialSectionBase=0xCD1A0000u,MaterialInspectorScroll=0xCD1A0100u,MaterialChoiceOptionBase=0xCD1A0200u,
+  MaterialChoiceClose=0xCD1A0300u,
+  // PK-2: janela Iluminação (Ambiente da cena e Material do céu).
+  LightingCreateEnvironment=0xCD1B0000u,LightingCreateSkybox,LightingEditSkybox,
   ImportFbxDeformation=0xCD120000u,ImportFbxWeights,ImportFbxSteps,ImportFbxRate,ImportTabRig,
   ImportTakePrevious,ImportTakeNext,ImportTakeRoot,ImportTakeExtract,
   ColliderGeometryOpen=0xDB000200u,ColliderGeometryClose,ColliderGeometryApply,ColliderGeometryVertex,
@@ -365,6 +374,8 @@ enum class EditorWidget : u32 {
   HierarchyActiveBase=0xE7000000u,
   // Menu de contexto: + código de context_menu_widget.
   ContextMenuBase=0xE8000000u,
+  // PK-6: Sonda de reflexo e Grupo de sondas de luz no Inspector: + código de probe_widget.
+  ProbeBase=0xE9000000u,
   ScriptAddBase=0x71000000u, ScriptFoldBase=0x72000000u, ScriptMenuBase=0x73000000u,
   ScriptRemoveBase=0x74000000u, ScriptEnabledBase=0x75000000u, ScriptSourceBase=0x76000000u,
   ScriptFieldBase=0x77000000u,
@@ -532,6 +543,15 @@ enum class EditorWidget : u32 {
 };
 
 inline constexpr u32 widgetId(EditorWidget widget) noexcept { return static_cast<u32>(widget); }
+// PK-9: partes de um campo do Inspector do Material. 1..8 são as opções de
+// um campo Segment (índice + 1).
+enum class MaterialFieldPart : u32 {Main=0,Option=1,Track=9,Value=10,Minus=11,Plus=12};
+inline constexpr u32 materialFieldWidget(u32 field,MaterialFieldPart part,u32 option=0) noexcept {
+  return widgetId(EditorWidget::MaterialFieldBase)+field*16u+static_cast<u32>(part)+option;
+}
+inline constexpr bool isMaterialFieldWidget(u32 widget) noexcept {
+  return widget>=widgetId(EditorWidget::MaterialFieldBase) && widget<widgetId(EditorWidget::MaterialFieldBase)+0x1000u;
+}
 // Atalhos do seletor de máscara (enum com `flags`), depois de qualquer índice de opção.
 inline constexpr u32 kEnumMaskNothing=0xFFF0u,kEnumMaskEverything=0xFFF1u;
 // Cada faixa-base (id + índice) reserva um intervalo inteiro de ids. Duas
@@ -585,6 +605,13 @@ enum Code : u32 {Bake=1,Cancel=2,Clear=3,ShowMesh=4};
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::NavigationBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::NavigationBase);}
 } // namespace navigation_widget
+namespace probe_widget {
+enum Code : u32 {BakeReflection=1,BakeLight=2,Clear=3,EditPoints=4,AddPoint=5,DuplicatePoint=6,RemovePoint=7,
+                 PreviousPoint=8,NextPoint=9};
+inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::ProbeBase)+code;}
+inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::ProbeBase);}
+inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
+} // namespace probe_widget
 namespace context_menu_widget {
 // Fundo (fecha), voltar, abrir Criar, objeto vazio, a folha com todas as
 // receitas e as categorias de criação (+ índice). As ações em si usam os

@@ -327,7 +327,8 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
   imageInfo.imageType = desc.depth > 1 ? VK_IMAGE_TYPE_3D : VK_IMAGE_TYPE_2D;
   imageInfo.extent = {desc.width, desc.height, desc.depth};
   imageInfo.mipLevels = desc.mipLevels;
-  imageInfo.arrayLayers = 1;
+  imageInfo.arrayLayers = desc.arrayLayers;
+  if (desc.cube) imageInfo.flags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
   imageInfo.format = desc.format;
   imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
   imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -366,11 +367,13 @@ bool VulkanMemoryAllocator::createImage(const ImageDesc &desc, VulkanImage *outI
   VkImageViewCreateInfo viewInfo{};
   viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   viewInfo.image = image;
-  viewInfo.viewType = desc.depth > 1 ? VK_IMAGE_VIEW_TYPE_3D : VK_IMAGE_VIEW_TYPE_2D;
+  viewInfo.viewType = desc.depth > 1 ? VK_IMAGE_VIEW_TYPE_3D
+                      : desc.cube ? VK_IMAGE_VIEW_TYPE_CUBE
+                      : desc.arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
   viewInfo.format = desc.format;
   viewInfo.subresourceRange.aspectMask = desc.aspectMask;
   viewInfo.subresourceRange.levelCount = desc.mipLevels;
-  viewInfo.subresourceRange.layerCount = 1;
+  viewInfo.subresourceRange.layerCount = desc.arrayLayers;
   VkImageView view = VK_NULL_HANDLE;
   if (vkCreateImageView(device_, &viewInfo, nullptr, &view) != VK_SUCCESS) {
     budget_.release(desc.memoryClass, allocationBytes);

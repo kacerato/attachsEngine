@@ -974,8 +974,10 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
     if (record->type != match->kind) return WorldStatus::ResourceTypeMismatch;
   }
   const resources::EnvironmentProfile *environmentProfile=nullptr;
-  if(resource.valid()&&match->kind==resources::AssetType::EnvironmentProfile) {
-    for(const auto &profile:environmentProfiles) if(profile.guid==resource) {environmentProfile=&profile;break;}
+  if(resource.valid()&&(match->kind==resources::AssetType::EnvironmentProfile||
+                        match->kind==resources::AssetType::SkyboxMaterial)) {
+    for(const auto &profile:environmentProfiles)
+      if(profile.guid==resource&&profile.assetType()==match->kind) {environmentProfile=&profile;break;}
     // O registro comprova identidade/tipo, mas só a biblioteca contém os
     // valores que tornam a troca de perfil observável no mesmo frame.
     if(!environmentProfile) return WorldStatus::UnknownResource;
@@ -990,7 +992,8 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
     return WorldStatus::Rejected;
   if(environmentProfile&&&candidate->type()==&scene::Environment::descriptor) {
     auto &environment=static_cast<scene::Environment&>(*candidate);
-    environment.values=resources::applyEnvironmentProfile(environment.values,*environmentProfile);
+    environment.values=environmentProfile->skybox?resources::applySkyboxMaterial(environment.values,*environmentProfile):
+        resources::applyEnvironmentProfile(environment.values,*environmentProfile);
   }
   if(!candidate->valid()) return WorldStatus::Rejected;
   // Mesmo limpar um override pode revelar um material/textura herdado. O

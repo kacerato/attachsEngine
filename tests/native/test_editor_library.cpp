@@ -82,8 +82,11 @@ AE_TEST(library_package_material_audit_card_counts_and_filters_by_class) {
   const std::string header="%YAML 1.1\nMaterial:\n  m_Shader: {fileID: 46, guid: 0000000000000000f000000000000000, type: 0}\n";
   AE_EXPECT_TRUE(project.add("Metal.mat",header+"  m_Name: Metal\n  m_ShaderKeywords: _METALLICGLOSSMAP\n  m_SavedProperties:\n    m_TexEnvs:\n    - _MetallicGlossMap:\n"
     "        m_Texture: {fileID: 2800000, guid: 11111111111111111111111111111111, type: 3}\n    m_Floats:\n    - _GlossMapScale: 0.7\n"),"complete");
-  AE_EXPECT_TRUE(project.add("Glass.mat",header+"  m_Name: Glass\n  m_ShaderKeywords: _SPECULARHIGHLIGHTS_OFF\n  m_SavedProperties:\n    m_Floats:\n    - _SpecularHighlights: 0\n"),"approximated");
-  AE_EXPECT_TRUE(project.add("Rock.mat",header+"  m_Name: Rock\n  m_ShaderKeywords: _PARALLAXMAP\n  m_SavedProperties:\n    m_Floats:\n    - _Parallax: 0.02\n"),"unsupported");
+  // PK-9: altura, detalhe e Forward Options ganharam consumidor. Aproximação que
+  // resta: Receive Shadows do material URP (na Astra é do Mesh Renderer).
+  const std::string urp="%YAML 1.1\nMaterial:\n  m_Shader: {fileID: 4800000, guid: 933532a4fcc9baf4fa0491de14d08ed7, type: 3}\n";
+  AE_EXPECT_TRUE(project.add("Glass.mat",urp+"  m_Name: Glass\n  m_ShaderKeywords: _RECEIVE_SHADOWS_OFF\n  m_SavedProperties:\n    m_Floats:\n    - _ReceiveShadows: 0\n"),"approximated");
+  AE_EXPECT_TRUE(project.add("Rock.mat",header+"  m_Name: Rock\n  m_ShaderKeywords: _ALPHATEST_ON _ALPHABLEND_ON\n  m_SavedProperties:\n    m_Floats:\n    - _Parallax: 0.02\n"),"unsupported");
   AE_EXPECT_TRUE(project.add("Notes.txt","not a material\n"),"other item");
   const auto prepared=project.prepare();AE_EXPECT_TRUE(prepared.accepted,prepared.diagnostic.c_str());
   std::vector<u8> fontBytes,atlasBytes;ui::UiFont font;ui::UiIconAtlas atlas;

@@ -71,11 +71,7 @@ public:
     if(lastAttempt_>=0 && now-lastAttempt_<1.0/budget_.updatesPerSecond) return false;
     if(published_ && revision_==version.revision && resourceRevision_==resourceRevision && !animated) return false;
     renderer::PerspectiveVisibilitySettings settings;
-    settings.verticalFieldOfViewRadians=pose.verticalFov*.01745329252f;
-    settings.nearPlane=pose.nearPlane;settings.farPlane=pose.farPlane;settings.roll=pose.roll;
-    settings.projection=pose.projection==scene::CameraProjection::Orthographic?
-      renderer::CameraProjection::Orthographic:renderer::CameraProjection::Perspective;
-    settings.orthographicHalfHeight=pose.orthographicHalfHeight;
+    const float aspect=pose.buildProjection(settings,static_cast<float>(width_),static_cast<float>(height_));
     if(geometry_) {
       MaterialStandalonePreview view;
       if(!library||!buildMaterialStandalonePreview(*library,material_,geometry_,orbit_,width_,height_,view)) {
@@ -88,11 +84,11 @@ public:
         failed_=true;published_=false;diagnostic_=library?view.diagnostic:"Biblioteca da prévia indisponível.";return false;
       }
       out.frustum=view.frustum;out.isolatedObjects=std::move(view.objects);diagnostic_=view.diagnostic;
-    } else out.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,
-      static_cast<float>(width_)/height_,settings);
+    } else out.frustum=renderer::buildPerspectiveFrustum(pose.position,pose.yaw,pose.pitch,aspect,settings);
     if(!out.frustum.valid) {out={};return false;}
     out.width=width_;out.height=height_;out.sceneEpoch=version.epoch;out.sceneRevision=version.revision;
     out.cameraEntity=entity_;out.environmentLayerMask=material_.valid()?~0u:pose.environmentMask;
+    if(!material_.valid()) applySceneCameraOutput(pose,out,aspect);
     out.resourceRevision=resourceRevision;
     out.requestId=++serial_;lease_=out;pending_=true;lastAttempt_=now;
     return true;

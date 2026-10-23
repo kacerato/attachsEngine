@@ -13,6 +13,10 @@ namespace ae::scene {
 class TimeOfDay final : public ComponentValue {
 public:
 #include "scene/generated/time_of_day_TimeOfDay_fields0.inc"
+  // V-2: a direcional que faz o papel de lua, como a "Moon" que o gerenciador
+  // de ciclo do HDRP gira junto com o "Sun". A mesma hora, data e latitude a
+  // levam até a lua; de noite ela vira a luz principal, com sombra.
+  u64 moonLight = 0;
 
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
@@ -26,17 +30,30 @@ public:
   }
   void write(std::ostream &out) const override {
     out<<enabled;for(const auto &p:descriptor.numbers) out<<' '<<p.read(*this);
+    out<<' '<<moonLight;
   }
+  // v1 não tinha a Lua.
   bool read(std::istream &in,u32 version) override {
-    if(version!=1 || !(in>>enabled)) return false;
+    if((version!=1&&version!=2) || !(in>>enabled)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
+    moonLight=0;
+    if(version==2&&!(in>>moonLight)) return false;
     return valid();
   }
 };
 #include "scene/generated/time_of_day_timeOfDayNumbers.inc"
 #include "scene/generated/time_of_day_timeOfDayBooleans.inc"
+inline constexpr std::array<ComponentObjectReference, 1> timeOfDayReferences{{
+  {"moon_light", "Lua", "astra.render.light", ObjectReferenceScope::Any, "Nenhuma (noite sem luar)",
+   [](const ComponentValue &v) { return static_cast<const TimeOfDay &>(v).moonLight; },
+   [](ComponentValue &v, u64 id) { static_cast<TimeOfDay &>(v).moonLight = id; },
+   {"Hora do dia", "", "Luz direcional girada até a lua desta hora; à noite ilumina com a fase e projeta a sombra",
+    nullptr, nullptr, "render.environment.time_of_day", "runtime/scene_lights.cpp → renderer/time_of_day.cpp",
+    Invalidate::LightCluster},
+   nullptr, nullptr, true}
+}};
 inline const ComponentType TimeOfDay::descriptor{
-  "astra.render.time_of_day",1,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TimeOfDay>();},
-  timeOfDayNumbers,timeOfDayBooleans
+  "astra.render.time_of_day",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TimeOfDay>();},
+  timeOfDayNumbers,timeOfDayBooleans,{},nullptr,false,timeOfDayReferences
 };
 }

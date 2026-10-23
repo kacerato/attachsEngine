@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 59> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -93,20 +93,24 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "platform/android/instanced_renderer.cpp (passes de sombra) + rhi/shaders/dirt_road_shading.glsl", ""},
 
   // --- Ambiente, GI e sondas ----------------------------------------------
-  {"render.ambient.hemispheric", "Ambiente hemisférico céu/chão", CapabilityState::Implemented,
-   "renderer/environment_lighting.h", ""},
+  {"render.ambient.hemispheric", "Luz ambiente (Skybox, Gradiente, Cor)", CapabilityState::Implemented,
+   "renderer/environment_ambient.cpp + rhi/shaders/environment_lighting.glsl",
+   "Environment Lighting da janela Iluminação: sonda SH L2 do céu procedural, do HDRI, de um gradiente ou de uma cor, com Intensity Multiplier; o nível Constante usa o hemisfério céu/chão da mesma sonda"},
   {"render.ambient.specular", "Reflexo especular do ambiente", CapabilityState::Implemented,
    "renderer/environment_map.cpp", ""},
   {"render.gi.lightmap", "Lightmap indireto externo por submalha", CapabilityState::DeviceLimited,
    "scene/lightmap_binding.h + rhi/shaders/dirt_road_shading.glsl", "RGB linear de irradiância; UV1 autoral; exige bindless. Sem bake, unwrap ou probes"},
-  {"render.probe.irradiance", "Sonda de irradiância por objeto", CapabilityState::Planned,
-   "renderer/ (volume de sondas)", "Sem recurso de sonda nem amostragem por instância"},
-  {"render.probe.reflection", "Sonda de reflexão local", CapabilityState::Planned,
-   "renderer/environment_map.cpp", "Sem captura local, atlas nem blend por volume"},
+  {"render.probe.irradiance", "Sondas de luz (Light Probe Group, SH L2 por objeto)", CapabilityState::Implemented,
+   "renderer/light_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "Bake por captura no aparelho: sol, céu e um rebate; luzes de tempo real não entram no SH, como na Unity. Sem Anchor Override nem LPPV"},
+  {"render.probe.reflection", "Sonda de reflexo local (Baked/Realtime, box projection, 2 por objeto)", CapabilityState::Implemented,
+   "renderer/reflection_probes.cpp + platform/android/instanced_probes.inl + rhi/shaders/probe_lighting.glsl",
+   "8 sondas por quadro, 256 px por face; sem tipo Custom, Shadow Distance nem oclusão própria da captura"},
 
   // --- Material ------------------------------------------------------------
-  {"render.material.pbr", "Superfície PBR metálico/rugosidade", CapabilityState::Implemented,
-   "rhi/shaders/material_shading.glsl", ""},
+  {"render.material.pbr", "Shader do Material: Lit (metálico/especular), Simple Lit, Unlit, Particles", CapabilityState::Implemented,
+   "rhi/shaders/dirt_road_shading.glsl + editor/editor_material_fields.h",
+   "PK-9. Altura e detalhe exigem bindless; sem ele o material desenha sem esses mapas"},
   {"render.material.alpha_mask", "Recorte por alfa, inclusive na sombra", CapabilityState::Implemented,
    "rhi/shaders/shadow_depth_masked.frag", ""},
   {"render.material.alpha_blend", "Transparência com mistura", CapabilityState::Implemented,
@@ -117,8 +121,8 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
    "rhi/shaders/world_uv.glsl", ""},
   {"render.material.variants", "Especialização de pipeline por material", CapabilityState::DeviceLimited,
    "renderer/rendering_policy.cpp", "Drivers móveis podem regredir com muitos pipelines pequenos"},
-  {"render.material.clearcoat", "Camada de verniz e transmissão", CapabilityState::Planned,
-   "rhi/shaders/material_shading.glsl", "Sem variante de BRDF com camada adicional"},
+  {"render.material.clearcoat", "Camada de verniz (Clear Coat do Complex Lit)", CapabilityState::Implemented,
+   "rhi/shaders/dirt_road_shading.glsl", "PK-9: sol e reflexo do ambiente no verniz; luzes adicionais só na camada de baixo. Sem transmissão"},
 
   // --- Textura -------------------------------------------------------------
   {"render.texture.anisotropy", "Filtragem anisotrópica", CapabilityState::DeviceLimited,
@@ -161,9 +165,32 @@ inline constexpr std::array<EngineCapability, 51> engineCapabilities{{
   {"render.environment.physical_atmosphere", "Céu físico Rayleigh/Mie", CapabilityState::Implemented,
    "renderer/scene_environment.cpp + rhi/shaders/dirt_road_sky.frag", ""},
   {"render.environment.fog", "Neblina por profundidade", CapabilityState::Implemented,
-   "rhi/shaders/post_process_common.glsl", ""},
+   "rhi/shaders/post_process_common.glsl",
+   "Fog da janela Iluminação: Linear (Início/Fim), Exponencial e Exponencial ao quadrado, cor própria ou acompanhando a luz do céu, decaimento por altura nos modos exponenciais"},
+  {"render.environment.skybox", "Material do céu (Skybox Material)", CapabilityState::Implemented,
+   "resources/environment_profile.cpp + runtime/scene_environment.cpp",
+   "Recurso .skybox com shader Procedural (Sun, Sun Size, Convergence, Atmosphere Thickness, Exposure), Panorâmico (HDRI) ou Físico, escolhido na janela Iluminação; sem Cubemap de 6 faces nem override por câmera"},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
    "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
+
+  // --- Câmera (PK-7) -------------------------------------------------------
+  {"render.camera.background", "Fundo da câmera: céu, cor sólida ou sem limpeza", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", ""},
+  {"render.camera.culling_mask", "Culling Mask por camada de objeto", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp",
+   "Esconde o desenho e a sombra do objeto nesta câmera; luzes ainda não filtram por camada"},
+  {"render.camera.viewport", "Viewport Rect e várias câmeras na tela por prioridade", CapabilityState::Implemented,
+   "editor/editor_scene_camera.h + platform/android/android_main.cpp",
+   "Até duas câmeras visíveis ao mesmo tempo; a de cima sai sem sombras e sem TAA"},
+  {"render.camera.post", "Pós, sombras, HDR e antisserrilhado por câmera", CapabilityState::Implemented,
+   "platform/android/instanced_renderer.cpp", "TAA por câmera só quando o projeto já aloca o histórico"},
+  {"render.camera.physical", "Câmera física: focal, sensor e Gate Fit", CapabilityState::Implemented,
+   "scene/camera.h", "Sem deslocamento de lente, abertura, ISO ou obturador"},
+  {"render.camera.stack", "Camera Stack (Overlay) e Target Texture", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp",
+   "Exige composição com alfa sobre a câmera Base e um recurso Render Texture amostrável por material"},
+  {"render.camera.msaa", "MSAA por câmera", CapabilityState::Planned,
+   "platform/android/instanced_renderer.cpp", "O renderer não tem passe multiamostrado; AA é FXAA ou TAA"},
 
   // --- Pós-processamento ---------------------------------------------------
   {"render.post.tonemap", "Exposição e mapeamento de tom", CapabilityState::Implemented,

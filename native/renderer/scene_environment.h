@@ -10,9 +10,28 @@
 namespace ae::renderer {
 
 enum class SkyModel : u32 { Hdri = 0, Atmosphere = 1, PhysicalAtmosphere = 2 };
-// Neutral was the historical name for Reinhard, not Unity's Neutral curve.
-enum class ToneMapper : u32 { Reinhard = 0, Neutral = Reinhard, Aces = 1, AgX = 2 };
+// Tonemapping da Unity (URP/HDRP 17): None, Neutral e ACES. AgX fica como
+// extra. Reinhard (0) é só o legado: cenas antigas migram para Neutral.
+enum class ToneMapper : u32 { Reinhard = 0, Aces = 1, AgX = 2, None = 3, Neutral = 4 };
 enum class EnvironmentVolumeShape : u32 { Global = 0, Box = 1, Sphere = 2 };
+// PK-1/PK-2: os enums da janela Lighting da Unity 6 e do Skybox/Procedural.
+// Sun do Skybox/Procedural: None, Simple, High Quality.
+enum class SunDiskMode : u32 { None = 0, Simple = 1, HighQuality = 2 };
+// Environment Lighting › Source.
+enum class AmbientSource : u32 { Skybox = 0, Gradient = 1, Color = 2 };
+// Other Settings › Fog › Mode (RenderSettings.fogMode).
+enum class FogMode : u32 { Linear = 0, Exponential = 1, ExponentialSquared = 2 };
+// Cor da neblina: a do autor (Unity URP) ou acompanhando a luz do céu (o
+// comportamento anterior da Astra, como o "Sky Color" do HDRP).
+enum class FogColorMode : u32 { Color = 0, SkyLight = 1 };
+// Override Exposure do Volume do HDRP 17 (Exposure.cs). Só os modos que a Astra
+// executa: Curve Mapping e Physical Camera não têm consumidor e ficam de fora.
+enum class ExposureMode : u32 { Fixed = 0, Automatic = 1, AutomaticHistogram = 2 };
+// Metering Mode do HDRP (ExposureCommon.hlsl, WeightSample): média de toda a
+// imagem, círculo de 7,5% no centro, ou peso que cai linearmente até a borda.
+enum class ExposureMetering : u32 { Average = 0, Spot = 1, CenterWeighted = 2 };
+// Adaptation Mode: Fixed salta para o alvo; Progressive aproxima exponencialmente.
+enum class ExposureAdaptation : u32 { Fixed = 0, Progressive = 1 };
 
 enum EnvironmentOverride : u32 {
   EnvironmentOverrideSky = 1u << 0,
@@ -21,11 +40,43 @@ enum EnvironmentOverride : u32 {
   // Luz indireta (o Indirect Lighting Controller do Volume da Unity): quanto do
   // céu e do reflexo do ambiente chega às superfícies dentro do volume.
   EnvironmentOverrideIndirect = 1u << 3,
+  // Overrides de pós no modelo do Volume da Unity: cada um é uma caixa própria
+  // no Inspector. O que fica desmarcado herda do volume de prioridade menor, e
+  // por fim dos padrões do mundo (o Default Volume Profile do HDRP). O bit Post
+  // passa a ser o Tonemapping (com a chave geral do pós).
+  EnvironmentOverrideExposure = 1u << 4,
+  EnvironmentOverrideBloom = 1u << 5,
+  EnvironmentOverrideVignette = 1u << 6,
+  EnvironmentOverrideColorAdjustments = 1u << 7,
+  EnvironmentOverrideColorGrading = 1u << 8,
+  EnvironmentOverrideFilmGrain = 1u << 9,
+  EnvironmentOverrideAmbientOcclusion = 1u << 10,
+  EnvironmentOverridePostEffects = EnvironmentOverridePost | EnvironmentOverrideExposure | EnvironmentOverrideBloom |
+                                   EnvironmentOverrideVignette | EnvironmentOverrideColorAdjustments |
+                                   EnvironmentOverrideColorGrading | EnvironmentOverrideFilmGrain |
+                                   EnvironmentOverrideAmbientOcclusion,
   // Cloud Layer: override próprio, como na Unity, separado do modelo de céu.
-  EnvironmentOverrideClouds = 1u << 4,
-  EnvironmentOverrideAll = EnvironmentOverrideSky | EnvironmentOverrideFog | EnvironmentOverridePost |
-                           EnvironmentOverrideIndirect | EnvironmentOverrideClouds,
+  EnvironmentOverrideClouds = 1u << 11,
+  EnvironmentOverrideAll = EnvironmentOverrideSky | EnvironmentOverrideFog | EnvironmentOverrideIndirect |
+                           EnvironmentOverridePostEffects | EnvironmentOverrideClouds,
 };
+
+// Constante de calibração do fotômetro (K) e conversões de EV100 do HDRP
+// (PhysicalCamera.hlsl). Na Astra as luzes não estão em lux; a fórmula é a mesma
+// sobre a radiância da cena já multiplicada pela exposição base da vista.
+inline float exposureEv100FromLuminance(float luminance, float targetMidGrey) {
+  return std::log2(std::max(luminance, 1.0e-4f) / targetMidGrey); // log2(L·100/K), K = cinza·100
+}
+inline float exposureMultiplierFromEv100(float ev100) { return 1.0f / (1.2f * std::exp2(ev100)); }
+// EV de clareamento que o pós aplica (exp2) para chegar ao mesmo multiplicador.
+inline float exposureBrighteningEvFromEv100(float ev100) { return -ev100 - std::log2(1.2f); }
+// ComputeLuminanceAdaptation do SRP Core: decaimento exponencial em EV100.
+inline float adaptExposureEv100(float previous, float target, float deltaSeconds,
+                                float speedDarkToLight, float speedLightToDark) {
+  const float delta = target - previous;
+  const float speed = delta > 0.0f ? speedDarkToLight : speedLightToDark;
+  return previous + delta * (1.0f - std::exp2(-std::max(deltaSeconds, 0.0f) * speed));
+}
 
 // G2: gradação de cor depois do tonemap, aplicada por uma LUT 32³ montada na
 // CPU (renderer/color_grading.h). O modelo segue o Volume da URP 17 (White
@@ -158,7 +209,18 @@ struct SceneEnvironment final {
   float skyZenith[3]{0.5f, 0.5f, 0.5f};
   float skyHorizon[3]{0.46f, 0.66f, 0.82f};
   float ground[3]{0.369f, 0.349f, 0.341f}; // Ground do Skybox/Procedural da Unity
+  // Atmosphere Thickness do Skybox/Procedural (0..5). Até a v16 era uma
+  // mistura 0..1 com o panorama; a migração devolve 1, a espessura de antes.
   float atmosphere = 1.0f;
+  // PK-1: Exposure do Skybox (Unity 1,3). Só o céu procedural; o HDRI usa
+  // hdriExposureEv e o físico physicalSkyIntensity. Nunca mais depende da
+  // intensidade do sol (o antigo skyScale).
+  float skyExposure = 1.3f;
+  // PK-2: o sol do Skybox/Procedural (Sun, Sun Size, Sun Size Convergence).
+  SunDiskMode sunDisk = SunDiskMode::HighQuality;
+  float sunSize = 0.04f;
+  float sunSizeConvergence = 5.0f;
+  // Disco do céu físico (Physically Based Sky): diâmetro e brilho próprios.
   float sunDiskDegrees = 0.53f;
   float sunDiskIntensity = 8.0f;
   // Physical-atmosphere distances use kilometres. Keeping the planetary
@@ -176,6 +238,18 @@ struct SceneEnvironment final {
   float aerosolScaleHeightKm = 1.2f;
   float atmosphereHeightKm = 100.0f;
   float groundAlbedo = 0.10f;
+  // PK-1: Environment Lighting. Skybox tira harmônicos esféricos do próprio
+  // céu; Gradient e Color usam as cores abaixo (sRGB, como o seletor da Unity:
+  // ambientSkyColor/EquatorColor/GroundColor). A intensidade é indirectDiffuse.
+  AmbientSource ambientSource = AmbientSource::Skybox;
+  float ambientSkyColor[3]{0.212f, 0.227f, 0.259f};
+  float ambientEquatorColor[3]{0.114f, 0.125f, 0.133f};
+  float ambientGroundColor[3]{0.047f, 0.043f, 0.035f};
+  float ambientColor[3]{0.212f, 0.227f, 0.259f}; // Source = Color (Ambient Color)
+  // Fog da janela Lighting: Mode, Start/End (Linear), Density (exponenciais).
+  FogMode fogMode = FogMode::ExponentialSquared;
+  FogColorMode fogColorMode = FogColorMode::Color;
+  float fogEnd = 300.0f;
   float fogColor[3]{0.58f, 0.67f, 0.76f};
   // Multiplies the linear fog tint into scene-referred HDR radiance.
   float fogLightEnergy = 1.0f;
@@ -186,21 +260,47 @@ struct SceneEnvironment final {
   // the historical uniform exponential fog exactly.
   float fogBaseHeight = 0.0f;
   float fogHeightFalloff = 0.0f;
-  float exposureEv = 0.0f;
-  // Quando ativo, exposureEv compensa o EV medido do HDR da câmera.
-  bool autoExposure = false;
-  float autoExposureMinEv = -8.0f;
-  float autoExposureMaxEv = 8.0f;
-  float autoExposureLowPercent = 0.05f;
-  float autoExposureHighPercent = 0.95f;
-  float autoExposureTargetGrey = 0.18f;
-  float autoExposureSpeedUp = 2.0f;
-  float autoExposureSpeedDown = 3.0f;
-  bool autoExposureCenterWeighted = false;
+  // Exposure (HDRP 17). Fixed usa fixedExposure; os automáticos medem a
+  // luminância da câmera em EV100, somam a compensação, adaptam e limitam.
+  // O padrão é o do Default Volume Profile do HDRP: Automatic, Center Weighted.
+  ExposureMode exposureMode = ExposureMode::Automatic;
+  ExposureMetering exposureMetering = ExposureMetering::CenterWeighted;
+  ExposureAdaptation exposureAdaptation = ExposureAdaptation::Progressive;
+  float fixedExposure = 0.0f;          // EV100
+  float exposureCompensation = 0.0f;   // EV; positivo clareia
+  // Limit Min/Max em EV100 da cena. Os -1/14 do HDRP supõem sol de 100000 lux
+  // (meio-dia ~EV100 14). Na Astra o meio-dia mede ~0 e o poente da Vila ~-2,7
+  // (POCO, 20/10/2026). V-2: com o céu noturno escuro e a Lua de 0,5 lux, a
+  // Vila às 22 h mede -10,4 sem Lua e -9,1 com ela (POCO, 22/10/2026). O limite
+  // fica ~3 EV acima do luar, como o Volume noturno da Unity (exposição fixa
+  // EV 1 sobre ~-1,4 medidos no tutorial HDRP Night): a noite fica escura, a
+  // praça dos postes legível, e dia e poente, que medem acima, não mudam.
+  float exposureLimitMin = -6.0f;
+  float exposureLimitMax = 10.0f;
+  float exposureHistogramLow = 40.0f;  // Histogram Percentages, 0 a 100
+  float exposureHistogramHigh = 90.0f;
+  float exposureTargetMidGrey = 0.125f; // Grey 12.5%, 14% ou 18%
+  float exposureSpeedDarkToLight = 3.0f;
+  float exposureSpeedLightToDark = 1.0f;
+  bool automaticExposure() const noexcept { return exposureMode != ExposureMode::Fixed; }
+  // EV de clareamento da exposição fixa (e o reserva dos automáticos sem compute).
+  float fixedBrighteningEv() const noexcept {
+    return exposureBrighteningEvFromEv100(fixedExposure - exposureCompensation);
+  }
   float bloomThreshold = 1.0f;
   float bloomIntensity = 0.10f;
   float contrast = 1.0f;
   float saturation = 1.0f;
+  // Color Adjustments da Unity: Post Exposure (EV, depois da exposição e antes
+  // do tonemap), Color Filter (multiplica a cor HDR) e Hue Shift (graus).
+  float postExposure = 0.0f;
+  float colorFilter[3]{1.0f, 1.0f, 1.0f};
+  float hueShift = 0.0f;
+  // Bloom da Unity: Scatter (0 a 1, quanto o brilho se espalha), Tint e Clamp
+  // (brilho máximo que entra no bloom; o padrão da Unity é 65472).
+  float bloomScatter = 0.7f;
+  float bloomTint[3]{1.0f, 1.0f, 1.0f};
+  float bloomClamp = 65472.0f;
   float vignetteIntensity = 0.18f;
   float filmGrainIntensity = 0.05f;
   float ambientOcclusionRadius = 1.0f;
@@ -222,14 +322,20 @@ struct SceneEnvironment final {
   float moonIntensity = 1.0f;
   float starIntensity = 1.0f;
   CloudLayer clouds{};
+  // PK-2: Material do céu (recurso Skybox). Vazio = céu desta instância.
+  resources::AssetGuid skybox{};
 
   bool valid() const noexcept {
-    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 2 || !grading.valid() || !clouds.valid()) return false;
+    if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 4 || !grading.valid() || !clouds.valid() ||
+        static_cast<u32>(exposureMode) > 2 || static_cast<u32>(exposureMetering) > 2 ||
+        static_cast<u32>(exposureAdaptation) > 1 ||
+        static_cast<u32>(sunDisk) > 2 || static_cast<u32>(ambientSource) > 2 || static_cast<u32>(fogMode) > 2 ||
+        static_cast<u32>(fogColorMode) > 1) return false;
     const float scalars[]{priority, atmosphere, sunDiskDegrees, sunDiskIntensity, hdriRotationDegrees, hdriExposureEv,
                           fogLightEnergy, fogDensity, fogStart, fogBaseHeight, fogHeightFalloff,
-                          exposureEv, autoExposureMinEv, autoExposureMaxEv,
-                          autoExposureLowPercent, autoExposureHighPercent,
-                          autoExposureTargetGrey, autoExposureSpeedUp, autoExposureSpeedDown,
+                          fixedExposure, exposureCompensation, exposureLimitMin, exposureLimitMax,
+                          exposureHistogramLow, exposureHistogramHigh,
+                          exposureTargetMidGrey, exposureSpeedDarkToLight, exposureSpeedLightToDark,
                           bloomThreshold,
                           bloomIntensity, contrast, saturation, vignetteIntensity,
                           filmGrainIntensity,
@@ -238,28 +344,40 @@ struct SceneEnvironment final {
                           physicalSkyIntensity, airDensity, aerosolDensity, aerosolAnisotropy,
                           planetRadiusKm, observerHeightKm, rayleighScaleHeightKm,
                           aerosolScaleHeightKm, atmosphereHeightKm, groundAlbedo,
-                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity};
+                          sunGlare, moonPhase, moonSizeDegrees, moonIntensity, starIntensity,
+                          postExposure, hueShift, bloomScatter, bloomClamp,
+                          skyExposure, sunSize, sunSizeConvergence, fogEnd};
     for (float value : scalars) if (!std::isfinite(value)) return false;
-    for (const float *color : {skyZenith, skyHorizon, ground, fogColor})
+    for (const float *color : {colorFilter, bloomTint})
+      for (u32 channel = 0; channel < 3; ++channel)
+        if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f) return false;
+    if (postExposure < -16.0f || postExposure > 16.0f || hueShift < -180.0f || hueShift > 180.0f ||
+        bloomScatter < 0.0f || bloomScatter > 1.0f || bloomClamp < 0.0f || bloomClamp > 65472.0f) return false;
+    for (const float *color : {skyZenith, skyHorizon, ground, fogColor, ambientSkyColor, ambientEquatorColor,
+                               ambientGroundColor, ambientColor})
       for (u32 channel = 0; channel < 3; ++channel)
         if (!std::isfinite(color[channel]) || color[channel] < 0.0f || color[channel] > 1.0f)
           return false;
     return hdriRotationDegrees>=-360.0f && hdriRotationDegrees<=360.0f &&
            hdriExposureEv>=-16.0f && hdriExposureEv<=16.0f &&
-           atmosphere >= 0.0f && atmosphere <= 1.0f &&
+           atmosphere >= 0.0f && atmosphere <= 5.0f &&
+           skyExposure >= 0.0f && skyExposure <= 1000.0f && sunSize >= 0.0f && sunSize <= 1.0f &&
+           sunSizeConvergence >= 1.0f && sunSizeConvergence <= 10.0f &&
+           fogEnd >= 0.0f && fogEnd <= 1000000.0f &&
            sunDiskDegrees >= 0.05f && sunDiskDegrees <= 10.0f && sunDiskIntensity >= 0.0f &&
            fogLightEnergy >= 0.0f && fogLightEnergy <= 65504.0f &&
            fogDensity >= 0.0f && fogDensity <= 1.0f && fogStart >= 0.0f &&
            fogBaseHeight >= -100000.0f && fogBaseHeight <= 100000.0f &&
            fogHeightFalloff >= 0.0f && fogHeightFalloff <= 10.0f &&
-           exposureEv >= -16.0f && exposureEv <= 16.0f &&
-           autoExposureMinEv >= -16.0f && autoExposureMaxEv <= 16.0f &&
-           autoExposureMinEv <= autoExposureMaxEv &&
-           autoExposureLowPercent >= 0.0f && autoExposureHighPercent <= 1.0f &&
-           autoExposureLowPercent < autoExposureHighPercent &&
-           autoExposureTargetGrey >= 0.01f && autoExposureTargetGrey <= 1.0f &&
-           autoExposureSpeedUp >= 0.01f && autoExposureSpeedUp <= 20.0f &&
-           autoExposureSpeedDown >= 0.01f && autoExposureSpeedDown <= 20.0f &&
+           fixedExposure >= -16.0f && fixedExposure <= 24.0f &&
+           exposureCompensation >= -16.0f && exposureCompensation <= 16.0f &&
+           exposureLimitMin >= -16.0f && exposureLimitMax <= 24.0f &&
+           exposureLimitMin <= exposureLimitMax &&
+           exposureHistogramLow >= 0.0f && exposureHistogramHigh <= 100.0f &&
+           exposureHistogramLow < exposureHistogramHigh &&
+           exposureTargetMidGrey >= 0.05f && exposureTargetMidGrey <= 0.5f &&
+           exposureSpeedDarkToLight >= 0.001f && exposureSpeedDarkToLight <= 100.0f &&
+           exposureSpeedLightToDark >= 0.001f && exposureSpeedLightToDark <= 100.0f &&
            bloomThreshold >= 0.0f && bloomThreshold <= 64.0f &&
            bloomIntensity >= 0.0f && bloomIntensity <= 2.0f &&
            contrast >= 0.5f && contrast <= 2.0f && saturation >= 0.0f && saturation <= 2.0f &&
@@ -269,8 +387,8 @@ struct SceneEnvironment final {
            ambientOcclusionIntensity >= 0.0f && ambientOcclusionIntensity <= 4.0f &&
            ambientOcclusionPower >= 0.1f && ambientOcclusionPower <= 4.0f &&
            ambientOcclusionBias >= 0.0f && ambientOcclusionBias <= 1.0f &&
-           indirectDiffuse >= 0.0f && indirectDiffuse <= 4.0f &&
-           indirectSpecular >= 0.0f && indirectSpecular <= 4.0f &&
+           indirectDiffuse >= 0.0f && indirectDiffuse <= 8.0f &&
+           indirectSpecular >= 0.0f && indirectSpecular <= 8.0f &&
            sunGlare >= 0.0f && sunGlare <= 4.0f && moonPhase >= 0.0f && moonPhase <= 1.0f &&
            moonSizeDegrees >= 0.1f && moonSizeDegrees <= 10.0f &&
            moonIntensity >= 0.0f && moonIntensity <= 8.0f &&
@@ -288,11 +406,40 @@ struct SceneEnvironment final {
   }
 };
 
-// Look inicial da Scene View quando o documento ainda não possui um Ambiente.
-// É transitório: não cria componente, não altera a cena e não afeta a câmera
-// de jogo. Assim o autor começa com céu, luz e pós coerentes e pode substituí-los
-// ao adicionar um Environment/Profile.
-SceneEnvironment defaultSceneViewEnvironment();
+// Cenas e perfis gravados antes da Exposure do HDRP guardavam EV de
+// clareamento (exp2(ev) multiplicava a imagem), percentis em fração e
+// velocidades lineares. Os campos novos foram lidos com esse sentido antigo;
+// isto os converte para o mesmo multiplicador em EV100 (-ev - log2(1,2)).
+// `legacyNumbers` diz se o arquivo tinha os números da exposição automática.
+inline void migrateLegacyExposure(SceneEnvironment &values,bool legacyNumbers,bool automatic,bool centerWeighted) {
+  const float toEv100=std::log2(1.2f);
+  if(legacyNumbers) {
+    // Limites antigos eram de clareamento; a ordem se inverte em EV100.
+    const float minimum=values.exposureLimitMin,maximum=values.exposureLimitMax;
+    values.exposureLimitMin=std::clamp(-maximum-toEv100,-16.0f,24.0f);
+    values.exposureLimitMax=std::clamp(-minimum-toEv100,values.exposureLimitMin,24.0f);
+    values.exposureHistogramLow=std::clamp(values.exposureHistogramLow*100.0f,0.0f,99.0f);
+    values.exposureHistogramHigh=std::clamp(values.exposureHistogramHigh*100.0f,values.exposureHistogramLow+1.0f,100.0f);
+    const float grey=values.exposureTargetMidGrey;
+    values.exposureTargetMidGrey=grey<.1325f?.125f:grey<.16f?.14f:.18f;
+    // "Subir" (clarear) era a resposta a uma cena que escureceu: Light to Dark.
+    std::swap(values.exposureSpeedDarkToLight,values.exposureSpeedLightToDark);
+  }
+  if(!automatic) {
+    values.exposureMode=ExposureMode::Fixed;
+    values.fixedExposure=std::clamp(-values.exposureCompensation-toEv100,-16.0f,24.0f);
+    values.exposureCompensation=0;
+    return;
+  }
+  values.exposureMode=ExposureMode::AutomaticHistogram;
+  values.exposureMetering=centerWeighted?ExposureMetering::CenterWeighted:ExposureMetering::Average;
+}
+
+// PK-2 (A-05): o ambiente de uma cena sem nenhum Ambiente, igual no editor e no
+// Play -- o que a Unity dá a toda cena nova: Default-Skybox procedural, luz
+// ambiente do Skybox e pós neutro. Também é a base sobre a qual volumes locais
+// se misturam quando não há volume global.
+SceneEnvironment defaultSceneEnvironment();
 
 // Instância resolvida da cena. `worldToLocal` mantém o volume independente do
 // editor e do grafo; o renderer só precisa da posição da câmera para atualizar

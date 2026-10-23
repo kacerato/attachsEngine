@@ -33,6 +33,29 @@ struct TimeOfDayState {
 
 TimeOfDayState evaluateTimeOfDay(const TimeOfDayInput &input) noexcept;
 
+// V-2: a lua da mesma data e hora, para a direcional com Corpo celeste = Lua
+// (a "Moon" dos ciclos de dia do HDRP). A direção é a do céu
+// (sky_celestial.glsl, celestialMoonDirection): o sol girado pela fase em torno
+// do eixo horizontal perpendicular a ele, então a lua cheia nasce quando o sol
+// se põe. O brilho segue a fração iluminada ao cubo (a meia-lua reflete ~1/8
+// da cheia, como a curva de fase lunar medida) e some com a lua abaixo do
+// horizonte e com o sol acima dele, como o script do ciclo desliga a Moon de dia.
+struct MoonState {
+  float toMoon[3]{0, 1, 0};
+  float elevation = 1.0f;     // seno da elevação da lua
+  float illuminated = 1.0f;   // fração acesa vista da Terra: 0 nova, 1 cheia
+  float intensity = 1.0f;     // multiplicador sobre a intensidade autoral da Lua
+};
+MoonState evaluateMoon(const TimeOfDayState &sun) noexcept;
+
+// V-2: a esfera celeste da hora, para as estrelas girarem em torno do polo como
+// o "Space Rotation" do Physically Based Sky e os ciclos com latitude da Unity.
+// `rows` leva uma direção do mundo para a esfera fixa das estrelas (linhas de
+// uma rotação): giram 15° por hora em torno do polo, que fica a |latitude| do
+// horizonte, e um dia a mais adianta o céu ~1° (tempo sideral). Um ponto fixo da
+// esfera, como o sol de um mesmo dia, cai sempre no mesmo lugar dela.
+void celestialSphereRows(const TimeOfDayInput &input, float rows[3][3]) noexcept;
+
 // Hora atual: a autoral mais o tempo de Play convertido pela duração do dia.
 // dayLengthMinutes <= 0 congela o relógio. O resultado volta a 0..24.
 float advanceTimeOfDayHour(float authoredHour, float dayLengthMinutes, double elapsedSeconds) noexcept;

@@ -43,6 +43,7 @@ bool buildUnityPrefab(const resources::UnityPrefabImport &source,resources::Asse
         if(!renderer)return fail("Componente MeshRenderer nativo indisponível.");
         renderer->enabled=object.rendererEnabled;renderer->asset=meshes.front();
         renderer->castShadows=object.castShadows;renderer->receiveShadows=object.receiveShadow;
+        renderer->lightProbes=object.lightProbes;renderer->reflectionProbes=object.reflectionProbes;
         for(usize slot=1;slot<meshes.size();++slot){scene::MeshSubmesh submesh;submesh.asset=meshes[slot];renderer->submeshes.push_back(submesh);}
         for(usize slot=0;slot<object.materials.size();++slot) {
           std::vector<resources::AssetGuid> materials;

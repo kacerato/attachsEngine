@@ -95,8 +95,8 @@ void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
     out.shapeFactor=mix(out.shapeFactor,target.shapeFactor,amount);
     out.erosion=mix(out.erosion,target.erosion,amount);
     out.steps=mix(out.steps,target.steps,amount);
-    if(amount>=.5f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;
-                     out.type=target.type;}
+    if(amount>0.0f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
+    if(amount>=.5f) out.type=target.type;
   }
   out.opacity=mix(from,to,amount);
   out.enabled=out.opacity>0.0f;
@@ -108,6 +108,14 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     mixColor(result.skyHorizon,target.skyHorizon,amount);
     mixColor(result.ground,target.ground,amount);
     result.atmosphere=mix(result.atmosphere,target.atmosphere,amount);
+    result.skyExposure=mix(result.skyExposure,target.skyExposure,amount);
+    result.sunSize=mix(result.sunSize,target.sunSize,amount);
+    result.sunSizeConvergence=mix(result.sunSizeConvergence,target.sunSizeConvergence,amount);
+    // Environment Lighting acompanha o céu (é da janela Lighting, não do pós).
+    mixColor(result.ambientSkyColor,target.ambientSkyColor,amount);
+    mixColor(result.ambientEquatorColor,target.ambientEquatorColor,amount);
+    mixColor(result.ambientGroundColor,target.ambientGroundColor,amount);
+    mixColor(result.ambientColor,target.ambientColor,amount);
     result.sunDiskDegrees=mix(result.sunDiskDegrees,target.sunDiskDegrees,amount);
     result.sunDiskIntensity=mix(result.sunDiskIntensity,target.sunDiskIntensity,amount);
     result.sunGlare=mix(result.sunGlare,target.sunGlare,amount);
@@ -125,7 +133,7 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.aerosolScaleHeightKm=mix(result.aerosolScaleHeightKm,target.aerosolScaleHeightKm,amount);
     result.atmosphereHeightKm=mix(result.atmosphereHeightKm,target.atmosphereHeightKm,amount);
     result.groundAlbedo=mix(result.groundAlbedo,target.groundAlbedo,amount);
-    if(amount>=.5f) {
+    if(amount>0.0f) {
       result.sky=target.sky;
       // Resources are selected discretely with the sky group. Never take an
       // HDRI from a volume overriding only fog/post, nor blend radiance using
@@ -134,6 +142,8 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
       result.hdriRotationDegrees=target.hdriRotationDegrees;
       result.hdriExposureEv=target.hdriExposureEv;
       result.physicalAtmosphereHighQuality=target.physicalAtmosphereHighQuality;
+      result.sunDisk=target.sunDisk;result.ambientSource=target.ambientSource;
+      result.skybox=target.skybox;
     }
   }
   if(overrides&EnvironmentOverrideFog) {
@@ -143,63 +153,74 @@ void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides
     result.fogStart=mix(result.fogStart,target.fogStart,amount);
     result.fogBaseHeight=mix(result.fogBaseHeight,target.fogBaseHeight,amount);
     result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
-    if(amount>=.5f) result.fog=target.fog;
+    result.fogEnd=mix(result.fogEnd,target.fogEnd,amount);
+    if(amount>0.0f) {result.fog=target.fog;result.fogMode=target.fogMode;result.fogColorMode=target.fogColorMode;}
   }
   if(overrides&EnvironmentOverrideClouds) mixClouds(result.clouds,target.clouds,amount);
   if(overrides&EnvironmentOverrideIndirect) {
     result.indirectDiffuse=mix(result.indirectDiffuse,target.indirectDiffuse,amount);
     result.indirectSpecular=mix(result.indirectSpecular,target.indirectSpecular,amount);
   }
+  // Cada override de pós é independente, como no Volume da Unity. Escolhas
+  // discretas (modo, curva, chaves) trocam no meio da mistura.
+  const bool discrete=amount>0.0f;
   if(overrides&EnvironmentOverridePost) {
-    result.exposureEv=mix(result.exposureEv,target.exposureEv,amount);
-    result.autoExposureMinEv=mix(result.autoExposureMinEv,target.autoExposureMinEv,amount);
-    result.autoExposureMaxEv=mix(result.autoExposureMaxEv,target.autoExposureMaxEv,amount);
-    result.autoExposureLowPercent=mix(result.autoExposureLowPercent,target.autoExposureLowPercent,amount);
-    result.autoExposureHighPercent=mix(result.autoExposureHighPercent,target.autoExposureHighPercent,amount);
-    result.autoExposureTargetGrey=mix(result.autoExposureTargetGrey,target.autoExposureTargetGrey,amount);
-    result.autoExposureSpeedUp=mix(result.autoExposureSpeedUp,target.autoExposureSpeedUp,amount);
-    result.autoExposureSpeedDown=mix(result.autoExposureSpeedDown,target.autoExposureSpeedDown,amount);
+    if(discrete) {result.post=target.post;result.toneMapper=target.toneMapper;}
+  }
+  if(overrides&EnvironmentOverrideExposure) {
+    result.fixedExposure=mix(result.fixedExposure,target.fixedExposure,amount);
+    result.exposureCompensation=mix(result.exposureCompensation,target.exposureCompensation,amount);
+    result.exposureLimitMin=mix(result.exposureLimitMin,target.exposureLimitMin,amount);
+    result.exposureLimitMax=mix(result.exposureLimitMax,target.exposureLimitMax,amount);
+    result.exposureHistogramLow=mix(result.exposureHistogramLow,target.exposureHistogramLow,amount);
+    result.exposureHistogramHigh=mix(result.exposureHistogramHigh,target.exposureHistogramHigh,amount);
+    result.exposureTargetMidGrey=mix(result.exposureTargetMidGrey,target.exposureTargetMidGrey,amount);
+    result.exposureSpeedDarkToLight=mix(result.exposureSpeedDarkToLight,target.exposureSpeedDarkToLight,amount);
+    result.exposureSpeedLightToDark=mix(result.exposureSpeedLightToDark,target.exposureSpeedLightToDark,amount);
+    if(discrete) {
+      result.exposureMode=target.exposureMode;result.exposureMetering=target.exposureMetering;
+      result.exposureAdaptation=target.exposureAdaptation;
+    }
+  }
+  if(overrides&EnvironmentOverrideBloom) {
     result.bloomThreshold=mix(result.bloomThreshold,target.bloomThreshold,amount);
     result.bloomIntensity=mix(result.bloomIntensity,target.bloom?target.bloomIntensity:0.0f,amount);
+    result.bloomScatter=mix(result.bloomScatter,target.bloomScatter,amount);
+    mixColor(result.bloomTint,target.bloomTint,amount);
+    result.bloomClamp=mix(result.bloomClamp,target.bloomClamp,amount);
+    if(discrete) result.bloom=target.bloom;
+  }
+  if(overrides&EnvironmentOverrideVignette) {
+    result.vignetteIntensity=mix(result.vignetteIntensity,target.vignette?target.vignetteIntensity:0.0f,amount);
+    if(discrete) result.vignette=target.vignette;
+  }
+  if(overrides&EnvironmentOverrideColorAdjustments) {
     result.contrast=mix(result.contrast,target.contrast,amount);
     result.saturation=mix(result.saturation,target.saturation,amount);
-    mixGrading(result.grading,target.grading,amount);
-    result.vignetteIntensity=mix(result.vignetteIntensity,target.vignette?target.vignetteIntensity:0.0f,amount);
+    result.postExposure=mix(result.postExposure,target.postExposure,amount);
+    mixColor(result.colorFilter,target.colorFilter,amount);
+    result.hueShift=mix(result.hueShift,target.hueShift,amount);
+  }
+  if(overrides&EnvironmentOverrideColorGrading) mixGrading(result.grading,target.grading,amount);
+  if(overrides&EnvironmentOverrideFilmGrain) {
     result.filmGrainIntensity=mix(result.filmGrainIntensity,
         target.filmGrain?target.filmGrainIntensity:0.0f,amount);
+    if(discrete) result.filmGrain=target.filmGrain;
+  }
+  if(overrides&EnvironmentOverrideAmbientOcclusion) {
     result.ambientOcclusionRadius=mix(result.ambientOcclusionRadius,target.ambientOcclusionRadius,amount);
     result.ambientOcclusionIntensity=mix(result.ambientOcclusionIntensity,
         target.ambientOcclusion?target.ambientOcclusionIntensity:0.0f,amount);
     result.ambientOcclusionPower=mix(result.ambientOcclusionPower,target.ambientOcclusionPower,amount);
     result.ambientOcclusionBias=mix(result.ambientOcclusionBias,target.ambientOcclusionBias,amount);
-    if(amount>=.5f) {
-      result.post=target.post;result.bloom=target.bloom;result.vignette=target.vignette;
-      result.autoExposure=target.autoExposure;
-      result.autoExposureCenterWeighted=target.autoExposureCenterWeighted;
-      result.filmGrain=target.filmGrain;
-      result.ambientOcclusion=target.ambientOcclusion;
-      result.toneMapper=target.toneMapper;
-    }
+    if(discrete) result.ambientOcclusion=target.ambientOcclusion;
   }
 }
 } // namespace
 
-SceneEnvironment defaultSceneViewEnvironment() {
+SceneEnvironment defaultSceneEnvironment() {
   SceneEnvironment result{};
   result.active=true;
-  result.post=true;
-  result.bloom=true;
-  result.vignette=true;
-  result.ambientOcclusion=true;
-  result.exposureEv=-0.15f;
-  result.bloomThreshold=1.15f;
-  result.bloomIntensity=0.08f;
-  result.contrast=1.06f;
-  result.saturation=1.04f;
-  result.vignetteIntensity=0.08f;
-  result.ambientOcclusionRadius=0.85f;
-  result.ambientOcclusionIntensity=0.85f;
-  result.ambientOcclusionPower=1.35f;
   return result;
 }
 
@@ -239,7 +260,7 @@ SceneEnvironment resolveSceneEnvironment(std::span<const SceneEnvironmentVolume>
     if(!initialized) {
       // Sem perfil global, grupos não sobrescritos herdam os padrões do mundo;
       // nunca vazam valores desmarcados só porque este foi o primeiro volume.
-      result=SceneEnvironment{};result.active=true;initialized=true;
+      result=defaultSceneEnvironment();initialized=true;
       blend(result,volume->environment,volume->overrides,amount);
     } else blend(result,volume->environment,volume->overrides,amount);
   }

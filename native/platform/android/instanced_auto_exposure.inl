@@ -6,8 +6,9 @@ struct AutoExposurePush {
   float metering[4];
   float adaptation[4];
   float range[4];
+  float extra[4];
 };
-static_assert(sizeof(AutoExposurePush)==80);
+static_assert(sizeof(AutoExposurePush)==96);
 }
 
 bool InstancedRenderer::createAutoExposureResources() {
@@ -17,6 +18,8 @@ bool InstancedRenderer::createAutoExposureResources() {
     if(!memoryAllocator_->createBuffer(histogram,&view.histogram)) return false;
     rhi::BufferDesc state{};state.sizeBytes=16;
     state.usage=VK_BUFFER_USAGE_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+    // 16 bytes legíveis pela CPU: o logcat mostra o EV100 medido e o adaptado.
+    state.cpuAccess=rhi::CpuAccess::Random;state.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(state,&view.state)) return false;
   }
   VkDescriptorSetLayoutBinding bindings[3]{};
@@ -136,7 +139,7 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   if(index>=autoExposureViews_.size()) return false;
   auto &view=autoExposureViews_[index];
   if(!view.state.isReady()) return false;
-  const bool enabled=look.active&&look.post&&look.autoExposure;
+  const bool enabled=look.active&&look.post&&look.automaticExposure();
   if(enabled && (!hdrSceneColor_ || !autoExposurePipelines_[0] || !autoExposurePipelines_[1])) {
     autoExposureDiagnostic_="Exposição automática requer HDR e compute";
     if(index==1) previewDiagnostic_="Exposição automática requer HDR e compute";
@@ -216,15 +219,25 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   push.viewport[2]=viewport.width;push.viewport[3]=viewport.height;
   const auto *frame=static_cast<const DirtRoadFrameUniform *>(
       index?previewUniform_.mappedData():environmentUniform_.mappedData());
-  push.metering[0]=look.autoExposureMinEv;push.metering[1]=look.autoExposureMaxEv;
-  push.metering[2]=look.autoExposureTargetGrey;
+  // Exposure do HDRP: limites em EV100, cinza médio alvo (K = cinza·100).
+  push.metering[0]=look.exposureLimitMin;push.metering[1]=look.exposureLimitMax;
+  push.metering[2]=look.exposureTargetMidGrey;
   push.metering[3]=frame->environment.parameters[0];
-  push.adaptation[0]=jumped||(index==0&&autoExposurePaused_)?0.0f:
+  // O editor redesenha sob demanda com o relógio parado (ou com saltos longos):
+  // sem dt a adaptação progressiva nunca andaria e a vista ficaria presa na
+  // exposição antiga depois de mudar a hora. Sem tempo correndo, salta para o
+  // alvo; o Play pausado é a exceção (congela, como o olho de uma imagem parada).
+  const bool paused=index==0&&autoExposurePaused_;
+  const bool snap=!paused && (jumped || timeSeconds==view.previousTime);
+  push.adaptation[0]=jumped||paused?0.0f:
       std::clamp(timeSeconds-view.previousTime,0.0f,0.1f);
-  push.adaptation[1]=look.autoExposureSpeedUp;push.adaptation[2]=look.autoExposureSpeedDown;
-  push.adaptation[3]=reset?1.0f:0.0f;
-  push.range[0]=look.autoExposureLowPercent;push.range[1]=look.autoExposureHighPercent;
-  push.range[2]=look.autoExposureCenterWeighted?1.0f:0.0f;
+  push.adaptation[1]=look.exposureSpeedDarkToLight;push.adaptation[2]=look.exposureSpeedLightToDark;
+  push.adaptation[3]=reset||snap?1.0f:0.0f;
+  push.range[0]=look.exposureHistogramLow*0.01f;push.range[1]=look.exposureHistogramHigh*0.01f;
+  push.range[2]=static_cast<float>(look.exposureMetering);
+  push.range[3]=look.exposureMode==renderer::ExposureMode::AutomaticHistogram?2.0f:1.0f;
+  push.extra[0]=look.exposureCompensation;
+  push.extra[1]=look.exposureAdaptation==renderer::ExposureAdaptation::Progressive?1.0f:0.0f;
   const u32 gridX=std::clamp(static_cast<u32>(std::ceil(viewport.width*activeWidth)),1u,256u);
   const u32 gridY=std::clamp(static_cast<u32>(std::ceil(viewport.height*activeHeight)),1u,144u);
   vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_COMPUTE,autoExposurePipelineLayout_,
@@ -254,5 +267,17 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   view.sceneEpoch=sceneEpoch;view.cameraEntity=cameraEntity;
   view.paused=index==0&&autoExposurePaused_;
   if(index==0) autoExposureDiagnostic_.clear();
+  if(index==0 && std::isfinite(timeSeconds) && std::abs(timeSeconds-view.lastLog)>=2.0f &&
+     view.state.mappedData() && memoryAllocator_->invalidateBuffer(view.state)) {
+    // Leitura de quadros anteriores (sem espera): basta para calibrar limites.
+    const auto *values=static_cast<const float*>(view.state.mappedData());
+    __android_log_print(ANDROID_LOG_INFO,LogTag,
+        "[AutoExposure] modo=%u medicao=%u medido=%.2f EV100 adaptado=%.2f limites=[%.1f, %.1f] comp=%.2f",
+        static_cast<u32>(look.exposureMode),static_cast<u32>(look.exposureMetering),
+        static_cast<double>(values[2]),static_cast<double>(values[1]),
+        static_cast<double>(look.exposureLimitMin),static_cast<double>(look.exposureLimitMax),
+        static_cast<double>(look.exposureCompensation));
+    view.lastLog=timeSeconds;
+  }
   return true;
 }

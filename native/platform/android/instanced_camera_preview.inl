@@ -51,8 +51,8 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
   previewSceneEnvironment_=sceneEnvironmentVolumes_.empty()?sceneEnvironment_:
       renderer::resolveSceneEnvironment(sceneEnvironmentVolumes_,view.frustum.cameraPosition,
                                         view.environmentLayerMask);
-  if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_))
-    previewSceneEnvironment_.autoExposure=false;
+  if((editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) || !view.postProcessing)
+    previewSceneEnvironment_.exposureMode=renderer::ExposureMode::Fixed;
   renderer::SharedEnvironmentMap selected;
   if(previewSceneEnvironment_.active && previewSceneEnvironment_.environmentMap.valid()) {
     for(const auto &[guid,resource]:environmentMaps_)
@@ -75,7 +75,10 @@ bool InstancedRenderer::prepareCameraPreviewEnvironment() {
                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else if(previewEnvironmentUsesPrimary_) {
     images[0]={dirtRoadResources_.environmentSampler(),dirtRoadResources_.environmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-    images[1]={dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    // V-1: a câmera que usa o ambiente principal reflete o mesmo céu capturado.
+    images[1]=previewSkyReflection()?
+        VkDescriptorImageInfo{probeAtlasSampler_.handle(),skyReflection_.view(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}:
+        VkDescriptorImageInfo{dirtRoadResources_.environmentSpecularSampler(),dirtRoadResources_.environmentSpecularView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     images[2]={dirtRoadResources_.environmentBrdfSampler(),dirtRoadResources_.environmentBrdfView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   } else {
     images[0]={dirtRoadResources_.packagedEnvironmentSampler(),dirtRoadResources_.packagedEnvironmentView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -147,8 +150,8 @@ bool InstancedRenderer::prepareCameraPreview() {
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
-    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,15},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,6},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
+    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,16},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,7},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
     VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool.maxSets=1;pool.poolSizeCount=4;pool.pPoolSizes=sizes;
     if(vkCreateDescriptorPool(device_,&pool,nullptr,&previewPool_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
@@ -210,6 +213,12 @@ bool InstancedRenderer::prepareCameraPreview() {
     copy.srcSet=environmentSet_;copy.dstSet=previewSet_;copy.srcBinding=copy.dstBinding=binding;copy.descriptorCount=1;
     copies.push_back(copy);
   }
+  // PK-6: a câmera da cena vê as mesmas sondas que a vista principal.
+  for(u32 binding:{24u,25u}) {
+    VkCopyDescriptorSet copy{};copy.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
+    copy.srcSet=environmentSet_;copy.dstSet=previewSet_;copy.srcBinding=copy.dstBinding=binding;copy.descriptorCount=1;
+    copies.push_back(copy);
+  }
   vkUpdateDescriptorSets(device_,0,nullptr,static_cast<u32>(copies.size()),copies.data());
   if(pendingPreview_.materialGeometry) {
     if(!standalonePreview_.prepare(*memoryAllocator_,pendingPreview_.materialGeometry,pendingPreview_.previewMaterial,
@@ -248,7 +257,7 @@ bool InstancedRenderer::prepareCameraPreview() {
   vkUpdateDescriptorSets(device_,waterSubpassActive_?2u:1u,writes,0,nullptr);
   if(!prepareCameraPreviewEnvironment()) return false;
   if(previewSceneEnvironment_.active && previewSceneEnvironment_.post &&
-     previewSceneEnvironment_.autoExposure &&
+     previewSceneEnvironment_.automaticExposure() &&
      (!hdrSceneColor_ || !autoExposurePipelines_[0] || !autoExposurePipelines_[1])) {
     previewDiagnostic_="Exposição automática requer HDR e compute";
     return false;
@@ -260,24 +269,29 @@ bool InstancedRenderer::prepareCameraPreview() {
   frame.postViewport[2]=frame.postViewport[3]=1;
   // O primeiro alvo guarda a cena linear/HDR. A segunda etapa usa este mesmo
   // UBO para neblina, AO, bloom, gradação e tonemap.
-  frame.scenePost[2]=hdrSceneColor_?1.0f:0.0f;
+  frame.scenePost[2]=hdrSceneColor_&&pendingPreview_.hdr?1.0f:0.0f;
   const auto &mapDescription=previewEnvironmentMap_?previewEnvironmentMap_->description:
       previewEnvironmentUsesPrimary_?dirtRoadResources_.environmentMapDescription():
                                      dirtRoadResources_.packagedEnvironmentMapDescription();
   const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
-  const bool editorPost=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+  const bool editorPost=(!editorBackground_||(editorSceneEffects_&&editorScenePost_))&&pendingPreview_.postProcessing;
   const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
       ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
-  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
-      previewSceneEnvironment_,mapDescription,static_cast<bool>(previewEnvironmentMap_) ||
-      (previewEnvironmentUsesPrimary_&&static_cast<bool>(activeEnvironmentMap_)),
-      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,cloudTimeSeconds_)) {
+  if(!applySceneEnvironmentLook(frame,dirtRoadResources_.environmentLighting(),
+      effectiveSceneLook(previewSceneEnvironment_),mapDescription,
+      renderingPolicy_.ambient.splitSumBrdf,editorFog,editorPost,lights,previewAtmosphereGroundCache_,
+      previewAmbientProbeCache_,cloudTimeSeconds_)) {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
   }
   // As nuvens volumétricas integradas são da vista principal; a prévia usa a
   // camada 2D com os mesmos parâmetros.
   frame.cloudShadow[2]=0.0f;
+  if(previewSkyReflection()) {
+    frame.environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
+    frame.environment.parameters[3]=frame.environment.parameters[3]>1.5f?3.0f:1.0f;
+    frame.sceneAoDetail[3]=previewSceneEnvironment_.indirectSpecular;
+  }
   renderer::LightBudgetReport previewLightBudget{};
   renderer::PunctualLight previewLights[renderer::MaximumPunctualLights]{};
   const u32 accepted=renderer::selectPunctualLights(lights,pendingPreview_.frustum.cameraPosition,
@@ -314,6 +328,10 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   vkCmdPipelineBarrier(commandBuffer_,VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT|VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,0,1,&before,0,nullptr,0,nullptr);
   VkClearValue clear[4]{};clear[0].color={{.028f,.032f,.039f,1}};clear[1].depthStencil={1,0};
+  // Background Type da câmera: cor sólida limpa com a cor; sem limpeza, preto.
+  if(view.background==1) clear[0].color={{view.backgroundColor[0],view.backgroundColor[1],view.backgroundColor[2],1}};
+  else if(view.background==2) clear[0].color={{0,0,0,1}};
+  const float viewAspect=view.projectionAspect>0?view.projectionAspect:static_cast<float>(view.width)/view.height;
   VkRenderPassBeginInfo begin{};begin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass=previewRenderPass_;begin.framebuffer=previewFramebuffer_;begin.renderArea.extent={view.width,view.height};
   begin.clearValueCount=temporalMasksActive_?4u:2u;begin.pClearValues=clear;
@@ -334,16 +352,15 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
       // R4: dupla face real. Só material que provou ordem de vértices (glTF de
       // uma face ou "Uma face" escolhida) descarta a face de trás.
       if(materialCulling_)
-        rhiDevice_->cmdSetCullMode(commandBuffer_,
-            (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
-                ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
+        rhiDevice_->cmdSetCullMode(commandBuffer_,renderer::materialCullMode(material.flags)==2u?VK_CULL_MODE_FRONT_BIT:
+            renderer::materialCullMode(material.flags)==1u?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE);
       if (!useBindless_) {
         const VkDescriptorSet set = standalone?standalonePreviewSet_:dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
                                 0, 1, &set, 0, nullptr);
       }
       DirtRoadPushConstants push{};
-      push.cameraFrame[0] = static_cast<float>(view.width)/view.height;
+      push.cameraFrame[0] = viewAspect;
       push.cameraFrame[1] = camera.yaw; push.cameraFrame[2] = camera.pitch;
       push.cameraFrame[3] = timeSeconds;
       push.surfaceTransform[0]=surfaceTransform.xx;push.surfaceTransform[1]=surfaceTransform.xy;
@@ -381,13 +398,22 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
                          0,sizeof(push),&push);
     };
   std::vector<u32> transparent;
+  // PK-9: shader do Material só na pipeline geral; mistura pela saída pedida.
+  const auto previewPipeline=[&](u32 flags,bool blend,const renderer::MaterialShading &shading) {
+    if(blend && (flags&renderer::MapMaterialShadingExtension)) {
+      const u32 output=renderer::materialBlendOutput(shading);
+      if(output!=renderer::MaterialBlendOutputStraight && transparentBlendPipelines_[output]) return transparentBlendPipelines_[output];
+    }
+    const auto variant=renderer::materialFeatureVariant(flags);
+    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
+    if(!(flags&renderer::MapMaterialShadingExtension) && variants[variant]) return variants[variant];
+    return blend?transparentPipeline_:pipeline_;
+  };
   auto draw=[&](u32 index,bool blend) {
     const auto &record=dirtRoadResources_.draws()[index];
     auto material=dirtRoadResources_.materials()[record.materialIndex];
     if(index<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[index]);
-    const auto variant=renderer::materialFeatureVariant(material.flags);
-    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
-    const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
+    const auto pipeline=previewPipeline(material.flags,blend,index<authoredMaterials_.size()?authoredMaterials_[index].shading:renderer::MaterialShading{});
     vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);
     pushMapMaterial(record.materialIndex,index);
     const auto geometry=drawGeometry(index);
@@ -397,9 +423,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   };
   const bool standaloneBlend=view.materialGeometry&&(standalonePreview_.material().flags&renderer::MapMaterialBlend);
   const auto drawStandalone=[&](bool blend) {
-    const auto variant=renderer::materialFeatureVariant(standalonePreview_.material().flags);
-    const auto *variants=blend?transparentMaterialPipelines_:opaqueMaterialPipelines_;
-    const auto pipeline=variants[variant]?variants[variant]:(blend?transparentPipeline_:pipeline_);
+    const auto pipeline=previewPipeline(standalonePreview_.material().flags,blend,standalonePreview_.shading());
     vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,pipeline);pushMapMaterial(0,0xffffffffu,true);
     const auto vertex=standalonePreview_.vertices(),instance=standalonePreview_.instance();
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&vertex,&zero);vkCmdBindVertexBuffers(commandBuffer_,1,1,&instance,&zero);
@@ -411,7 +435,8 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
     if(view.materialGeometry) break;
     if(view.isolatedObjects && (i>=authoredDrawIdentities_.size() ||
        !std::binary_search(view.isolatedObjects->begin(),view.isolatedObjects->end(),authoredDrawIdentities_[i].objectId))) continue;
-    if(!authoredVisibility_.empty()&&!authoredVisibility_[i]) continue;
+    // Visibilidade autoral com a Culling Mask DESTA câmera, não a da principal.
+    if(!authoredVisibility_.empty()&&!authoredVisibleIn(i,view.cullingMask)) continue;
     const auto &record=dirtRoadResources_.draws()[i];
     auto material=dirtRoadResources_.materials()[record.materialIndex];
     if(i<authoredMaterials_.size()) material=renderer::applyMaterialOverride(material,authoredMaterials_[i]);
@@ -422,11 +447,11 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   }
   // The authored camera preview must draw the same environment background as
   // the game camera. Leaving the clear color here hid both HDRI and atmosphere.
-  if(skyPipeline_) {
+  if(skyPipeline_ && view.background==0) {
     DirtRoadPushConstants sky{};
     const float ortho=renderer::isOrthographic(view.frustum)?view.frustum.orthographicHalfHeight:0.0f;
     std::memcpy(&sky.textureIndices[3],&ortho,sizeof(ortho));
-    sky.cameraFrame[0]=static_cast<float>(view.width)/view.height;
+    sky.cameraFrame[0]=viewAspect;
     sky.cameraFrame[1]=camera.yaw;sky.cameraFrame[2]=camera.pitch;sky.cameraFrame[3]=timeSeconds;
     sky.materialFactors[0]=camera.roll;sky.materialFactors[3]=1.0f/view.frustum.tangentHalfVertical;
     sky.surfaceTransform[0]=sky.surfaceTransform[3]=1.0f;
@@ -442,7 +467,9 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   if(waterSubpassActive_) vkCmdNextSubpass(commandBuffer_,VK_SUBPASS_CONTENTS_INLINE);
   const auto distance=[&](u32 index){float result=0;const auto &r=dirtRoadResources_.draws()[index];
     for(u32 k=0;k<3;++k) {const float d=r.boundsCenter[k]-camera.position[k];result+=d*d;}return result;};
-  std::sort(transparent.begin(),transparent.end(),[&](u32 a,u32 b){return distance(a)>distance(b);});
+  const auto priority=[&](u32 index){return index<authoredMaterials_.size()?static_cast<int>(authoredMaterials_[index].shading.sortingPriority):0;};
+  std::sort(transparent.begin(),transparent.end(),[&](u32 a,u32 b){
+    return priority(a)!=priority(b)?priority(a)<priority(b):distance(a)>distance(b);});
   for(auto index:transparent) draw(index,true);
   if(standaloneBlend) drawStandalone(true);
   vkCmdEndRenderPass(commandBuffer_);
@@ -461,7 +488,7 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   }
 
   const bool previewGrading=prepareColorGrading(1,previewSceneEnvironment_,
-      previewSceneEnvironment_.active&&previewSceneEnvironment_.post);
+      view.postProcessing&&previewSceneEnvironment_.active&&previewSceneEnvironment_.post);
   VkRenderPassBeginInfo postBegin{};postBegin.sType=VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   postBegin.renderPass=previewPostRenderPass_;postBegin.framebuffer=previewPostFramebuffer_;
   postBegin.renderArea.extent={view.width,view.height};
@@ -470,25 +497,29 @@ void InstancedRenderer::recordCameraPreview(float timeSeconds) {
   vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipeline_);
   vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,postPipelineLayout_,0,1,&previewPostSet_,0,nullptr);
   PostPushConstants post{};
-  const bool authoredPost=previewSceneEnvironment_.active&&previewSceneEnvironment_.post;
+  // Pós da câmera desligado: nada de bloom, vinheta, nitidez nem gradação;
+  // sobra só a exposição e o tom de exibição, como na vista principal.
+  const bool previewEffects=view.postProcessing;
+  const bool authoredPost=previewEffects&&previewSceneEnvironment_.active&&previewSceneEnvironment_.post;
   post.texelFlags[0]=1.0f/view.width;post.texelFlags[1]=1.0f/view.height;
-  post.texelFlags[2]=(authoredPost?previewSceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
+  post.texelFlags[2]=previewEffects&&(authoredPost?previewSceneEnvironment_.bloom:renderingPolicy_.post.bloom)?1.0f:0.0f;
   if(previewGrading) post.texelFlags[2]+=65536.0f;
-  post.texelFlags[3]=(renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
+  post.texelFlags[3]=view.antialiasing==1?0.0f:view.antialiasing==2?1.0f:
+                     (renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Fxaa ||
                       renderingPolicy_.post.antiAliasing==renderer::AntiAliasingMode::Temporal)?1.0f:0.0f;
   post.bloom[0]=authoredPost?previewSceneEnvironment_.bloomThreshold:renderingPolicy_.post.bloomThreshold;
   post.bloom[1]=authoredPost?previewSceneEnvironment_.bloomIntensity:renderingPolicy_.post.bloomIntensity;
-  post.bloom[2]=renderingPolicy_.post.sharpen;
-  post.bloom[3]=authoredPost?(previewSceneEnvironment_.vignette?previewSceneEnvironment_.vignetteIntensity:0.0f):
+  post.bloom[2]=previewEffects?renderingPolicy_.post.sharpen:0.0f;
+  post.bloom[3]=!previewEffects?0.0f:authoredPost?(previewSceneEnvironment_.vignette?previewSceneEnvironment_.vignetteIntensity:0.0f):
       (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
-  post.grade[0]=authoredPost?previewSceneEnvironment_.contrast:renderingPolicy_.post.contrast;
-  post.grade[1]=authoredPost?previewSceneEnvironment_.saturation:renderingPolicy_.post.saturation;
+  post.grade[0]=!previewEffects?1.0f:authoredPost?previewSceneEnvironment_.contrast:renderingPolicy_.post.contrast;
+  post.grade[1]=!previewEffects?1.0f:authoredPost?previewSceneEnvironment_.saturation:renderingPolicy_.post.saturation;
   post.grade[2]=(previewColor_.format()==VK_FORMAT_B8G8R8A8_SRGB ||
                  previewColor_.format()==VK_FORMAT_R8G8B8A8_SRGB)?0.0f:1.0f;
   post.grade[3]=static_cast<float>(packSurfaceTransform(rhi::SurfaceTransform{}));
   post.sourceTransform[0]=post.sourceTransform[1]=1.0f;
   post.sourceTransform[2]=renderer::isOrthographic(view.frustum)?-1.0f:1.0f/view.frustum.tangentHalfVertical;
-  post.sourceTransform[3]=static_cast<float>(view.width)/view.height;
+  post.sourceTransform[3]=viewAspect;
   post.currentCamera[0]=post.previousCamera[0]=camera.yaw;
   post.currentCamera[1]=post.previousCamera[1]=camera.pitch;
   post.previousCamera[2]=post.previousCamera[3]=camera.roll;

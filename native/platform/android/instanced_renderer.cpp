@@ -1,10 +1,13 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
 #include "renderer/procedural_sky.h"
+#include "renderer/environment_ambient.h"
+#include "scene/components.h"
 #include "renderer/cloud_layer.h"
 #include "renderer/cloud_noise.h"
 #include "rhi/shaders/cloud_volume_spirv.h"
 #include "renderer/time_of_day.h"
+#include "renderer/night_sky.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
 #include "renderer/spatial_render_chunks.h"
@@ -32,6 +35,7 @@
 #include "rhi/shaders/post_process_temporal_spirv.h"
 #include "rhi/shaders/exposure_histogram_spirv.h"
 #include "rhi/shaders/exposure_reduce_spirv.h"
+#include "rhi/shaders/reflection_probe_filter_spirv.h"
 #include "rhi/shaders/fsr_easu_spirv.h"
 #include "rhi/shaders/fsr_rcas_spirv.h"
 #include "rhi/shaders/shadow_depth_spirv.h"
@@ -111,8 +115,8 @@ struct DirtRoadFrameUniform {
   // Estado de aparência resolvido da cena. Fica depois do ABI persistente de
   // EnvironmentLighting e antes das linhas transitórias, igual nos shaders.
   float sceneSky[4]{};             // força, raio solar rad, brilho, modelo
-  float sceneFogColorDensity[4]{}; // rgb linear, densidade 1/m
-  float sceneFog[4]{};             // ativo, início m, altura base m, queda 1/m
+  float sceneFogColorDensity[4]{}; // rgb linear, densidade 1/m (Linear: fim m)
+  float sceneFog[4]{};             // modo (0 off, 1 exp, 2 exp², 3 linear; +4 cobre o céu), início m, altura base m, queda 1/m
   float scenePost[4]{};            // EV, curva, intermediário HDR, override
   float sceneAo[4]{};              // ativo, raio m, intensidade, potência
   float sceneAoDetail[4]{};        // viés em m, reservados
@@ -184,11 +188,31 @@ struct DirtRoadFrameUniform {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens.
   // Só o fragmento de superfície declara (environment_lighting.glsl, offset explícito).
   renderer::PunctualLight punctualLightsExtra[renderer::MaximumPunctualLights - renderer::PunctualLightBankSize]{};
-  // G4d, Volumetric Clouds: fator de forma, erosão (cloud_volume.frag).
+  // PK-5: Color Adjustments e Bloom completos da Unity (post_process_common.glsl).
+  float postColorAdjust[4]{1,1,1,0}; // filtro de cor rgb, giro de matiz em graus
+  float postBloomTint[4]{1,1,1,0};   // tom rgb, espalhamento 0..1
+  float postBloomDetail[4]{65472,0,0,0}; // brilho máximo antes do bloom, reservados
+  // V-2, céu da noite (só o céu e as nuvens leem; dirt_road_sky.frag). Com a Lua
+  // como luz principal, `environment.sunDirection` é a lua: o céu precisa do sol
+  // verdadeiro. skySun: chão->sol, intensidade do sol (zero = use o principal).
+  // skyMoon: chão->lua da direcional Lua, w 1 quando existe. skyStarRotation:
+  // linhas mundo->esfera das estrelas; w da 1ª linha 1 quando a hora gira o céu,
+  // w da 2ª a Via Láctea.
+  float skySun[4]{};
+  float skyMoon[4]{};
+  float skyStarRotation[3][4]{};
+  // V-2: brilho do céu noturno (o luar espalhado pelo ar), rgb; w reservado.
+  float skyNight[4]{};
+  // G4d, Volumetric Clouds: fator de forma, erosão, histórico válido (cloud_volume.frag).
   float cloudVolume[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4128);
-static_assert(offsetof(DirtRoadFrameUniform, cloudVolume) == 4112);
+static_assert(sizeof(DirtRoadFrameUniform) == 4272);
+static_assert(offsetof(DirtRoadFrameUniform, cloudVolume) == 4256);
+static_assert(offsetof(DirtRoadFrameUniform, skyNight) == 4240);
+static_assert(offsetof(DirtRoadFrameUniform, skySun) == 4160);
+static_assert(offsetof(DirtRoadFrameUniform, skyMoon) == 4176);
+static_assert(offsetof(DirtRoadFrameUniform, skyStarRotation) == 4192);
+static_assert(offsetof(DirtRoadFrameUniform, postColorAdjust) == 4112);
 static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
 static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
 static_assert(offsetof(DirtRoadFrameUniform, punctualLightsExtra) == 3600);
@@ -882,6 +906,23 @@ bool InstancedRenderer::createPipeline() {
       pipelineInfo.subpass = waterSubpassActive_ ? 1u : 0u;
       if (pipelineOk)
         pipelineOk = createScenePipeline(&transparentPipeline_) == VK_SUCCESS;
+      // PK-9: Blending Mode do Transparent. Só o fator de cor muda; o alfa
+      // segue carregando a cobertura opaca restante. O shader já entrega a cor
+      // na forma que cada fator espera (renderer::MaterialBlendOutput*).
+      {
+        const VkBlendFactor factors[renderer::MaterialBlendOutputCount][2]{
+            {VK_BLEND_FACTOR_SRC_ALPHA, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
+            {VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA},
+            {VK_BLEND_FACTOR_ONE, VK_BLEND_FACTOR_ONE},
+            {VK_BLEND_FACTOR_DST_COLOR, VK_BLEND_FACTOR_ZERO}};
+        for (u32 output = 1; pipelineOk && output < renderer::MaterialBlendOutputCount; ++output) {
+          colorBlendAttachment.srcColorBlendFactor = factors[output][0];
+          colorBlendAttachment.dstColorBlendFactor = factors[output][1];
+          pipelineOk = createScenePipeline(&transparentBlendPipelines_[output]) == VK_SUCCESS;
+        }
+        colorBlendAttachment.srcColorBlendFactor = factors[0][0];
+        colorBlendAttachment.dstColorBlendFactor = factors[0][1];
+      }
       pipelineInfo.subpass = 0;
 
       // Material detail LOD is a compiled pipeline choice, not merely a
@@ -1111,7 +1152,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[23]{};
+  VkDescriptorSetLayoutBinding bindings[25]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1156,15 +1197,18 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   // e ruídos 3D de forma (21) e erosão (22), lidos pelo passe próprio.
   for(u32 binding=19;binding<=22;++binding)
     bindings[bindingCount++]={binding,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
+  bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  bindings[bindingCount++]={25,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 6u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 7u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
+                                    (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
   VkDescriptorPoolCreateInfo pool{};
   pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   pool.maxSets = 1;
@@ -1188,6 +1232,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   VkDescriptorImageInfo specular{dirtRoadResources_.environmentSpecularSampler(),
                                  dirtRoadResources_.environmentSpecularView(),
                                  VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  environmentSpecularBound_ = specular.imageView;
   VkDescriptorImageInfo brdf{dirtRoadResources_.environmentBrdfSampler(),
                              dirtRoadResources_.environmentBrdfView(),
                              VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
@@ -1348,7 +1393,38 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
     ++writeCount;
   }
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
+  // PK-6: o atlas e o registro por desenho (o buffer se reescreve no binding 24
+  // sozinho ao crescer). Sem sondas o shader cai exatamente no céu de antes.
+  if (!createProbeResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Probes] recursos de sonda indisponíveis.");
+    return false;
+  }
+  VkDescriptorImageInfo probeAtlas{probeAtlasSampler_.handle(), probeAtlas_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  VkDescriptorBufferInfo probeBlock{probeBlock_.handle(), 0, probeBlock_.sizeBytes()};
+  VkWriteDescriptorSet probeWrites[2]{};
+  probeWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  probeWrites[0].dstSet = environmentSet_;
+  probeWrites[0].dstBinding = 24;
+  probeWrites[0].descriptorCount = 1;
+  probeWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+  probeWrites[0].pBufferInfo = &probeBlock;
+  probeWrites[1] = probeWrites[0];
+  probeWrites[1].dstBinding = 25;
+  probeWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  probeWrites[1].pBufferInfo = nullptr;
+  probeWrites[1].pImageInfo = &probeAtlas;
+  vkUpdateDescriptorSets(device_, 2, probeWrites, 0, nullptr);
   return true;
+}
+
+// PK-9: saída da mistura de um desenho transparente (o índice da pipeline).
+u32 InstancedRenderer::transparentBlendOutput(u32 drawIndex) const {
+  if (drawIndex >= authoredMaterials_.size() || drawIndex >= dirtRoadResources_.draws().size()) return 0;
+  const auto &material = authoredMaterials_[drawIndex];
+  const u32 flags = renderer::applyMaterialOverride(
+      dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex], material).flags;
+  if (!(flags & renderer::MapMaterialShadingExtension) || !(flags & renderer::MapMaterialBlend)) return 0;
+  return renderer::materialBlendOutput(material.shading);
 }
 
 bool InstancedRenderer::writeAuthoredUvTransforms() {
@@ -1360,14 +1436,23 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
   const u32 textureBase = static_cast<u32>(dirtRoadResources_.packageTextureCount());
   for (usize draw = 0; draw < authoredMaterials_.size(); ++draw) {
     const auto &material = authoredMaterials_[draw];
-    if (!renderer::needsMaterialExtension(material)) continue;
-    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
     // O padrão da fonte (oclusão empacotada ou não) vem das flags efetivas do desenho.
     u32 flags = 0;
     if (draw < dirtRoadResources_.draws().size()) {
       const u32 materialIndex = dirtRoadResources_.draws()[draw].materialIndex;
       if (materialIndex < dirtRoadResources_.materials().size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex], material, textureBase).flags;
+    }
+    if (!renderer::needsMaterialExtension(material) && !(flags & renderer::MapMaterialShadingExtension)) continue;
+    if (used >= MaterialUvTransformCapacity) { overflow = true; continue; }
+    // PK-9: altura, detalhe e clear coat, como a oclusão própria (só bindless).
+    u32 extraSlots[scene::MaterialExtraTextureCount];
+    for (u32 extra = 0; extra < scene::MaterialExtraTextureCount; ++extra) {
+      extraSlots[extra] = renderer::MaterialExtensionNoTexture;
+      const u32 resolved = material.extraTextures[extra];
+      if (!useBindless_ || !renderer::materialExtraTexturePresent(resolved)) continue;
+      const u64 texture = u64{resolved} + textureBase;
+      if (texture < dirtTextureSlots_.size()) extraSlots[extra] = dirtTextureSlots_[texture];
     }
     // Textura de oclusão própria só existe com descritores bindless: o caminho de
     // fallback tem exatamente quatro samplers por material.
@@ -1388,7 +1473,8 @@ bool InstancedRenderer::writeAuthoredUvTransforms() {
       if(texture<dirtTextureSlots_.size()) lightmapSlot=dirtTextureSlots_[texture];
     }
     renderer::materialExtensionEntry(material, flags, occlusionSlot,
-                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot);
+                                     entries + static_cast<usize>(used) * renderer::MaterialExtensionFloats,lightmapSlot,
+                                     extraSlots);
     authoredUvTransformEntries_[draw] = ++used;
   }
   // Acima da capacidade o desenho fica sem extensão e isso é dito uma vez.
@@ -1675,14 +1761,92 @@ bool InstancedRenderer::createUiRenderPass() {
   return true;
 }
 
+// V-2: a direcional Lua e a esfera das estrelas, publicadas para o céu.
+const renderer::SceneLight *strongestMoon(std::span<const renderer::SceneLight> lights) {
+  const renderer::SceneLight *moon=nullptr;
+  for(const auto &light:lights)
+    if(light.celestialBody==renderer::CelestialLightBody::Moon&&
+       light.modality==renderer::LightModality::Directional&&
+       (!moon||light.intensity>moon->intensity)) moon=&light;
+  return moon;
+}
+
+void publishNightSky(DirtRoadFrameUniform &frame,std::span<const renderer::SceneLight> lights) {
+  if(const auto *moon=strongestMoon(lights)) {
+    float direction[3];renderer::detail::normalized(moon->direction,direction);
+    for(u32 axis=0;axis<3;++axis) frame.skyMoon[axis]=-direction[axis];
+    frame.skyMoon[3]=1.0f;
+  }
+  for(const auto &light:lights) {
+    if(light.celestialBody==renderer::CelestialLightBody::None) continue;
+    for(u32 row=0;row<3;++row) std::copy_n(light.celestialSphere[row],3,frame.skyStarRotation[row]);
+    frame.skyStarRotation[0][3]=1.0f;
+    break;
+  }
+}
+
+// Depois do ambiente do céu e antes das nuvens: a noite dos céus procedural e
+// físico ilumina pelo luar espalhado, não pelo ambiente do dia (renderer/night_sky.h).
+void applyNightSky(DirtRoadFrameUniform &frame,const renderer::SceneEnvironment &look,float skyDaylight,
+                   std::span<const renderer::SceneLight> lights) {
+  if(!look.active||(look.sky!=renderer::SkyModel::Atmosphere&&look.sky!=renderer::SkyModel::PhysicalAtmosphere))
+    return;
+  float moonRadiance[3]{};
+  if(const auto *moon=strongestMoon(lights))
+    for(u32 channel=0;channel<3;++channel)
+      moonRadiance[channel]=std::max(moon->intensity,0.0f)*std::max(moon->color[channel],0.0f);
+  const float night=renderer::nightBlend(frame.skySun[1]);
+  const auto lighting=renderer::evaluateNightSkyLighting(frame.environment.ambientColorStrength,
+      frame.environment.groundColorSaturation,skyDaylight,moonRadiance,night);
+  std::copy_n(lighting.sky,3,frame.environment.ambientColorStrength);
+  std::copy_n(lighting.ground,3,frame.environment.groundColorSaturation);
+  frame.sceneAoDetail[3]*=lighting.specularScale;
+  // O céu visível à noite brilha com o luar espalhado (mais claro que o chão,
+  // como nos frames da Unity), e a neblina que acompanha o céu fica da cor dele
+  // -- o Sky Color da neblina do HDRP. Sem isso o piso de 0,015 do dia virava
+  // uma faixa branca no horizonte depois da exposição da noite.
+  for(u32 c=0;c<3;++c) {
+    frame.skyNight[c]=lighting.nightSky[c]*renderer::NightSkyGlow*lighting.night;
+    if(look.fogColorMode==renderer::FogColorMode::SkyLight)
+      frame.sceneFogColorDensity[c]+=(lighting.nightSky[c]*renderer::NightSkyGlow-frame.sceneFogColorDensity[c])*lighting.night;
+  }
+  // Diagnóstico de calibração no aparelho (logcat [NightSky]), a cada ~300 quadros.
+  static u32 nightLogFrame=0;
+  if(++nightLogFrame%300u==1u)
+    __android_log_print(ANDROID_LOG_INFO,LogTag,
+        "[NightSky] noite=%.2f solY=%.3f lua=%.3g ceu=%.3g,%.3g,%.3g ambiente=%.3g sh=%d",
+        static_cast<double>(lighting.night),static_cast<double>(frame.skySun[1]),
+        static_cast<double>(renderer::nightLuminance(moonRadiance)),
+        static_cast<double>(frame.skyNight[0]),static_cast<double>(frame.skyNight[1]),
+        static_cast<double>(frame.skyNight[2]),
+        static_cast<double>(renderer::nightLuminance(lighting.sky)),
+        frame.diffuseIrradianceSh[0][3]>0.5f?1:0);
+  // PK-1: com a sonda SH publicada, é ela que o shader lê. A noite mistura a
+  // sonda do céu com a do céu noturno (gradiente vertical, como a fonte
+  // Gradient da janela Lighting), na mesma proporção da constante acima.
+  if(frame.diffuseIrradianceSh[0][3]>0.5f&&lighting.night>0.0f) {
+    renderer::DiffuseIrradianceSh9 night{};
+    renderer::ambientProbeFromGradient(lighting.nightSky,lighting.nightSky,lighting.nightGround,night);
+    for(usize k=0;k<frame.diffuseIrradianceSh.size();++k)
+      for(u32 c=0;c<3;++c)
+        frame.diffuseIrradianceSh[k][c]+=(night[k][c]-frame.diffuseIrradianceSh[k][c])*lighting.night;
+  }
+}
+
+// PK-1: o ambiente da cena como a janela Lighting da Unity 6. Cada controle tem
+// um dono só: o brilho do céu é o Exposure do Skybox (ou o EV do HDRI), a luz
+// ambiente é a Environment Lighting (Skybox/Gradient/Color × Intensity
+// Multiplier) e a intensidade do sol é só do sol -- não existe mais a escala
+// "sol da cena / sol do recurso" que clareava céu e ambiente junto com a luz.
 bool applySceneEnvironmentLook(
     DirtRoadFrameUniform &frame, const EnvironmentLighting &baseLighting,
-    const float adjustment[4], const renderer::SceneEnvironment &look,
-    const renderer::EnvironmentMapDescription &mapDescription, bool authoredMapActive,
+    const renderer::SceneEnvironment &look,
+    const renderer::EnvironmentMapDescription &mapDescription,
     bool splitSumBrdf, bool fogEnabled, bool postEnabled,
     std::span<const renderer::SceneLight> lights,
-    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache, double timeSeconds) {
-  if(!renderer::adjustEnvironmentLighting(baseLighting,adjustment,frame.environment)) return false;
+    renderer::PhysicalAtmosphereGroundIrradianceCache &groundCache,
+    renderer::ProceduralAmbientProbeCache &ambientCache, double timeSeconds) {
+  frame.environment=baseLighting;
   frame.diffuseIrradianceSh={};
   if(mapDescription.hasDiffuseIrradianceSh()) {
     frame.diffuseIrradianceSh=mapDescription.diffuseIrradianceSh;
@@ -1701,9 +1865,15 @@ bool applySceneEnvironmentLook(
       frame.environment.ambientColorStrength[channel]=
           look.skyHorizon[channel]*0.65f+look.skyZenith[channel]*0.35f;
   }
-  frame.sceneSky[0]=look.active?look.atmosphere:0.0f;
-  frame.sceneSky[1]=look.sunDiskDegrees*0.5f*0.0174532925199433f;
-  frame.sceneSky[2]=look.sunDiskIntensity;
+  const bool procedural=look.active&&look.sky==renderer::SkyModel::Atmosphere;
+  const bool physical=look.active&&look.sky==renderer::SkyModel::PhysicalAtmosphere;
+  // Céu procedural: o shader calcula com a exposição interna 2,4 (equivale ao
+  // 1,3 da Unity depois do tonemap da Astra); Exposure escala a partir dela.
+  const float proceduralExposure=look.skyExposure/1.3f;
+  frame.sceneSky[0]=look.active?1.0f:0.0f;
+  // Procedural: Sun Size e Sun Size Convergence; físico: disco em graus e brilho.
+  frame.sceneSky[1]=procedural?look.sunSize:look.sunDiskDegrees*0.5f*0.0174532925199433f;
+  frame.sceneSky[2]=procedural?look.sunSizeConvergence:look.sunDiskIntensity;
   frame.sceneSky[3]=look.active?static_cast<float>(look.sky):0.0f;
   frame.celestialParameters[0]=look.sunGlare;
   frame.celestialParameters[1]=look.moonPhase;
@@ -1715,7 +1885,7 @@ bool applySceneEnvironmentLook(
     frame.celestialStars[1+channel]=look.skyZenith[channel];
     frame.skyParameters[channel]=look.ground[channel];
   }
-  frame.skyParameters[3]=1.0f;
+  frame.skyParameters[3]=look.atmosphere; // Atmosphere Thickness
   frame.atmosphereScattering[0]=look.physicalSkyIntensity;
   frame.atmosphereScattering[1]=look.airDensity;
   frame.atmosphereScattering[2]=look.aerosolDensity;
@@ -1727,15 +1897,35 @@ bool applySceneEnvironmentLook(
   frame.atmosphereDetail[0]=look.atmosphereHeightKm;
   frame.atmosphereDetail[1]=look.groundAlbedo;
   frame.atmosphereDetail[2]=look.physicalAtmosphereHighQuality?1.0f:0.0f;
-  frame.atmosphereDetail[3]=0.0f;
+  // Sun do Skybox/Procedural: 0 sem disco, 1 Simple, 2 High Quality.
+  frame.atmosphereDetail[3]=static_cast<float>(look.sunDisk);
   for(u32 channel=0;channel<3;++channel)
     frame.sceneFogColorDensity[channel]=look.fogColor[channel]*look.fogLightEnergy;
-  frame.sceneFogColorDensity[3]=look.fogDensity;
-  frame.sceneFog[0]=look.active&&look.fog&&fogEnabled?1.0f:0.0f;
+  // Fog Mode: 1 exponencial, 2 exponencial ao quadrado, 3 linear (Start/End).
+  // No linear a densidade não vale, então a linha carrega o End.
+  const bool fogOn=look.active&&look.fog&&fogEnabled;
+  frame.sceneFogColorDensity[3]=look.fogMode==renderer::FogMode::Linear?look.fogEnd:look.fogDensity;
+  frame.sceneFog[0]=!fogOn?0.0f:(look.fogMode==renderer::FogMode::Linear?3.0f:
+      look.fogMode==renderer::FogMode::ExponentialSquared?2.0f:1.0f)+
+      (look.fogColorMode==renderer::FogColorMode::SkyLight?4.0f:0.0f);
   frame.sceneFog[1]=look.fogStart;
   frame.sceneFog[2]=look.fogBaseHeight;
-  frame.sceneFog[3]=look.fogHeightFalloff;
-  frame.scenePost[0]=look.active&&look.post&&postEnabled?look.exposureEv:0.0f;
+  frame.sceneFog[3]=look.fogMode==renderer::FogMode::Linear?0.0f:look.fogHeightFalloff;
+  // Fixa: o EV100 vira EV de clareamento aqui. Automática: o estado da GPU
+  // (instanced_auto_exposure.inl) já traz compensação, adaptação e limites.
+  frame.scenePost[0]=look.active&&look.post&&postEnabled&&!look.automaticExposure()?
+      look.fixedBrighteningEv():0.0f;
+  // Post Exposure soma depois da exposição (fixa ou medida) e não entra na
+  // medição: o histograma lê a cena antes de scenePost.x, como na Unity.
+  const bool authoredLook=look.active&&look.post&&postEnabled;
+  if(authoredLook) frame.scenePost[0]+=look.postExposure;
+  for(u32 channel=0;channel<3;++channel) {
+    frame.postColorAdjust[channel]=authoredLook?look.colorFilter[channel]:1.0f;
+    frame.postBloomTint[channel]=authoredLook?look.bloomTint[channel]:1.0f;
+  }
+  frame.postColorAdjust[3]=authoredLook?look.hueShift:0.0f;
+  frame.postBloomTint[3]=authoredLook?look.bloomScatter:0.0f;
+  frame.postBloomDetail[0]=authoredLook?look.bloomClamp:65472.0f;
   frame.scenePost[1]=look.active&&look.post&&postEnabled?
       static_cast<float>(look.toneMapper):static_cast<float>(renderer::ToneMapper::Aces);
   frame.scenePost[3]=look.active&&look.post&&postEnabled?1.0f:0.0f;
@@ -1747,11 +1937,14 @@ bool applySceneEnvironmentLook(
   frame.sceneAoDetail[1]=look.active&&look.post&&look.filmGrain&&postEnabled?
       look.filmGrainIntensity:0.0f;
 
-  float skyScale=1.0f;
+  // V-2: quanto o céu procedural/físico ilumina agora, em fração do meio-dia.
+  float skyDaylight=1.0f;
+  std::fill(std::begin(frame.skySun),std::end(frame.skySun),0.0f);
+  std::fill(std::begin(frame.skyMoon),std::end(frame.skyMoon),0.0f);
+  for(auto &row:frame.skyStarRotation) std::fill(std::begin(row),std::end(row),0.0f);
+  std::fill(std::begin(frame.skyNight),std::end(frame.skyNight),0.0f);
+  publishNightSky(frame,lights);
   if(const auto *sun=renderer::selectDirectionalLight(lights)) {
-    const float reference=frame.environment.sunDirectionIntensity[3];
-    if(sun->photometric&&reference>0.0f&&std::isfinite(sun->intensity)&&sun->intensity>0.0f)
-      skyScale=sun->intensity/reference;
     float direction[3];renderer::detail::normalized(sun->direction,direction);
     for(u32 axis=0;axis<3;++axis) {
       frame.environment.sunDirectionIntensity[axis]=-direction[axis];
@@ -1760,76 +1953,133 @@ bool applySceneEnvironmentLook(
     frame.environment.sunDirectionIntensity[3]=sun->intensity;
     // G4: TimeOfDay no sol dita a fase da lua do céu.
     if(sun->moonPhase>=0.0f) frame.celestialParameters[1]=sun->moonPhase;
-    // Como "Environment Lighting Source: Skybox" na Unity: a luz ambiente vem
-    // do próprio céu procedural, avaliado no ângulo atual do sol. Girar a luz
-    // escurece o ambiente junto com o céu.
-    if(look.active&&look.sky==renderer::SkyModel::Atmosphere) {
-      renderer::ProceduralSkyParameters sky;
-      std::copy_n(look.skyZenith,3,sky.skyTint);std::copy_n(look.ground,3,sky.ground);
-      float toSun[3];std::copy_n(frame.environment.sunDirectionIntensity,3,toSun);
-      float skyAmbient[3],equator[3],groundAmbient[3];
-      renderer::proceduralSkyAmbient(sky,toSun,skyAmbient,equator,groundAmbient);
-      for(u32 channel=0;channel<3;++channel) {
-        frame.environment.ambientColorStrength[channel]=skyAmbient[channel]*0.4f+equator[channel]*0.6f;
-        frame.environment.groundColorSaturation[channel]=groundAmbient[channel];
-      }
-      // A neblina acompanha a luz do horizonte, como o "Sky Color" da neblina do
-      // HDRP e os ciclos de dia da Unity: cor autoral ao meio-dia, quase apagada
-      // à noite. Sem isso a noite ganha uma faixa clara no horizonte.
-      const float zenithSun[3]{0.0f,1.0f,0.0f};
-      float noonSky[3],noonEquator[3],noonGround[3];
-      renderer::proceduralSkyAmbient(sky,zenithSun,noonSky,noonEquator,noonGround);
-      const auto luminance=[](const float c[3]){return 0.2126f*c[0]+0.7152f*c[1]+0.0722f*c[2];};
-      const float daylight=std::clamp(luminance(equator)/std::max(luminance(noonEquator),1e-4f),0.015f,1.0f);
-      for(u32 channel=0;channel<3;++channel) frame.sceneFogColorDensity[channel]*=daylight;
-    } else if(look.active&&look.sky==renderer::SkyModel::PhysicalAtmosphere) {
-      // Céu físico (como o Physically Based Sky do HDRP): neblina e ambiente
-      // acompanham a irradiância do próprio céu desenhado: a integração da
-      // atmosfera no ângulo atual do sol dividida pela do sol a pino. Uma curva
-      // de outro modelo deixava a praça clara sob um céu já escuro no poente.
-      static renderer::PhysicalAtmosphereGroundIrradianceCache nowCache,noonCache;
-      renderer::PhysicalAtmosphereGroundIrradianceInput now;
-      now.airDensity=look.airDensity;now.aerosolDensity=look.aerosolDensity;
-      now.aerosolAnisotropy=look.aerosolAnisotropy;now.planetRadiusKm=look.planetRadiusKm;
-      now.rayleighScaleHeightKm=look.rayleighScaleHeightKm;
-      now.aerosolScaleHeightKm=look.aerosolScaleHeightKm;
-      now.atmosphereHeightKm=look.atmosphereHeightKm;
-      now.sunIntensity=1.0f;
-      renderer::PhysicalAtmosphereGroundIrradianceInput noon=now;
-      std::copy_n(frame.environment.sunDirectionIntensity,3,now.sunDirection);
-      float irradianceNow[3]{},irradianceNoon[3]{};
-      const auto luminance=[](const float c[3]){return 0.2126f*c[0]+0.7152f*c[1]+0.0722f*c[2];};
-      float daylight=1.0f;
-      if(nowCache.resolve(now,irradianceNow)&&noonCache.resolve(noon,irradianceNoon))
-        daylight=std::clamp(luminance(irradianceNow)/std::max(luminance(irradianceNoon),1e-6f),0.015f,1.0f);
-      for(u32 channel=0;channel<3;++channel) {
-        frame.sceneFogColorDensity[channel]*=daylight;
-        frame.environment.ambientColorStrength[channel]*=daylight;
-        frame.environment.groundColorSaturation[channel]*=daylight;
-      }
+    // V-2: a Lua só é a luz principal com o sol apagado; o céu, a neblina e o
+    // ambiente continuam no sol verdadeiro daquela hora, abaixo do horizonte.
+    if(sun->celestialBody==renderer::CelestialLightBody::Moon) {
+      std::copy_n(sun->celestialToSun,3,frame.skySun);
+      frame.skySun[3]=0.0f;
+    } else {
+      std::copy_n(frame.environment.sunDirectionIntensity,4,frame.skySun);
     }
   }
-  if(authoredMapActive&&look.sky==renderer::SkyModel::Hdri)
-    skyScale=std::exp2(look.hdriExposureEv);
-  frame.sceneAoDetail[2]=skyScale;
-  frame.sceneAoDetail[3]=skyScale*(look.active?look.indirectSpecular:1.0f);
-  frame.environment.ambientColorStrength[3]*=
-      skyScale*(look.active?look.indirectDiffuse:1.0f);
+  // Sem direcional na cena, o céu usa o sol padrão do recurso de ambiente.
+  if(frame.skySun[0]==0.0f&&frame.skySun[1]==0.0f&&frame.skySun[2]==0.0f)
+    std::copy_n(frame.environment.sunDirectionIntensity,4,frame.skySun);
+  float toSun[3];std::copy_n(frame.skySun,3,toSun);
+  {
+    const float length=std::sqrt(toSun[0]*toSun[0]+toSun[1]*toSun[1]+toSun[2]*toSun[2]);
+    if(length>1e-6f) for(float &axis:toSun) axis/=length; else {toSun[0]=toSun[2]=0.0f;toSun[1]=1.0f;}
+  }
+  const auto luminance=[](const float c[3]){return 0.2126f*c[0]+0.7152f*c[1]+0.0722f*c[2];};
+  renderer::ProceduralSkyParameters skyParameters;
+  std::copy_n(look.skyZenith,3,skyParameters.skyTint);std::copy_n(look.ground,3,skyParameters.ground);
+  skyParameters.atmosphereThickness=look.atmosphere;
+  skyParameters.exposure=2.4f*proceduralExposure;
 
   std::fill(std::begin(frame.atmosphereGroundIrradiance),
             std::end(frame.atmosphereGroundIrradiance),0.0f);
-  if(look.active&&look.sky==renderer::SkyModel::PhysicalAtmosphere) {
+  if(physical) {
     renderer::PhysicalAtmosphereGroundIrradianceInput input;
     input.airDensity=look.airDensity;input.aerosolDensity=look.aerosolDensity;
     input.aerosolAnisotropy=look.aerosolAnisotropy;input.planetRadiusKm=look.planetRadiusKm;
     input.rayleighScaleHeightKm=look.rayleighScaleHeightKm;
     input.aerosolScaleHeightKm=look.aerosolScaleHeightKm;
     input.atmosphereHeightKm=look.atmosphereHeightKm;
-    std::copy_n(frame.environment.sunDirectionIntensity,3,input.sunDirection);
+    std::copy_n(frame.skySun,3,input.sunDirection);
     std::copy_n(frame.environment.sunColorAngularRadius,3,input.sunColor);
-    input.sunIntensity=frame.environment.sunDirectionIntensity[3];
+    input.sunIntensity=frame.skySun[3];
     if(!groundCache.resolve(input,frame.atmosphereGroundIrradiance)) return false;
   }
+  // Brilho do céu visível e dos reflexos: Exposure do procedural, EV do HDRI.
+  const float skyBrightness=procedural?proceduralExposure:
+      (look.sky==renderer::SkyModel::Hdri?std::exp2(look.hdriExposureEv):1.0f);
+  float ambientScale=look.active?look.indirectDiffuse:1.0f;
+  // Environment Lighting › Source. Toda fonte vira a mesma sonda SH.
+  bool probe=false;
+  if(look.active&&look.ambientSource==renderer::AmbientSource::Skybox) {
+    if(procedural) {
+      frame.diffuseIrradianceSh=ambientCache.resolve(skyParameters,toSun,frame.environment.parameters[1]);
+      probe=true;
+    } else if(look.sky==renderer::SkyModel::Hdri) {
+      ambientScale*=skyBrightness;
+    } else {
+      // Físico: a irradiância que o próprio céu integra no chão (com a
+      // intensidade real do sol), vinda de cima; embaixo, o albedo do solo.
+      float skyRadiance[3],groundRadiance[3];
+      for(u32 c=0;c<3;++c) {
+        skyRadiance[c]=std::max(frame.atmosphereGroundIrradiance[c],0.0f)/3.14159265f*look.physicalSkyIntensity;
+        groundRadiance[c]=skyRadiance[c]*look.groundAlbedo;
+      }
+      renderer::ambientProbeFromGradient(skyRadiance,skyRadiance,groundRadiance,frame.diffuseIrradianceSh);
+      probe=true;
+    }
+  } else if(look.active) {
+    float sky[3],equator[3],ground[3];
+    for(u32 c=0;c<3;++c) {
+      sky[c]=scene::srgbChannelToLinear(look.ambientSkyColor[c]);
+      equator[c]=scene::srgbChannelToLinear(look.ambientEquatorColor[c]);
+      ground[c]=scene::srgbChannelToLinear(look.ambientGroundColor[c]);
+    }
+    // O gradiente é vertical: girar a normal em Y (rotação do HDRI) não o muda.
+    if(look.ambientSource==renderer::AmbientSource::Gradient)
+      renderer::ambientProbeFromGradient(sky,equator,ground,frame.diffuseIrradianceSh);
+    else {
+      float color[3];
+      for(u32 c=0;c<3;++c) color[c]=scene::srgbChannelToLinear(look.ambientColor[c]);
+      renderer::ambientProbeFromColor(color,frame.diffuseIrradianceSh);
+    }
+    probe=true;
+  }
+  if(probe) {
+    frame.diffuseIrradianceSh[0][3]=1.0f;
+    // O nível Constante não lê a sonda: céu e chão dela, já em E/pi.
+    const float up[3]{0,1,0},down[3]{0,-1,0};
+    float upE[3]{},downE[3]{};
+    renderer::evaluateDiffuseIrradianceSh(frame.diffuseIrradianceSh,up,upE);
+    renderer::evaluateDiffuseIrradianceSh(frame.diffuseIrradianceSh,down,downE);
+    for(u32 c=0;c<3;++c) {
+      frame.environment.ambientColorStrength[c]=upE[c]/3.14159265f;
+      frame.environment.groundColorSaturation[c]=downE[c]/3.14159265f;
+    }
+  }
+
+  float daylight=1.0f;
+  if(procedural) {
+    float skyAmbient[3],equator[3],groundAmbient[3];
+    renderer::proceduralSkyAmbient(skyParameters,toSun,skyAmbient,equator,groundAmbient);
+    const float zenithSun[3]{0.0f,1.0f,0.0f};
+    float noonSky[3],noonEquator[3],noonGround[3];
+    renderer::proceduralSkyAmbient(skyParameters,zenithSun,noonSky,noonEquator,noonGround);
+    daylight=std::clamp(luminance(equator)/std::max(luminance(noonEquator),1e-4f),0.015f,1.0f);
+  } else if(physical) {
+    // Céu físico (como o Physically Based Sky do HDRP): neblina e ambiente
+    // acompanham a irradiância do próprio céu desenhado: a integração da
+    // atmosfera no ângulo atual do sol dividida pela do sol a pino.
+    static renderer::PhysicalAtmosphereGroundIrradianceCache nowCache,noonCache;
+    renderer::PhysicalAtmosphereGroundIrradianceInput now;
+    now.airDensity=look.airDensity;now.aerosolDensity=look.aerosolDensity;
+    now.aerosolAnisotropy=look.aerosolAnisotropy;now.planetRadiusKm=look.planetRadiusKm;
+    now.rayleighScaleHeightKm=look.rayleighScaleHeightKm;
+    now.aerosolScaleHeightKm=look.aerosolScaleHeightKm;
+    now.atmosphereHeightKm=look.atmosphereHeightKm;
+    now.sunIntensity=1.0f;
+    renderer::PhysicalAtmosphereGroundIrradianceInput noon=now;
+    std::copy_n(toSun,3,now.sunDirection);
+    float irradianceNow[3]{},irradianceNoon[3]{};
+    if(nowCache.resolve(now,irradianceNow)&&noonCache.resolve(noon,irradianceNoon))
+      daylight=std::clamp(luminance(irradianceNow)/std::max(luminance(irradianceNoon),1e-6f),0.015f,1.0f);
+  }
+  // A-03: a cor da neblina é a do autor. "Acompanhar o céu" é a escolha
+  // explícita (o comportamento das cenas antigas): apaga à noite com o céu.
+  skyDaylight=daylight;
+  if(look.fogColorMode==renderer::FogColorMode::SkyLight)
+    for(u32 channel=0;channel<3;++channel) frame.sceneFogColorDensity[channel]*=daylight;
+
+  frame.sceneAoDetail[2]=skyBrightness;
+  frame.sceneAoDetail[3]=skyBrightness*(look.active?look.indirectSpecular:1.0f);
+  frame.environment.ambientColorStrength[3]*=ambientScale;
+  applyNightSky(frame,look,skyDaylight,lights);
+
   // G4b: Cloud Layer. As linhas vão ao céu e à sombra do sol; o ambiente do céu
   // perde o azul na proporção do céu coberto, como a sonda de ambiente do HDRP,
   // que é renderizada com as nuvens.
@@ -1847,11 +2097,13 @@ bool applySceneEnvironmentLook(
     };
     grey(frame.environment.ambientColorStrength);
     grey(frame.atmosphereGroundIrradiance);
+    if(probe) for(auto &coefficient:frame.diffuseIrradianceSh) grey(coefficient.data());
   }
   return true;
 }
 
 #include "platform/android/instanced_camera_preview.inl"
+#include "platform/android/instanced_probes.inl"
 
 void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
   if (!createUiRenderPass()) return;
@@ -1986,6 +2238,8 @@ void InstancedRenderer::recordUiContents() {
 }
 
 float InstancedRenderer::sceneAspectRatio() const {
+  // Gate Fit "Nenhum" da câmera física: a projeção estica o sensor na vista.
+  if(sceneAspectOverride_>0) return sceneAspectOverride_;
   const auto extent = swapchain_->displayExtent();
   const float aspect = static_cast<float>(extent.width) / static_cast<float>(extent.height);
   return sceneViewport_.isEmpty() ? aspect : aspect * sceneViewport_.width / sceneViewport_.height;
@@ -2414,9 +2668,8 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
                           0, 1, upscaledInput ? &upscaledDescriptorSet_ :
                           fogResolvedThisFrame_ ? &fogResolveDescriptorSet_ : &postDescriptorSet_, 0, nullptr);
   PostPushConstants push{};
-  const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
-  const auto look=sceneEnvironment_.active?sceneEnvironment_:
-      (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+  const bool postEffectsEnabled=viewPostEnabled();
+  const auto look=effectiveSceneLook();
   const bool authoredPost=postEffectsEnabled&&look.active&&look.post;
   push.texelFlags[0] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->width() : renderTargetWidth());
   push.texelFlags[1] = 1.0f / static_cast<float>(upscaledInput ? swapchain_->height() : renderTargetHeight());
@@ -2439,6 +2692,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if(colorGradingThisFrame_) push.texelFlags[2] += 65536.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
+                       sceneAntialiasing_==1 ? 0.0f : sceneAntialiasing_==2 ? 1.0f :
                        temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_
                            ? 3.0f
                            : temporalAaActive_ || (renderingPolicy_.post.antiAliasing ==
@@ -2446,7 +2700,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   if (temporalDebugAvailable())
     push.texelFlags[3] += 4.0f * static_cast<float>(temporalDebugView_);
   push.bloom[0] = authoredPost?look.bloomThreshold:renderingPolicy_.post.bloomThreshold;
-  push.bloom[1] = authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
+  push.bloom[1] = postIsolation_&4u?0.0f:authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
   // FSR 1 e os ampliadores temporais aplicam o próprio RCAS com esta nitidez.
   push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f;
   push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
@@ -3100,8 +3354,10 @@ void InstancedRenderer::splitShadowDraws(const std::vector<u32> &solid,const std
         if(drawIndex<authoredMaterials_.size())
           material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
                                                    static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+        // Render Face "Back" projeta sombra das duas faces: o passe de sombra
+        // só sabe descartar a de trás.
         culled=(material.flags&renderer::MapMaterialCullBackFaces)!=0 &&
-               (material.flags&renderer::MapMaterialDoubleSided)==0;
+               (material.flags&(renderer::MapMaterialDoubleSided|renderer::MapMaterialCullFrontFaces))==0;
       }
       (culled?cull:none).push_back(drawIndex);
     }
@@ -4932,6 +5188,7 @@ void InstancedRenderer::shutdown() {
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
   destroyCameraPreview();
+  destroyProbeResources();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
   // The UI owns VMA buffers and images too. Release them before its render pass
@@ -4994,6 +5251,10 @@ void InstancedRenderer::shutdown() {
   if (transparentPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, transparentPipeline_, nullptr);
     transparentPipeline_ = VK_NULL_HANDLE;
+  }
+  for (auto &blendPipeline : transparentBlendPipelines_) {
+    if (blendPipeline != VK_NULL_HANDLE) vkDestroyPipeline(device_, blendPipeline, nullptr);
+    blendPipeline = VK_NULL_HANDLE;
   }
   if (waterPipeline_ != VK_NULL_HANDLE) {
     vkDestroyPipeline(device_, waterPipeline_, nullptr);
@@ -5119,6 +5380,7 @@ void InstancedRenderer::shutdown() {
   memoryAllocator_ = nullptr;
   swapchain_ = nullptr;
   pendingScene_.clear();sourceMapDraws_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredLighting_.clear();authoredMaterials_.clear();authoredDrawIdentities_.clear();
+  authoredBaseVisibility_.clear();authoredBaseShadows_.clear();authoredLayers_.clear();
   authoredUvTransformEntries_.clear();
   fillInstanceBuffer_ = nullptr;
   extractScene_ = nullptr;
@@ -5420,6 +5682,7 @@ bool InstancedRenderer::rebuildAuthoringGeometry(std::span<const u8> vertices, s
   pendingScene_.clear();pendingMapPoseCount_=0;pendingMapTransformChanged_=false;
   pendingAuthoredStateValid_=false;
   authoredMaterials_.clear();authoredVisibility_.clear();authoredShadows_.clear();authoredLighting_.clear();authoredDrawIdentities_.clear();authoredUvTransformEntries_.clear();
+  authoredBaseVisibility_.clear();authoredBaseShadows_.clear();authoredLayers_.clear();
   authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();
   shadowCascadeDirtyMask_=0xffffffffu;
   if(!rebuildDrawOrders()) {
@@ -5532,7 +5795,11 @@ bool InstancedRenderer::rebuildDrawOrders() {
   profileSourceTriangleCount_ = 0;
   for (const auto &draw : sourceMapDraws_) profileSourceTriangleCount_ += draw.indexCount / 3;
   sourceDrawUvMetric_.assign(sourceMapDraws_.size(),-1.0f);
-  if(emptyScene_) { authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0); }
+  if(emptyScene_) {
+    authoredVisibility_.assign(sourceMapDraws_.size(),0);authoredShadows_.assign(sourceMapDraws_.size(),0);
+    authoredBaseVisibility_.assign(sourceMapDraws_.size(),0);authoredBaseShadows_.assign(sourceMapDraws_.size(),0);
+    authoredLayers_.assign(sourceMapDraws_.size(),0);
+  }
   instanceCount_ = static_cast<u32>(dirtRoadResources_.draws().size());
   for (u32 index = 0; index < instanceCount_; ++index) {
     const u32 material = dirtRoadResources_.draws()[index].materialIndex;
@@ -5683,6 +5950,7 @@ bool InstancedRenderer::queueAuthoredPoses(std::span<const renderer::MapDrawStat
     state.visible=draws[i].visible;
     state.castShadows=draws[i].castShadows;
     state.lighting=draws[i].lighting;
+    state.layer=static_cast<u8>(draws[i].lighting.objectLayer&31u);
   }
   pendingAuthoredStateValid_=true;
   queueSkinPalettes(draws);
@@ -5739,6 +6007,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   std::vector<renderer::MapDrawRecord> records;records.reserve(count);
   authoredVisibility_.resize(count);authoredShadows_.resize(count);authoredMaterials_.resize(count);
   authoredLighting_.resize(count);
+  authoredBaseVisibility_.resize(count);authoredBaseShadows_.resize(count);authoredLayers_.resize(count);
   authoredDrawIdentities_.resize(count);
   routeVertices_=std::move(nextVertices);routeIndices_=std::move(nextIndices);authoredWaterLayers_.resize(count);
   authoredWaterFlowDepth_.resize(count);
@@ -5749,9 +6018,13 @@ bool InstancedRenderer::commitAuthoredScene() {
   cameraWaterHorizonFillActive_=false;
   for(u32 i=0;i<count;++i) {
     const auto &state=pendingScene_[i];records.push_back(state.pose.draw);instances[i]=state.pose.instance;
-    // "Só sombra" sai da câmera e fica no mapa de sombra.
-    authoredVisibility_[i]=state.visible&&state.castShadows!=3;
-    authoredShadows_[i]=state.visible?state.castShadows:u8{0};
+    // "Só sombra" sai da câmera e fica no mapa de sombra. A Culling Mask da
+    // câmera esconde o desenho e a sombra do objeto nesta vista.
+    authoredBaseVisibility_[i]=state.visible&&state.castShadows!=3;
+    authoredBaseShadows_[i]=state.visible?state.castShadows:u8{0};
+    authoredLayers_[i]=static_cast<u8>(state.lighting.objectLayer&31u);
+    authoredVisibility_[i]=authoredVisibleIn(i,sceneCullingMask_);
+    authoredShadows_[i]=authoredShadowsIn(i,sceneCullingMask_);
     authoredLighting_[i]=state.lighting;
     authoredMaterials_[i]=state.material;
     authoredDrawIdentities_[i]={state.objectId,state.sourceDrawIndex,state.route};
@@ -5762,7 +6035,7 @@ bool InstancedRenderer::commitAuthoredScene() {
     if(state.pose.draw.lodLevel!=0) continue;
     // R4: a fila segue o modo de alfa efetivo (trocado na instância ou no material do projeto).
     const auto flags=renderer::applyMaterialOverride(dirtRoadResources_.materials()[state.pose.draw.materialIndex],state.material).flags;
-    if(state.visible && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
+    if(authoredVisibility_[i] && (flags & renderer::MapMaterialWaterCameraGrid)) cameraWaterHorizonFillActive_=true;
     if(flags & renderer::MapMaterialWater) waterDrawOrder_.push_back(i);
     else if(flags & renderer::MapMaterialBlend) transparentDrawOrder_.push_back(i);
     else if(flags & renderer::MapMaterialAlphaMask) coverageDrawOrder_.push_back(i);
@@ -5775,6 +6048,7 @@ bool InstancedRenderer::commitAuthoredScene() {
   }
   if(!memoryAllocator_->flushBuffer(instanceBuffer_)) return false;
   if(!writeAuthoredUvTransforms()) return false;
+  appliedCullingMask_=sceneCullingMask_;
   pendingScene_.clear();shadowCascadeDirtyMask_=0xffffffffu;
   return true;
 }
@@ -5844,6 +6118,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       writes[i].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[i].pImageInfo=&images[i];
     }
     vkUpdateDescriptorSets(device_,3,writes,0,nullptr);
+    environmentSpecularBound_=images[1].imageView;
     activeEnvironmentMap_=std::move(selectedEnvironment);temporalHistoryInitialized_=false;
   }
   u32 imageIndex = 0;
@@ -5855,6 +6130,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   if(submittedPreview_.requestId) {
     completedPreview_=submittedPreview_;submittedPreview_={};previewCompletionSuccess_=true;
   }
+  // A cerca do quadro anterior já foi cumprida: a leitura da sonda chegou.
+  collectProbeReadback();
   updateTextureStreaming(camera);
   updateAuthoredMeshLods(camera);
   if(previewCloseRequested_) {destroyCameraPreview();previewCloseRequested_=false;}
@@ -5896,18 +6173,31 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       const auto &state = pendingAuthoredState_[i];
       const u8 visible = state.visible && state.castShadows != 3;
       const u8 shadows = state.visible ? state.castShadows : u8{0};
-      if (!(authoredMaterials_[i] == state.material) || authoredVisibility_[i] != visible ||
-          authoredShadows_[i] != shadows) {
+      const u8 layer = static_cast<u8>(state.lighting.objectLayer&31u);
+      const bool tracked = i<authoredBaseVisibility_.size();
+      if (!(authoredMaterials_[i] == state.material) ||
+          (tracked ? (authoredBaseVisibility_[i] != visible || authoredBaseShadows_[i] != shadows || authoredLayers_[i] != layer)
+                   : (authoredVisibility_[i] != visible || authoredShadows_[i] != shadows))) {
         shadowCascadeDirtyMask_ = 0xffffffffu;
         authoredAppearanceChanged=true;
       }
       authoredMaterials_[i] = state.material;
-      authoredVisibility_[i] = visible;
-      authoredShadows_[i] = shadows;
+      if (tracked) {
+        authoredBaseVisibility_[i] = visible;authoredBaseShadows_[i] = shadows;authoredLayers_[i] = layer;
+        authoredVisibility_[i] = authoredVisibleIn(i,sceneCullingMask_);
+        authoredShadows_[i] = authoredShadowsIn(i,sceneCullingMask_);
+      } else {authoredVisibility_[i] = visible;authoredShadows_[i] = shadows;}
       if (i < authoredLighting_.size()) authoredLighting_[i] = state.lighting;
     }
     if (!writeAuthoredUvTransforms()) return rhi::SwapchainStatus::FatalError;
     pendingAuthoredStateValid_ = false;
+    appliedCullingMask_ = sceneCullingMask_;
+  }
+  // Culling Mask trocada sem mudar a cena (outra câmera, script): a mesma
+  // invalidação de uma troca de visibilidade, inclusive cascatas e HZB.
+  if (sceneCullingMask_ != appliedCullingMask_ && applySceneCullingMask()) {
+    shadowCascadeDirtyMask_ = 0xffffffffu;
+    authoredAppearanceChanged = true;
   }
   if (pendingMapPoseCount_ != 0) {
     auto *instances = static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
@@ -6013,7 +6303,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Pixel -> NDC físico do Vulkan (y desce, como na imagem das bibliotecas).
     temporalCurrentJitter_[0]=2.0f*temporalUpscalerJitterPixels_[0]/std::max(1.0f,renderWidth()*jitterViewport.width);
     temporalCurrentJitter_[1]=2.0f*temporalUpscalerJitterPixels_[1]/std::max(1.0f,renderHeight()*jitterViewport.height);
-  } else if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_) {
+  } else if (temporalAaActive_ && temporalPoseSupported && temporalHistoryInitialized_ && sceneAntialiasing_==0) {
     if(temporalStaticFrameCount_>=9u) {
       temporalCurrentJitter_[0]=temporalCurrentJitter_[1]=0.0f;
     } else {
@@ -6068,17 +6358,28 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->postViewport[1]=postViewport.y;
     frame->postViewport[2]=postViewport.width;
     frame->postViewport[3]=postViewport.height;
-    const auto look=sceneEnvironment_.active?sceneEnvironment_:
-        (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+    const auto look=effectiveSceneLook();
     const auto &mapDescription=dirtRoadResources_.environmentMapDescription();
     const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
-    const bool editorPost=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
+    const bool editorPost=viewPostEnabled();
     const std::span<const renderer::SceneLight> lights=editorBackground_&&!editorSceneLighting_
         ? std::span<const renderer::SceneLight>{}:std::span<const renderer::SceneLight>{sceneLights_};
-    if(!applySceneEnvironmentLook(*frame,dirtRoadResources_.environmentLighting(),environmentAdjustment_,
-          look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
-          editorFog,editorPost,lights,atmosphereGroundCache_,timeSeconds))
+    if(!applySceneEnvironmentLook(*frame,dirtRoadResources_.environmentLighting(),
+          look,mapDescription,renderingPolicy_.ambient.splitSumBrdf,
+          editorFog,editorPost,lights,atmosphereGroundCache_,ambientProbeCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
+    // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
+    // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
+    // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava
+    // a sombra cinza e um contorno claro em tudo, em qualquer hora do dia.
+    skyReflectionWanted_=hdrSceneColor_&&look.active&&look.sky!=renderer::SkyModel::Hdri&&!(postIsolation_&128u);
+    if(skyReflectionActive()) {
+      frame->environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
+      frame->environment.parameters[3]=frame->environment.parameters[3]>1.5f?3.0f:1.0f;
+      // A captura já está na radiância da cena: só o Intensity Multiplier.
+      frame->sceneAoDetail[3]=look.indirectSpecular;
+    }
+    if(!bindEnvironmentSpecular()) return rhi::SwapchainStatus::FatalError;
     // Volumetric Clouds: sem pipeline, a camada 2D desenha no lugar; o
     // histórico só vale depois de um quadro integrado.
     if (!volumetricCloudsReady()) frame->cloudShadow[2] = 0.0f;
@@ -6086,9 +6387,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
+    // V-1: ambiente difuso (céu/SH/sondas, todos escalados por .w) e reflexo do ambiente.
+    if(postIsolation_&32u) frame->environment.ambientColorStrength[3]=0.0f;
+    if(postIsolation_&64u) frame->sceneAoDetail[3]=0.0f;
     fogActiveThisFrame_=frame->sceneFog[0]>0.5f;
     aoActiveThisFrame_=frame->sceneAo[0]>0.5f;
-    frame->scenePost[2]=hdrSceneColor_?1.0f:0.0f;
+    // HDR desligado na câmera: o shader de cena tonaliza na hora e nada passa
+    // de 1 antes do pós, como num alvo LDR da Unity.
+    frame->scenePost[2]=hdrSceneColor_&&sceneHdr_?1.0f:0.0f;
     const auto basis=renderer::buildCameraViewBasis(camera.yaw,camera.pitch,camera.roll);
     const float row0[4] = {basis.row0[0],basis.row0[1],basis.row0[2],sceneOrthographicHalfHeight_};
     const float row1[4] = {basis.row1[0],basis.row1[1],basis.row1[2],0};
@@ -6236,7 +6542,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->localShadowParameters[0] = 0.0f;
       frame->localShadowParameters[1] = localShadowAtlas_.width() > 0
           ? 1.0f / static_cast<float>(localShadowAtlas_.width()) : 1.0f;
-      if (renderingPolicy_.shadows.enabled && localShadowRenderPass_ != VK_NULL_HANDLE &&
+      if (renderingPolicy_.shadows.enabled && sceneShadows_ && localShadowRenderPass_ != VK_NULL_HANDLE &&
           localShadowAtlas_.width() > 1) {
         renderer::ShadowCaster casters[renderer::MaximumPunctualLights]{};
         u32 casterCount = 0;
@@ -6347,7 +6653,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->shadowTransitionParameters[2] = 1.0f/std::tan(sceneFieldOfView()*.5f);
     const u32 previousShadowCascadeCount = shadowCascadeCount_;
     shadowCascadeCount_ = 0;
-    if (renderingPolicy_.shadows.enabled && sunShadow.casts()) {
+    // Render Shadows da câmera: sem cascatas nem atlas, o shader não amostra sombra.
+    if (renderingPolicy_.shadows.enabled && sceneShadows_ && sunShadow.casts()) {
       renderer::ShadowCascadeInput input{};
       std::memcpy(input.cameraPosition, camera.position, sizeof(input.cameraPosition));
       std::memcpy(input.cameraForward, row2, sizeof(input.cameraForward));
@@ -6402,14 +6709,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
 
-  const auto cachedLook=sceneEnvironment_.active?sceneEnvironment_:
-      renderer::defaultSceneViewEnvironment();
+  // A exposição automática não impede o reaproveitamento: ele exige o mesmo
+  // tempo, e com dt zero o estado adaptado da câmera não muda.
   const bool sceneCacheEligible=editorSceneReuseEnabled_ && editorBackground_ && dirtRoadPreview_ &&
       renderingPolicy_.post.dedicatedPass && postPipeline_!=VK_NULL_HANDLE &&
       !temporalInputsActive_ && !temporalUpscaler_.ready() &&
       waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
-      !textureStreamingDebugView_ &&
-      !cachedLook.autoExposure;
+      !textureStreamingDebugView_;
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
       (textureStreamingDebugView_?32u:0u);
@@ -6422,6 +6728,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       sameCameraPose(camera,editorSceneCachedCamera_) && sceneUniformMatches;
   if(!sceneCacheEligible) editorSceneCacheValid_=false;
 
+  // PK-6: antes da prévia, que copia o binding 24 deste conjunto.
+  if(!prepareProbes(camera)) return rhi::SwapchainStatus::FatalError;
   if(pendingPreview_.requestId && !prepareCameraPreview()) {
     completedPreview_=pendingPreview_;pendingPreview_={};previewCompletionSuccess_=false;
   }
@@ -6436,6 +6744,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::Skinning);
   if (!recordSkinning()) return rhi::SwapchainStatus::FatalError;
   endGpuRegion(GpuPassClass::Skinning);
+  beginGpuRegion(GpuPassClass::Probes);
+  recordProbes(timeSeconds);
+  endGpuRegion(GpuPassClass::Probes);
   beginGpuRegion(GpuPassClass::CameraPreview);
   recordCameraPreview(timeSeconds);
   endGpuRegion(GpuPassClass::CameraPreview);
@@ -6481,6 +6792,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
 
   VkClearValue clearValues[4]{};
   clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};
+  // Background Type da câmera de jogo. Fora do Viewport Rect nenhuma câmera
+  // desenha: preto. Dentro, a cor sólida limpa só o retângulo, mais abaixo.
+  const bool cameraSolid=!editorBackground_ && sceneBackground_==1;
+  if(!editorBackground_ && (sceneBackgroundPartial_ || sceneBackground_==2))
+    clearValues[0].color = VkClearColorValue{{0.0f,0.0f,0.0f,1.0f}};
+  else if(cameraSolid)
+    clearValues[0].color = VkClearColorValue{{sceneBackgroundColor_[0],sceneBackgroundColor_[1],sceneBackgroundColor_[2],1.0f}};
   clearValues[1].depthStencil = {1.0f, 0};
 
   VkRenderPassBeginInfo renderPassInfo{};
@@ -6543,6 +6861,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   scissor.extent = {std::min(renderWidth() - static_cast<u32>(scissor.offset.x), static_cast<u32>(std::ceil(viewport.width))),
                     std::min(renderHeight() - static_cast<u32>(scissor.offset.y), static_cast<u32>(std::ceil(viewport.height)))};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+  if(cameraSolid && sceneBackgroundPartial_ && scissor.extent.width && scissor.extent.height) {
+    VkClearAttachment fill{};fill.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;fill.colorAttachment=0;
+    fill.clearValue.color=VkClearColorValue{{sceneBackgroundColor_[0],sceneBackgroundColor_[1],sceneBackgroundColor_[2],1.0f}};
+    const VkClearRect area{scissor,0,1};
+    vkCmdClearAttachments(commandBuffer_,1,&fill,1,&area);
+  }
 
   if (dirtRoadPreview_) {
     vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -6572,9 +6896,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // R4: dupla face real. Só material que provou ordem de vértices (glTF de
       // uma face ou "Uma face" escolhida) descarta a face de trás.
       if(materialCulling_)
-        rhiDevice_->cmdSetCullMode(commandBuffer_,
-            (material.flags & renderer::MapMaterialCullBackFaces)!=0 && (material.flags & renderer::MapMaterialDoubleSided)==0
-                ? VK_CULL_MODE_BACK_BIT : VK_CULL_MODE_NONE);
+        rhiDevice_->cmdSetCullMode(commandBuffer_,renderer::materialCullMode(material.flags)==2u?VK_CULL_MODE_FRONT_BIT:
+            renderer::materialCullMode(material.flags)==1u?VK_CULL_MODE_BACK_BIT:VK_CULL_MODE_NONE);
       if (!useBindless_) {
         const VkDescriptorSet set = dirtMaterialSets_[materialIndex];
         vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_,
@@ -6632,6 +6955,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (drawIndex < authoredMaterials_.size())
         flags = renderer::applyMaterialOverride(dirtRoadResources_.materials()[materialIndex],
                                                 authoredMaterials_[drawIndex]).flags;
+      // PK-9: o código do shader do Material só existe na pipeline geral.
+      if (flags & renderer::MapMaterialShadingExtension) return fallback;
       const u32 variant = renderer::materialFeatureVariant(flags);
       return variants[variant] != VK_NULL_HANDLE ? variants[variant] : fallback;
     };
@@ -6947,11 +7272,15 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     const auto *solidInstances = static_cast<const renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
     opaqueNoClipLastFrame_ = opaqueNoClipEnabled_ && opaqueNoClipPipeline_ != VK_NULL_HANDLE &&
         solidInstances && !visibleSolidDrawOrder_.empty();
+    // PK-9: a pipeline de luz pontual sem sombra compila sem a superfície
+    // geral, onde o shader do Material mora.
+    bool shadingExtensionVisible = false;
     for (u32 drawIndex : visibleSolidDrawOrder_) {
       if (!opaqueNoClipLastFrame_) break;
       const auto &base = dirtRoadResources_.materials()[dirtRoadResources_.draws()[drawIndex].materialIndex];
       const auto material = drawIndex < authoredMaterials_.size()
           ? renderer::applyMaterialOverride(base, authoredMaterials_[drawIndex], dirtRoadResources_.packageTextureCount()) : base;
+      if (material.flags & renderer::MapMaterialShadingExtension) shadingExtensionVisible = true;
       if (solidInstances[drawIndex].normalColumns[7] != 0.0f ||
           (material.flags & (renderer::MapMaterialBlend | renderer::MapMaterialAlphaMask |
                              renderer::MapMaterialImpostor | renderer::MapMaterialWater)))
@@ -6995,7 +7324,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       if (masksChanged && !memoryAllocator_->flushBuffer(instanceBuffer_))
         return rhi::SwapchainStatus::FatalError;
     }
-    pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ &&
+    pointLightingSpecializationLastFrame_ = opaqueNoClipLastFrame_ && !shadingExtensionVisible &&
         pointLightingSpecializationEnabled_ && pointLightingPipeline_ != VK_NULL_HANDLE && lightingFrame &&
         lightingFrame->punctualLightParameters[0] >= 0.0f &&
         lightingFrame->punctualLightParameters[0] <= static_cast<float>(renderer::MaximumPunctualLights) &&
@@ -7191,7 +7520,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     vkCmdPushConstants(commandBuffer_, skyPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
                        0, sizeof(skyPush), &skyPush);
-    if(!editorBackground_||(editorSceneEffects_&&editorSceneSky_))
+    // Câmera de jogo com fundo de cor ou não inicializado não desenha o céu.
+    if(editorBackground_?(editorSceneEffects_&&editorSceneSky_):sceneBackground_==0)
       vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
 
     // A grade editorial, depois da geometria opaca e antes do transparente: ela
@@ -7244,7 +7574,14 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       boundMapPipeline = VK_NULL_HANDLE;
     }
 
+    // PK-9: Sorting Priority primeiro (fila Transparent 3000 + prioridade, a
+    // menor desenha antes), depois de trás para a frente.
+    const auto sortingPriority = [&](u32 drawIndex) {
+      return drawIndex < authoredMaterials_.size() ? static_cast<int>(authoredMaterials_[drawIndex].shading.sortingPriority) : 0;
+    };
     std::sort(visibleTransparentDrawOrder_.begin(), visibleTransparentDrawOrder_.end(), [&](u32 left, u32 right) {
+      const int pa=sortingPriority(left),pb=sortingPriority(right);
+      if(pa!=pb) return pa<pb;
       const auto &a=dirtRoadResources_.draws()[left];const auto &b=dirtRoadResources_.draws()[right];
       float da=0,db=0;for(u32 axis=0;axis<3;++axis){const float av=a.boundsCenter[axis]-camera.position[axis];
         const float bv=b.boundsCenter[axis]-camera.position[axis];da+=av*av;db+=bv*bv;}return da>db;
@@ -7266,8 +7603,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
             drawMapPrimitive(drawIndex, nullptr, waterPipeline_, VK_NULL_HANDLE);
         }
         else {
-          drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
-                           transparentDistantPipeline_);
+          const u32 output = transparentBlendOutput(drawIndex);
+          if (output != renderer::MaterialBlendOutputStraight && transparentBlendPipelines_[output] != VK_NULL_HANDLE)
+            drawMapPrimitive(drawIndex, nullptr, transparentBlendPipelines_[output], VK_NULL_HANDLE);
+          else
+            drawMapPrimitive(drawIndex, transparentMaterialPipelines_, transparentPipeline_,
+                             transparentDistantPipeline_);
         }
       }
     }
@@ -7306,9 +7647,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   endGpuRegion(GpuPassClass::Motion);
   beginGpuRegion(GpuPassClass::AutoExposure);
   if(renderingPolicy_.post.dedicatedPass) {
-    auto look=sceneEnvironment_.active?sceneEnvironment_:
-        (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
-    if(editorBackground_&&(!editorSceneEffects_||!editorScenePost_)) look.autoExposure=false;
+    auto look=effectiveSceneLook();
+    if(!viewPostEnabled()) look.exposureMode=renderer::ExposureMode::Fixed;
     const auto record=[&](const renderer::SceneEnvironment &environment) {
       return recordAutoExposure(0,environment,camera,timeSeconds,physicalSceneViewport(),
                                 renderWidth(),renderHeight(),renderTargetWidth(),renderTargetHeight(),
@@ -7316,20 +7656,19 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     };
     if(!record(look)) {
       const std::string diagnostic=autoExposureDiagnostic_;
-      look.autoExposure=false;
+      look.exposureMode=renderer::ExposureMode::Fixed;
       if(!record(look)) return rhi::SwapchainStatus::FatalError;
       autoExposureDiagnostic_=diagnostic;
     }
-  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.autoExposure) {
+  } else if(sceneEnvironment_.active&&sceneEnvironment_.post&&sceneEnvironment_.automaticExposure()) {
     autoExposureDiagnostic_="Exposição automática requer pós-processamento dedicado";
   } else autoExposureDiagnostic_.clear();
   endGpuRegion(GpuPassClass::AutoExposure);
   {
     // Antes do ampliador temporal: ele e os pré-passes usam cópias do conjunto
     // do pós, e a LUT precisa estar amostrável (e atualizada) antes de todos.
-    const bool postEffectsEnabled=!editorBackground_||(editorSceneEffects_&&editorScenePost_);
-    const auto look=sceneEnvironment_.active?sceneEnvironment_:
-        (editorBackground_?renderer::defaultSceneViewEnvironment():renderer::SceneEnvironment{});
+    const bool postEffectsEnabled=viewPostEnabled();
+    const auto look=effectiveSceneLook();
     colorGradingThisFrame_=postPipeline_!=VK_NULL_HANDLE &&
         prepareColorGrading(0,look,postEffectsEnabled&&look.active&&look.post);
     if(colorGradingThisFrame_!=colorGradingReported_) {

@@ -29,6 +29,11 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
+  if(&type==&scene::Camera::descriptor) {
+    const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Luz na ordem do Light Inspector da Unity: Geral (Tipo), Emissão, Volume
   // (alcance e cone), Sombra e Renderização (máscaras).
   if(&type==&scene::Light::descriptor) {
@@ -42,6 +47,40 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
   return groups;
+}
+
+std::vector<std::string_view> componentGroups(const scene::ComponentValue &component,bool lightingWindow) {
+  auto groups=componentGroups(component);
+  if(&component.type()!=&scene::Environment::descriptor) return groups;
+  // Ordem da janela Lighting: Environment (céu), Environment Lighting e
+  // Reflections, Other Settings (neblina); o resto da aparência do céu depois.
+  const auto rank=[](std::string_view group){
+    return group=="Geral"?0:group=="Céu"?1:group=="Atmosfera física"?2:group=="Sol e lua"?3:
+           group=="Luz ambiente"?4:group=="Neblina"?5:group=="Nuvens"?6:7;};
+  std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  if(lightingWindow)
+    std::erase_if(groups,[&](std::string_view group){return group=="Geral"||rank(group)>5;});
+  return groups;
+}
+
+EditorEntityId sceneLightingEnvironment(const runtime::SceneGraph &document,u64 *instance) {
+  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+  EditorEntityId best=kInvalidEntity;u64 bestInstance=0;float bestPriority=0;
+  for(const auto id:ids) {
+    const auto *entity=document.find(id);
+    if(!entity||!document.activeInHierarchy(id)) continue;
+    for(usize i=0;i<entity->components.size();++i) {
+      const auto *component=entity->components.at(i);
+      if(&component->type()!=&scene::Environment::descriptor) continue;
+      const auto &environment=static_cast<const scene::Environment&>(*component);
+      if(!environment.values.active||environment.shape!=renderer::EnvironmentVolumeShape::Global) continue;
+      if(best==kInvalidEntity||environment.values.priority<bestPriority) {
+        best=id;bestInstance=component->instanceId();bestPriority=environment.values.priority;
+      }
+    }
+  }
+  if(instance) *instance=bestInstance;
+  return best;
 }
 
 std::vector<u32> namedPhysicsLayers(const runtime::GameplayLayers &layers) {
@@ -400,14 +439,14 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     const auto *value=entity&&at<entity->components.size()?entity->components.at(at):nullptr;
     if(!value) return outcome;
     const auto groups=value->type().id==std::string_view{"astra.physics.constant_force"}?
-        std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*value);
+        std::vector<std::string_view>{"Força mundo","Força local"}:componentGroups(*value,state.workspace==EditorWorkspace::Lighting);
     if(group<groups.size()) EditorScreenState::flip(state.inspectorSections,std::string(value->type().id)+"/"+std::string(groups[group]));
     return outcome;
   }
   if(widget>=widgetId(EditorWidget::ComponentGroupBase)&&widget<widgetId(EditorWidget::ComponentGroupBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);const auto *value=entity?entity->components.findInstance(state.expandedNative):nullptr;
     if(!value) return outcome;
-    const auto groups=componentGroups(*value);
+    const auto groups=componentGroups(*value,state.workspace==EditorWorkspace::Lighting);
     const auto i=widget-widgetId(EditorWidget::ComponentGroupBase);
     if(i<groups.size()) {state.componentGroup=groups[i];state.propertyPage=0;}
     return outcome;
@@ -495,7 +534,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         is(EditorWidget::ComponentPasteNewBase)||is(EditorWidget::ComponentHelpBase)||is(EditorWidget::ComponentEnableBase)||
         (script&&(is(EditorWidget::ComponentCopyBase)||is(EditorWidget::ComponentPasteBase)||is(EditorWidget::ComponentResetBase)));
     if(generic) {
-      if(!component || state.workspace!=EditorWorkspace::Scene || history.isOpen()) return outcome;
+      if(!component || (state.workspace!=EditorWorkspace::Scene && state.workspace!=EditorWorkspace::Lighting) ||
+         history.isOpen()) return outcome;
       // Como o menu de contexto da Unity, escolher uma ação fecha o menu.
       state.nativeMenu=0;state.scriptMenu=0;
       auto value=*entity;
@@ -559,7 +599,8 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
 
   if(widget>=widgetId(EditorWidget::ComponentAddBase) && widget<widgetId(EditorWidget::ComponentEnumBase)+0x01000000u) {
     const auto *entity=document.find(state.selection);
-    if(!entity || state.workspace!=EditorWorkspace::Scene) return outcome;
+    // A janela Iluminação edita o cartão do Ambiente da cena com os mesmos controles.
+    if(!entity || (state.workspace!=EditorWorkspace::Scene && state.workspace!=EditorWorkspace::Lighting)) return outcome;
     if(state.componentSelection!=state.selection) {
       state.componentSelection=state.selection;state.expandedComponent.clear();state.expandedNative=0;state.nativeMenu=0;state.addingComponent=false;state.componentPage=0;state.expandedScript=0;state.scriptMenu=0;
     }
@@ -589,6 +630,13 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->booleans.size()) return outcome;
         const auto &property=entry.type->booleans[field];
         if(scene::setComponentProperty(value.components,entry.type->id,property.id,!property.read(*component),instance)!=scene::ComponentPropertyStatus::Applied) return outcome;
+        // Câmera física ligada: a focal nasce do campo vertical atual no sensor
+        // (Camera.FieldOfViewToFocalLength), como na Unity.
+        if(property.id=="physical_camera" && entry.type==&scene::Camera::descriptor && !property.read(*component)) {
+          const auto &camera=static_cast<const scene::Camera&>(*component);
+          scene::setComponentProperty(value.components,entry.type->id,"focal_length",
+              scene::cameraFocalLengthForFov(camera.verticalFov,camera.sensorHeight),instance);
+        }
       } else if(operation==widgetId(EditorWidget::ComponentEnumBase)) {
         const u32 field=(widget&0x00ffffffu)>>8;if(field>=entry.type->enums.size()) return outcome;
         state.enumPicker=widget;return outcome;
@@ -784,7 +832,15 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabGui: state.contextMenu=false;state.workspace=EditorWorkspace::Gui;break;
     case EditorWidget::TabScene: state.contextMenu=false;state.workspace = EditorWorkspace::Scene; break;
     case EditorWidget::TabAssets: if(state.assetCount) {state.contextMenu=false;state.workspace=EditorWorkspace::Library;state.libraryKind=11;} break;
-    case EditorWidget::TabLighting: state.contextMenu=false;state.workspace = EditorWorkspace::Lighting; state.selection=document.root(); state.propertyPage=0; break;
+    case EditorWidget::TabLighting: {
+      // Janela Iluminação: abre no Ambiente da cena (ou na raiz, que mostra o
+      // padrão e o botão de personalizar), na aba do céu.
+      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;
+      u64 instance=0;const auto target=sceneLightingEnvironment(document,&instance);
+      state.selection=target!=kInvalidEntity?target:document.root();
+      state.expandedNative=instance;state.componentSelection=state.selection;
+      state.componentGroup="Céu";state.propertyPage=0;break;
+    }
     case EditorWidget::TabProject:
       state.contextMenu=false;state.workspace=EditorWorkspace::Project;state.propertyPage=0;
       state.tagPage=0;state.tagQuery.clear();state.tagPicker=false;state.physicsMatrixPage=0;state.inputActionPage=0;state.inputBindingPage=0;

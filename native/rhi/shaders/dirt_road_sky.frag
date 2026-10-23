@@ -33,7 +33,22 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=3552) vec4 cloudShape;
   layout(offset=3568) vec4 cloudTint;
   layout(offset=3584) vec4 cloudShadow;
+  // V-2: sol verdadeiro, lua da direcional Lua e esfera das estrelas
+  // (DirtRoadFrameUniform::skySun/skyMoon/skyStarRotation).
+  layout(offset=4160) vec4 skySun;
+  layout(offset=4176) vec4 skyMoon;
+  layout(offset=4192) vec4 skyStarRotation[3];
+  layout(offset=4240) vec4 skyNight; // rgb brilho do céu ao luar
 } environment;
+// O céu segue o sol verdadeiro; à noite a luz principal pode ser a Lua.
+vec3 skySunDirection() {
+  vec3 d=environment.skySun.xyz;
+  return dot(d,d)>0.25?normalize(d):normalize(environment.sunDirectionIntensity.xyz);
+}
+float skySunIntensity() {
+  vec3 d=environment.skySun.xyz;
+  return dot(d,d)>0.25?environment.skySun.w:environment.sunDirectionIntensity.w;
+}
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
 // Volumetric Clouds já integradas (rgb pré-multiplicado, a = cobertura).
@@ -163,9 +178,9 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
   vec3 betaRayleigh=vec3(0.005802,0.013558,0.033100)*airDensity;
   vec3 betaAerosol=vec3(0.021000)*aerosolDensity;
   vec3 betaAerosolExtinction=betaAerosol*1.10;
-  float sunIntensity=max(environment.sunDirectionIntensity.w,0.0);
+  float sunIntensity=max(skySunIntensity(),0.0);
   if(sunIntensity<=0.0) return vec3(0.0);
-  vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
+  vec3 sunDirection=skySunDirection();
   vec3 sunColor=max(environment.sunColorAngularRadius.rgb,vec3(0.0));
   vec2 viewDepth;
   vec3 scattered=integrateSingleScattering(origin,viewDirection,viewDistance,
@@ -241,28 +256,36 @@ void main() {
     // Como o Skybox/Procedural da Unity: a cor sai do sol (O'Neil), e o tom e o
     // chão autorais só deslocam o espectro e pintam o chão. Meio-dia, pôr do sol
     // e noite são o mesmo modelo -- girar a luz direcional muda o céu inteiro.
-    vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
+    vec3 sunDirection=skySunDirection();
+    vec3 mie;
     vec3 atmosphereSky=astraProceduralSky(visibleDirection,sunDirection,environment.celestialStars.yzw,
-        environment.skyParameters.rgb,environment.skyParameters.w,2.4);
-    float alignment=clamp(dot(visibleDirection,sunDirection),-1.0,1.0);
-    float angularDistance=acos(alignment);
-    float radius=max(environment.sceneSky.y,0.0001);
-    vec3 disc=celestialSunDisc(angularDistance,radius,pixelAngle);
-    float glare=celestialSunGlare(angularDistance,alignment,radius);
+        environment.skyParameters.rgb,environment.skyParameters.w,2.4,mie);
+    // Sun / Sun Size / Sun Size Convergence: a cor é a do sol atenuada pelo ar
+    // (cOut da Unity, 15x no High Quality, 27x no Simple), dividida pelo brilho
+    // da cor da luz como na Unity: a intensidade do sol não acende o disco.
+    float sunMode=environment.atmosphereDetail.w;
+    vec3 lightColor=max(environment.sunColorAngularRadius.rgb,vec3(0.0));
+    float lightBrightness=clamp(length(lightColor),0.25,1.0);
+    vec3 sunColor=(sunMode>1.5?15.0*clamp(mie,0.0,1.0):27.0*clamp(mie*8000.0,0.0,1.0))*lightColor/lightBrightness;
+    float attenuation=astraProceduralSunAttenuation(visibleDirection,sunDirection,sunMode,
+        environment.sceneSky.y,environment.sceneSky.z);
     // O disco some abaixo do horizonte, como o sol da Unity atrás do chão.
     float aboveGround=smoothstep(-0.01,0.01,visibleDirection.y);
-    atmosphereSky+=environment.sunColorAngularRadius.rgb*(disc+vec3(glare))*environment.sceneSky.z*aboveGround;
+    atmosphereSky+=sunColor*attenuation*aboveGround;
     color=mix(color,atmosphereSky,clamp(environment.sceneSky.x,0.0,1.0));
   }
-  // HDRI e o céu legado usam a proporção relativa skyScale. O modo físico já
-  // integra a intensidade atual do sol e não pode recebê-la uma segunda vez.
+  // PK-1: brilho do céu = Exposure do Skybox (procedural) ou EV do HDRI. O
+  // físico tem a própria intensidade e não recebe uma segunda escala.
   if(environment.sceneSky.w<1.5) color*=environment.sceneAoDetail.z;
   // Lua e estrelas sobre os céus procedural e físico (o HDRI já traz o seu).
   if(environment.sceneSky.w>0.5) {
-    vec3 sunDirection=normalize(environment.sunDirectionIntensity.xyz);
+    vec3 sunDirection=skySunDirection();
     float moonCoverage;
     vec3 moon=celestialMoon(visibleDirection,sunDirection,pixelAngle,moonCoverage);
     float aboveHorizon=smoothstep(-0.012,0.012,visibleDirection.y);
+    // V-2: o céu da noite não é preto: o ar espalha o luar, mais claro perto
+    // do horizonte (mais ar no caminho), como o azul-marinho da Unity à noite.
+    color+=environment.skyNight.rgb*(0.75+0.75*(1.0-clamp(visibleDirection.y,0.0,1.0)))*aboveHorizon;
     color+=moon*aboveHorizon;
     color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
            (1.0-moonCoverage*aboveHorizon);
@@ -272,8 +295,8 @@ void main() {
   if(environment.cloudShadow.z>0.5) {
     vec4 volume=textureLod(cloudVolumeImage,vScreen,0.0);
     color=color*(1.0-volume.a)+volume.rgb;
-  } else if(environment.cloudParameters.x>0.0 && visibleDirection.y>-0.002) {
-    vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
+  } else if(environment.cloudParameters.x>0.0 && visibleDirection.y>0.0) {
+    vec3 toSun=skySunDirection();
     // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
     // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,
     // e o ambiente vem da irradiância integrada do céu. Procedural/HDRI: a cor
@@ -285,12 +308,12 @@ void main() {
     vec3 skyAmbient;
     if(environment.sceneSky.w>1.5) {
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*
-          max(environment.sunDirectionIntensity.w,0.0)*environment.atmosphereScattering.x*(0.9/PI)*daylight;
+          max(skySunIntensity(),0.0)*environment.atmosphereScattering.x*(0.9/PI)*daylight;
       skyAmbient=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0))*(0.9/PI)*
           environment.atmosphereScattering.x+diffuseSky*0.35;
     } else {
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*environment.sceneAoDetail.z*daylight*
-          (environment.sunDirectionIntensity.w>0.0?1.0:0.0);
+          (skySunIntensity()>0.0?1.0:0.0);
       float skyLuminance=dot(diffuseSky,vec3(0.2126,0.7152,0.0722));
       skyAmbient=mix(vec3(skyLuminance),diffuseSky,0.6)*1.1;
     }

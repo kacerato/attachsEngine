@@ -31,10 +31,18 @@ public:
       if(index>=textureCount||index>=bindlessSlots.size()) {diagnostic="Textura de oclusão ainda não foi publicada no renderer.";return false;}
       occlusion=bindlessSlots[index];
     }
+    // PK-9: altura, detalhe e clear coat. Sem bindless o shader não os lê.
+    u32 extraSlots[scene::MaterialExtraTextureCount];
+    for(u32 extra=0;extra<scene::MaterialExtraTextureCount;++extra) {
+      extraSlots[extra]=renderer::MaterialExtensionNoTexture;
+      const u64 index=u64{effective.extraTextures[extra]}+textureBase;
+      if(bindless&&renderer::materialExtraTexturePresent(effective.extraTextures[extra])&&index<textureCount&&index<bindlessSlots.size())
+        extraSlots[extra]=bindlessSlots[index];
+    }
     if(geometry_==geometry&&effective_==effective&&textureBase_==textureBase&&occlusion_==occlusion) return true;
     // Encoded entry1 addresses storage entry0; encoded zero means no extension.
     std::array<float,renderer::MaterialExtensionFloats> extension{};
-    renderer::materialExtensionEntry(effective,material.flags,occlusion,extension.data());
+    renderer::materialExtensionEntry(effective,material.flags,occlusion,extension.data(),renderer::MaterialExtensionNoTexture,extraSlots);
     rhi::VulkanBuffer vertices,indices,instance,materialExtension;
     const auto create=[&](std::span<const u8> bytes,VkBufferUsageFlags usage,rhi::VulkanBuffer &out) {
       rhi::BufferDesc desc{};desc.sizeBytes=bytes.size();desc.usage=usage;
@@ -63,6 +71,7 @@ public:
   VkBuffer extension() const {return extension_.handle();}
   u32 indexCount() const {return geometry_?geometry_->draw.indexCount:0;}
   const renderer::MapMaterialRecord &material() const {return material_;}
+  const scene::MaterialShading &shading() const {return effective_.shading;}
 private:
   rhi::VulkanBuffer vertices_,indices_,instance_,extension_;
   std::shared_ptr<const renderer::MaterialPreviewGeometry> geometry_;

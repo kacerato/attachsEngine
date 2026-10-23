@@ -88,9 +88,9 @@ public:
   //    material, como o passe ShadowCaster), 2 Dupla face (sem culling no mapa
   //    de sombra), 3 Só sombra (não desenha na câmera, só no mapa).
   //  - Receive Shadows: as sombras do sol e das locais escurecem esta malha.
-  //  - Light/Reflection Probes: declarados com os valores da Unity e GRAVADOS,
-  //    mas não são propriedade do Inspector nem da API até existir sonda
-  //    (PK-6): o registro recusa propriedade de capacidade planejada.
+  //  - Light/Reflection Probes: os valores da Unity (Off/Blend Probes e
+  //    Off/Blend Probes/Blend Probes and Skybox/Simple), lidos por desenho em
+  //    renderer/light_probes.cpp e renderer/reflection_probes.cpp (PK-6).
   //  - Rendering Layer Mask: só luzes com uma camada em comum iluminam.
   u32 castShadows=1;
 #include "scene/generated/mesh_renderer_MeshRenderer_fields1.inc"
@@ -291,7 +291,7 @@ public:
     if(version>=5) {
       for(u32 slot=0;slot<slotCount();++slot) {
         unsigned alpha=0,sides=0;float cutoff=.5f;
-        if(!(in>>alpha>>sides>>cutoff) || alpha>MaterialAlphaBlend || sides>MaterialSidesDouble) return false;
+        if(!(in>>alpha>>sides>>cutoff) || alpha>MaterialAlphaBlend || sides>MaterialSidesBack) return false;
         *editSlotSurface(slot)={static_cast<std::uint8_t>(alpha),static_cast<std::uint8_t>(sides),cutoff};
         if(!validMaterialSurface(*editSlotSurface(slot))) return false;
       }
@@ -364,12 +364,23 @@ inline constexpr std::array<ComponentEnumOption,2> meshLightProbeOptions{{{0,"De
 inline constexpr std::array<ComponentEnumOption,4> meshReflectionProbeOptions{{
   {0,"Desligado"},{1,"Misturar sondas"},{2,"Misturar sondas e céu"},{3,"Simples"}
 }};
-inline constexpr std::array<ComponentEnum,2> meshRendererEnums{{
+inline constexpr std::array<ComponentEnum,4> meshRendererEnums{{
   {"cast_shadows","Projetar sombras",meshCastShadowsOptions,
     [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).castShadows;},
     [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).castShadows=value;},
     {"Iluminação","","Ligado respeita a face do material; Dupla face projeta pelas duas; Só sombra some da câmera",nullptr,nullptr,
      "render.shadow.renderer","platform/android/instanced_renderer.cpp → passes de sombra",Invalidate::ShadowMap},true},
+  // PK-6: Probes do Mesh Renderer da Unity 6, agora com consumidor.
+  {"light_probes","Sondas de luz",meshLightProbeOptions,
+    [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).lightProbes;},
+    [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).lightProbes=value;},
+    {"Sondas","","Misturar sondas troca o ambiente do céu pela luz das sondas de luz em volta do objeto",nullptr,nullptr,
+     "render.probe.irradiance","renderer/light_probes.cpp → SH L2 do desenho",Invalidate::Draw},true},
+  {"reflection_probes","Sondas de reflexo",meshReflectionProbeOptions,
+    [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).reflectionProbes;},
+    [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).reflectionProbes=value;},
+    {"Sondas","","Misturar usa as duas sondas mais importantes em volta; \"e céu\" mistura também o céu; Simples usa só a principal",nullptr,nullptr,
+     "render.probe.reflection","renderer/reflection_probes.cpp → mistura do desenho",Invalidate::Draw},true},
   {"rendering_layer_mask","Camadas de renderização",renderingLayerOptions,
     [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).renderingLayerMask;},
     [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).renderingLayerMask=value;},
@@ -457,8 +468,8 @@ inline constexpr std::array<ComponentEnumOption,2> materialOverrideOptions{{
 inline constexpr std::array<ComponentEnumOption,4> materialAlphaModeOptions{{
   {MaterialAlphaKeep,"Herdar"},{MaterialAlphaOpaque,"Opaco"},{MaterialAlphaMask,"Recorte"},{MaterialAlphaBlend,"Mistura"}
 }};
-inline constexpr std::array<ComponentEnumOption,3> materialSidesOptions{{
-  {MaterialSidesKeep,"Herdar"},{MaterialSidesSingle,"Face única"},{MaterialSidesDouble,"Face dupla"}
+inline constexpr std::array<ComponentEnumOption,4> materialSidesOptions{{
+  {MaterialSidesKeep,"Herdar"},{MaterialSidesSingle,"Face única"},{MaterialSidesDouble,"Face dupla"},{MaterialSidesBack,"Só a face de trás"}
 }};
 inline constexpr std::array<ComponentEnumOption,5> materialChannelOptions{{
   {MaterialChannelKeep,"Herdar"},{MaterialChannelR,"R"},{MaterialChannelG,"G"},{MaterialChannelB,"B"},{MaterialChannelA,"A"}

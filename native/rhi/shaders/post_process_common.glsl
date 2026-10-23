@@ -40,6 +40,11 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
   // zw: extensão renderizada / alocação das entradas temporais (profundidade,
   // vetor e máscaras), válida também quando a cor de entrada já foi ampliada.
   layout(offset=3472) vec4 temporalParameters;
+  // PK-5: Color Adjustments (filtro rgb, matiz em graus) e Bloom (tom rgb,
+  // espalhamento; brilho máximo). Ver DirtRoadFrameUniform.
+  layout(offset=4112) vec4 postColorAdjust;
+  layout(offset=4128) vec4 postBloomTint;
+  layout(offset=4144) vec4 postBloomDetail;
 } environment;
 layout(push_constant) uniform PostPushConstants {
   // z bits: 1 bloom, 2 bicúbica, 4 FSR 1, 8 vetor, 16 cobertura estática,
@@ -88,9 +93,23 @@ vec3 applySceneFog(vec2 sourceUv, vec3 color) {
   // dobraria a densidade, e com profundidade de outra resolução.
   // 512: a cor de entrada já recebeu a névoa por texel no pré-passe (256).
   if(environment.sceneFog.x>0.5 && !postFlag(128.0) && !postFlag(512.0)) {
-    float viewDepth=viewDistance(sourceUv);
+    float rawDepth=texture(sceneDepth,clampSourceUv(sourceUv)).r;
+    float viewDepth=viewDistanceFromDepth(rawDepth);
     float falloff=environment.sceneFog.w;
     float opticalDepth;
+    // PK-1: Fog Mode da janela Lighting. x = 1 exponencial, 2 exponencial ao
+    // quadrado, 3 linear (Start/End; a linha da densidade carrega o End).
+    // +4 = a neblina também cobre o céu ("Acompanhar o céu", o visual antigo);
+    // sem isso o Skybox fica limpo, como na Unity (o céu não recebe Fog).
+    float fogMode=environment.sceneFog.x;
+    bool fogsSky=fogMode>4.5;
+    if(fogsSky) fogMode-=4.0;
+    else if(rawDepth>=0.99999) return color;
+    if(fogMode>2.5) {
+      float start=environment.sceneFog.y,end=environment.sceneFogColorDensity.w;
+      float linearFog=clamp((viewDepth-start)/max(end-start,1.0e-4),0.0,1.0);
+      return mix(color,environment.sceneFogColorDensity.rgb,linearFog);
+    }
     if(falloff<=0.0) {
       // Exact legacy path: default/old scenes retain depth-linear exponential fog.
       opticalDepth=environment.sceneFogColorDensity.w*
@@ -141,6 +160,7 @@ vec3 applySceneFog(vec2 sourceUv, vec3 color) {
         opticalDepth=exp(clamp(logDepth,-80.0,log(80.0)));
       }
     }
+    if(fogMode>1.5) opticalDepth*=opticalDepth;
     float fog=1.0-exp(-opticalDepth);
     color=mix(color,environment.sceneFogColorDensity.rgb,clamp(fog,0.0,1.0));
   }
@@ -324,17 +344,19 @@ vec3 bloomNeighborhood(vec2 uv) {
   if (mod(post.texelFlags.z,2.0) < 0.5 || post.bloom.y <= 0.0) return vec3(0.0);
   // 1024: a cadeia já espalhou o brilho por cinco oitavas; cada nível somou
   // a subida do seguinte, por isso a média divide pelo número de níveis.
-  if (postFlag(1024.0)) return texture(bloomChain,uv).rgb*(post.bloom.y/kBloomLevels);
-  vec2 px = post.texelFlags.xy * 2.0;
+  if (postFlag(1024.0))
+    return texture(bloomChain,uv).rgb*environment.postBloomTint.rgb*(post.bloom.y/kBloomLevels);
+  // Scatter: o anel de 8 amostras abre de 2 texels (0, o bloom de antes) a 8.
+  vec2 px = post.texelFlags.xy * 2.0 * exp2(2.0*clamp(environment.postBloomTint.w,0.0,1.0));
   vec3 sum = vec3(0.0);
   const vec2 offsets[8] = vec2[8](
     vec2(-1,-1),vec2(0,-1),vec2(1,-1),vec2(-1,0),
     vec2(1,0),vec2(-1,1),vec2(0,1),vec2(1,1));
   for (int index = 0; index < 8; ++index) {
-    vec3 value = sampleScene(uv + offsets[index] * px);
+    vec3 value = min(sampleScene(uv + offsets[index] * px),vec3(environment.postBloomDetail.x));
     sum += value * smoothstep(post.bloom.x, post.bloom.x + 0.25, luma(value));
   }
-  return sum * (post.bloom.y / 8.0);
+  return sum * environment.postBloomTint.rgb * (post.bloom.y / 8.0);
 }
 
 vec3 linearToSrgb(vec3 color) {
@@ -343,9 +365,28 @@ vec3 linearToSrgb(vec3 color) {
 }
 
 #include "tone_mapping.glsl"
+// Giro de matiz em HSV linear, como o Hue Shift do LutBuilderHdr da Unity.
+vec3 rgbToHsv(vec3 c) {
+  vec4 k=vec4(0.0,-1.0/3.0,2.0/3.0,-1.0);
+  vec4 p=mix(vec4(c.bg,k.wz),vec4(c.gb,k.xy),step(c.b,c.g));
+  vec4 q=mix(vec4(p.xyw,c.r),vec4(c.r,p.yzx),step(p.x,c.r));
+  float d=q.x-min(q.w,q.y);
+  return vec3(abs(q.z+(q.w-q.y)/(6.0*d+1.0e-4)),d/(q.x+1.0e-4),q.x);
+}
+vec3 hsvToRgb(vec3 c) {
+  vec3 p=abs(fract(c.xxx+vec3(1.0,2.0/3.0,1.0/3.0))*6.0-3.0);
+  return c.z*mix(vec3(1.0),clamp(p-1.0,0.0,1.0),c.y);
+}
 vec3 toneMap(vec3 color) {
   float adaptation=automaticExposure.valid!=0u?automaticExposure.ev:0.0;
   color=max(color*environment.parameters.x*exp2(environment.scenePost.x+adaptation),vec3(0.0));
+  // Color Adjustments antes da curva, na ordem da Unity: filtro, depois matiz.
+  color*=environment.postColorAdjust.rgb;
+  if(abs(environment.postColorAdjust.w)>0.01) {
+    vec3 hsv=rgbToHsv(color);
+    hsv.x=fract(hsv.x+environment.postColorAdjust.w/360.0);
+    color=hsvToRgb(hsv);
+  }
   return astraToneMap(color,environment.scenePost.y);
 }
 
@@ -596,6 +637,7 @@ void main() {
     for(int index=0;index<5;++index) {
       vec3 value=taps[index];float weight=weights[index];
       if(prefilter) {
+        value=min(value,vec3(environment.postBloomDetail.x));
         float brightness=luma(value);
         value*=smoothstep(post.bloom.x,post.bloom.x+0.25,brightness);
         weight/=1.0+luma(value);

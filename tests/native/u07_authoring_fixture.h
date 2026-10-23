@@ -77,7 +77,7 @@ inline bool u07Environment(editor::EditorSession &s,editor::EditorEntityId floor
   auto id=g.createEntity(g.root(),runtime::ObjectKind::Folder,"Atmosfera de teste");e=*g.find(id);
   auto &env=static_cast<scene::Environment*>(e.components.add(scene::Environment::descriptor))->values;
   env.sky=renderer::SkyModel::PhysicalAtmosphere;env.fog=true;env.fogDensity=.004f;env.fogStart=18;env.fogHeightFalloff=.1f;
-  env.physicalSkyIntensity=.8f;env.aerosolDensity=.45f;env.bloom=false;env.exposureEv=0;
+  env.physicalSkyIntensity=.8f;env.aerosolDensity=.45f;env.bloom=false;env.exposureCompensation=0;
   if(!g.applyEntityValues(id,e))return false;
   id=g.createEntity(g.root(),runtime::ObjectKind::Folder,"Sol");e=*g.find(id);e.transform.rotationDegrees[0]=50;e.transform.rotationDegrees[1]=-25;
   auto *sun=static_cast<scene::Light*>(e.components.add(scene::Light::descriptor));sun->kind=scene::LightKind::Directional;sun->unit=scene::LightUnit::Engine;sun->intensity=2;

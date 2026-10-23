@@ -22,7 +22,8 @@
             "visible": {
               "cpp": "environmentUsesPost"
             },
-            "capability": "render.post.tonemap"
+            "capability": "render.post.tonemap",
+            "group": "Ajustes de cor"
           }
         },
         {
@@ -39,7 +40,8 @@
             "visible": {
               "cpp": "environmentUsesVignette"
             },
-            "capability": "render.post.tonemap"
+            "capability": "render.post.tonemap",
+            "group": "Vinheta"
           }
         },
         {
@@ -56,7 +58,8 @@
             "visible": {
               "cpp": "environmentUsesFilmGrain"
             },
-            "capability": "render.post.film_grain"
+            "capability": "render.post.film_grain",
+            "group": "Grão de filme"
           }
         }
       ],
@@ -185,7 +188,7 @@
       "items": [
         {
           "id": "indirect_diffuse",
-          "label": "Difuso indireto",
+          "label": "Intensidade",
           "member": "values.indirectDiffuse",
           "presentation": {
             "capability": "render.ambient.hemispheric",
@@ -194,7 +197,7 @@
         },
         {
           "id": "indirect_specular",
-          "label": "Reflexo indireto",
+          "label": "Intensidade dos reflexos",
           "member": "values.indirectSpecular",
           "presentation": {
             "capability": "render.ambient.specular",
@@ -208,13 +211,13 @@
           "cpp": "0"
         },
         "max": {
-          "cpp": "4"
+          "cpp": "8"
         },
         "step": {
           "cpp": ".02f"
         },
         "presentation": {
-          "group": "Luz indireta",
+          "group": "Luz ambiente",
           "unit": "×",
           "help": {
             "cpp": "nullptr"
@@ -384,7 +387,7 @@
       "items": [
         {
           "id": "hdri_rotation_degrees",
-          "label": "Rotação HDRI",
+          "label": "Rotação",
           "member": "values.hdriRotationDegrees",
           "min": {
             "cpp": "-360"
@@ -396,12 +399,15 @@
             "cpp": "1"
           },
           "presentation": {
-            "unit": "°"
+            "unit": "°",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
           "id": "hdri_exposure_ev",
-          "label": "Exposição HDRI",
+          "label": "Exposição",
           "member": "values.hdriExposureEv",
           "min": {
             "cpp": "-16"
@@ -413,14 +419,17 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV"
+            "unit": "EV",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         }
       ],
       "defaults": {
         "type": "Environment",
         "presentation": {
-          "group": "HDRI",
+          "group": "Céu",
           "help": {
             "cpp": "nullptr"
           },
@@ -445,122 +454,165 @@
       "constexpr": true,
       "items": [
         {
-          "id": "auto_exposure_min_ev",
-          "label": "EV mínimo",
-          "member": "values.autoExposureMinEv",
+          "id": "exposure_limit_min",
+          "label": "Limite mínimo",
+          "member": "values.exposureLimitMin",
           "min": {
             "cpp": "-16"
           },
           "max": {
-            "cpp": "16"
+            "cpp": "24"
           },
           "step": {
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV"
+            "unit": "EV",
+            "help": "EV100 mais baixo que a medição pode atingir: a noite não vira dia"
           }
         },
         {
-          "id": "auto_exposure_max_ev",
-          "label": "EV máximo",
-          "member": "values.autoExposureMaxEv",
+          "id": "exposure_limit_max",
+          "label": "Limite máximo",
+          "member": "values.exposureLimitMax",
           "min": {
             "cpp": "-16"
           },
           "max": {
-            "cpp": "16"
+            "cpp": "24"
           },
           "step": {
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV"
+            "unit": "EV",
+            "help": "EV100 mais alto: limita o escurecimento de cenas muito claras"
           }
         },
         {
-          "id": "auto_exposure_low_percent",
-          "label": "Corte baixo",
-          "member": "values.autoExposureLowPercent",
+          "id": "exposure_histogram_low",
+          "label": "Percentual baixo",
+          "member": "values.exposureHistogramLow",
           "min": {
             "cpp": "0"
           },
           "max": {
-            "cpp": "1"
+            "cpp": "100"
           },
           "step": {
-            "cpp": ".01f"
+            "cpp": "1"
           },
           "presentation": {
-            "unit": ""
+            "unit": "%",
+            "help": "Descarta os pixels mais escuros do histograma",
+            "visible": {
+              "cpp": "environmentUsesExposureHistogram"
+            }
           }
         },
         {
-          "id": "auto_exposure_high_percent",
-          "label": "Corte alto",
-          "member": "values.autoExposureHighPercent",
+          "id": "exposure_histogram_high",
+          "label": "Percentual alto",
+          "member": "values.exposureHistogramHigh",
           "min": {
             "cpp": "0"
           },
           "max": {
-            "cpp": "1"
+            "cpp": "100"
           },
           "step": {
-            "cpp": ".01f"
+            "cpp": "1"
           },
           "presentation": {
-            "unit": ""
+            "unit": "%",
+            "help": "Descarta os pixels mais claros do histograma",
+            "visible": {
+              "cpp": "environmentUsesExposureHistogram"
+            }
           }
         },
         {
-          "id": "auto_exposure_target_grey",
-          "label": "Cinza alvo",
-          "member": "values.autoExposureTargetGrey",
+          "id": "exposure_target_mid_grey",
+          "label": "Cinza médio alvo",
+          "member": "values.exposureTargetMidGrey",
           "min": {
-            "cpp": ".01f"
+            "cpp": ".05f"
           },
           "max": {
-            "cpp": "1"
+            "cpp": ".5f"
           },
           "step": {
-            "cpp": ".01f"
+            "cpp": ".005f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "help": "Cinza para o qual a média medida é mapeada (12,5%, 14% ou 18%)",
+            "visible": {
+              "cpp": "environmentNeverVisible"
+            }
           }
         },
         {
-          "id": "auto_exposure_speed_up",
-          "label": "Velocidade ao escurecer",
-          "member": "values.autoExposureSpeedUp",
+          "id": "exposure_speed_dark_to_light",
+          "label": "Escuro para claro",
+          "member": "values.exposureSpeedDarkToLight",
           "min": {
-            "cpp": ".01f"
+            "cpp": ".001f"
           },
           "max": {
-            "cpp": "20"
+            "cpp": "100"
           },
           "step": {
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV/s"
+            "unit": "",
+            "help": "Velocidade da adaptação ao sair do escuro para o claro",
+            "visible": {
+              "cpp": "environmentUsesProgressiveExposure"
+            }
           }
         },
         {
-          "id": "auto_exposure_speed_down",
-          "label": "Velocidade ao clarear",
-          "member": "values.autoExposureSpeedDown",
+          "id": "exposure_speed_light_to_dark",
+          "label": "Claro para escuro",
+          "member": "values.exposureSpeedLightToDark",
           "min": {
-            "cpp": ".01f"
+            "cpp": ".001f"
           },
           "max": {
-            "cpp": "20"
+            "cpp": "100"
           },
           "step": {
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "EV/s"
+            "unit": "",
+            "help": "Velocidade da adaptação ao entrar no escuro",
+            "visible": {
+              "cpp": "environmentUsesProgressiveExposure"
+            }
+          }
+        },
+        {
+          "id": "exposure_fixed",
+          "label": "Exposição fixa",
+          "member": "values.fixedExposure",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "24"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "unit": "EV",
+            "help": "EV100 da câmera: maior escurece",
+            "visible": {
+              "cpp": "environmentUsesFixedExposure"
+            }
           }
         }
       ],
@@ -606,7 +658,7 @@
           "member": "values.fog",
           "presentation": {
             "group": "Neblina",
-            "help": "Aplica neblina exponencial uniforme ou com decaimento por altura",
+            "help": "Other Settings › Fog da janela Lighting: linear, exponencial ou exponencial ao quadrado",
             "visible": {
               "cpp": "nullptr"
             },
@@ -622,11 +674,11 @@
         },
         {
           "id": "post",
-          "label": "Pós-processamento",
+          "label": "Pós-processamento ativo",
           "member": "values.post",
           "presentation": {
-            "group": "Pós",
-            "help": "Ativa os overrides autorais desta cena",
+            "group": "Tonemapping",
+            "help": "Liga o pós desta vista; a curva vem logo abaixo",
             "visible": {
               "cpp": "nullptr"
             },
@@ -641,51 +693,11 @@
           }
         },
         {
-          "id": "auto_exposure",
-          "label": "Exposição automática",
-          "member": "values.autoExposure",
-          "presentation": {
-            "group": "Exposição",
-            "help": "Mede luminância HDR e adapta a exposição por câmera",
-            "visible": {
-              "cpp": "environmentUsesPost"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.auto_exposure",
-            "consumer": "platform/android/instanced_auto_exposure.inl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
-          "id": "auto_exposure_center_weighted",
-          "label": "Peso central",
-          "member": "values.autoExposureCenterWeighted",
-          "presentation": {
-            "group": "Exposição",
-            "help": "Prioriza o centro da imagem na medição",
-            "visible": {
-              "cpp": "environmentUsesAutoExposure"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.auto_exposure",
-            "consumer": "platform/android/instanced_auto_exposure.inl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
           "id": "bloom",
-          "label": "Bloom",
+          "label": "Ativo",
           "member": "values.bloom",
           "presentation": {
-            "group": "Pós",
+            "group": "Bloom",
             "help": "Espalha altas luzes antes do tonemap",
             "visible": {
               "cpp": "environmentUsesPost"
@@ -702,10 +714,10 @@
         },
         {
           "id": "vignette",
-          "label": "Vinheta",
+          "label": "Ativo",
           "member": "values.vignette",
           "presentation": {
-            "group": "Pós",
+            "group": "Vinheta",
             "help": "Escurece gradualmente as bordas",
             "visible": {
               "cpp": "environmentUsesPost"
@@ -722,10 +734,10 @@
         },
         {
           "id": "film_grain",
-          "label": "Grão de filme",
+          "label": "Ativo",
           "member": "values.filmGrain",
           "presentation": {
-            "group": "Pós",
+            "group": "Grão de filme",
             "help": "Adiciona grão sensível à luminância depois da resolução temporal",
             "visible": {
               "cpp": "environmentUsesPost"
@@ -742,7 +754,7 @@
         },
         {
           "id": "ambient_occlusion",
-          "label": "Oclusão ambiente",
+          "label": "Ativo",
           "member": "values.ambientOcclusion",
           "presentation": {
             "group": "Oclusão ambiente",
@@ -788,7 +800,7 @@
           "label": "Sobrescrever neblina",
           "member": "overrideFog",
           "presentation": {
-            "group": "Volume",
+            "group": "Neblina",
             "help": "Participa da mistura de neblina",
             "visible": {
               "cpp": "nullptr"
@@ -808,11 +820,11 @@
         },
         {
           "id": "override_post",
-          "label": "Sobrescrever pós",
+          "label": "Sobrescrever Tonemapping",
           "member": "overridePost",
           "presentation": {
-            "group": "Volume",
-            "help": "Participa da mistura de exposição e pós",
+            "group": "Tonemapping",
+            "help": "Este volume decide a curva de Tonemapping e a chave geral do pós",
             "visible": {
               "cpp": "nullptr"
             },
@@ -834,7 +846,7 @@
           "label": "Sobrescrever luz indireta",
           "member": "overrideIndirect",
           "presentation": {
-            "group": "Volume",
+            "group": "Luz indireta",
             "help": "Participa da mistura de difuso e reflexo indiretos",
             "visible": {
               "cpp": "nullptr"
@@ -853,12 +865,173 @@
           }
         },
         {
+          "id": "override_exposure",
+          "label": "Sobrescrever exposição",
+          "member": "overrideExposure",
+          "presentation": {
+            "group": "Exposição",
+            "help": "Marcado: este volume decide exposição. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.auto_exposure",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_bloom",
+          "label": "Sobrescrever bloom",
+          "member": "overrideBloom",
+          "presentation": {
+            "group": "Bloom",
+            "help": "Marcado: este volume decide bloom. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_vignette",
+          "label": "Sobrescrever vinheta",
+          "member": "overrideVignette",
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Marcado: este volume decide vinheta. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_color_adjustments",
+          "label": "Sobrescrever ajustes de cor",
+          "member": "overrideColorAdjustments",
+          "presentation": {
+            "group": "Ajustes de cor",
+            "help": "Marcado: este volume decide ajustes de cor. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.tonemap",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_color_grading",
+          "label": "Sobrescrever cor",
+          "member": "overrideColorGrading",
+          "presentation": {
+            "group": "Cor",
+            "help": "Marcado: este volume decide cor. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.color_grading",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_film_grain",
+          "label": "Sobrescrever grão de filme",
+          "member": "overrideFilmGrain",
+          "presentation": {
+            "group": "Grão de filme",
+            "help": "Marcado: este volume decide grão de filme. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.film_grain",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_ambient_occlusion",
+          "label": "Sobrescrever oclusão ambiente",
+          "member": "overrideAmbientOcclusion",
+          "presentation": {
+            "group": "Oclusão ambiente",
+            "help": "Marcado: este volume decide oclusão ambiente. Desmarcado: herda do volume de prioridade menor",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.ambient_occlusion",
+            "consumer": "renderer/scene_environment.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
           "id": "override_clouds",
           "label": "Sobrescrever nuvens",
           "member": "overrideClouds",
           "presentation": {
-            "group": "Volume",
-            "help": "Participa da mistura do Cloud Layer, separado do céu",
+            "group": "Nuvens",
+            "help": "Marcado: este volume decide as nuvens. Desmarcado: herda do volume de prioridade menor",
             "visible": {
               "cpp": "nullptr"
             },
@@ -886,7 +1059,7 @@
               "cpp": "environmentUsesPhysicalAtmosphere"
             },
             "editable": {
-              "cpp": "nullptr"
+              "cpp": "environmentSkyIsLocal"
             },
             "capability": "render.environment.physical_atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
@@ -989,7 +1162,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -998,6 +1171,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1015,7 +1191,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1024,6 +1200,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1041,7 +1220,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1050,6 +1229,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1067,7 +1249,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentNeverVisible"
@@ -1076,6 +1258,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1093,7 +1278,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentNeverVisible"
@@ -1102,6 +1287,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1119,7 +1307,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentNeverVisible"
@@ -1128,6 +1316,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1145,7 +1336,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1154,6 +1345,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1171,7 +1365,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1180,6 +1374,9 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1197,7 +1394,7 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1206,24 +1403,27 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
         {
           "id": "atmosphere",
-          "label": "Força atmosférica",
+          "label": "Espessura da atmosfera",
           "member": "values.atmosphere",
           "min": {
             "cpp": "0"
           },
           "max": {
-            "cpp": "1"
+            "cpp": "5"
           },
           "step": {
             "cpp": ".02f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Céu",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesAtmosphere"
@@ -1232,12 +1432,15 @@
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
         {
           "id": "sun_disk_degrees",
-          "label": "Diâmetro do sol",
+          "label": "Diâmetro do disco solar",
           "member": "values.sunDiskDegrees",
           "min": {
             "cpp": ".05f"
@@ -1249,15 +1452,18 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Atmosfera física",
             "unit": "°",
             "visible": {
-              "cpp": "environmentUsesProceduralSky"
+              "cpp": "environmentUsesPhysicalAtmosphere"
             },
             "capability": "render.environment.atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1275,15 +1481,18 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "group": "Atmosfera",
+            "group": "Atmosfera física",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesProceduralSky"
+              "cpp": "environmentUsesPhysicalAtmosphere"
             },
             "capability": "render.environment.atmosphere",
             "consumer": "rhi/shaders/dirt_road_sky.frag",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
             }
           }
         },
@@ -1408,7 +1617,7 @@
             "group": "Neblina",
             "unit": "1/m",
             "visible": {
-              "cpp": "environmentUsesFog"
+              "cpp": "environmentUsesExponentialFog"
             },
             "capability": "render.environment.fog",
             "consumer": "rhi/shaders/post_process_common.glsl",
@@ -1460,7 +1669,7 @@
             "group": "Neblina",
             "unit": "m",
             "visible": {
-              "cpp": "environmentUsesFog"
+              "cpp": "environmentUsesExponentialFog"
             },
             "capability": "render.environment.fog",
             "consumer": "rhi/shaders/post_process_common.glsl",
@@ -1486,7 +1695,7 @@
             "group": "Neblina",
             "unit": "1/m",
             "visible": {
-              "cpp": "environmentUsesFog"
+              "cpp": "environmentUsesExponentialFog"
             },
             "capability": "render.environment.fog",
             "consumer": "rhi/shaders/post_process_common.glsl",
@@ -1496,9 +1705,9 @@
           }
         },
         {
-          "id": "exposure_ev",
+          "id": "exposure_compensation",
           "label": "Compensação",
-          "member": "values.exposureEv",
+          "member": "values.exposureCompensation",
           "min": {
             "cpp": "-16"
           },
@@ -1514,11 +1723,12 @@
             "visible": {
               "cpp": "environmentUsesPost"
             },
-            "capability": "render.post.tonemap",
-            "consumer": "rhi/shaders/post_process_common.glsl",
+            "capability": "render.post.auto_exposure",
+            "consumer": "platform/android/instanced_auto_exposure.inl",
             "invalidates": {
               "cpp": "Invalidate::Policy"
-            }
+            },
+            "help": "Soma à exposição medida ou fixa: positivo clareia"
           }
         },
         {
@@ -1535,7 +1745,7 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "group": "Pós",
+            "group": "Bloom",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesBloom"
@@ -1561,7 +1771,7 @@
             "cpp": ".02f"
           },
           "presentation": {
-            "group": "Pós",
+            "group": "Bloom",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesBloom"
@@ -1587,7 +1797,7 @@
             "cpp": ".02f"
           },
           "presentation": {
-            "group": "Pós",
+            "group": "Ajustes de cor",
             "unit": "",
             "visible": {
               "cpp": "environmentUsesPost"
@@ -1632,7 +1842,10 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": "×"
+            "unit": "×",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1649,7 +1862,10 @@
             "cpp": ".02f"
           },
           "presentation": {
-            "unit": "×"
+            "unit": "×",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1666,7 +1882,10 @@
             "cpp": ".02f"
           },
           "presentation": {
-            "unit": "×"
+            "unit": "×",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1683,7 +1902,10 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "unit": "g"
+            "unit": "g",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1700,7 +1922,10 @@
             "cpp": "1"
           },
           "presentation": {
-            "unit": "km"
+            "unit": "km",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1717,7 +1942,10 @@
             "cpp": ".001f"
           },
           "presentation": {
-            "unit": "km"
+            "unit": "km",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1734,7 +1962,10 @@
             "cpp": ".1f"
           },
           "presentation": {
-            "unit": "km"
+            "unit": "km",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1751,7 +1982,10 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": "km"
+            "unit": "km",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1768,7 +2002,10 @@
             "cpp": "1"
           },
           "presentation": {
-            "unit": "km"
+            "unit": "km",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -1785,7 +2022,10 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         }
       ],
@@ -2385,7 +2625,13 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesPhysicalAtmosphere"
+            },
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -2402,7 +2648,10 @@
             "cpp": ".01f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -2419,7 +2668,10 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": "°"
+            "unit": "°",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -2436,7 +2688,10 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         },
         {
@@ -2453,7 +2708,10 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
           }
         }
       ],
@@ -2477,6 +2735,256 @@
           }
         }
       }
+    },
+    {
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "name": "environmentPostExtraNumbers",
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "consumer": "rhi/shaders/post_process_common.glsl",
+          "invalidates": {
+            "cpp": "Invalidate::Policy"
+          }
+        }
+      },
+      "items": [
+        {
+          "id": "post_exposure",
+          "label": "Pós-exposição",
+          "member": "values.postExposure",
+          "min": {
+            "cpp": "-16"
+          },
+          "max": {
+            "cpp": "16"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "EV",
+            "help": "Clareia ou escurece depois da exposição e antes do tonemap",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.r",
+          "label": "Filtro R",
+          "member": "values.colorFilter[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.g",
+          "label": "Filtro G",
+          "member": "values.colorFilter[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "color_filter.b",
+          "label": "Filtro B",
+          "member": "values.colorFilter[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "",
+            "help": "Multiplica a cor da imagem",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "hue_shift",
+          "label": "Giro de matiz",
+          "member": "values.hueShift",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Ajustes de cor",
+            "unit": "°",
+            "help": "Gira todas as cores no círculo de matiz",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "capability": "render.post.tonemap"
+          }
+        },
+        {
+          "id": "bloom_scatter",
+          "label": "Espalhamento",
+          "member": "values.bloomScatter",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Quanto o brilho se espalha em volta das luzes",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.r",
+          "label": "Tom R",
+          "member": "values.bloomTint[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.g",
+          "label": "Tom G",
+          "member": "values.bloomTint[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_tint.b",
+          "label": "Tom B",
+          "member": "values.bloomTint[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Cor do brilho",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        },
+        {
+          "id": "bloom_clamp",
+          "label": "Brilho máximo",
+          "member": "values.bloomClamp",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "65472"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "unit": "",
+            "help": "Corta pixels mais claros que isto antes do bloom",
+            "visible": {
+              "cpp": "environmentUsesBloom"
+            },
+            "capability": "render.post.bloom"
+          }
+        }
+      ]
     },
     {
       "name": "environmentCloudNumbers",
@@ -2841,6 +3349,405 @@
           }
         }
       ]
+    },
+    {
+      "name": "environmentLightingNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "sky_exposure",
+          "label": "Exposição",
+          "member": "values.skyExposure",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Céu",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAtmosphere"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/dirt_road_sky.frag",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
+          }
+        },
+        {
+          "id": "sun_size",
+          "label": "Tamanho do sol",
+          "member": "values.sunSize",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".005f"
+          },
+          "presentation": {
+            "group": "Céu",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesProceduralSun"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/sky_procedural.glsl",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
+          }
+        },
+        {
+          "id": "sun_size_convergence",
+          "label": "Convergência do sol",
+          "member": "values.sunSizeConvergence",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "10"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Céu",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesHighQualitySun"
+            },
+            "capability": "render.environment.atmosphere",
+            "consumer": "rhi/shaders/sky_procedural.glsl",
+            "editable": {
+              "cpp": "environmentSkyIsLocal"
+            }
+          }
+        },
+        {
+          "id": "ambient_sky_color.r",
+          "label": "Céu R",
+          "member": "values.ambientSkyColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_sky_color.g",
+          "label": "Céu G",
+          "member": "values.ambientSkyColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_sky_color.b",
+          "label": "Céu B",
+          "member": "values.ambientSkyColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_equator_color.r",
+          "label": "Equador R",
+          "member": "values.ambientEquatorColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_equator_color.g",
+          "label": "Equador G",
+          "member": "values.ambientEquatorColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_equator_color.b",
+          "label": "Equador B",
+          "member": "values.ambientEquatorColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_ground_color.r",
+          "label": "Chão R",
+          "member": "values.ambientGroundColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_ground_color.g",
+          "label": "Chão G",
+          "member": "values.ambientGroundColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_ground_color.b",
+          "label": "Chão B",
+          "member": "values.ambientGroundColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientGradient"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_color.r",
+          "label": "Cor ambiente R",
+          "member": "values.ambientColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientColor"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_color.g",
+          "label": "Cor ambiente G",
+          "member": "values.ambientColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientColor"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "ambient_color.b",
+          "label": "Cor ambiente B",
+          "member": "values.ambientColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Luz ambiente",
+            "unit": "",
+            "visible": {
+              "cpp": "environmentUsesAmbientColor"
+            },
+            "capability": "render.ambient.hemispheric",
+            "consumer": "renderer/environment_ambient.cpp"
+          }
+        },
+        {
+          "id": "fog_end",
+          "label": "Fim",
+          "member": "values.fogEnd",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1000000"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Neblina",
+            "unit": "m",
+            "visible": {
+              "cpp": "environmentUsesLinearFog"
+            },
+            "capability": "render.environment.fog",
+            "consumer": "rhi/shaders/post_process_common.glsl"
+          }
+        }
+      ],
+      "defaults": {
+        "type": "Environment",
+        "presentation": {
+          "help": {
+            "cpp": "nullptr"
+          },
+          "editable": {
+            "cpp": "nullptr"
+          },
+          "invalidates": {
+            "cpp": "Invalidate::Draw"
+          }
+        }
+      }
     }
   ],
   "field_groups": [
@@ -2852,7 +3759,14 @@
         "environmentBooleans/override_fog",
         "environmentBooleans/override_post",
         "environmentBooleans/override_indirect",
-        "environmentBooleans/override_clouds"
+        "environmentBooleans/override_clouds",
+        "environmentBooleans/override_exposure",
+        "environmentBooleans/override_bloom",
+        "environmentBooleans/override_vignette",
+        "environmentBooleans/override_color_adjustments",
+        "environmentBooleans/override_color_grading",
+        "environmentBooleans/override_film_grain",
+        "environmentBooleans/override_ambient_occlusion"
       ]
     }
   ]

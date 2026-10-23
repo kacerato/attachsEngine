@@ -109,8 +109,12 @@ resources::AssetGuid EditorSession::importUnityMaterial(const std::string &path,
       diagnostic="Textura ausente ou inacessível: "+texturePath;return {};
     }
     resources::TextureProfile profile;
-    profile.interpretation=texture.binding==1?resources::TextureInterpretationNormal:
-      (texture.binding==0||texture.binding==3?resources::TextureInterpretationColor:resources::TextureInterpretationData);
+    // PK-9: as extras sobem como o binding que seguem (detalhe de cor é cor,
+    // normal de detalhe é normal, altura/máscara/verniz são dado).
+    const u32 publication=texture.binding>=scene::MaterialExtraTextureBindingBase?
+      scene::materialExtraPublicationBinding(texture.binding-scene::MaterialExtraTextureBindingBase):texture.binding;
+    profile.interpretation=publication==1?resources::TextureInterpretationNormal:
+      (publication==0||publication==3?resources::TextureInterpretationColor:resources::TextureInterpretationData);
     const auto textureHash=Sha256::hex(encoded);
     textureSources.push_back({texturePath,textureHash});
     const auto *known=nextAssets.findByPath(texturePath);
@@ -139,7 +143,8 @@ resources::AssetGuid EditorSession::importUnityMaterial(const std::string &path,
     }
     if(std::find(dependencies.begin(),dependencies.end(),guid)==dependencies.end()) dependencies.push_back(guid);
     if(texture.binding<scene::MaterialTextureCount) {material.textures[texture.binding]=guid;material.sampling[texture.binding]=texture.sampling;}
-    else {material.occlusionTexture=guid;material.sampling[2]=texture.sampling;}
+    else if(texture.binding==scene::MaterialOcclusionTextureBinding) {material.occlusionTexture=guid;material.sampling[2]=texture.sampling;}
+    else material.extraTextures[texture.binding-scene::MaterialExtraTextureBindingBase]=guid;
   }
   if(!material.valid()) {diagnostic="Material convertido inválido.";return {};}
   if(!EditorImportTransaction::read(source,bytes,256u*1024u)||Sha256::hex(bytes)!=sourceHash) {
