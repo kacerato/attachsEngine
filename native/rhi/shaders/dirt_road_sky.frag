@@ -292,10 +292,9 @@ void main() {
   }
   // Nuvens por cima de tudo: escondem sol, lua e estrelas. Volumétricas vêm
   // prontas do passe próprio; a camada 2D é integrada aqui.
-  if(environment.cloudShadow.z>0.5) {
-    vec4 volume=textureLod(cloudVolumeImage,vScreen,0.0);
-    color=color*(1.0-volume.a)+volume.rgb;
-  } else if(environment.cloudParameters.x>0.0 && visibleDirection.y>0.0) {
+  vec4 volume=environment.cloudShadow.z>0.5?textureLod(cloudVolumeImage,vScreen,0.0):vec4(0.0);
+  if(environment.cloudParameters.x>0.0 &&
+     (volume.a>0.001 || (environment.cloudShadow.z<0.5 && visibleDirection.y>0.0))) {
     vec3 toSun=skySunDirection();
     // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
     // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,
@@ -317,7 +316,16 @@ void main() {
       float skyLuminance=dot(diffuseSky,vec3(0.2126,0.7152,0.0722));
       skyAmbient=mix(vec3(skyLuminance),diffuseSky,0.6)*1.1;
     }
-    color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient,pixelAngle);
+    if(environment.cloudShadow.z>0.5) {
+      // Volumetric Clouds: os fatores do passe próprio viram cor com as mesmas
+      // radiâncias da camada 2D; longe a nuvem se perde na névoa do horizonte.
+      float distanceKm=volume.b/volume.a;
+      float fade=mix(1.0,0.1,1.0-exp(-distanceKm/55.0))*smoothstep(-0.002,0.03,visibleDirection.y)*
+                 environment.cloudParameters.x;
+      vec3 cloud=(sunRadiance*volume.r+skyAmbient*volume.g)*environment.cloudTint.rgb;
+      color=color*(1.0-volume.a*fade)+cloud*fade;
+    } else
+      color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient,pixelAngle);
   }
   if(environment.scenePost.z<0.5)
     color=astraToneMap(color*environment.parameters.x*exp2(environment.scenePost.x),environment.scenePost.y);

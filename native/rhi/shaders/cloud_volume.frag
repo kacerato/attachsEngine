@@ -59,35 +59,49 @@ float henyeyGreenstein(float cosine,float g) {
   return (1.0-g2)/(4.0*PI*pow(max(1.0+g2-2.0*g*cosine,1e-4),1.5));
 }
 
+// Mancha de cobertura do mapa 2D. O mapa da camada 2D tem ruas ao longo de z;
+// a média com uma cópia girada 60° (e noutra escala) deixa as manchas redondas.
+float cloudVolumePatch(vec2 weatherUv,float lod) {
+  vec2 rotated=vec2(weatherUv.x*0.5-weatherUv.y*0.866,weatherUv.x*0.866+weatherUv.y*0.5)*0.77+vec2(0.31);
+  float m=(textureLod(cloudMap,weatherUv,lod).r+textureLod(cloudMap,rotated,lod).r)*0.5;
+  return cloudCumulusFromMap(vec3(0.5+(m-0.5)*1.6,0.0,0.5));
+}
+
 // Densidade (0..1) num ponto a `p` km do observador, com altura relativa
-// `height` na camada. `cheap` pula a erosão (marcha de luz).
-float cloudVolumeDensity(vec3 p,float height,float lod,bool cheap) {
-  vec2 weatherUv=cloudLayerUv(p.xz*1000.0);
-  // Cobertura suave do mapa: onde há cúmulos e quão densos.
-  float coverage=cloudCumulusFromMap(vec3(textureLod(cloudMap,weatherUv,lod+1.0).r,0.0,0.5));
-  if(coverage<=0.0) return 0.0;
-  // Perfil de cúmulo: base reta e rápida, topo que sobe onde a coluna é densa.
-  float top=mix(0.4,1.0,coverage);
+// `height` na camada e `distanceKm` do olho. `cheap` pula a erosão (marcha de luz).
+float cloudVolumeDensity(vec3 p,float height,float lod,float distanceKm,bool cheap) {
+  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0),lod);
+  if(patchValue<=0.0) return 0.0;
+  // Cobertura local abaixo de ~0,6: o ruído 3D recorta cúmulos separados.
+  float coverage=patchValue*(0.05+0.6*environment.cloudParameters.y);
+  // Perfil de cúmulo: base reta e rápida, topo que sobe onde a mancha é densa.
+  float top=0.45+0.55*patchValue;
   float profile=smoothstep(0.0,0.07,height)*smoothstep(top,top*0.5,height);
   if(profile<=0.0) return 0.0;
-  // Forma: o ruído 3D repete a cada metade do mapa e anda com o mesmo vento.
+  // Forma (Schneider): Perlin-Worley remapeado pelo fBm de Worley; repete a
+  // cada metade do mapa e anda com o mesmo vento. Longe o detalhe some (o ruído
+  // 3D não tem mips): sem moiré no horizonte.
+  float detail=exp(-distanceKm/25.0);
   vec3 world=vec3(p.x*1000.0-environment.cloudShape.z,p.y*1000.0,p.z*1000.0-environment.cloudShape.w);
   vec3 q=world*environment.cloudShape.x*2.0;
   vec4 n=textureLod(cloudShapeNoise,q,0.0);
   float fbm=n.g*0.625+n.b*0.25+n.a*0.125;
-  float shape=clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0);
+  float shape=mix(0.62,clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0),detail);
   float base=mix(1.0,shape,environment.cloudVolume.x)*profile;
   float cloud=clamp(remapValue(base,1.0-coverage,1.0,0.0,1.0),0.0,1.0)*coverage;
   if(cloud<=0.0 || cheap) return cloud;
   // Erosão: rolos finos no topo, fiapos na base.
   vec3 e3=textureLod(cloudErosionNoise,q*5.0,0.0).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
-  erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
+  erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0))*detail;
   return clamp(remapValue(cloud,erosion*environment.cloudVolume.y*0.45,1.0,0.0,1.0),0.0,1.0);
 }
 
 void main() {
   vec3 viewDirection=normalize(vDirection);
+  // Saída sem unidade, somada pela opacidade de cada amostra: r = luz do sol
+  // (transmitância rumo ao sol x fase), g = luz ambiente, b = distância (km),
+  // a = cobertura. O céu converte em cor com as mesmas radiâncias da camada 2D.
   vec4 result=vec4(0.0);
   if(viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
     float y=max(viewDirection.y,0.0);
@@ -104,33 +118,23 @@ void main() {
     float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
     float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy+5.588238*frameIndex,vec2(0.06711056,0.00583715))));
     vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
-    float daylight=smoothstep(-0.06,0.06,toSun.y);
-    vec3 sunRadiance;
-    vec3 ambient;
-    if(environment.sceneSky.w>1.5) {
-      sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*max(environment.sunDirectionIntensity.w,0.0)*
-          environment.atmosphereScattering.x*daylight;
-      ambient=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0))*(1.0/PI)*environment.atmosphereScattering.x;
-    } else {
-      sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*environment.sceneAoDetail.z*daylight*
-          (environment.sunDirectionIntensity.w>0.0?PI:0.0);
-      ambient=max(environment.ambientColorStrength.rgb,vec3(0.0))*environment.sceneAoDetail.z;
-    }
-    ambient*=environment.cloudTint.w;
     float extinction=mix(8.0,48.0,environment.cloudParameters.w);   // por km com densidade 1
     float cosine=dot(viewDirection,toSun);
     float phase=mix(henyeyGreenstein(cosine,0.8),henyeyGreenstein(cosine,-0.3),0.35)*4.0*PI;
-    float lod=clamp(log2(max(startKm,1.0)/4.0),0.0,4.0);
+    // Mip do mapa pela área do pixel neste alvo, como a camada 2D faz.
+    float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
+    float pixelAngle=2.0/(focal*float(textureSize(cloudHistory,0).y));
+    float texelKm=1.0/(environment.cloudShape.x*1000.0*256.0);
     float transmittance=1.0;
-    vec3 color=vec3(0.0);
-    float weightedDistance=0.0;
+    vec3 sums=vec3(0.0);
     for(int i=0;i<64;++i) {
       if(i>=steps) break;
       float t=startKm+(float(i)+jitter)*stepKm;
       vec3 p=viewDirection*t;
       float height=(cloudPointHeightKm(p)-baseKm)/thicknessKm;
       if(height<0.0 || height>1.0) continue;
-      float density=cloudVolumeDensity(p,height,lod,false);
+      float lod=clamp(log2(max(t*pixelAngle,1e-6)/texelKm)-1.0,0.0,2.0);
+      float density=cloudVolumeDensity(p,height,lod,t,false);
       if(density<=0.003) continue;
       // Marcha de luz: 4 passos crescentes rumo ao sol, sem erosão.
       float optical=0.0;
@@ -139,27 +143,21 @@ void main() {
         vec3 lp=p+toSun*d;
         float lh=(cloudPointHeightKm(lp)-baseKm)/thicknessKm;
         if(lh>1.0) break;
-        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,true)*thicknessKm*0.14;
+        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,t,true)*thicknessKm*0.14;
       }
-      float beer=exp(-optical*extinction);
-      float powder=1.0-exp(-optical*extinction*2.0-0.15);
-      float sunLight=beer*mix(1.0,powder,0.65)*1.4;
-      vec3 scattered=sunRadiance*sunLight*phase+ambient*mix(0.35,1.0,height);
+      // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
+      float od=optical*extinction;
+      float beer=exp(-od)+0.5*exp(-od*0.25)+0.25*exp(-od*0.0625);
+      float powder=1.0-exp(-density*extinction*0.08-0.05);
+      float sunLight=beer*(0.6+0.4*powder)*(0.5+0.5*phase);
+      float ambientLight=(0.15+0.85*height)*(0.75+0.25*(1.0-density));
       float sampleTransmittance=exp(-density*extinction*stepKm);
       float absorbed=transmittance*(1.0-sampleTransmittance);
-      color+=absorbed*scattered;
-      weightedDistance+=absorbed*t;
+      sums+=absorbed*vec3(sunLight,ambientLight,t);
       transmittance*=sampleTransmittance;
       if(transmittance<0.02) break;
     }
-    float alpha=1.0-transmittance;
-    if(alpha>0.001) {
-      float distanceKm=weightedDistance/alpha;
-      // Névoa: longe, a nuvem some no céu (o céu atrás aparece pela opacidade).
-      float fade=mix(1.0,0.1,1.0-exp(-distanceKm/55.0))*smoothstep(-0.002,0.03,viewDirection.y);
-      float opacity=environment.cloudParameters.x*fade;
-      result=vec4(color*environment.cloudTint.rgb*opacity,alpha*opacity);
-    }
+    result=vec4(sums,1.0-transmittance);
   }
   // Acúmulo temporal: o mesmo ponto do céu no quadro anterior, pela rotação da
   // câmera (as nuvens estão longe; a translação não muda a direção).
@@ -178,7 +176,7 @@ void main() {
     vec2 previousUv=uv+(previousNdc-currentNdc)*0.5;
     if(previous.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       vec4 history=textureLod(cloudHistory,previousUv,0.0);
-      result=mix(result,history,0.85);
+      result=mix(result,history,0.9);
     }
   }
   outCloud=result;
