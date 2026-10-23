@@ -98,6 +98,23 @@ sépia com o Clima (`16-defeito-...`, `18-defeito-play-chuva-sem-cor-1033.png`).
    somada à sonda e ao ambiente constante, como a sonda do HDRP renderizada com as nuvens
    (`platform/android/instanced_renderer.cpp`).
 
+### Resultado no POCO (23/10, `0.3.0-dev.261023999-clima-1245`)
+
+Clima criado pelo menu na Vila (`20-clima-criado-edicao-1245.png`), chuva em Play
+(`21-play-chuva-1245.png`) e neve pelo Tipo do Inspector (`22-play-neve-1245.png`, 4.701 flocos,
+passe 0,075 ms de GPU). Telhados, grama e personagens voltaram a ter cor sob o céu cinza.
+
+Pranchas Unity × POCO:
+
+- `prancha-chuva-pixagon-1m38-x-poco-1245.png`: Pixagon Rain Storm (1:38) × Vila. Traço e densidade
+  das gotas parecidos. A tempestade da Pixagon é bem mais escura e azulada; a Vila com Chuva 0,7 fica
+  clara. O tipo Tempestade escurece mais, mas ainda sem chão molhado nem poças.
+- `prancha-neve-synty-3m51-x-poco-1245.png`: Synty (3:51) × Vila. Flocos pequenos e opacos como os da
+  Synty. A Synty tem neve acumulada nos telhados e no chão; a Astra ainda não acumula neve.
+
+Lacunas que continuam: chão molhado/poças, acúmulo de neve, respingo no chão (sub-emissor de
+colisão disponível, sem receita pronta).
+
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
 `tools/measure-g0-baseline.ps1 -Order S -Seconds 40`, 4 rodadas intercaladas, bateria ≤ 37,9 °C no
