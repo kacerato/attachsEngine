@@ -23,6 +23,10 @@ struct WeatherLook {
   float rain = 0, snow = 0;  // fração da emissão máxima
   float fog = 0;             // fração da Neblina máxima
   float storm = 0;           // 1 na Tempestade (relâmpagos)
+  // Multiplicadores da luz direta e da ambiente, como directLightIntensityModifier
+  // e ambientIntensityModifier dos tipos de clima do Enviro 3: a chuva escurece
+  // a cena inteira, não só o céu.
+  float sunScale = 1, ambientScale = 1;
 };
 // Alvos de cada tipo na intensidade dada. Os pontos fixos seguem a ideia dos
 // presets Sparse/Cloudy/Overcast/Stormy das Volumetric Clouds do HDRP 17.
@@ -45,6 +49,7 @@ public:
   // superfície; nada disso é gravado na cena.
   struct Surface {
     float wetness = 0, puddles = 0, snow = 0;
+    float sunScale = 1, ambientScale = 1;  // menor entre os climas ativos
   };
   struct Report {
     u32 weathers = 0, writes = 0;

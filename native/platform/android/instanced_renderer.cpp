@@ -6378,6 +6378,13 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           editorFog,editorPost,lights,atmosphereGroundCache_,ambientProbeCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
     std::copy(std::begin(weatherSurface_),std::end(weatherSurface_),std::begin(frame->weatherSurface));
+    // Relógio das ondulações nas poças (a linha só tem três valores do clima).
+    frame->weatherSurface[3]=static_cast<float>(std::fmod(timeSeconds,3600.0));
+    // Clima: luz direta e ambiente escurecem com a intensidade (Enviro 3:
+    // directLightIntensityModifier/ambientIntensityModifier). A força do
+    // ambiente multiplica a sonda SH e o ambiente constante no shader.
+    frame->environment.sunDirectionIntensity[3]*=weatherSunScale_;
+    frame->environment.ambientColorStrength[3]*=weatherAmbientScale_;
     // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
     // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
     // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava

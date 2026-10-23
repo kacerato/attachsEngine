@@ -147,10 +147,15 @@ void aetherWeatherSurface(highp vec3 position,inout mediump vec3 n,inout mediump
     // A neve começa no que é bem plano e desce para as encostas com a quantidade.
     mediump float slope=smoothstep(0.85-0.45*snow,1.0-0.3*snow,up);
     mediump float cover=slope*smoothstep(0.0,0.2,snow*1.35-breakup*(1.0-snow*0.5));
-    albedo=mix(albedo,vec3(0.82,0.85,0.9),cover);
-    rough=mix(rough,0.7,cover);
+    // Grão da neve (o _SnowLayerTex/_SnowLayerBump do UniStorm, aqui por ruído):
+    // brancos levemente diferentes e um relevo fino, para não virar tinta lisa.
+    mediump float grain=aetherWeatherNoise(position.xz*23.0)*0.6+aetherWeatherNoise(position.xz*61.0)*0.4;
+    mediump vec3 snowColor=mix(vec3(0.78,0.81,0.87),vec3(0.93,0.95,0.98),grain);
+    albedo=mix(albedo,snowColor,cover);
+    rough=mix(rough,mix(0.55,0.8,grain),cover);
     metal=mix(metal,0.0,cover);
-    n=normalize(mix(n,vec3(0.0,1.0,0.0),cover*0.5));
+    mediump vec2 bump=vec2(aetherWeatherNoise(position.xz*9.0+vec2(3.1,0.0)),aetherWeatherNoise(position.xz*9.0+vec2(0.0,5.7)))-0.5;
+    n=normalize(mix(n,normalize(vec3(bump.x*0.35,1.0,bump.y*0.35)),cover*0.7));
     wetness*=1.0-cover;
     puddles*=1.0-cover;
   }
@@ -165,7 +170,21 @@ void aetherWeatherSurface(highp vec3 position,inout mediump vec3 n,inout mediump
       albedo*=mix(1.0,0.3,puddle);
       rough=mix(rough,0.02,puddle);
       metal=mix(metal,0.0,puddle);
-      n=normalize(mix(n,vec3(0.0,1.0,0.0),puddle));
+      // Gotas caindo na poça (o Rain do sample da Unity): em cada célula de
+      // 25 cm um anel abre e some, cada um na sua fase; inclina a normal para
+      // fora do centro na crista do anel.
+      mediump vec3 ripple=vec3(0.0,1.0,0.0);
+      if(environment.weatherSurface.x>0.05) {
+        highp vec2 cellPosition=position.xz*4.0;
+        highp vec2 cell=floor(cellPosition);
+        mediump float seed=aetherWeatherHash(cell);
+        mediump float phase=fract(environment.weatherSurface.w*1.3+seed);
+        mediump vec2 toCenter=fract(cellPosition)-(0.3+0.4*vec2(seed,fract(seed*7.13)));
+        mediump float distanceToCenter=length(toCenter);
+        mediump float crest=smoothstep(0.06,0.0,abs(distanceToCenter-phase*0.45))*(1.0-phase);
+        ripple=normalize(vec3(toCenter/max(distanceToCenter,1.0e-3)*crest*0.6,1.0).xzy);
+      }
+      n=normalize(mix(n,ripple,puddle));
     }
   }
 }

@@ -263,4 +263,11 @@ AE_TEST(weather_surfaces_wet_puddle_and_snow_over_time_like_unity_weather) {
   AE_EXPECT_TRUE(fromV1.read(old, 1) && fromV1.rainRate == 3500 && fromV1.surfaceWetness == 1.0f &&
                  std::abs(fromV1.surfacePuddles - 0.6f) < 1e-6f && fromV1.snowSeconds == 60.0f, "v1 abre com superfícies no padrão");
   AE_EXPECT_EQ(scene::Weather::descriptor.version, 2u, "versão 2");
+  // Luz do clima (Enviro: Rain 0,5/0,6; Snow 0,8/0,8): chuva cheia escurece a
+  // luz direta e a ambiente; neve escurece menos; céu limpo não mexe.
+  const auto rain = runtime::weatherTarget(scene::WeatherKind::Rain, 1.0f);
+  const auto snowy = runtime::weatherTarget(scene::WeatherKind::Snow, 1.0f);
+  const auto clear = runtime::weatherTarget(scene::WeatherKind::Clear, 1.0f);
+  AE_EXPECT_TRUE(rain.sunScale == 0.5f && rain.ambientScale == 0.6f && snowy.sunScale > rain.sunScale &&
+                 clear.sunScale == 1.0f && clear.ambientScale == 1.0f, "multiplicadores de luz por tipo");
 }

@@ -162,6 +162,8 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.fog = 0.1f;
     break;
   case scene::WeatherKind::Cloudy:
+    look.sunScale = lerp(0.95f, 0.8f, i);
+    look.ambientScale = lerp(1.0f, 0.9f, i);
     look.coverage = lerp(0.45f, 0.72f, i);
     look.cirrus = 0.4f;
     look.density = lerp(0.6f, 0.75f, i);
@@ -176,6 +178,8 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.tint = lerp(0.72f, 0.5f, i);
     look.rain = i;
     look.fog = lerp(0.3f, 0.7f, i);
+    look.sunScale = lerp(0.8f, 0.5f, i);
+    look.ambientScale = lerp(0.85f, 0.6f, i);
     break;
   case scene::WeatherKind::Storm:
     look.coverage = lerp(0.95f, 1.0f, i);
@@ -185,6 +189,8 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.rain = lerp(0.5f, 1.0f, i);
     look.fog = lerp(0.5f, 0.9f, i);
     look.storm = 1.0f;
+    look.sunScale = lerp(0.45f, 0.3f, i);
+    look.ambientScale = lerp(0.55f, 0.4f, i);
     break;
   case scene::WeatherKind::Snow:
     look.coverage = lerp(0.85f, 0.97f, i);
@@ -193,6 +199,8 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.tint = lerp(0.95f, 0.85f, i);
     look.snow = i;
     look.fog = lerp(0.4f, 1.0f, i);
+    look.sunScale = lerp(0.9f, 0.8f, i);
+    look.ambientScale = lerp(0.95f, 0.8f, i);
     break;
   }
   return look;
@@ -252,6 +260,8 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       l.snow = lerp(l.snow, target.snow, k);
       l.fog = lerp(l.fog, target.fog, k);
       l.storm = lerp(l.storm, target.storm, k);
+      l.sunScale = lerp(l.sunScale, target.sunScale, k);
+      l.ambientScale = lerp(l.ambientScale, target.ambientScale, k);
       // Sem resíduo eterno: a emissão chega a zero de verdade.
       if (std::abs(l.rain - target.rain) < 1e-3f) l.rain = target.rain;
       if (std::abs(l.snow - target.snow) < 1e-3f) l.snow = target.snow;
@@ -285,6 +295,8 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       report.surface.wetness = std::max(report.surface.wetness, surface.wetness);
       report.surface.puddles = std::max(report.surface.puddles, surface.puddles);
       report.surface.snow = std::max(report.surface.snow, surface.snow);
+      report.surface.sunScale = std::min(report.surface.sunScale, state.look.sunScale);
+      report.surface.ambientScale = std::min(report.surface.ambientScale, state.look.ambientScale);
     }
     // Vento do Cloud Layer deste Ambiente (0° sopra para +X, como as nuvens).
     float wind[2]{0, 0};

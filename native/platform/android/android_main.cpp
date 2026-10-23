@@ -4085,7 +4085,8 @@ void android_main(android_app *app) {
         shell.instancedRenderer.queueParticles(shell.particleFrame);
         {
           const auto surface=shell.editorSession.weatherSurface();
-          shell.instancedRenderer.setWeatherSurface(surface.wetness,surface.puddles,surface.snow);
+          shell.instancedRenderer.setWeatherSurface(surface.wetness,surface.puddles,surface.snow,
+                                                    surface.sunScale,surface.ambientScale);
         }
         // Bancada: uma linha a cada 2 s com o custo medido do quadro anterior
         // (simulação e montagem na CPU, passe próprio na GPU por timestamps).
