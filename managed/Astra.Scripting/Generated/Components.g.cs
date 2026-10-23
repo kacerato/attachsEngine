@@ -12966,6 +12966,69 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetFloat("shape_donut_radius");
         set => Component.SetFloat("shape_donut_radius", value);
     }
+    /// <summary>Colunas. Quadros na horizontal da imagem (Tiles X)</summary>
+    /// <remarks>Faixa válida: 1 a 64.</remarks>
+    public float SheetTilesX
+    {
+        get => Component.GetFloat("sheet_tiles_x");
+        set => Component.SetFloat("sheet_tiles_x", value);
+    }
+    /// <summary>Linhas. Quadros na vertical da imagem (Tiles Y)</summary>
+    /// <remarks>Faixa válida: 1 a 64.</remarks>
+    public float SheetTilesY
+    {
+        get => Component.GetFloat("sheet_tiles_y");
+        set => Component.SetFloat("sheet_tiles_y", value);
+    }
+    /// <summary>Linha. Linha usada no modo Uma linha (0 é a de cima)</summary>
+    /// <remarks>Faixa válida: 0 a 63.</remarks>
+    public float SheetRow
+    {
+        get => Component.GetFloat("sheet_row");
+        set => Component.SetFloat("sheet_row", value);
+    }
+    /// <summary>Quadro no tempo. Posição na sequência (0 = primeiro quadro, 1 = fim)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SheetFrame
+    {
+        get => Component.GetFloat("sheet_frame");
+        set => Component.SetFloat("sheet_frame", value);
+    }
+    /// <summary>Quadro no tempo mínimo. Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SheetFrameMin
+    {
+        get => Component.GetFloat("sheet_frame_min");
+        set => Component.SetFloat("sheet_frame_min", value);
+    }
+    /// <summary>Quadro no tempo · multiplicador (×). Escala aplicada à curva (1 percorre a sequência inteira)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float SheetFrameMultiplier
+    {
+        get => Component.GetFloat("sheet_frame_multiplier");
+        set => Component.SetFloat("sheet_frame_multiplier", value);
+    }
+    /// <summary>Quadro inicial. Quadro somado ao do tempo; sorteado entre dois para variar o início</summary>
+    /// <remarks>Faixa válida: 0 a 4095.</remarks>
+    public float SheetStartFrame
+    {
+        get => Component.GetFloat("sheet_start_frame");
+        set => Component.SetFloat("sheet_start_frame", value);
+    }
+    /// <summary>Quadro inicial mínimo. Limite inferior do sorteio por partícula</summary>
+    /// <remarks>Faixa válida: 0 a 4095.</remarks>
+    public float SheetStartFrameMin
+    {
+        get => Component.GetFloat("sheet_start_frame_min");
+        set => Component.SetFloat("sheet_start_frame_min", value);
+    }
+    /// <summary>Ciclos (×). Quantas vezes a sequência roda durante a vida da partícula</summary>
+    /// <remarks>Faixa válida: 0.01 a 100.</remarks>
+    public float SheetCycles
+    {
+        get => Component.GetFloat("sheet_cycles");
+        set => Component.SetFloat("sheet_cycles", value);
+    }
     /// <summary>Repetir. Recomeça o ciclo ao terminar a duração</summary>
     public bool Looping
     {
@@ -13079,6 +13142,12 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     {
         get => Component.GetBool("rotation_by_speed_enabled");
         set => Component.SetBool("rotation_by_speed_enabled", value);
+    }
+    /// <summary>Folha de textura ativa. Texture Sheet Animation: anima a partícula por quadros de uma grade na imagem do Material</summary>
+    public bool TextureSheetEnabled
+    {
+        get => Component.GetBool("texture_sheet_enabled");
+        set => Component.SetBool("texture_sheet_enabled", value);
     }
     public enum StartDelayModeOption : uint
     {
@@ -13538,6 +13607,52 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => (RotationBySpeedModeOption)Component.GetEnum("rotation_by_speed_mode");
         set => Component.SetEnum("rotation_by_speed_mode", (uint)value);
     }
+    public enum SheetAnimationOption : uint
+    {
+        FolhaInteira = 0,
+        UmaLinha = 1,
+    }
+    /// <summary>Animação. Folha inteira (todos os quadros em ordem) ou uma linha só</summary>
+    public SheetAnimationOption SheetAnimation
+    {
+        get => (SheetAnimationOption)Component.GetEnum("sheet_animation");
+        set => Component.SetEnum("sheet_animation", (uint)value);
+    }
+    public enum SheetRowModeOption : uint
+    {
+        Escolhida = 0,
+        Sorteada = 1,
+    }
+    /// <summary>Escolha da linha. Linha fixa ou sorteada por partícula</summary>
+    public SheetRowModeOption SheetRowMode
+    {
+        get => (SheetRowModeOption)Component.GetEnum("sheet_row_mode");
+        set => Component.SetEnum("sheet_row_mode", (uint)value);
+    }
+    public enum SheetFrameModeOption : uint
+    {
+        Constante = 0,
+        Curva = 1,
+        EntreDuasConstantes = 2,
+        EntreDuasCurvas = 3,
+    }
+    /// <summary>Quadro no tempo · modo. Curva ao longo da vida (o padrão sobe de 0 a 1), constante, ou sorteio por partícula</summary>
+    public SheetFrameModeOption SheetFrameMode
+    {
+        get => (SheetFrameModeOption)Component.GetEnum("sheet_frame_mode");
+        set => Component.SetEnum("sheet_frame_mode", (uint)value);
+    }
+    public enum SheetStartFrameModeOption : uint
+    {
+        Constante = 0,
+        EntreDuasConstantes = 2,
+    }
+    /// <summary>Quadro inicial · modo. Constante, ou sorteio entre dois quadros por partícula</summary>
+    public SheetStartFrameModeOption SheetStartFrameMode
+    {
+        get => (SheetStartFrameModeOption)Component.GetEnum("sheet_start_frame_mode");
+        set => Component.SetEnum("sheet_start_frame_mode", (uint)value);
+    }
     /// <summary>Plano 1. O +Y do objeto é a normal; a partícula quica do lado de cima</summary>
     public ObjectReference CollisionPlane0
     {
@@ -13568,6 +13683,9 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetReference("sub_emitter_death");
         set => Component.SetReference("sub_emitter_death", value);
     }
+    /// <summary>Material. Recurso do projeto por slot</summary>
+    public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
+    public void SetMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("material", value, slot);
     /// <summary>Tocar. Inicia ou retoma a simulação e a emissão</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public void Play() => Component.Invoke("play");
