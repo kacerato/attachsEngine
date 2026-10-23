@@ -3,6 +3,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
 #include "renderer/cloud_layer.h"
+#include "renderer/cloud_noise.h"
 #include "renderer/scene_environment.h"
 #include "resources/environment_profile.h"
 #include "runtime/scene_environment.h"
@@ -132,16 +133,16 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 17u, "Ambiente v17");
-  AE_EXPECT_TRUE(reread.read(in, 17), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 18u, "Ambiente v18");
+  AE_EXPECT_TRUE(reread.read(in, 18), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
-  // exposição automática) e sem os 15 números do fim (14 da v16, espessura da v17).
+  // exposição automática), sem o tipo (v18) e sem os 18 números do fim.
   auto parts = tokens(out.str());
   AE_EXPECT_TRUE(parts.size() > 40, "texto completo");
   std::vector<std::string> legacy(parts.begin(), parts.begin() + 20);
-  legacy.insert(legacy.end(), parts.begin() + 23, parts.end() - 15);
+  legacy.insert(legacy.end(), parts.begin() + 24, parts.end() - 18);
   scene::Environment old;std::istringstream oldIn(join(legacy));oldIn.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(oldIn, 15), "cena v15 abre");
   AE_EXPECT_TRUE(!old.values.clouds.enabled && old.values.clouds == renderer::CloudLayer{} && old.overrideClouds,
@@ -166,10 +167,10 @@ AE_TEST(cloud_layer_round_trips_in_environment_profile_v11) {
   resources::EnvironmentProfile reread;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, reread), "perfil v11 relido");
   AE_EXPECT_TRUE(reread.values.clouds == profile.values.clouds, "nuvens no perfil compartilhado");
-  // v10: troca a versão e corta as 17 palavras das nuvens (v11 e v12).
+  // v10: troca a versão e corta as 21 palavras das nuvens (v11..v13).
   auto parts = tokens(text);
   parts[1] = "10";
-  parts.resize(parts.size() - 17);
+  parts.resize(parts.size() - 21);
   resources::EnvironmentProfile old;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(join(parts), old), "perfil v10 abre");
   AE_EXPECT_TRUE(old.values.clouds == renderer::CloudLayer{}, "perfil antigo sem nuvens");
@@ -252,12 +253,45 @@ AE_TEST(cloud_layer_follows_the_planet_curvature_and_v16_scenes_get_volume) {
   AE_EXPECT_EQ(renderer::packCloudLayer(clouds, true, 0.0).shadow[1], 1200.0f, "espessura no bloco");
   clouds.thicknessMeters = 6000.0f;
   AE_EXPECT_TRUE(!clouds.valid(), "espessura acima de 5 km recusada");
-  // Cena v16: o mesmo texto sem o último número. Ganha a espessura padrão.
+  // Cena v16: o mesmo texto sem o tipo (v18) e sem os 4 últimos números
+  // (espessura da v17 e os 3 da v18). Ganha a espessura padrão.
   scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.thicknessMeters = 300.0f;
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
-  auto parts = tokens(out.str());parts.pop_back();
+  auto parts = tokens(out.str());parts.erase(parts.begin() + 23);parts.resize(parts.size() - 4);
   scene::Environment old;std::istringstream in(join(parts));in.imbue(std::locale::classic());
   AE_EXPECT_TRUE(old.read(in, 16), "cena v16 abre");
   AE_EXPECT_TRUE(old.values.clouds.enabled && old.values.clouds.thicknessMeters == renderer::CloudLayer{}.thicknessMeters,
                  "v16 mantém as nuvens e recebe a espessura padrão");
+}
+
+AE_TEST(volumetric_clouds_noise_tiles_and_v17_scenes_keep_the_2d_layer) {
+  // Ruído 3D de Schneider: repetível nos três eixos e com contraste útil.
+  std::vector<u8> shape, erosion;
+  AE_EXPECT_TRUE(renderer::buildCloudShapeNoise(renderer::CloudShapeNoiseSize, 7u, shape), "forma 64³");
+  AE_EXPECT_TRUE(renderer::buildCloudErosionNoise(renderer::CloudErosionNoiseSize, 13u, erosion), "erosão 32³");
+  const u32 n = renderer::CloudShapeNoiseSize;
+  AE_EXPECT_EQ(shape.size(), static_cast<usize>(n) * n * n * 4, "RGBA8");
+  u32 low = 255, high = 0;
+  for (usize i = 0; i < shape.size(); i += 4) { low = std::min<u32>(low, shape[i]); high = std::max<u32>(high, shape[i]); }
+  AE_EXPECT_TRUE(high - low > 150, "Perlin-Worley com contraste");
+  AE_EXPECT_TRUE(std::abs(renderer::tileableWorley(0.001f, 0.3f, 0.6f, 4, 1u) -
+                          renderer::tileableWorley(1.001f, 0.3f, 0.6f, 4, 1u)) < 1e-4f, "Worley repete em X");
+  AE_EXPECT_TRUE(std::abs(renderer::tileableWorley(0.2f, 0.3f, 0.0005f, 8, 1u) -
+                          renderer::tileableWorley(0.2f, 0.3f, 1.0005f, 8, 1u)) < 1e-4f, "Worley repete em Z");
+  // Tipo volumétrico vai para a GPU; cena v17 abre como camada 2D.
+  renderer::CloudLayer clouds;clouds.enabled = true;clouds.type = 1;clouds.steps = 32.0f;clouds.shapeFactor = 0.7f;
+  const auto rows = renderer::packCloudLayer(clouds, true, 0.0);
+  AE_EXPECT_TRUE(rows.shadow[2] == 1.0f && rows.shadow[3] == 32.0f && rows.volume[0] == 0.7f, "tipo, passos e forma no bloco");
+  clouds.type = 2;AE_EXPECT_TRUE(!clouds.valid(), "tipo desconhecido recusado");
+  scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.type = 1;
+  std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
+  auto parts = tokens(out.str());
+  scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(reread.read(in, 18) && reread.values.clouds.type == 1, "v18 guarda o tipo volumétrico");
+  parts.erase(parts.begin() + 23);parts.resize(parts.size() - 3);
+  scene::Environment old;std::istringstream oldIn(join(parts));oldIn.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(oldIn, 17) && old.values.clouds.type == 0 && old.values.clouds.enabled, "v17 continua camada 2D");
+  bool typeEnum = false;
+  for (const auto &item : scene::environmentEnums) if (item.id == std::string_view("cloud_type")) typeEnum = true;
+  AE_EXPECT_TRUE(typeEnum, "Inspector: Tipo Camada 2D / Volumétricas");
 }

@@ -134,6 +134,10 @@ CloudLayerRows packCloudLayer(const CloudLayer &clouds, bool environmentActive, 
   rows.tint[3] = clouds.ambientDimmer;
   rows.shadow[0] = clouds.castShadows ? clouds.shadowMultiplier : 0.0f;
   rows.shadow[1] = clouds.thicknessMeters;
+  rows.shadow[2] = clouds.type == 1 ? 1.0f : 0.0f;
+  rows.shadow[3] = clouds.steps;
+  rows.volume[0] = clouds.shapeFactor;
+  rows.volume[1] = clouds.erosion;
   return rows;
 }
 

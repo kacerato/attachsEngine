@@ -31,7 +31,8 @@ float cloudLayerAlpha(const CloudLayer &clouds, float cumulus, float cirrus, flo
 //   parameters  opacidade (0 sem nuvens), cobertura, cirros, densidade
 //   shape       1/tamanho, altitude, deslocamento do vento x, z (m, < tamanho)
 //   tint        tom * 2^exposição, atenuação do ambiente
-//   shadow      força da sombra (0 sem sombra), espessura m, reservados
+//   shadow      força da sombra (0 sem sombra), espessura m, tipo (1 volumétrica), passos
+//   volume      (offset 4112) fator de forma, erosão, reservados
 // O vento entra como deslocamento já reduzido ao tamanho do mapa (o mapa se
 // repete), calculado em double: o ponto flutuante do shader não perde precisão
 // depois de horas de Play.
@@ -40,6 +41,7 @@ struct CloudLayerRows final {
   float shape[4]{};
   float tint[4]{};
   float shadow[4]{};
+  float volume[4]{};
 };
 CloudLayerRows packCloudLayer(const CloudLayer &clouds, bool environmentActive, double timeSeconds) noexcept;
 

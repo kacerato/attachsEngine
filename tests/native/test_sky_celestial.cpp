@@ -14,15 +14,15 @@
 using namespace ae;
 
 namespace {
-// Linha v15 a partir da atual: sem os 3 interruptores das nuvens (depois da
-// exposição automática, palavras 20..22) e sem os 15 números delas no fim
-// (14 da v16 e a espessura da v17).
+// Linha v15 a partir da atual: sem os 4 campos das nuvens depois da exposição
+// automática (palavras 20..23: 3 interruptores da v16 e o tipo da v18) e sem
+// os 18 números delas no fim (14 da v16, espessura da v17, 3 da v18).
 inline std::string withoutClouds(const std::string &text) {
   std::istringstream in(text);std::vector<std::string> words;std::string word;
   while (in >> word) words.push_back(word);
   std::string out;
-  for (usize i = 0; i + 15 < words.size(); ++i) {
-    if (i >= 20 && i <= 22) continue;
+  for (usize i = 0; i + 18 < words.size(); ++i) {
+    if (i >= 20 && i <= 23) continue;
     if (!out.empty()) out += ' ';
     out += words[i];
   }
@@ -87,9 +87,9 @@ AE_TEST(sky_celestial_profile_v10_round_trips_and_v9_reads_with_defaults) {
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(), parsed), "v10 relido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == 0.1f && parsed.values.starIntensity == 2.0f, "perfil guarda lua e estrelas");
   auto text = profile.serialize();
-  text.replace(text.find(" 12 "), 4, " 9 ");
-  // v9: sem os 17 das nuvens (v11, v12) e os 5 dos corpos celestes (v10).
-  text = dropTail(text.substr(0, text.size() - 1), 22) + "\n";
+  text.replace(text.find(" 13 "), 4, " 9 ");
+  // v9: sem os 21 das nuvens (v11..v13) e os 5 dos corpos celestes (v10).
+  text = dropTail(text.substr(0, text.size() - 1), 26) + "\n";
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text, parsed), "v9 lido");
   AE_EXPECT_TRUE(parsed.values.moonPhase == renderer::SceneEnvironment{}.moonPhase, "v9 recebe os padrões");
 }

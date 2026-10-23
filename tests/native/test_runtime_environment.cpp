@@ -357,8 +357,8 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
   // v7..v10 acrescentaram no fim: 9 de exposição + energia da neblina (v7, v8),
-  // 31 de gradação (v9), 5 dos corpos celestes (v10) e 17 das nuvens (v11, v12).
-  fields[1]="6";fields.resize(fields.size()-63);
+  // 31 de gradação (v9), 5 dos corpos celestes (v10) e 21 das nuvens (v11..v13).
+  fields[1]="6";fields.resize(fields.size()-67);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';
   resources::EnvironmentProfile migrated;

@@ -425,6 +425,7 @@ add_library(aether_renderer STATIC
   renderer/time_of_day.cpp
   renderer/procedural_sky.cpp
   renderer/cloud_layer.cpp
+  renderer/cloud_noise.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp

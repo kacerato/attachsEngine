@@ -2,6 +2,8 @@
 #include "platform/android/android_texture_loader.h"
 #include "renderer/procedural_sky.h"
 #include "renderer/cloud_layer.h"
+#include "renderer/cloud_noise.h"
+#include "rhi/shaders/cloud_volume_spirv.h"
 #include "renderer/time_of_day.h"
 #include "renderer/water_detail_texture.h"
 #include "renderer/water_authoring_geometry.h"
@@ -182,8 +184,11 @@ struct DirtRoadFrameUniform {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens.
   // Só o fragmento de superfície declara (environment_lighting.glsl, offset explícito).
   renderer::PunctualLight punctualLightsExtra[renderer::MaximumPunctualLights - renderer::PunctualLightBankSize]{};
+  // G4d, Volumetric Clouds: fator de forma, erosão (cloud_volume.frag).
+  float cloudVolume[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4112);
+static_assert(sizeof(DirtRoadFrameUniform) == 4128);
+static_assert(offsetof(DirtRoadFrameUniform, cloudVolume) == 4112);
 static_assert(offsetof(DirtRoadFrameUniform, cloudParameters) == 3536);
 static_assert(offsetof(DirtRoadFrameUniform, cloudShadow) == 3584);
 static_assert(offsetof(DirtRoadFrameUniform, punctualLightsExtra) == 3600);
@@ -544,6 +549,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_post_fog.inl"
 #include "platform/android/instanced_post_chain.inl"
 #include "platform/android/instanced_color_grading.inl"
+#include "platform/android/instanced_volumetric_clouds.inl"
 #include "platform/android/instanced_skinning.inl"
 
 bool InstancedRenderer::createPipeline() {
@@ -1105,7 +1111,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[19]{};
+  VkDescriptorSetLayoutBinding bindings[23]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1146,12 +1152,16 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G4b: mapa do Cloud Layer, lido pelo céu (conjunto 0) e pela sombra do sol (conjunto 1).
   bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G4d: Volumetric Clouds — resultado integrado (19, o céu lê), histórico (20)
+  // e ruídos 3D de forma (21) e erosão (22), lidos pelo passe próprio.
+  for(u32 binding=19;binding<=22;++binding)
+    bindings[bindingCount++]={binding,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 2u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 6u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 1u}};
@@ -1195,7 +1205,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[19]{};
+  VkWriteDescriptorSet writes[23]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1319,6 +1329,24 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[writeCount].pImageInfo = &cloudMapInfo;
   ++writeCount;
+  if (!createVolumetricCloudResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Clouds] recursos das nuvens volumétricas recusados.");
+    return false;
+  }
+  const VkDescriptorImageInfo cloudVolumeInfos[4]{
+    {cloudVolumeSampler_.handle(), cloudVolumeTarget_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudVolumeSampler_.handle(), cloudVolumeHistory_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudNoiseSampler_.handle(), cloudShapeNoise_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudNoiseSampler_.handle(), cloudErosionNoise_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  for (u32 index = 0; index < 4; ++index) {
+    writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[writeCount].dstSet = environmentSet_;
+    writes[writeCount].dstBinding = 19 + index;
+    writes[writeCount].descriptorCount = 1;
+    writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[writeCount].pImageInfo = &cloudVolumeInfos[index];
+    ++writeCount;
+  }
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   return true;
 }
@@ -1439,6 +1467,9 @@ bool InstancedRenderer::createSkyPipeline() {
     pipeline.renderPass = renderPass_; pipeline.subpass = 0;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &skyPipeline_) == VK_SUCCESS;
   }
+  // Mesmo layout e vértice do céu; sem ele as nuvens caem na camada 2D.
+  if (ok && !createVolumetricCloudPipeline())
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[Clouds] pipeline volumétrico recusado; nuvens 2D.");
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
   return ok;
@@ -1807,6 +1838,7 @@ bool applySceneEnvironmentLook(
   std::copy_n(clouds.shape,4,frame.cloudShape);
   std::copy_n(clouds.tint,4,frame.cloudTint);
   std::copy_n(clouds.shadow,4,frame.cloudShadow);
+  std::copy_n(clouds.volume,4,frame.cloudVolume);
   const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
   if(occlusion>0.0f) {
     const auto grey=[&](float color[3]) {
@@ -5073,6 +5105,7 @@ void InstancedRenderer::shutdown() {
   baseTexture_.reset();
   waterDetailSampler_.shutdown();waterDetailTexture_.reset();
   cloudMapSampler_.shutdown();cloudMapTexture_.reset();
+  destroyVolumetricCloudResources();
   routeVertices_.reset();routeIndices_.reset();authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();authoredWaterTime_=-1;
   dummySampler_.shutdown();
   dummyTexture_.reset();
@@ -6046,6 +6079,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,static_cast<bool>(activeEnvironmentMap_),renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
+    // Volumetric Clouds: sem pipeline, a camada 2D desenha no lugar; o
+    // histórico só vale depois de um quadro integrado.
+    if (!volumetricCloudsReady()) frame->cloudShadow[2] = 0.0f;
+    frame->cloudVolume[2] = cloudHistoryValid_ ? 1.0f : 0.0f;
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
@@ -6437,6 +6474,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // mesmo estagio, e atribui-lo a outra classe falsearia a medicao das duas.
   recordDrawCompactDispatch();
   endGpuRegion(GpuPassClass::Culling);
+  // G4d: Volumetric Clouds em 1/16 dos pixels, antes da cena (o céu compõe).
+  beginGpuRegion(GpuPassClass::Clouds);
+  recordVolumetricClouds(camera, timeSeconds);
+  endGpuRegion(GpuPassClass::Clouds);
 
   VkClearValue clearValues[4]{};
   clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};

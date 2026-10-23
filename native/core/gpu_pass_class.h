@@ -40,6 +40,7 @@ enum class GpuPassClass : u32 {
   FsrRcas,     // nitidez AMD FSR 1 e apresentação
   Ui,          // HUD/joystick e editor, após pós na resolução nativa
   Hzb,         // cadeia de redução Hi-Z, fora do render pass principal
+  Clouds,      // Volumetric Clouds em 1/16 dos pixels, antes da cena
   Count
 };
 constexpr u32 GpuPassClassCount = static_cast<u32>(GpuPassClass::Count);
@@ -48,7 +49,7 @@ constexpr u32 GpuPassClassCount = static_cast<u32>(GpuPassClass::Count);
 // captura AGI/RenderDoc; sem ele a captura é um bloco único e não atribui
 // custo a nada.
 constexpr const char *GpuPassClassLabels[] = {"Skinning", "CameraPreview", "WaterSimulation", "Shadow", "LocalShadow", "Culling", "Opaque", "Coverage", "Sky",
-                                              "Transparent", "Motion", "AutoExposure", "TemporalUpscale", "Post", "FsrEasu", "FsrRcas", "UI", "HZB"};
+                                              "Transparent", "Motion", "AutoExposure", "TemporalUpscale", "Post", "FsrEasu", "FsrRcas", "UI", "HZB", "Clouds"};
 
 // Nome da métrica no relatório de perfil. Fica ao lado do rótulo de propósito:
 // a captura e o relatório precisam usar o mesmo vocabulário para que um possa
@@ -58,7 +59,7 @@ constexpr const char *GpuPassClassMetricNames[] = {
     "gpu_camera_preview_ms",
     "gpu_water_simulation_ms",
     "gpu_shadow_ms", "gpu_local_shadow_ms", "gpu_culling_ms", "gpu_opaque_ms", "gpu_coverage_ms", "gpu_sky_ms",
-    "gpu_transparent_ms", "gpu_motion_ms", "gpu_auto_exposure_ms", "gpu_temporal_upscale_ms", "gpu_post_ms", "gpu_fsr_easu_ms", "gpu_fsr_rcas_ms", "gpu_ui_ms", "gpu_hzb_ms"};
+    "gpu_transparent_ms", "gpu_motion_ms", "gpu_auto_exposure_ms", "gpu_temporal_upscale_ms", "gpu_post_ms", "gpu_fsr_easu_ms", "gpu_fsr_rcas_ms", "gpu_ui_ms", "gpu_hzb_ms", "gpu_clouds_ms"};
 
 // Cor do marcador, só para leitura humana da captura. Opacos frios, vegetação
 // verde, céu azul claro, transparência âmbar, UI cinza, HZB roxo. Culling
@@ -72,7 +73,7 @@ constexpr float GpuPassClassLabelColors[][3] = {
     {0.93f, 0.68f, 0.24f}, {0.42f, 0.70f, 0.82f}, {0.84f, 0.76f, 0.38f}, {0.30f, 0.82f, 0.62f},
     {0.88f, 0.36f, 0.72f}, {0.94f, 0.25f, 0.32f},
     {0.80f, 0.38f, 0.18f}, {0.66f, 0.66f, 0.70f},
-    {0.62f, 0.40f, 0.85f}};
+    {0.62f, 0.40f, 0.85f}, {0.86f, 0.90f, 0.96f}};
 
 static_assert(sizeof(GpuPassClassLabels) / sizeof(GpuPassClassLabels[0]) ==
                   GpuPassClassCount,

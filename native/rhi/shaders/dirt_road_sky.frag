@@ -36,7 +36,10 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
 } environment;
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
+// Volumetric Clouds já integradas (rgb pré-multiplicado, a = cobertura).
+layout(set=0,binding=19) uniform mediump sampler2D cloudVolumeImage;
 layout(location=0) in vec3 vDirection;
+layout(location=1) in vec2 vScreen;
 layout(location=0) out vec4 outColor;
 vec2 environmentUv(vec3 direction) {
   direction=normalize(direction);
@@ -264,8 +267,12 @@ void main() {
     color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
            (1.0-moonCoverage*aboveHorizon);
   }
-  // Nuvens por cima de tudo: escondem sol, lua e estrelas como no Cloud Layer.
-  if(environment.cloudParameters.x>0.0 && visibleDirection.y>-0.002) {
+  // Nuvens por cima de tudo: escondem sol, lua e estrelas. Volumétricas vêm
+  // prontas do passe próprio; a camada 2D é integrada aqui.
+  if(environment.cloudShadow.z>0.5) {
+    vec4 volume=textureLod(cloudVolumeImage,vScreen,0.0);
+    color=color*(1.0-volume.a)+volume.rgb;
+  } else if(environment.cloudParameters.x>0.0 && visibleDirection.y>-0.002) {
     vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
     // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
     // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,

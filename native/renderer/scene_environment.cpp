@@ -92,7 +92,11 @@ void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
     out.density=mix(out.density,target.density,amount);
     out.ambientDimmer=mix(out.ambientDimmer,target.ambientDimmer,amount);
     out.shadowMultiplier=mix(out.shadowMultiplier,target.shadowMultiplier,amount);
-    if(amount>=.5f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
+    out.shapeFactor=mix(out.shapeFactor,target.shapeFactor,amount);
+    out.erosion=mix(out.erosion,target.erosion,amount);
+    out.steps=mix(out.steps,target.steps,amount);
+    if(amount>=.5f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;
+                     out.type=target.type;}
   }
   out.opacity=mix(from,to,amount);
   out.enabled=out.opacity>0.0f;

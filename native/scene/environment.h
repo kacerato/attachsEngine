@@ -39,12 +39,13 @@ public:
         << ' ' << values.physicalAtmosphereHighQuality
         << ' ' << (values.environmentMap.valid()?values.environmentMap.text():"-")
         << ' ' << values.autoExposure << ' ' << values.autoExposureCenterWeighted
-        << ' ' << values.clouds.enabled << ' ' << values.clouds.castShadows << ' ' << overrideClouds;
+        << ' ' << values.clouds.enabled << ' ' << values.clouds.castShadows << ' ' << overrideClouds
+        << ' ' << values.clouds.type;
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
     u32 sky = 0, tone = 0;
-    if ((version < 1 || version > 17) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
+    if ((version < 1 || version > 18) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
                           values.vignette))
       return false;
     if(version<7) {
@@ -99,6 +100,10 @@ public:
     if(version>=16) {
       if(!(in>>values.clouds.enabled>>values.clouds.castShadows>>overrideClouds)) return false;
     } else {values.clouds={};overrideClouds=true;}
+    // v18 (G4d): tipo Volumetric Clouds. Cena antiga continua na camada 2D.
+    if(version>=18) {
+      if(!(in>>values.clouds.type)||values.clouds.type>1) return false;
+    } else values.clouds.type=0;
     if(version<12) values.fogLightEnergy=1.0f;
     // v13 (G2): gradação de cor. Cena antiga fica neutra: sem LUT, mesma imagem.
     if(version<13) values.grading={};
@@ -117,6 +122,8 @@ public:
       if(version<16 && property.id.starts_with("cloud_")) continue;
       // v17: espessura da camada. Cena v16 fica com o padrão (nuvens com volume).
       if(version<17 && property.id=="cloud_thickness") continue;
+      if(version<18 && (property.id=="cloud_shape_factor" || property.id=="cloud_erosion" ||
+                        property.id=="cloud_steps")) continue;
       if(version<14 && (property.id.starts_with("sun_glare") || property.id.starts_with("moon_") ||
                         property.id.starts_with("star_"))) continue;
       if(version<13 && property.id.starts_with("grading_")) continue;
@@ -171,6 +178,14 @@ inline bool environmentUsesPhysicalAtmosphere(const ComponentValue &value) {
 }
 inline bool environmentUsesClouds(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.clouds.enabled;
+}
+inline bool environmentUsesVolumetricClouds(const ComponentValue &value) {
+  const auto &clouds=static_cast<const Environment &>(value).values.clouds;
+  return clouds.enabled&&clouds.type==1;
+}
+inline bool environmentUsesCloudLayer(const ComponentValue &value) {
+  const auto &clouds=static_cast<const Environment &>(value).values.clouds;
+  return clouds.enabled&&clouds.type==0;
 }
 inline bool environmentUsesCloudShadows(const ComponentValue &value) {
   const auto &clouds=static_cast<const Environment &>(value).values.clouds;
@@ -267,10 +282,12 @@ inline constexpr std::array<ComponentEnumOption,8> environmentLayerOptions{{
   {0,"Ambiente 0"},{1,"Ambiente 1"},{2,"Ambiente 2"},{3,"Ambiente 3"},
   {4,"Ambiente 4"},{5,"Ambiente 5"},{6,"Ambiente 6"},{7,"Ambiente 7"}
 }};
-inline constexpr std::array<ComponentEnum, 4> environmentEnums{{
+inline constexpr std::array<ComponentEnumOption,2> cloudTypeOptions{{{0,"Camada 2D"},{1,"Volumétricas"}}};
+inline constexpr std::array<ComponentEnum, 5> environmentEnums{{
   {"sky", "Céu", skyOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sky);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sky=static_cast<renderer::SkyModel>(n);}, {"Atmosfera","","Fonte visual do céu",nullptr,nullptr,"render.environment.atmosphere","rhi/shaders/dirt_road_sky.frag",Invalidate::Draw}},
   {"tone_mapper", "Tonemapping", toneOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.toneMapper);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.toneMapper=static_cast<renderer::ToneMapper>(n);}, {"Pós","","Curva aplicada ao HDR antes da saída",environmentUsesPost,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
   {"volume_shape","Modo",environmentShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).shape);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).shape=static_cast<renderer::EnvironmentVolumeShape>(n);},{"Volume","","Global afeta toda vista; formas usam o Transform do objeto",nullptr,nullptr,"render.environment.volumes","runtime/scene_environment.cpp",Invalidate::Draw}},
+  {"cloud_type","Tipo",cloudTypeOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).values.clouds.type;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.clouds.type=n;},{"Nuvens","","Camada 2D (Cloud Layer, barata) ou Volumétricas (Volumetric Clouds: cúmulos com volume)",environmentUsesClouds,nullptr,"render.environment.clouds","rhi/shaders/cloud_volume.frag",Invalidate::Draw}},
   {"volume_layer","Camada",environmentLayerOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).layer;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).layer=n;},{"Volume","","Filtro consultado pela câmera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
 }};
 
@@ -307,7 +324,7 @@ inline constexpr std::array<ComponentResourceBinding,2> environmentResources{{
 }};
 
 inline const ComponentType Environment::descriptor{
-  "astra.render.environment", 17,
+  "astra.render.environment", 18,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
   environmentResources

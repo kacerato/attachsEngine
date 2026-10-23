@@ -48,7 +48,6 @@ mediump float cloudShadowVisibility(highp vec3 worldPosition) {
   return 1.0-cloudLayerAlphaAt(cloudLayerUv(hit),2.0)*strength;
 }
 
-#ifdef CLOUD_LAYER_SKY
 // Distância (km) do observador no chão até a casca de raio R+h, pela forma
 // estável de renderer::cloudShellDistance: no zênite dá h, no horizonte
 // ~sqrt(2Rh). É a curvatura do planeta que encolhe as nuvens até a faixa
@@ -66,14 +65,15 @@ float cloudPointHeightKm(vec3 p) {
   return n/(sqrt(R*R+n)+R);
 }
 
+#ifdef CLOUD_LAYER_SKY
 // Composição sobre o céu já desenhado (sol, lua e estrelas ficam atrás).
 // `sunRadiance` é a luz do sol que chega à camada na escala deste céu, e
 // `skyAmbient` a luz difusa do céu nessa mesma escala.
 //
-// A camada vai da Altitude até Altitude+Espessura. Seis passos atravessam a
-// casca: o mapa diz quanto de nuvem há em cada coluna e o perfil vertical
-// sobe mais onde ela é densa (base reta, topo alto, como um cúmulo). Perto do
-// horizonte o raio cruza a casca de lado e enxerga a lateral das nuvens.
+// A camada vai da Altitude até Altitude+Espessura. O mapa diz quanto de
+// nuvem há em cada coluna e a coluna sobe até essa fração da espessura (base
+// reta, topo alto onde é densa, como um cúmulo). Perto do horizonte o raio
+// cruza a casca de lado e enxerga a lateral das nuvens.
 vec3 cloudLayerComposite(vec3 sky,vec3 viewDirection,vec3 toSun,vec3 sunRadiance,vec3 skyAmbient,
                          float pixelAngle) {
   float opacity=environment.cloudParameters.x;
@@ -86,7 +86,7 @@ vec3 cloudLayerComposite(vec3 sky,vec3 viewDirection,vec3 toSun,vec3 sunRadiance
   // Raios rasantes cruzam dezenas de km de casca: seis passos só cobrem os
   // primeiros 24 km, onde ainda há forma visível; o resto é névoa.
   float pathKm=min(endKm-startKm,24.0);
-  const int steps=6;
+  const int steps=8;
   float stepKm=pathKm/float(steps);
   float toUv=environment.cloudShape.x*1000.0;           // km -> repetições do mapa
   float texelKm=1.0/(toUv*256.0);
@@ -109,31 +109,65 @@ vec3 cloudLayerComposite(vec3 sky,vec3 viewDirection,vec3 toSun,vec3 sunRadiance
   vec3 sunGrey=vec3(dot(sunRadiance,luma));
   vec3 ambient=mix(vec3(dot(skyAmbient,luma)),skyAmbient,0.5)*environment.cloudTint.w;
 
-  float transmittance=1.0;
-  vec3 color=vec3(0.0);
+  // Relevo: o raio para na primeira amostra que entra no perfil do cúmulo
+  // (altura relativa abaixo da densidade da coluna), com refinamento linear
+  // entre a última amostra fora e a primeira dentro, como um parallax
+  // occlusion. Acima da cabeça a opacidade é a do mapa 2D (a cobertura não
+  // muda com a espessura); de lado o raio encontra a parede das colunas altas.
+  // Um deslocamento por pixel esconde os degraus que restam.
+  float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715))));
+  float previousGap=1.0,previousShape=0.0,previousHeight=0.0,previousTop=0.0;
+  float hitShape=0.0,hitHeight=0.0,hitTop=1.0;
+  bool hit=false;
   for(int i=0;i<steps;++i) {
-    float t=startKm+(float(i)+0.5)*stepKm;
+    float t=startKm+(float(i)+jitter)*stepKm;
     vec3 p=viewDirection*t;
+    // Forma suave (mip +1,5, sem erosão) para a altura da coluna: paredes
+    // lisas, sem as "penas" que o detalhe de alta frequência riscava nelas.
     vec2 sampleUv=cloudLayerUv(p.xz*1000.0);
-    mediump vec3 map=textureLod(cloudMap,sampleUv,lod).rgb;
-    map.b=textureLod(cloudMap,sampleUv*3.0+vec2(0.37,0.61),lod).b;
-    float shape=cloudCumulusFromMap(map);
-    float top=pow(clamp(shape,0.0,1.0),0.6);
-    // Folha plana (Espessura 0): a coluna inteira é a própria cobertura.
-    float height=thicknessKm>0.01?clamp((cloudPointHeightKm(p)-baseKm)/thicknessKm,0.0,1.0):0.5*top;
-    float local=clamp((top-height)*6.0,0.0,1.0)*smoothstep(0.02,0.12,shape);
-    if(local<=0.0) continue;
-    float above=max(top-height,0.0)*max(thicknessKm,0.3);
+    float shape=cloudCumulusFromMap(vec3(textureLod(cloudMap,sampleUv,lod+2.5).r,0.0,0.5));
+    // Núcleo denso chega ao topo, bordas ficam baixas: topo fofo, base reta.
+    float top=pow(smoothstep(0.15,0.85,shape),0.7);
+    float height=thicknessKm>0.01?clamp((cloudPointHeightKm(p)-baseKm)/thicknessKm,0.0,1.0):0.0;
+    float gap=height-top;
+    if(gap<=0.0 && top>0.04) {
+      // Bissecção entre a última amostra fora e esta: a altura do acerto sai
+      // contínua e a luz por altura não forma degraus nas laterais.
+      float lowT=i==0?startKm:t-stepKm,highT=t;
+      if(i>0) for(int k=0;k<3;++k) {
+        float midT=0.5*(lowT+highT);
+        vec3 m=viewDirection*midT;
+        float mShape=cloudCumulusFromMap(vec3(textureLod(cloudMap,cloudLayerUv(m.xz*1000.0),lod+2.5).r,0.0,0.5));
+        float mHeight=clamp((cloudPointHeightKm(m)-baseKm)/thicknessKm,0.0,1.0);
+        if(mHeight<=pow(smoothstep(0.15,0.85,mShape),0.7)) highT=midT; else lowT=midT;
+      }
+      vec3 h=viewDirection*highT;
+      float hShape=cloudCumulusFromMap(vec3(textureLod(cloudMap,cloudLayerUv(h.xz*1000.0),lod+2.5).r,0.0,0.5));
+      hitHeight=thicknessKm>0.01?clamp((cloudPointHeightKm(h)-baseKm)/thicknessKm,0.0,1.0):0.0;
+      hitTop=max(pow(smoothstep(0.15,0.85,hShape),0.7),1e-3);
+      // Opacidade com o detalhe, só no ponto de acerto.
+      vec2 hitUv=cloudLayerUv(h.xz*1000.0);
+      mediump vec3 map=textureLod(cloudMap,hitUv,lod).rgb;
+      map.b=textureLod(cloudMap,hitUv*3.0+vec2(0.37,0.61),lod).b;
+      // A borda vem da forma suave; o detalhe só texturiza (sem cortinas nas paredes).
+      hitShape=hShape*mix(0.8,1.15,cloudCumulusFromMap(map));
+      hit=true;
+      break;
+    }
+    previousGap=gap;previousShape=shape;previousHeight=height;previousTop=top;
+    if(thicknessKm<=0.01) break;
+  }
+  float alpha=hit?hitShape*opacity:0.0;
+  vec3 cloud=sky;
+  if(hit) {
+    float relative=clamp(hitHeight/hitTop,0.0,1.0);        // 0 base, 1 topo da coluna
+    float above=max(hitTop-hitHeight,0.0)*max(thicknessKm,0.3)+hitShape*0.15;
     float sunTransmittance=exp(-extinction*0.25*(above/max(toSun.y,0.15)*(1.0-lowSun)+side*0.3));
-    float lift=mix(mix(0.35,1.0,height),1.0,lowSun);
+    float lift=mix(mix(0.3,1.0,relative),1.0,lowSun);
     vec3 multiple=mix(sunRadiance,sunGrey,0.5)*0.3*(1.0-sunTransmittance*0.5);
-    vec3 lit=sunRadiance*(sunTransmittance*lift+phase*(1.0-local*0.6)*2.0)+multiple+
-             ambient*(0.55+0.45*height);
-    // Espessura 0: uma amostra só, opacidade direta do mapa.
-    float sampleT=thicknessKm>0.01?exp(-local*extinction*stepKm):1.0-local;
-    color+=transmittance*(1.0-sampleT)*lit;
-    transmittance*=sampleT;
-    if(thicknessKm<=0.01 || transmittance<0.02) break;
+    vec3 lit=sunRadiance*(sunTransmittance*lift+phase*(1.0-hitShape*0.6)*2.0)+multiple+
+             ambient*(0.55+0.45*relative);
+    cloud=lit*environment.cloudTint.rgb;
   }
   // Cirros: véu fino 6 km acima da base, atrás dos cúmulos e iluminado direto.
   float cirrusKm=cloudShellDistanceKm(baseKm+6.0,y);
@@ -143,9 +177,7 @@ vec3 cloudLayerComposite(vec3 sky,vec3 viewDirection,vec3 toSun,vec3 sunRadiance
                environment.cloudParameters.z*0.5*opacity*(1.0-exp(-y*12.0));
   vec3 cirrusColor=(sunRadiance*(0.6+phase*2.0)+ambient)*environment.cloudTint.rgb;
   sky=mix(sky,mix(cirrusColor,sky,1.0-exp(-cirrusKm/60.0)),cirrus);
-  float alpha=(1.0-transmittance)*opacity;
   if(alpha<=0.001) return sky;
-  vec3 cloud=color/max(1.0-transmittance,1e-3)*environment.cloudTint.rgb;
   // Longe, a nuvem se perde na névoa do horizonte, que é o próprio céu.
   float haze=1.0-exp(-startKm/38.0);
   cloud=mix(cloud,sky,haze*0.8);

@@ -652,6 +652,12 @@ private:
   bool createEnvironmentDescriptors();
   bool createSpectralWaterResources();
   bool createSkyPipeline();
+  // G4d: Volumetric Clouds (instanced_volumetric_clouds.inl).
+  bool createVolumetricCloudResources();
+  bool createVolumetricCloudPipeline();
+  void destroyVolumetricCloudResources();
+  bool volumetricCloudsReady() const;
+  void recordVolumetricClouds(const platform::FreeCameraState &camera, float timeSeconds);
   bool createEditorGridPipeline();
   bool createRuntimeHudPipeline();
   bool createUiRenderPass();
@@ -1176,6 +1182,21 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
+  // G4d: alvo de 1/16 dos pixels, histórico e ruídos 3D das Volumetric Clouds.
+  rhi::VulkanImage cloudVolumeTarget_{};
+  rhi::VulkanImage cloudVolumeHistory_{};
+  rhi::VulkanImage cloudShapeNoise_{};
+  rhi::VulkanImage cloudErosionNoise_{};
+  rhi::VulkanBuffer cloudShapeStaging_{};
+  rhi::VulkanBuffer cloudErosionStaging_{};
+  rhi::VulkanSampler cloudVolumeSampler_{};
+  rhi::VulkanSampler cloudNoiseSampler_{};
+  VkRenderPass cloudVolumeRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudVolumeFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline cloudVolumePipeline_ = VK_NULL_HANDLE;
+  bool cloudNoiseUploaded_ = false;
+  bool cloudHistoryValid_ = false;
+  bool cloudImagesInitialized_ = false;
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;

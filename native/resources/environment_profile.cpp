@@ -82,6 +82,7 @@ std::string EnvironmentProfile::serialize() const {
   out<<' '<<clouds.exposureEv<<' '<<clouds.windOrientationDegrees<<' '<<clouds.windSpeedKmh
      <<' '<<clouds.density<<' '<<clouds.ambientDimmer<<' '<<clouds.shadowMultiplier
      <<' '<<clouds.thicknessMeters;
+  out<<' '<<clouds.type<<' '<<clouds.shapeFactor<<' '<<clouds.erosion<<' '<<clouds.steps;
   out<<'\n';
   return out.str();
 }
@@ -146,6 +147,9 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
   }
   // v12: espessura da camada.
   if(version>=12 && !(in>>candidate.values.clouds.thicknessMeters)) return false;
+  // v13: Volumetric Clouds.
+  if(version>=13 && !(in>>candidate.values.clouds.type>>candidate.values.clouds.shapeFactor>>
+                      candidate.values.clouds.erosion>>candidate.values.clouds.steps)) return false;
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }

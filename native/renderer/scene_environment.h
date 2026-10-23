@@ -91,6 +91,9 @@ struct ColorGrading final {
 struct CloudLayer final {
   bool enabled = false;          // Cloud Type: None / Cloud Layer
   bool castShadows = true;       // Cast Shadows (luz direcional principal)
+  // 0 = Cloud Layer (camada 2D, barata), 1 = Volumetric Clouds (raymarch com
+  // ruído 3D, como o override Volumetric Clouds do HDRP). Os dois coexistem.
+  u32 type = 0;
   float opacity = 1.0f;          // Opacity
   float coverage = 0.45f;        // parte do céu com cúmulos (0 limpo, 1 encoberto)
   float cirrus = 0.3f;           // véu alto de cirros
@@ -106,6 +109,10 @@ struct CloudLayer final {
   float density = 0.5f;          // Raymarching › Density (mais escuro por dentro)
   float ambientDimmer = 1.0f;    // Ambient Probe Dimmer
   float shadowMultiplier = 0.8f; // Shadow Multiplier
+  // Volumetric Clouds: Shape Factor, Erosion Factor e Num Primary Steps.
+  float shapeFactor = 0.8f;
+  float erosion = 0.6f;
+  float steps = 24.0f;
 
   bool operator==(const CloudLayer &) const = default;
   bool valid() const noexcept {
@@ -114,6 +121,9 @@ struct CloudLayer final {
                          tint[0], tint[1], tint[2]};
     for (float value : values) if (!std::isfinite(value)) return false;
     for (float channel : tint) if (channel < 0.0f || channel > 1.0f) return false;
+    if (type > 1 || !std::isfinite(shapeFactor) || shapeFactor < 0.0f || shapeFactor > 1.0f ||
+        !std::isfinite(erosion) || erosion < 0.0f || erosion > 1.0f ||
+        !std::isfinite(steps) || steps < 8.0f || steps > 64.0f) return false;
     return opacity >= 0.0f && opacity <= 1.0f && coverage >= 0.0f && coverage <= 1.0f &&
            cirrus >= 0.0f && cirrus <= 1.0f && altitudeMeters >= 100.0f && altitudeMeters <= 20000.0f &&
            thicknessMeters >= 0.0f && thicknessMeters <= 5000.0f &&
