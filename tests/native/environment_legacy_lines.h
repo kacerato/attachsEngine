@@ -69,10 +69,13 @@ inline std::string componentBeforeExposure(const std::string &line,bool keepClou
   out.push_back("0");out.push_back("0");
   if(keepClouds) out.insert(out.end(),tokens.begin()+header+exposureTokens,tokens.begin()+numbersAt);
   const auto &numbers=ae::scene::Environment::descriptor.numbers;
-  for(size_t i=0;i<numbers.size()&&numbersAt+i<tokens.size();++i) {
+  // O texto v17 já não tem os números da v18 nem da v19: o índice só anda pelos demais.
+  for(size_t i=0,at=numbersAt;i<numbers.size()&&at<tokens.size();++i) {
     const std::string_view id=numbers[i].id;
+    if(componentNumberSinceV19(id)||ae::scene::environmentNumberSinceV18(id)) continue;
+    const size_t token=at++;
     if(id=="exposure_fixed"||ae::scene::environmentNumberSinceV17(id)||(!keepClouds&&id.starts_with("cloud_"))) continue;
-    out.push_back(tokens[numbersAt+i]);
+    out.push_back(tokens[token]);
   }
   return join(out);
 }
