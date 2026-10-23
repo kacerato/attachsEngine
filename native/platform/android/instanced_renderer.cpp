@@ -128,7 +128,7 @@ struct DirtRoadFrameUniform {
   float shadowSplitDepths[4]{};
   float shadowParameters[4]{}; // inv atlas, cascade count, força da sombra do sol, normal offset
   float shadowWorldUnitsPerTexel[4]{};
-  float shadowFilterParameters[4]{}; // near radius, far radius, reserved
+  float shadowFilterParameters[4]{}; // near radius, far radius (+8 = no gather), jitter
   float shadowTransitionParameters[4]{}; // cascade blend, distance fade, reserved
   float materialDistanceParameters[4]{}; // MR map, emissive map, reserved
   float waterParameters[4]{}; // wave count, base height, time, reserved
@@ -6600,6 +6600,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                        : renderingPolicy_.shadows.farFilterTaps >= 25u ? 2.0f
                                        : renderingPolicy_.shadows.farFilterTaps >= 9u ? 1.0f
                                                                                        : 0.0f;
+    // A/B do G1: +8 nos dois raios pede ao shader as nove buscas filtradas no lugar do gather.
+    if (!shadowGatherEnabled_) {
+      frame->shadowFilterParameters[0] += 8.0f;
+      frame->shadowFilterParameters[1] += 8.0f;
+    }
     {
       // O mapa guardado das cascatas estáticas foi desenhado com o desvio
       // anterior: trocar o Desvio da Luz exige redesenhar.
