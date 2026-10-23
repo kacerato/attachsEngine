@@ -52,9 +52,12 @@ inline std::string componentAsV17(const std::string &line) {
   tokens.erase(tokens.begin()+lightingAt,tokens.begin()+lightingAt+lightingTokens);
   std::vector<std::string> out(tokens.begin(),tokens.begin()+lightingAt);
   const auto &numbers=ae::scene::Environment::descriptor.numbers;
-  for(size_t i=0;i<numbers.size()&&lightingAt+i<tokens.size();++i)
-    if(!ae::scene::environmentNumberSinceV18(numbers[i].id)&&!componentNumberSinceV19(numbers[i].id))
-      out.push_back(tokens[lightingAt+i]);
+  // O texto v18 já não tem os números da v19: o índice só anda pelos demais.
+  for(size_t i=0,at=lightingAt;i<numbers.size()&&at<tokens.size();++i) {
+    if(componentNumberSinceV19(numbers[i].id)) continue;
+    if(!ae::scene::environmentNumberSinceV18(numbers[i].id)) out.push_back(tokens[at]);
+    ++at;
+  }
   return join(out);
 }
 inline std::string componentBeforeExposure(const std::string &line,bool keepClouds) {

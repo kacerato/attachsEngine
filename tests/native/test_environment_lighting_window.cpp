@@ -61,7 +61,7 @@ AE_TEST(environment_v18_round_trips_lighting_window_fields) {
   AE_EXPECT_TRUE(back.values.fogMode==renderer::FogMode::Linear&&back.values.fogEnd==420.0f&&
                  back.values.fogColorMode==renderer::FogColorMode::SkyLight,"Fog Mode, End e cor preservados");
   AE_EXPECT_TRUE(back.values.skybox==v.skybox,"Material do céu preservado");
-  AE_EXPECT_EQ(back.loadedVersion,18u,"lido na versão atual");
+  AE_EXPECT_EQ(back.loadedVersion,scene::Environment::CurrentVersion,"lido na versão atual");
 }
 
 AE_TEST(environment_v17_migrates_to_the_same_image) {
