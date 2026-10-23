@@ -153,8 +153,14 @@ inline const CreationComponent spot[]{{light,spotLight}};
 // referencia-unity): gota de ~0,6 m de traço, fina e translúcida como a da
 // Pixagon (Rain Storm, 1:38); floco pequeno e opaco como o da Synty (3:51).
 inline constexpr std::string_view weatherType="astra.environment.weather",particleType="astra.effects.particle_system";
+// Só nuvens e neblina: todo grupo de pós (exposição, cor, bloom...) desligado,
+// como no Volume de nuvens; o clima não pode trocar a imagem da cena.
 inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",true},
-  {environmentType,"override_post",false},{environmentType,"override_indirect",false},{environmentType,"clouds",true},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"clouds",true},
   {environmentType,"fog",true},{environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
   {environmentType,"fog_base_height",0.f},{environmentType,"fog_height_falloff",.06f},
   {environmentType,"priority",2.f}};

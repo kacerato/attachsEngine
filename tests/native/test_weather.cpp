@@ -223,6 +223,9 @@ AE_TEST(weather_recipe_creates_climate_with_linked_rain_and_snow) {
   const auto &env = environmentOf(graph, created);
   AE_EXPECT_TRUE(env.overrideClouds && env.overrideFog && !env.overrideSky && !env.overridePost && env.values.priority == 2,
                  "volume só de nuvens e neblina");
+  AE_EXPECT_TRUE(!env.overrideExposure && !env.overrideBloom && !env.overrideVignette && !env.overrideColorAdjustments &&
+                 !env.overrideColorGrading && !env.overrideFilmGrain && !env.overrideAmbientOcclusion && !env.overrideIndirect,
+                 "nenhum grupo de pós: o clima não troca a exposição nem a cor da cena");
   session.update();
   AE_EXPECT_TRUE(environmentOf(graph, created).values.clouds.coverage ==
                  runtime::weatherTarget(scene::WeatherKind::Rain, 0.7f).coverage, "a edição já mostra o céu de chuva");
