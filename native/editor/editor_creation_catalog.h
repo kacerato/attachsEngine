@@ -161,7 +161,11 @@ inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky"
   {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
   {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
   {environmentType,"override_ambient_occlusion",false},{environmentType,"clouds",true},
-  {environmentType,"fog",true},{environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
+  // Neblina exponencial que cobre o céu e acompanha a luz dele: o véu cinza
+  // da chuva da Unity. Com o padrão novo (Exp² e cor fixa) o céu ficava limpo
+  // e a cena, quente do sol, sem o cinza do tempo fechado.
+  {environmentType,"fog",true},{environmentType,"fog_mode",u32{1}},{environmentType,"fog_color_mode",u32{1}},
+  {environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
   {environmentType,"fog_base_height",0.f},{environmentType,"fog_height_falloff",.06f},
   {environmentType,"priority",2.f}};
 inline const CreationValue weatherValues[]{{weatherType,"kind",u32{2}},{weatherType,"intensity",.7f}};
