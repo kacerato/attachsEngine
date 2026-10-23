@@ -12,6 +12,8 @@ param(
     # Um controle a cada N configurações (e no início e no fim).
     [int]$ControlEvery=3,
     [int]$Seconds=40,
+    # Cena leve presa no vsync baixa o clock e esconde o custo: alvo acima do quadro real.
+    [float]$TargetFps=60,
     [switch]$Edit,
     [float[]]$Pose=@(),
     [double]$MaximumStartBatteryCelsius=40.0,
@@ -38,7 +40,7 @@ for($step=0;$step -lt $plan.Count;++$step) {
         if($t+1 -lt $tokens.Count -and !$tokens[$t+1].StartsWith('-')) { $extra[$key]=[int]$tokens[$t+1];++$t }
         else { $extra[$key]=$true }
     }
-    $call=@{OutputDirectory=$run;Projects=@($Project);Order=@('S');Seconds=$Seconds
+    $call=@{OutputDirectory=$run;Projects=@($Project);Order=@('S');Seconds=$Seconds;TargetFps=$TargetFps
         MaximumStartBatteryCelsius=$MaximumStartBatteryCelsius;MaximumCoolingMinutes=$MaximumCoolingMinutes}
     # A névoa resolvida por texel é o padrão do APK; o coletor do G0 a desliga se não pedir.
     if($extra.ContainsKey('NoFogResolve')) { $extra.Remove('NoFogResolve') } else { $call.FogResolve=$true }

@@ -1,0 +1,6 @@
+[PostIsolation] mask=16 (1 neblina, 2 AO, 4 bloom, 8 FXAA, 16 nitidez, 32 ambiente difuso, 64 reflexo do ambiente, 128 reflexo do c├®u desligado, 256 recaptura do c├®u a cada quadro).
+[PunctualLightMask] desligada
+[ShadowGather] gather 4
+[RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+[RenderPolicy] preset=s perfil=3 sombras=on(4 cascatas @2048, 25/9 taps, cache=static margem=1.05 blend=0.10 fade=0.12) ambiente=hemisferio+especular+split-sum pos=passe+bloom malha_agua=ultra(236 seg) textura_mip_bias=0 aniso=8.0 escala=1.00 dinamica=off[0.85,1.00] clamps=0
+[RenderPolicy] lod=on erro_solido=1.00px erro_coverage=2.00px histerese=0.80 normal_ate=0.0 specular_ate=0.0 mr_ate=0.0 emissive_ate=0.0 variantes_material=on aa=fxaa bloom=1 sharpen=0.12 contraste=1.04 saturacao=1.03

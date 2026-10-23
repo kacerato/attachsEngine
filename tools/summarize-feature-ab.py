@@ -35,6 +35,17 @@ def cell(value, digits=2):
     return '—' if value is None else ('%.*f' % (digits, value)).replace('.', ',')
 
 
+def battery_celsius(run_folder):
+    """Temperatura da bateria no início da rodada (battery-before.txt do coletor)."""
+    import glob
+    import re
+    for path in glob.glob(os.path.join(run_folder, '**', 'battery-before.txt'), recursive=True):
+        match = re.search(r'temperature: (\d+)', open(path, encoding='utf-8-sig', errors='replace').read())
+        if match:
+            return int(match.group(1)) / 10.0
+    return None
+
+
 def base_table(folder, key):
     project, g0_folder = SCENES[key]
     now = load(os.path.join(folder, key + '-base', 'rows.json'))
@@ -53,7 +64,11 @@ def base_table(folder, key):
             delta = None if a is None or b is None else b - a
             cells += [cell(a), cell(b), ('+' if delta is not None and delta >= 0.005 else '') + cell(delta)]
         print('| %s | %s |' % (label, ' | '.join(cells)))
-    print()
+    slug = 'sponza' if key == 'sponza' else 'vila-astra'
+    print('\nRodadas: ' + '; '.join('%d %s %s FPS, GPU %s ms, bateria %s °C' % (
+        r['round'], r['tier'], cell(r.get('internalFps'), 1), cell(r.get('gpu_frame_ms')),
+        cell(battery_celsius(os.path.join(folder, key + '-base', slug, '%02d-%s' % (r['round'], r['tier']))), 1))
+        for r in now) + '.\n')
 
 
 def ab_table(folder, key):
@@ -63,9 +78,11 @@ def ab_table(folder, key):
         return
     controls = [r for r in rows if r['configuration'] == 'base']
     print('### %s: A/B por recurso em S (controle = média dos dois controles vizinhos)\n' % project)
-    print('Controles (GPU quadro, ms, na ordem): %s\n' % ', '.join(cell(r.get('gpu_frame_ms')) for r in controls))
-    print('| Configuração | GPU quadro | Δ GPU | Opaco | Δ opaco | Pós | Δ pós | Sombra | CPU | Δ CPU |')
-    print('|---|---|---|---|---|---|---|---|---|---|')
+    print('Controles (passo: GPU quadro ms, bateria °C): %s\n' % ', '.join('%d: %s (%s)' % (
+        r['step'], cell(r.get('gpu_frame_ms')),
+        cell(battery_celsius(os.path.join(folder, key + '-ab', '%02d-base' % r['step'])), 1)) for r in controls))
+    print('| Configuração | GPU quadro | Δ GPU | Opaco | Δ opaco | Pós | Δ pós | Sombra | CPU | Δ CPU | Bateria °C |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|')
     for row in rows:
         if row['configuration'] == 'base':
             continue
@@ -83,6 +100,7 @@ def ab_table(folder, key):
         reference = mean([c.get('process_cpu_ms') for c in neighbours])
         out += [cell(cpu), ('+' if cpu is not None and reference is not None and cpu > reference else '') +
                 cell(None if cpu is None or reference is None else cpu - reference)]
+        out.append(cell(battery_celsius(os.path.join(folder, key + '-ab', '%02d-%s' % (row['step'], row['configuration']))), 1))
         print('| ' + ' | '.join(out) + ' |')
     print()
 

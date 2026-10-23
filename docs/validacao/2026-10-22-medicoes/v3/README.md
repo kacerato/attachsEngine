@@ -16,7 +16,16 @@ e viravam 0. A correção (constantes em highp) é o commit 5b1b938c, já na bas
 
 Prancha: `prancha-v3-unity-poco.jpg` (montada de `prancha.json` com `tools/build-comparison-board.py`).
 Capturas do POCO em `poco-pk9-1423/` (APK 0.3.0-dev.261022999-pk9-1423, que já tem 5b1b938c) e
-`poco-base/` (APK da base desta entrega).
+`poco-clima-2324/` (APK 0.3.0-dev.261022999-clima-2324, a base mais o clima, que outra frente tinha
+instalado na hora; mesma conclusão, com a luz do clima).
+
+## Objeto fora do sol continua projetando
+
+Com a Casa C fora da Máscara de culling do sol (`poco-clima-2324/05-casa-C-sem-sol.jpg`), ela fica só
+com o ambiente e **a sombra dela no calçamento continua**. É o comportamento da URP 6: no caso
+[9149 do issue tracker da Unity](https://issuetracker.unity.com/issues/9149/shadows-are-not-cast-when-the-lights-cullingmask-and-the-gameobjects-layer-do-not-match)
+(URP, 6000.0.28f1), o resultado *esperado* para um cubo fora do Culling Mask da direcional é a sombra
+aparecer no plano. Para tirar a sombra, o autor desliga Projetar sombras, como na Unity. Sem mudança.
 
 ## Como as variantes foram feitas
 
