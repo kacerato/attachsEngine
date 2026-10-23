@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 69> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 70> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -223,13 +223,18 @@ inline constexpr std::array<EngineCapability, 69> engineCapabilities{{
   {"render.particles.material", "Material de partícula mistura/aditivo", CapabilityState::Implemented,
    "rhi/shaders/particle_material.frag + renderer/particles/particle_textures.cpp",
    "Texturas próprias da engine (8 formas, 3 ruídos, 3 máscaras) ou, com descritores bindless, a imagem e a cor base de um Material do projeto com shader Partícula (PK-10a); sem bindless fica a textura própria"},
+  {"render.particles.lights", "Luzes das partículas (Lights)", CapabilityState::Implemented,
+   "runtime/scene_particles.cpp + platform/android/android_main.cpp",
+   "Luz modelo (ponto ou spot) copiada para a Proporção das partículas até o Máximo por sistema; cor da partícula, tamanho no alcance e alfa na intensidade. Sem sombra e sem Random Distribution: o sorteio é fixo por partícula"},
   {"render.particles.texture_sheet", "Folha de textura (Texture Sheet Animation)", CapabilityState::Implemented,
    "renderer/particles/particle_simulation.cpp + rhi/shaders/particle_billboard.vert",
    "Modo Grid da Unity: Colunas x Linhas, Folha inteira ou Uma linha (escolhida ou sorteada), Quadro no tempo (curva), Quadro inicial e Ciclos; sem modo Sprites nem mistura entre quadros"},
   {"render.particles.soft", "Partícula suave por profundidade", CapabilityState::DeviceLimited,
    "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
   {"render.particles.mesh", "Partícula de malha", CapabilityState::Planned, "renderer/particles/", "Pacote P2"},
-  {"render.particles.trails", "Rastros, TrailRenderer e LineRenderer", CapabilityState::Planned, "renderer/particles/", "Pacote P3"},
+  {"render.particles.trails", "Trilhas das partículas (Trails)", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
+   "Modo Particles da Unity: até 12 pontos por partícula, Proporção, Vida da trilha, Distância mínima, largura do início ao fim, cor herdada e esmaecer; segmentos como billboards esticados no passe das partículas, com o material do sistema. Sem modo Ribbon, sem Trail Material próprio; componentes TrailRenderer e LineRenderer ainda não"},
   {"render.particles.collision", "Colisão de partículas com planos", CapabilityState::Implemented,
    "renderer/particles/particle_simulation.cpp",
    "Modo Planes da Unity: até dois objetos-plano com quique, amortecimento, perda de vida e velocidade mínima; sem colisão com a física da cena (modo World)"},

@@ -12,6 +12,7 @@
 // a prévia do editor recomeça quando a cena é reaberta.
 #include "core/base.h"
 #include "renderer/particles/particle_simulation.h"
+#include "renderer/punctual_lights.h"
 #include "runtime/scene_graph.h"
 #include "scene/particle_system.h"
 
@@ -99,6 +100,10 @@ private:
   // Sub-emissores: cada evento do quadro faz o sistema referenciado emitir ali.
   void routeSubEmitters(const SceneGraph &graph);
   Entry *firstEntryOf(ObjectId object);
+  // Canal de sorteio da luz por partícula: fixo, como os canais da simulação.
+  static constexpr u32 kLightChannel = 0x4c494748u;  // "LIGH"
+  void appendLights(const SceneGraph &graph, const Entry &entry, const renderer::particles::ParticleBatch &batch,
+                    renderer::particles::ParticleFrame &out) const;
 
   std::map<Key, Entry> entries_;
   u64 knownRevision_ = ~u64{0};
@@ -106,6 +111,10 @@ private:
   bool previewLoop_ = false;
   float simulationMs_ = 0;
 };
+
+// PK-10b: as luzes das partículas do quadro viram luzes da cena, depois das
+// autorais (o teto do renderer conta o que não coube, como qualquer luz).
+void appendParticleLights(const renderer::particles::ParticleFrame &frame, std::vector<renderer::SceneLight> &out);
 
 // Semente efetiva: a manual, ou uma derivada do objeto e da instância (estável
 // entre execuções; dois sistemas iguais em objetos diferentes não coincidem).

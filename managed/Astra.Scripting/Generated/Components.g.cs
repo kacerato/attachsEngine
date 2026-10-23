@@ -13029,6 +13029,69 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetFloat("sheet_cycles");
         set => Component.SetFloat("sheet_cycles", value);
     }
+    /// <summary>Proporção. Fração das partículas que levam uma luz (sorteio fixo por partícula)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float LightRatio
+    {
+        get => Component.GetFloat("light_ratio");
+        set => Component.SetFloat("light_ratio", value);
+    }
+    /// <summary>Máximo de luzes. Teto de luzes deste sistema por quadro; as luzes do aparelho também têm teto</summary>
+    /// <remarks>Faixa válida: 0 a 64.</remarks>
+    public float LightMax
+    {
+        get => Component.GetFloat("light_max");
+        set => Component.SetFloat("light_max", value);
+    }
+    /// <summary>Multiplicador de alcance (×). Escala o alcance da luz modelo</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float LightRangeMultiplier
+    {
+        get => Component.GetFloat("light_range_multiplier");
+        set => Component.SetFloat("light_range_multiplier", value);
+    }
+    /// <summary>Multiplicador de intensidade (×). Escala a intensidade da luz modelo</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float LightIntensityMultiplier
+    {
+        get => Component.GetFloat("light_intensity_multiplier");
+        set => Component.SetFloat("light_intensity_multiplier", value);
+    }
+    /// <summary>Proporção. Fração das partículas que deixam trilha (sorteio fixo por partícula)</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float TrailRatio
+    {
+        get => Component.GetFloat("trail_ratio");
+        set => Component.SetFloat("trail_ratio", value);
+    }
+    /// <summary>Vida da trilha. Quanto dura cada ponto, em fração da vida da partícula</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float TrailLifetime
+    {
+        get => Component.GetFloat("trail_lifetime");
+        set => Component.SetFloat("trail_lifetime", value);
+    }
+    /// <summary>Distância mínima (m). Um ponto novo só depois de andar isto (menos pontos, mais barato)</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float TrailMinVertexDistance
+    {
+        get => Component.GetFloat("trail_min_vertex_distance");
+        set => Component.SetFloat("trail_min_vertex_distance", value);
+    }
+    /// <summary>Largura no início (×). Largura junto da partícula, em vezes o tamanho dela</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float TrailWidth
+    {
+        get => Component.GetFloat("trail_width");
+        set => Component.SetFloat("trail_width", value);
+    }
+    /// <summary>Largura no fim (×). Largura na ponta mais velha, em vezes o tamanho da partícula</summary>
+    /// <remarks>Faixa válida: 0 a 10.</remarks>
+    public float TrailWidthEnd
+    {
+        get => Component.GetFloat("trail_width_end");
+        set => Component.SetFloat("trail_width_end", value);
+    }
     /// <summary>Repetir. Recomeça o ciclo ao terminar a duração</summary>
     public bool Looping
     {
@@ -13148,6 +13211,48 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     {
         get => Component.GetBool("texture_sheet_enabled");
         set => Component.SetBool("texture_sheet_enabled", value);
+    }
+    /// <summary>Luzes ativas. Lights: partículas acendem luzes pontuais copiadas de uma luz modelo (faíscas, tochas, magia)</summary>
+    public bool LightsEnabled
+    {
+        get => Component.GetBool("lights_enabled");
+        set => Component.SetBool("lights_enabled", value);
+    }
+    /// <summary>Usar cor da partícula. A cor da luz é multiplicada pela cor da partícula</summary>
+    public bool LightUseParticleColor
+    {
+        get => Component.GetBool("light_use_particle_color");
+        set => Component.SetBool("light_use_particle_color", value);
+    }
+    /// <summary>Tamanho afeta o alcance. O alcance é multiplicado pelo tamanho da partícula</summary>
+    public bool LightSizeAffectsRange
+    {
+        get => Component.GetBool("light_size_affects_range");
+        set => Component.SetBool("light_size_affects_range", value);
+    }
+    /// <summary>Alfa afeta a intensidade. A luz apaga junto com a partícula</summary>
+    public bool LightAlphaAffectsIntensity
+    {
+        get => Component.GetBool("light_alpha_affects_intensity");
+        set => Component.SetBool("light_alpha_affects_intensity", value);
+    }
+    /// <summary>Trilhas ativas. Trails: cada partícula deixa um rastro dos pontos por onde passou (faíscas, cometas, magia)</summary>
+    public bool TrailsEnabled
+    {
+        get => Component.GetBool("trails_enabled");
+        set => Component.SetBool("trails_enabled", value);
+    }
+    /// <summary>Herdar cor da partícula. A trilha tem a cor atual da partícula; desligado, branca</summary>
+    public bool TrailInheritColor
+    {
+        get => Component.GetBool("trail_inherit_color");
+        set => Component.SetBool("trail_inherit_color", value);
+    }
+    /// <summary>Esmaecer na ponta. O alfa cai até zero na ponta mais velha</summary>
+    public bool TrailFade
+    {
+        get => Component.GetBool("trail_fade");
+        set => Component.SetBool("trail_fade", value);
     }
     public enum StartDelayModeOption : uint
     {
@@ -13682,6 +13787,12 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     {
         get => Component.GetReference("sub_emitter_death");
         set => Component.SetReference("sub_emitter_death", value);
+    }
+    /// <summary>Luz modelo. Objeto com Luz pontual ou spot: cor, intensidade, alcance e unidade copiados (pode ficar inativo)</summary>
+    public ObjectReference LightTemplate
+    {
+        get => Component.GetReference("light_template");
+        set => Component.SetReference("light_template", value);
     }
     /// <summary>Material. Recurso do projeto por slot</summary>
     public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);

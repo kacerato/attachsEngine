@@ -4,7 +4,9 @@
 
 #include "renderer/particles/particle_simulation.h"
 #include "renderer/particles/particle_textures.h"
+#include "runtime/scene_lights.h"
 #include "runtime/scene_particles.h"
+#include "scene/light.h"
 #include "scene/component_reflection.h"
 #include "scene/component_schema.h"
 #include "scene/particle_system.h"
@@ -53,7 +55,7 @@ AE_TEST(particle_system_registered_with_effects_family_and_reflection) {
   AE_EXPECT_TRUE(scene::componentSchemaIdsUnique(), "ids únicos");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.simulation"), "simulação implementada");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.soft"), "suave autorável (limitada pelo aparelho)");
-  AE_EXPECT_TRUE(!core::engineCapabilityAuthorable("render.particles.trails"), "rastro ainda planejado");
+  AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.trails") && !core::engineCapabilityAuthorable("render.particles.mesh"), "trilhas implementadas; partícula de malha ainda planejada");
   // Toda propriedade tem consumidor declarado e capacidade autorável.
   for (const auto &p : scene::ParticleSystem::descriptor.numbers)
     AE_EXPECT_TRUE(p.presentation.hasConsumer() && !p.presentation.consumer.empty() && !p.id.empty(), "número com consumidor");
@@ -837,4 +839,104 @@ AE_TEST(particle_pk10a_project_material_reaches_the_batch) {
   particles.build(graph, kCamera, frame, &refuse);
   AE_EXPECT_TRUE(frame.batches[0].material.projectTexture == ~0u && frame.batches[0].material.blend == 0,
                  "Material sem shader Partícula: material embutido");
+}
+
+// PK-10b: módulo Luzes (Unity Lights): luz modelo, proporção, teto e cor.
+AE_TEST(particle_pk10b_lights_copy_the_template_light_for_a_share_of_particles) {
+  runtime::SceneGraph graph;
+  const auto lamp = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Faísca modelo");
+  auto &template_ = static_cast<scene::Light &>(*graph.editComponents(lamp)->add(scene::Light::descriptor));
+  template_.kind = scene::LightKind::Point;template_.range = 4;
+  AE_EXPECT_TRUE(graph.setActive(lamp, false), "modelo inativo não acende sozinho");
+  const auto sparks = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Faíscas");
+  auto &system = scene::particleSystem(*graph.editComponents(sparks)->add(scene::ParticleSystem::descriptor));
+  system.emissionRate = scene::particleCurveDefault(400);
+  system.startColor.colorMax[0] = 1;system.startColor.colorMax[1] = 0.5f;system.startColor.colorMax[2] = 0.1f;
+  system.lightsEnabled = true;system.lightTemplate = lamp;system.lightRatio = 0.5f;system.lightMaxLights = 12;
+  system.lightRangeMultiplier = 2;system.lightAlphaAffectsIntensity = false;
+  runtime::SceneParticles particles;
+  particles.advance(graph, 0.2f);
+  renderer::particles::ParticleFrame frame;
+  particles.build(graph, kCamera, frame);
+  AE_EXPECT_EQ(frame.lights.size(), usize(12), "Máximo de luzes por sistema");
+  std::vector<renderer::SceneLight> base;
+  AE_EXPECT_TRUE(runtime::collectSceneLights(graph, base) && base.empty(), "o modelo inativo não está entre as luzes da cena");
+  renderer::SceneLight reference;
+  runtime::sceneLightValues(template_, reference);
+  const auto &first = frame.lights.front();
+  AE_EXPECT_TRUE(std::abs(first.range - 8) < 1e-5f, "alcance do modelo × multiplicador");
+  AE_EXPECT_TRUE(std::abs(first.color[1] - reference.color[1] * 0.5f) < 1e-3f && std::abs(first.intensity - reference.intensity) < 1e-4f,
+                 "cor do modelo × cor da partícula; intensidade do modelo");
+  std::vector<renderer::SceneLight> lights;
+  runtime::appendParticleLights(frame, lights);
+  AE_EXPECT_TRUE(lights.size() == 12 && lights[0].modality == renderer::LightModality::Point, "viram luzes pontuais da cena");
+  // Proporção zero e modelo direcional não acendem nada.
+  scene::particleSystem(*graph.editComponents(sparks)->edit(scene::ParticleSystem::descriptor)).lightRatio = 0;
+  particles.advance(graph, 0.0f);
+  particles.build(graph, kCamera, frame);
+  AE_EXPECT_TRUE(frame.lights.empty(), "proporção zero");
+  scene::particleSystem(*graph.editComponents(sparks)->edit(scene::ParticleSystem::descriptor)).lightRatio = 1;
+  static_cast<scene::Light &>(*graph.editComponents(lamp)->edit(scene::Light::descriptor)).kind = scene::LightKind::Directional;
+  particles.advance(graph, 0.0f);
+  particles.build(graph, kCamera, frame);
+  AE_EXPECT_TRUE(frame.lights.empty(), "sol não vira luz de partícula");
+  scene::ParticleSystem fraction;fraction.lightMaxLights = 2.5f;
+  AE_EXPECT_TRUE(!fraction.valid(), "máximo inteiro");
+}
+
+// PK-10c: Trilhas (modo Particles): pontos por distância, vida, largura e cor.
+AE_TEST(particle_pk10c_trails_record_points_and_build_stretched_segments) {
+  scene::ParticleSystemSettings comet;
+  comet.startLifetime = scene::particleCurveDefault(2);
+  comet.startSpeed = scene::particleCurveDefault(5);
+  comet.emissionRate = scene::particleCurveDefault(0);
+  comet.shapeEnabled = false;  // para +Z
+  comet.simulationSpace = scene::ParticleSimulationSpace::World;
+  comet.trailsEnabled = true;comet.trailLifetime = 0.5f;comet.trailMinVertexDistance = 0.4f;
+  comet.trailWidth = 1;comet.trailWidthEnd = 0;
+  ParticleEmitter emitter;
+  emitter.configure(comet, 5);
+  emitter.play();
+  emitter.emit(1, kIdentity);
+  for (u32 i = 0; i < 10; ++i) emitter.simulate(0.05f, kIdentity);  // 2,5 m andados
+  std::vector<ParticleInstance> segments;
+  emitter.buildTrails(kIdentity, segments);
+  AE_EXPECT_TRUE(segments.size() >= 5 && segments.size() <= 7, "um ponto a cada 0,4 m");
+  const auto &front = segments.front();
+  AE_EXPECT_TRUE(front.velocity[2] > 0 && front.size > segments.back().size, "segmento aponta para a frente e afina na ponta");
+  AE_EXPECT_TRUE(renderer::particles::halfToFloat(segments.back().color[3]) < renderer::particles::halfToFloat(front.color[3]),
+                 "esmaece na ponta");
+  for (u32 i = 0; i < 20; ++i) emitter.simulate(0.05f, kIdentity);  // pontos com mais de 1 s caem
+  std::vector<ParticleInstance> later;
+  emitter.buildTrails(kIdentity, later);
+  float tail = 1e9f;
+  for (const auto &s : later) tail = std::min(tail, s.position[2] - s.velocity[2]);
+  std::vector<ParticleInstance> head;
+  emitter.build(kIdentity, kCamera, head);
+  AE_EXPECT_TRUE(!head.empty() && head[0].position[2] - tail <= 5 * 1.0f + 0.45f, "a trilha cobre só a Vida da trilha (1 s = 5 m)");
+  const auto material = emitter.trailMaterial();
+  AE_EXPECT_TRUE(material.renderMode == static_cast<u32>(scene::ParticleRenderMode::StretchedBillboard) &&
+                 material.stretchVelocityScale == 1 && material.stretchLengthScale == 0, "segmento esticado com o comprimento exato");
+  auto none = comet;none.trailRatio = 0;
+  emitter.configure(none, 5);
+  segments.clear();
+  emitter.buildTrails(kIdentity, segments);
+  AE_EXPECT_TRUE(segments.empty(), "proporção zero, nenhuma trilha");
+  auto off = comet;off.trailsEnabled = false;
+  emitter.configure(off, 5);
+  emitter.buildTrails(kIdentity, segments);
+  AE_EXPECT_TRUE(segments.empty(), "módulo desligado apaga os pontos");
+  // A cena monta um lote de trilha logo atrás do lote das partículas.
+  runtime::SceneGraph graph;
+  const auto id = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Cometa");
+  auto &system = scene::particleSystem(*graph.editComponents(id)->add(scene::ParticleSystem::descriptor));
+  static_cast<scene::ParticleSystemSettings &>(system) = comet;
+  system.emissionRate = scene::particleCurveDefault(20);
+  runtime::SceneParticles particles;
+  for (u32 i = 0; i < 10; ++i) particles.advance(graph, 0.05f);
+  renderer::particles::ParticleFrame frame;
+  particles.build(graph, kCamera, frame);
+  AE_EXPECT_EQ(frame.batches.size(), usize(2), "partículas e trilhas");
+  const bool trailFirst = frame.batches[0].material.renderMode == static_cast<u32>(scene::ParticleRenderMode::StretchedBillboard);
+  AE_EXPECT_TRUE(trailFirst, "a trilha desenha antes (atrás) da partícula");
 }

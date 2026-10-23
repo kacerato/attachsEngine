@@ -18,8 +18,9 @@ enum Channel : u32 {
   ChannelVelocityX, ChannelVelocityY, ChannelVelocityZ, ChannelSpeedModifier, ChannelLimit,
   ChannelForceX, ChannelForceY, ChannelForceZ, ChannelNoise,
   ChannelSizeBySpeed, ChannelColorBySpeed, ChannelRotationBySpeed,
-  ChannelSheetFrame, ChannelSheetStart, ChannelSheetRow
+  ChannelSheetFrame, ChannelSheetStart, ChannelSheetRow, ChannelTrail
 };
+constexpr u32 kTrailStride = scene::ParticleSystemSettings::kTrailPoints * 4;
 // Velocidade normalizada na faixa autoral (Size/Color/Rotation by Speed).
 float speedFraction(float speed, const float (&range)[2]) {
   const float span = range[1] - range[0];
@@ -260,6 +261,8 @@ void ParticleEmitter::configure(const scene::ParticleSystemSettings &settings, u
     rng_.seed(seed);
   }
   configured_ = true;
+  // Trilhas desligadas no inspetor: os pontos somem já, não no próximo passo.
+  if (!settings.trailsEnabled) { trail_.clear(); trailCount_.clear(); }
   // Teto autoral reduzido: as excedentes saem pelas mais velhas do fim da lista.
   while (alive() > capacity()) kill(alive() - 1);
 }
@@ -295,6 +298,8 @@ void ParticleEmitter::clear() {
   for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &ax_, &ay_, &az_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
     v->clear();
   seed_.clear();
+  trail_.clear();
+  trailCount_.clear();
 }
 void ParticleEmitter::restart() {
   clear();
@@ -393,10 +398,19 @@ void ParticleEmitter::kill(u32 index) {
     rotation_[index] = rotation_[last];
     colorR_[index] = colorR_[last]; colorG_[index] = colorG_[last]; colorB_[index] = colorB_[last]; colorA_[index] = colorA_[last];
     seed_[index] = seed_[last];
+    if (!trailCount_.empty()) {
+      std::copy_n(trail_.begin() + static_cast<std::ptrdiff_t>(last) * kTrailStride, kTrailStride,
+                  trail_.begin() + static_cast<std::ptrdiff_t>(index) * kTrailStride);
+      trailCount_[index] = trailCount_[last];
+    }
   }
   for (auto *v : {&px_, &py_, &pz_, &vx_, &vy_, &vz_, &ax_, &ay_, &az_, &age_, &lifetime_, &baseSize_, &rotation_, &colorR_, &colorG_, &colorB_, &colorA_})
     v->pop_back();
   seed_.pop_back();
+  if (!trailCount_.empty()) {
+    trail_.resize(trail_.size() - kTrailStride);
+    trailCount_.pop_back();
+  }
 }
 
 // Formas na convenção da Unity: cone, caixa e "forma desligada" emitem para +Z;
@@ -559,6 +573,10 @@ void ParticleEmitter::spawn(u32 count, const float (&world)[16], float systemNor
     rotation_.push_back(startRotation_.evaluate(systemNormalized, particleRandom(seed, ChannelRotation)) * kDegrees);
     colorR_.push_back(color[0]); colorG_.push_back(color[1]); colorB_.push_back(color[2]); colorA_.push_back(color[3]);
     seed_.push_back(seed);
+    if (settings_.trailsEnabled) {
+      trail_.resize(trail_.size() + kTrailStride, 0.0f);
+      trailCount_.push_back(0);
+    }
     if (settings_.subEmittersEnabled && settings_.subEmitterBirth) record(births_, alive() - 1, world);
   }
 }
@@ -698,6 +716,7 @@ void ParticleEmitter::simulate(float deltaSeconds, const float (&world)[16]) {
   std::copy(world + 12, world + 15, lastOrigin_);
   hasLastOrigin_ = true;
   advanceParticles(dt, gravity, world);
+  updateTrails();
   if (emitting_ && settings_.emissionEnabled && distanceAccumulator_ >= 1) {
     const auto count = static_cast<u32>(std::min(distanceAccumulator_, 1.0e6f));
     distanceAccumulator_ -= static_cast<float>(count);
@@ -853,6 +872,112 @@ float ParticleEmitter::sheetFrame(float t, u32 seed) const {
       ? std::min(rows - 1, static_cast<u32>(particleRandom(seed, ChannelSheetRow) * static_cast<float>(rows)))
       : std::min(rows - 1, static_cast<u32>(s.sheetRow));
   return static_cast<float>(row * columns + std::min(index, columns - 1));
+}
+
+// Trails (modo Particles): cada partícula grava a posição quando andou a
+// Distância mínima e esquece pontos mais velhos que Vida da trilha × vida dela.
+// Os pontos ficam no espaço da simulação, como as próprias partículas.
+void ParticleEmitter::updateTrails() {
+  const u32 n = alive();
+  if (!settings_.trailsEnabled) {
+    trail_.clear();
+    trailCount_.clear();
+    return;
+  }
+  if (trailCount_.size() != n) {
+    // Módulo ligado com partículas já vivas: começam sem pontos.
+    trail_.assign(static_cast<usize>(n) * kTrailStride, 0.0f);
+    trailCount_.assign(n, 0);
+  }
+  const float minimum = std::max(settings_.trailMinVertexDistance, 0.0f);
+  for (u32 i = 0; i < n; ++i) {
+    float *points = trail_.data() + static_cast<usize>(i) * kTrailStride;
+    u32 count = trailCount_[i];
+    const float keep = std::max(settings_.trailLifetime, 0.0f) * lifetime_[i];
+    u32 expired = 0;
+    while (expired < count && age_[i] - points[expired * 4 + 3] > keep) ++expired;
+    if (expired) {
+      std::copy(points + expired * 4, points + count * 4, points);
+      count -= expired;
+    }
+    bool record = count == 0;
+    if (!record) {
+      const float *last = points + (count - 1) * 4;
+      const float d[3]{px_[i] - last[0], py_[i] - last[1], pz_[i] - last[2]};
+      record = d[0] * d[0] + d[1] * d[1] + d[2] * d[2] >= minimum * minimum;
+    }
+    if (record && keep > 0) {
+      if (count == scene::ParticleSystemSettings::kTrailPoints) {
+        std::copy(points + 4, points + count * 4, points);
+        --count;
+      }
+      float *slot = points + count * 4;
+      slot[0] = px_[i]; slot[1] = py_[i]; slot[2] = pz_[i]; slot[3] = age_[i];
+      ++count;
+    }
+    trailCount_[i] = static_cast<u8>(count);
+  }
+}
+
+void ParticleEmitter::buildTrails(const float (&world)[16], std::vector<ParticleInstance> &out) const {
+  const auto &s = settings_;
+  if (!s.trailsEnabled || trailCount_.size() != alive()) return;
+  const bool local = s.simulationSpace == scene::ParticleSimulationSpace::Local;
+  const auto toWorld = [&](const float *p, float (&w)[3]) {
+    const float point[3]{p[0], p[1], p[2]};
+    if (local) transformPoint(world, point, w);
+    else std::copy(point, point + 3, w);
+  };
+  for (u32 i = 0; i < alive(); ++i) {
+    const u32 count = trailCount_[i];
+    if (!count || particleRandom(seed_[i], ChannelTrail) >= s.trailRatio) continue;
+    const float *points = trail_.data() + static_cast<usize>(i) * kTrailStride;
+    // Do mais novo (a própria partícula) ao mais velho: o segmento k liga o
+    // ponto k ao ponto k+1 da lista invertida.
+    float newer[3];
+    const float head[3]{px_[i], py_[i], pz_[i]};
+    toWorld(head, newer);
+    const float t = age_[i] / lifetime_[i];
+    float size = baseSize_[i];
+    if (s.sizeOverLifetimeEnabled) size *= std::max(0.0f, sizeOverLifetime_.evaluate(t, particleRandom(seed_[i], ChannelSizeOverLifetime)));
+    float color[4]{1, 1, 1, 1};
+    if (s.trailInheritColor) {
+      color[0] = colorR_[i]; color[1] = colorG_[i]; color[2] = colorB_[i]; color[3] = colorA_[i];
+      if (s.colorOverLifetimeEnabled) {
+        float over[4];
+        colorOverLifetime_.evaluate(t, particleRandom(seed_[i], ChannelColorOverLifetime), over);
+        for (u32 k = 0; k < 4; ++k) color[k] *= over[k];
+      }
+    }
+    for (u32 k = count; k-- > 0;) {
+      float older[3];
+      toWorld(points + k * 4, older);
+      const float segment[3]{newer[0] - older[0], newer[1] - older[1], newer[2] - older[2]};
+      if (segment[0] * segment[0] + segment[1] * segment[1] + segment[2] * segment[2] > 1e-10f) {
+        // Fração ao longo da trilha no meio do segmento: 0 junto da partícula.
+        const float along = (static_cast<float>(count - k) - 0.5f) / static_cast<float>(count);
+        ParticleInstance instance;
+        std::copy(newer, newer + 3, instance.position);
+        std::copy(segment, segment + 3, instance.velocity);
+        instance.size = size * (s.trailWidth + (s.trailWidthEnd - s.trailWidth) * along);
+        const float fade = s.trailFade ? 1.0f - along : 1.0f;
+        for (u32 c = 0; c < 3; ++c) instance.color[c] = floatToHalf(std::max(0.0f, color[c]));
+        instance.color[3] = floatToHalf(std::clamp(color[3] * fade, 0.0f, 1.0f));
+        instance.random = seed_[i];
+        if (instance.size > 0) out.push_back(instance);
+      }
+      std::copy(older, older + 3, newer);
+    }
+  }
+}
+
+ParticleMaterialParameters ParticleEmitter::trailMaterial() const {
+  auto m = material();
+  m.renderMode = static_cast<u32>(scene::ParticleRenderMode::StretchedBillboard);
+  m.stretchVelocityScale = 1;  // comprimento = o segmento
+  m.stretchLengthScale = 0;
+  m.sheetTiles[0] = m.sheetTiles[1] = 1;
+  return m;
 }
 
 ParticleMaterialParameters ParticleEmitter::material() const {

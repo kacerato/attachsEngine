@@ -312,6 +312,33 @@ struct ParticleSystemSettings {
   }();
   ParticleMinMaxCurve sheetStartFrame = particleCurveDefault(0);
   float sheetCycles = 1;
+
+  // --- Luzes (PK-10b) ---------------------------------------------------------
+  // Lights da Unity: uma luz modelo (objeto com componente Luz, pode estar
+  // inativo) copiada para parte das partículas, com teto por sistema.
+  bool lightsEnabled = false;
+  u64 lightTemplate = 0;
+  float lightRatio = 0.1f;
+  float lightMaxLights = 8;
+  bool lightUseParticleColor = true;
+  bool lightSizeAffectsRange = false;
+  bool lightAlphaAffectsIntensity = true;
+  float lightRangeMultiplier = 1;
+  float lightIntensityMultiplier = 1;
+
+  // --- Trilhas (PK-10c) ------------------------------------------------------
+  // Trails da Unity no modo Particles: pontos guardados por partícula (no
+  // máximo kTrailPoints), desenhados como segmentos esticados no mesmo passe e
+  // com o mesmo material. Morrem com a partícula (Die with Particles).
+  static constexpr u32 kTrailPoints = 12;
+  bool trailsEnabled = false;
+  float trailRatio = 1;
+  float trailLifetime = 0.3f;
+  float trailMinVertexDistance = 0.2f;
+  float trailWidth = 1;
+  float trailWidthEnd = 0;
+  bool trailInheritColor = true;
+  bool trailFade = true;
   u32 sheetFrameCount() const noexcept {
     const u32 columns = static_cast<u32>(sheetTiles[0]), rows = static_cast<u32>(sheetTiles[1]);
     return sheetAnimation == ParticleSheetAnimation::SingleRow ? columns : columns * rows;
@@ -416,6 +443,8 @@ inline constexpr std::array<ComponentEnumOption, 4> particleMaskOptions{{
 
 inline bool particleCollides(const ComponentValue &v) { return particleSystem(v).collisionEnabled; }
 inline bool particleSheetOn(const ComponentValue &v) { return particleSystem(v).textureSheetEnabled; }
+inline bool particleLightsOn(const ComponentValue &v) { return particleSystem(v).lightsEnabled; }
+inline bool particleTrailsOn(const ComponentValue &v) { return particleSystem(v).trailsEnabled; }
 inline bool particleSheetSingleRow(const ComponentValue &v) {
   return particleSheetOn(v) && particleSystem(v).sheetAnimation == ParticleSheetAnimation::SingleRow;
 }
@@ -439,7 +468,7 @@ inline bool particleHasSubEmitters(const ComponentValue &v) { return particleSys
 #include "scene/generated/particle_system_particleSystemEnums.inc"
 // Planos e sub-sistemas são objetos da cena, com referência persistente
 // remapeada por clone e prefab como qualquer outra.
-inline constexpr std::array<ComponentObjectReference, 5> particleSystemReferences{{
+inline constexpr std::array<ComponentObjectReference, 6> particleSystemReferences{{
   {"collision_plane_0", "Plano 1", "", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).collisionPlane0; },
    [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane0 = id; },
@@ -465,6 +494,11 @@ inline constexpr std::array<ComponentObjectReference, 5> particleSystemReference
    [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterDeath = id; },
    {"Sub-emissores", "", "Sistema que emite onde cada partícula morre (fogos)", particleHasSubEmitters, nullptr,
     "render.particles.sub_emitters", "runtime/scene_particles.cpp"}},
+  {"light_template", "Luz modelo", "astra.render.light", ObjectReferenceScope::Other, "Nenhuma",
+   [](const ComponentValue &v) { return particleSystem(v).lightTemplate; },
+   [](ComponentValue &v, u64 id) { particleSystem(v).lightTemplate = id; },
+   {"Luzes", "", "Objeto com Luz pontual ou spot: cor, intensidade, alcance e unidade copiados (pode ficar inativo)",
+    particleLightsOn, nullptr, "render.particles.lights", "runtime/scene_particles.cpp"}},
 }};
 
 // Material do projeto (PK-10a). Ausente = material embutido do componente.
@@ -581,7 +615,8 @@ inline bool ParticleSystem::valid() const {
          subEmitterCollisionCount == std::floor(subEmitterCollisionCount) && subEmitterDeathCount == std::floor(subEmitterDeathCount) &&
          sheetTiles[0] == std::floor(sheetTiles[0]) && sheetTiles[1] == std::floor(sheetTiles[1]) && sheetRow == std::floor(sheetRow) &&
          sheetStartFrame.constantMin == std::floor(sheetStartFrame.constantMin) &&
-         sheetStartFrame.constantMax == std::floor(sheetStartFrame.constantMax) && !sheetStartFrame.usesCurves();
+         sheetStartFrame.constantMax == std::floor(sheetStartFrame.constantMax) && !sheetStartFrame.usesCurves() &&
+         lightMaxLights == std::floor(lightMaxLights);
 }
 
 // v1: "<n> id valor … <c> id "curva" … <g> id "gradiente" …".

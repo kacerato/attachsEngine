@@ -1,7 +1,9 @@
 #include "runtime/scene_particles.h"
 
 #include "core/job_system.h"
+#include "runtime/scene_lights.h"
 #include "runtime/transform_math.h"
+#include "scene/light.h"
 
 #include <algorithm>
 #include <chrono>
@@ -215,9 +217,57 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
   simulationMs_ = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
+// Módulo Luzes (Unity Lights): a luz modelo é lida do grafo a cada quadro (o
+// autor pode animá-la); cada partícula entra por um sorteio fixo da semente
+// dela contra a Proporção, na ordem do lote, até o Máximo de luzes.
+void SceneParticles::appendLights(const SceneGraph &graph, const Entry &entry, const renderer::particles::ParticleBatch &batch,
+                                  renderer::particles::ParticleFrame &out) const {
+  const auto &s = entry.emitter.settings();
+  if (!s.lightsEnabled || !s.lightTemplate || s.lightMaxLights < 1 || s.lightRatio <= 0) return;
+  const auto *object = graph.find(static_cast<ObjectId>(s.lightTemplate));
+  const auto *light = object ? static_cast<const scene::Light *>(object->components.find(scene::Light::descriptor)) : nullptr;
+  if (!light || !light->enabled || !light->valid() || light->kind == scene::LightKind::Directional) return;
+  renderer::SceneLight base;
+  sceneLightValues(*light, base);
+  const u32 limit = static_cast<u32>(s.lightMaxLights);
+  u32 lit = 0;
+  for (u32 i = 0; i < batch.instanceCount && lit < limit; ++i) {
+    const auto &p = out.instances[batch.firstInstance + i];
+    if (renderer::particles::particleRandom(p.random, kLightChannel) >= s.lightRatio) continue;
+    renderer::particles::ParticleLight l;
+    std::copy(p.position, p.position + 3, l.position);
+    const float alpha = renderer::particles::halfToFloat(p.color[3]);
+    for (u32 k = 0; k < 3; ++k)
+      l.color[k] = base.color[k] * (s.lightUseParticleColor ? renderer::particles::halfToFloat(p.color[k]) : 1.0f);
+    l.intensity = base.intensity * s.lightIntensityMultiplier * (s.lightAlphaAffectsIntensity ? alpha : 1.0f);
+    l.range = base.range * s.lightRangeMultiplier * (s.lightSizeAffectsRange ? p.size : 1.0f);
+    l.modality = static_cast<u32>(base.modality);
+    l.photometric = base.photometric;
+    l.cullingMask = base.filter.cullingMask;
+    l.renderingLayers = base.filter.renderingLayers;
+    if (l.intensity <= 0 || l.range <= 0) continue;
+    out.lights.push_back(l);
+    ++lit;
+  }
+}
+
+void appendParticleLights(const renderer::particles::ParticleFrame &frame, std::vector<renderer::SceneLight> &out) {
+  for (const auto &light : frame.lights) {
+    renderer::SceneLight entry{};
+    entry.modality = static_cast<renderer::LightModality>(light.modality);
+    std::copy(light.position, light.position + 3, entry.position);
+    std::copy(light.color, light.color + 3, entry.color);
+    entry.intensity = light.intensity;
+    entry.range = light.range;
+    entry.photometric = light.photometric;
+    entry.filter.cullingMask = light.cullingMask;
+    entry.filter.renderingLayers = light.renderingLayers;
+    out.push_back(entry);
+  }
+}
+
 void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out,
                            const ParticleMaterialResolver *materials) const {
-  (void)graph;
   const auto start = std::chrono::steady_clock::now();
   out.clear();
   out.budget = budget_;
@@ -242,8 +292,22 @@ void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], re
     }
     const float d[3]{entry.world[12] - camera[0], entry.world[13] - camera[1], entry.world[14] - camera[2]};
     batch.sortDistance = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) + entry.emitter.sortingFudge();
+    appendLights(graph, entry, batch, out);
     out.batches.push_back(batch);
     out.alive += batch.instanceCount;
+    // Trilhas: um lote a mais do mesmo sistema, logo atrás das partículas.
+    renderer::particles::ParticleBatch trails;
+    trails.firstInstance = static_cast<u32>(out.instances.size());
+    entry.emitter.buildTrails(entry.world, out.instances);
+    trails.instanceCount = static_cast<u32>(out.instances.size()) - trails.firstInstance;
+    if (trails.instanceCount) {
+      trails.material = entry.emitter.trailMaterial();
+      trails.material.projectTexture = batch.material.projectTexture;
+      std::copy(batch.material.tint, batch.material.tint + 3, trails.material.tint);
+      trails.material.blend = batch.material.blend;
+      trails.sortDistance = batch.sortDistance + 1e-3f;
+      out.batches.push_back(trails);
+    }
     ++out.systems;
   }
   std::stable_sort(out.batches.begin(), out.batches.end(),

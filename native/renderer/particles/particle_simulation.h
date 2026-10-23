@@ -59,13 +59,25 @@ struct ParticleBatch {
   float sortDistance = 0;  // distância à câmera + ajuste de ordem; maior desenha antes
 };
 
+// PK-10b: luz pontual acesa por uma partícula (módulo Luzes), em mundo e já
+// com a unidade da luz modelo resolvida (renderer::SceneLight).
+struct ParticleLight {
+  float position[3]{};
+  float color[3]{1, 1, 1};
+  float intensity = 1, range = 1;
+  u32 modality = 0;  // renderer::LightModality da luz modelo (ponto ou spot)
+  bool photometric = false;
+  u32 cullingMask = ~0u, renderingLayers = 1;
+};
+
 // O que o renderer recebe por quadro. Lotes já ordenados de trás para a frente.
 struct ParticleFrame {
   std::vector<ParticleInstance> instances;
   std::vector<ParticleBatch> batches;
+  std::vector<ParticleLight> lights;
   u32 alive = 0, systems = 0, budget = 0;
   float simulationMs = 0, buildMs = 0;
-  void clear() { instances.clear(); batches.clear(); alive = systems = budget = 0; simulationMs = buildMs = 0; }
+  void clear() { instances.clear(); batches.clear(); lights.clear(); alive = systems = budget = 0; simulationMs = buildMs = 0; }
 };
 
 u16 floatToHalf(float value);
@@ -153,6 +165,11 @@ public:
   void simulate(float deltaSeconds, const float (&world)[16]);
   // Instâncias deste emissor, em mundo, na ordem do modo de ordenação.
   void build(const float (&world)[16], const float (&camera)[3], std::vector<ParticleInstance> &out) const;
+  // PK-10c: segmentos das trilhas, um por par de pontos, como billboards
+  // esticados (posição = ponto mais novo, velocidade = do mais velho ao novo).
+  void buildTrails(const float (&world)[16], std::vector<ParticleInstance> &out) const;
+  // Material dos segmentos: o do sistema em modo esticado, comprimento exato.
+  ParticleMaterialParameters trailMaterial() const;
   ParticleMaterialParameters material() const;
 
   State state() const noexcept { return state_; }
@@ -173,6 +190,7 @@ private:
   void record(std::vector<ParticleEvent> &events, u32 index, const float (&world)[16]);
   void collide(float dt, const float (&world)[16]);
   void advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]);
+  void updateTrails();
   float sheetFrame(float t, u32 seed) const;
 
   scene::ParticleSystemSettings settings_;
@@ -195,6 +213,10 @@ private:
   std::vector<float> age_, lifetime_, baseSize_, rotation_;
   std::vector<float> colorR_, colorG_, colorB_, colorA_;
   std::vector<u32> seed_;
+  // Trilhas: kTrailPoints pontos por partícula (x, y, z, idade em que foi
+  // gravado), do mais velho ao mais novo; trailCount_ diz quantos valem.
+  std::vector<float> trail_;
+  std::vector<u8> trailCount_;
   ParticleCollisionPlane planes_[2];
   u32 planeCount_ = 0;
   std::vector<ParticleEvent> births_, collisions_, deaths_;

@@ -139,6 +139,7 @@ struct AndroidShell final {
   // G5: quadro de partículas trocado com o renderer a cada quadro (sem cópia).
   ae::renderer::particles::ParticleFrame particleFrame;
   double particleClock = 0, particleLogClock = 0;
+  bool particleLightsPublished = false;  // PK-10b: o quadro anterior tinha luzes de partícula
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
   // PK-6: sondas publicadas para o renderer e o que já foi entregue a ele.
   std::vector<ae::renderer::SceneReflectionProbe> authoredReflectionProbes;
@@ -4072,6 +4073,15 @@ void android_main(android_app *app) {
         const auto tier=static_cast<ae::renderer::particles::ParticleTier>(std::min<ae::u32>(3u,static_cast<ae::u32>(shell.renderingCapabilities.profile)));
         shell.editorSession.setParticleBudget(ae::renderer::particles::particleTierBudget(tier));
         shell.editorSession.updateParticles(particleDelta,sceneCamera.position,shell.particleFrame);
+        // PK-10b: luzes das partículas mudam a cada quadro. Republica as luzes
+        // da cena com elas (e uma última vez sem elas, quando apagam).
+        if(!shell.particleFrame.lights.empty() || shell.particleLightsPublished) {
+          if(shell.editorSession.extractLights(shell.authoredLights)) {
+            ae::runtime::appendParticleLights(shell.particleFrame,shell.authoredLights);
+            shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+          }
+          shell.particleLightsPublished=!shell.particleFrame.lights.empty();
+        }
         shell.instancedRenderer.queueParticles(shell.particleFrame);
         // Bancada: uma linha a cada 2 s com o custo medido do quadro anterior
         // (simulação e montagem na CPU, passe próprio na GPU por timestamps).

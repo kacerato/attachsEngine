@@ -3901,6 +3901,231 @@
               "cpp": "particleSheetOn"
             }
           }
+        },
+        {
+          "id": "light_ratio",
+          "label": "Proporção",
+          "type": "ParticleSystem",
+          "member": "lightRatio",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Fração das partículas que levam uma luz (sorteio fixo por partícula)",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "light_max",
+          "label": "Máximo de luzes",
+          "type": "ParticleSystem",
+          "member": "lightMaxLights",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Teto de luzes deste sistema por quadro; as luzes do aparelho também têm teto",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "light_range_multiplier",
+          "label": "Multiplicador de alcance",
+          "type": "ParticleSystem",
+          "member": "lightRangeMultiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Luzes",
+            "unit": "×",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Escala o alcance da luz modelo",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "light_intensity_multiplier",
+          "label": "Multiplicador de intensidade",
+          "type": "ParticleSystem",
+          "member": "lightIntensityMultiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Luzes",
+            "unit": "×",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Escala a intensidade da luz modelo",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_ratio",
+          "label": "Proporção",
+          "type": "ParticleSystem",
+          "member": "trailRatio",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Fração das partículas que deixam trilha (sorteio fixo por partícula)",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_lifetime",
+          "label": "Vida da trilha",
+          "type": "ParticleSystem",
+          "member": "trailLifetime",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quanto dura cada ponto, em fração da vida da partícula",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_min_vertex_distance",
+          "label": "Distância mínima",
+          "type": "ParticleSystem",
+          "member": "trailMinVertexDistance",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "m",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Um ponto novo só depois de andar isto (menos pontos, mais barato)",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_width",
+          "label": "Largura no início",
+          "type": "ParticleSystem",
+          "member": "trailWidth",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "×",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Largura junto da partícula, em vezes o tamanho dela",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_width_end",
+          "label": "Largura no fim",
+          "type": "ParticleSystem",
+          "member": "trailWidthEnd",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "×",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Largura na ponta mais velha, em vezes o tamanho da partícula",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
         }
       ]
     },
@@ -4169,6 +4394,112 @@
             "capability": "render.particles.texture_sheet",
             "consumer": "renderer/particles/particle_simulation.cpp",
             "help": "Texture Sheet Animation: anima a partícula por quadros de uma grade na imagem do Material"
+          }
+        },
+        {
+          "id": "lights_enabled",
+          "label": "Luzes ativas",
+          "type": "ParticleSystem",
+          "member": "lightsEnabled",
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Lights: partículas acendem luzes pontuais copiadas de uma luz modelo (faíscas, tochas, magia)"
+          }
+        },
+        {
+          "id": "light_use_particle_color",
+          "label": "Usar cor da partícula",
+          "type": "ParticleSystem",
+          "member": "lightUseParticleColor",
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "A cor da luz é multiplicada pela cor da partícula",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "light_size_affects_range",
+          "label": "Tamanho afeta o alcance",
+          "type": "ParticleSystem",
+          "member": "lightSizeAffectsRange",
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "O alcance é multiplicado pelo tamanho da partícula",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "light_alpha_affects_intensity",
+          "label": "Alfa afeta a intensidade",
+          "type": "ParticleSystem",
+          "member": "lightAlphaAffectsIntensity",
+          "presentation": {
+            "group": "Luzes",
+            "unit": "",
+            "capability": "render.particles.lights",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "A luz apaga junto com a partícula",
+            "visible": {
+              "cpp": "particleLightsOn"
+            }
+          }
+        },
+        {
+          "id": "trails_enabled",
+          "label": "Trilhas ativas",
+          "type": "ParticleSystem",
+          "member": "trailsEnabled",
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Trails: cada partícula deixa um rastro dos pontos por onde passou (faíscas, cometas, magia)"
+          }
+        },
+        {
+          "id": "trail_inherit_color",
+          "label": "Herdar cor da partícula",
+          "type": "ParticleSystem",
+          "member": "trailInheritColor",
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "A trilha tem a cor atual da partícula; desligado, branca",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
+          }
+        },
+        {
+          "id": "trail_fade",
+          "label": "Esmaecer na ponta",
+          "type": "ParticleSystem",
+          "member": "trailFade",
+          "presentation": {
+            "group": "Trilhas",
+            "unit": "",
+            "capability": "render.particles.trails",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "O alfa cai até zero na ponta mais velha",
+            "visible": {
+              "cpp": "particleTrailsOn"
+            }
           }
         }
       ]

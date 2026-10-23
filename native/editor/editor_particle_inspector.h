@@ -17,7 +17,7 @@ namespace ae::editor {
 
 inline constexpr std::string_view kParticlePreviewRow = "preview";
 
-inline constexpr std::array<std::string_view, 275> particleInspectorOrder{{
+inline constexpr std::array<std::string_view, 293> particleInspectorOrder{{
   // Principal
   kParticlePreviewRow, "duration", "looping", "prewarm",
   "start_delay_mode", "start_delay", "start_delay_min",
@@ -74,6 +74,12 @@ inline constexpr std::array<std::string_view, 275> particleInspectorOrder{{
   "texture_sheet_enabled", "sheet_tiles_x", "sheet_tiles_y", "sheet_animation", "sheet_row_mode", "sheet_row",
   "sheet_frame_mode", "sheet_frame", "sheet_frame_min", "sheet_frame_multiplier", "sheet_frame.max", "sheet_frame.min",
   "sheet_start_frame_mode", "sheet_start_frame", "sheet_start_frame_min", "sheet_cycles",
+  // Luzes (PK-10b)
+  "lights_enabled", "light_template", "light_ratio", "light_max", "light_use_particle_color", "light_size_affects_range",
+  "light_alpha_affects_intensity", "light_range_multiplier", "light_intensity_multiplier",
+  // Trilhas (PK-10c)
+  "trails_enabled", "trail_ratio", "trail_lifetime", "trail_min_vertex_distance", "trail_width", "trail_width_end",
+  "trail_inherit_color", "trail_fade",
   // Renderização
   "render_mode", "stretch_velocity_scale", "stretch_length_scale", "sort_mode", "sorting_fudge", "max_particle_size",
   // Material: o recurso do projeto primeiro (como o Material do Renderer da Unity)
@@ -102,6 +108,8 @@ inline std::string_view particleModuleToggle(std::string_view group) {
   if (group == "Rotação pela velocidade") return "rotation_by_speed_enabled";
   if (group == "Sub-emissores") return "sub_emitters_enabled";
   if (group == "Folha de textura") return "texture_sheet_enabled";
+  if (group == "Luzes") return "lights_enabled";
+  if (group == "Trilhas") return "trails_enabled";
   return {};
 }
 // Rótulo curto do chip de modo Min/Max (cabe ao lado do valor).
