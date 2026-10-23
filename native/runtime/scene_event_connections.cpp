@@ -26,7 +26,9 @@ std::vector<std::string> auditEventConnectionCatalog() {
     const auto *method=schema?scene::findComponentMethod(*schema->type,key.method):nullptr;
     if(!method) {issues.push_back("método "+std::to_string(key.value)+" sem descritor");continue;}
     const bool number=method->parameters.size()==1&&method->parameters[0].kind==scene::ComponentValueKind::Number;
-    if(!(method->parameters.empty()||number)||number!=scene::eventConnectionTakesNumber(key.value)||method->result!=scene::ComponentValueKind::None)
+    const bool asset=scene::componentMethodTakesAsset(*method);
+    if(!(method->parameters.empty()||number||asset)||number!=scene::eventConnectionTakesNumber(key.value)||
+       asset!=scene::eventConnectionTakesAsset(key.value)||method->result!=scene::ComponentValueKind::None)
       issues.push_back("método "+std::to_string(key.value)+": assinatura que a conexão não monta");
     for(usize j=0;j<i;++j) if(scene::eventConnectionMethodKeys[j].value==key.value) issues.push_back("método "+std::to_string(key.value)+" repetido");
     bool labeled=false;for(const auto &option:scene::eventConnectionMethods) labeled=labeled||option.value==key.value;
@@ -40,7 +42,8 @@ std::vector<std::string> auditEventConnectionCatalog() {
         issues.push_back(std::string(schema.type->id)+"/"+std::string(event.id)+": evento sem identidade de conexão");
     for(const auto &method:schema.type->methods) {
       const bool command=method.result==scene::ComponentValueKind::None&&
-        (method.parameters.empty()||(method.parameters.size()==1&&method.parameters[0].kind==scene::ComponentValueKind::Number));
+        (method.parameters.empty()||(method.parameters.size()==1&&method.parameters[0].kind==scene::ComponentValueKind::Number)||
+         scene::componentMethodTakesAsset(method));
       if(!command) continue;
       bool found=false;
       for(const auto &key:scene::eventConnectionMethodKeys) found=found||(key.type==schema.type->id&&key.method==method.id);
@@ -110,6 +113,11 @@ WorldStatus SceneEventConnections::execute(const ComponentOperationServices &ser
     if(scene::eventConnectionTakesNumber(connection.method)) {
       const auto argument=scene::ComponentOperationValue::makeNumber(connection.argument);
       return invokeComponentMethod(services,component,method->method,std::span(&argument,1),result);
+    }
+    if(scene::eventConnectionTakesAsset(connection.method)) {
+      const std::array arguments{scene::ComponentOperationValue::makeInteger(static_cast<i64>(connection.asset.high)),
+                                 scene::ComponentOperationValue::makeInteger(static_cast<i64>(connection.asset.low))};
+      return invokeComponentMethod(services,component,method->method,arguments,result);
     }
     return invokeComponentMethod(services,component,method->method,{},result);
   }

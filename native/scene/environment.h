@@ -588,11 +588,38 @@ inline constexpr std::array<ComponentResourceBinding,4> environmentResources{{
    true,{}}
 }};
 
+// G7: o Volume da Unity pelo script e pela Conexão de evento
+// (UnityEngine.Rendering.Volume: weight, sharedProfile, profile,
+// HasInstantiatedProfile; VolumeComponent.active; VolumeParameter.overrideState).
+// Os índices de parâmetro e de override são os da tabela gravada
+// (renderer/volume_parameters.h), publicados na fachada C# gerada. O efeito
+// mora em runtime/component_operations.cpp.
+inline constexpr std::array<ComponentParameter,1> environmentWeightParameters{{{"weight","Peso",ComponentValueKind::Number}}};
+// GUID em duas metades, como o recurso de referência do Animator.
+inline constexpr std::array<ComponentParameter,2> environmentAssetParameters{{
+  {"asset_high","Recurso (64 bits altos)",ComponentValueKind::Integer},{"asset_low","Recurso (64 bits baixos)",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,1> environmentParameterIndex{{{"parameter","Parâmetro",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,2> environmentParameterState{{
+  {"parameter","Parâmetro",ComponentValueKind::Integer},{"value","Marcado",ComponentValueKind::Boolean}}};
+inline constexpr std::array<ComponentParameter,1> environmentGroupIndex{{{"group","Override",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentParameter,2> environmentGroupState{{
+  {"group","Override",ComponentValueKind::Integer},{"active","Ligado",ComponentValueKind::Boolean}}};
+inline constexpr std::array<ComponentMethod,8> environmentMethods{{
+  {"set_weight","Definir peso","Volume.weight: 0 não contribui, 1 contribui inteiro",environmentWeightParameters},
+  {"set_shared_profile","Trocar perfil","Volume.sharedProfile: passa a usar outro Volume Profile do projeto (zero tira o perfil)",environmentAssetParameters},
+  {"instantiate_profile","Usar cópia do perfil","Volume.profile: copia o perfil compartilhado para este Volume; mudanças seguintes não tocam o recurso"},
+  {"has_instantiated_profile","Tem cópia própria?","Volume.HasInstantiatedProfile: verdadeiro quando os valores são deste Volume, sem perfil compartilhado",{},ComponentValueKind::Boolean},
+  {"parameter_overridden","Parâmetro marcado?","VolumeParameter.overrideState do parâmetro de índice dado",environmentParameterIndex,ComponentValueKind::Boolean},
+  {"set_parameter_overridden","Marcar parâmetro","VolumeParameter.overrideState; com perfil compartilhado, primeiro usa a cópia (Volume.profile)",environmentParameterState},
+  {"component_active","Override ligado?","VolumeComponent.active do override de índice dado",environmentGroupIndex,ComponentValueKind::Boolean},
+  {"set_component_active","Ligar override","VolumeComponent.active; com perfil compartilhado, primeiro usa a cópia (Volume.profile)",environmentGroupState},
+}};
+
 inline const ComponentType Environment::descriptor{
   "astra.render.environment", Environment::CurrentVersion,
   []()->std::unique_ptr<ComponentValue>{return std::make_unique<Environment>();},
   environmentAllNumbers, environmentBooleans, environmentEnums, nullptr, false, {}, environmentTriples,
-  environmentResources
+  environmentResources, {}, {}, {}, environmentMethods
 };
 
 } // namespace ae::scene

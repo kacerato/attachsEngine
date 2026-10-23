@@ -247,7 +247,7 @@ public:
     scripts_.setAnimatorGraphs(&animatorGraphs_);
     scripts_.setNavigation(&navigation_);
     scripts_.setIk(&ik_);
-    reflectionProbes_.reset();
+    reflectionProbes_.reset();timeOfDayClock_.reset();
     scripts_.setReflectionProbes(&reflectionProbes_);
     ik_.setBodyMover([this](runtime::ObjectId body,const float pose[7]) {return physics_.moveKinematic(body,pose);});
     scripts_.setNumberTweens(&numberTweens_);
@@ -315,7 +315,7 @@ public:
     scripts_.setNavigation(nullptr);
     scripts_.setIk(nullptr);
     scripts_.setReflectionProbes(nullptr);
-    reflectionProbes_.reset();
+    reflectionProbes_.reset();timeOfDayClock_.reset();
     events_.reset();
     eventConnections_.reset();
     scripts_.setSceneGui(nullptr);
@@ -352,8 +352,11 @@ public:
   bool step() {return active_ && paused_ && advanceFrame(1.0/60.0,true);}
   // G4: a Hora do dia gira o sol pelo relógio da cena, pelo mesmo caminho de
   // transform que os scripts usam (respeita autoridade e revisão).
-  bool advanceTimeOfDay() {
-    runtime::applyTimeOfDay(world_.graph(),world_.elapsedSeconds(),[&](runtime::ObjectId id,const runtime::Transform &t){
+  // G7: o relógio avança a hora do componente do mundo (scripts podem
+  // escrevê-la) e emite os eventos de hora; o giro usa então essa hora.
+  bool advanceTimeOfDay(double elapsed) {
+    timeOfDayClock_.advance(world_,elapsed,&events_);
+    runtime::applyTimeOfDay(world_.graph(),0.0,[&](runtime::ObjectId id,const runtime::Transform &t){
       return world_.setLocalTransform(world_.handle(id),t)==runtime::WorldStatus::Ok;});
     return true;
   }
@@ -390,7 +393,10 @@ public:
     if(!active_) return runtime::WorldStatus::NotRunning;
     return runtime::invokeComponentMethod(operationServices(),{world_.handle(object),instance},method,arguments,result);
   }
-  runtime::ComponentOperationServices operationServices() noexcept {return {&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_,&ik_,&reflectionProbes_};}
+  runtime::ComponentOperationServices operationServices() noexcept {
+    runtime::ComponentOperationServices services{&world_,&timers_,&tweens_,&audio_,&paths_,&sequences_,&queries_,&physics_,&virtualCameras_,&animatorGraphs_,&navigation_,&ik_,&reflectionProbes_};
+    scripts_.shareResources(services);return services;
+  }
   const runtime::SceneReflectionProbeRequests &reflectionProbeRequests() const noexcept {return reflectionProbes_;}
   runtime::ComponentEventQueue &events() noexcept {return events_;}
   const runtime::SceneEventConnections &eventConnections() const noexcept {return eventConnections_;}
@@ -457,7 +463,7 @@ private:
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
-           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(frameElapsed),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
@@ -632,6 +638,7 @@ private:
   runtime::SceneConstraints constraints_;
   runtime::SceneIk ik_;
   runtime::SceneReflectionProbeRequests reflectionProbes_;
+  runtime::SceneTimeOfDayClock timeOfDayClock_;
   runtime::SceneRootMotion rootMotion_;
   renderer::WaterWorld water_;
   runtime::SceneTweens tweens_;

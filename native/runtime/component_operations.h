@@ -47,6 +47,12 @@ struct ComponentOperationServices {
   SceneNavigation *navigation=nullptr;
   SceneIk *ik=nullptr;
   SceneReflectionProbeRequests *reflectionProbes=nullptr;
+  // G7: recursos do projeto para métodos que trocam material ou perfil (o
+  // mesmo registro, biblioteca de perfis e resolvedor que o script usa em
+  // Component.SetResource). Sem eles, esses métodos respondem NotRunning.
+  const resources::AssetRegistry *assets=nullptr;
+  const std::vector<resources::EnvironmentProfile> *environmentProfiles=nullptr;
+  const ComponentResourceResolver *resolveResource=nullptr;
 };
 
 using ComponentMethodInvoke=WorldStatus (*)(const ComponentOperationServices &,ComponentHandle,

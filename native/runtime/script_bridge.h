@@ -68,6 +68,10 @@ public:
                        const std::vector<resources::EnvironmentProfile> *environmentProfiles) {
     if (!running_) { assets_ = assets; environmentProfiles_ = environmentProfiles; }
   }
+  // G7: as conexões de evento chamam os mesmos métodos com os recursos do script.
+  void shareResources(ComponentOperationServices &services) const noexcept {
+    services.assets=assets_;services.environmentProfiles=environmentProfiles_;services.resolveResource=&resourceAvailable_;
+  }
   void setResourceAvailability(ResourceAvailability available) {
     if(!running_) resourceAvailable_=std::move(available);
   }
@@ -154,7 +158,7 @@ private:
   void collectDiagnostics();
   void installAccess();
   void installExtensions();
-  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_,cameras_,animators_,navigation_,ik_,reflectionProbes_};}
+  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_,cameras_,animators_,navigation_,ik_,reflectionProbes_,assets_,environmentProfiles_,&resourceAvailable_};}
   QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
   static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
   static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);

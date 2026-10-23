@@ -52,8 +52,19 @@ inline constexpr std::array<ComponentObjectReference, 1> timeOfDayReferences{{
     Invalidate::LightCluster},
    nullptr, nullptr, true}
 }};
+// G7: acontecimentos do relógio no Play (runtime/scene_time_of_day.cpp), como
+// os eventos de hora do ciclo de dia do plano G4. Também viram eventos da
+// Conexão de evento (scene/event_connection.h), sem script.
+inline constexpr std::array<ComponentParameter,1> timeOfDayHourPayload{{{"hour","Hora",ComponentValueKind::Integer,"h"}}};
+inline constexpr std::array<ComponentParameter,1> timeOfDayDayPayload{{{"day","Dia do ano",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentEvent,4> timeOfDayEvents{{
+  {"hour_changed","Hora mudou","A hora inteira mudou: passou o tempo ou um script escreveu outra hora",timeOfDayHourPayload},
+  {"sunrise","Nascer do sol","O sol subiu acima do horizonte"},
+  {"sunset","Pôr do sol","O sol desceu abaixo do horizonte"},
+  {"day_changed","Dia mudou","A hora passou de 24 h; o Dia do ano avança um",timeOfDayDayPayload},
+}};
 inline const ComponentType TimeOfDay::descriptor{
   "astra.render.time_of_day",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<TimeOfDay>();},
-  timeOfDayNumbers,timeOfDayBooleans,{},nullptr,false,timeOfDayReferences
+  timeOfDayNumbers,timeOfDayBooleans,{},nullptr,false,timeOfDayReferences,{},{},{},{},{},{},timeOfDayEvents
 };
 }

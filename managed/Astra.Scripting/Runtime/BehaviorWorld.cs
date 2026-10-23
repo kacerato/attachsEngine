@@ -152,8 +152,10 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
             foreach (var schema in project.Types) _types.Add(assembly.GetType(schema.Name, throwOnError: true)!, schema);
             _bindComponentState = bindComponentState; _saveStore = saveStore;
             _time = new TimeAccess(scene as ITimeSceneAccess); _time.Activate();
+            attachments = attachments as IReadOnlyCollection<BehaviorAttachment> ?? attachments.ToArray();
             PrepareAttachments(scene, attachments, prepared);
             _context = context; _scene = scene; _entries.AddRange(prepared); _failures.Clear(); _started = true;
+            SceneQuery.Bind(scene, attachments.Select(static a => a.ObjectId).FirstOrDefault());
             _coroutines = new(CoroutineMayRun, CoroutineFailure);
             // Todas as instâncias existem antes dos callbacks. Objetos inativos
             // aguardam sua primeira ativação; Enabled=false não adia o Awake.
@@ -165,7 +167,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
             _coroutines?.Shutdown(); _coroutines = null;
             _time?.End(); _time = null;
             foreach (var entry in prepared) entry.Instance.Detach();
-            _entries.Clear(); _types.Clear(); _messages.Clear(); _context = null; _scene = null; _saveStore = null; _started = false; context.Unload(); throw;
+            _entries.Clear(); _types.Clear(); _messages.Clear(); _context = null; _scene = null; _saveStore = null; _started = false; SceneQuery.Unbind(); context.Unload(); throw;
         }
     }
     // A contagem fica fixa por despacho. Adições podem realocar a lista sem
@@ -730,7 +732,7 @@ public sealed class BehaviorWorld : IDisposable, IBehaviorRegistry, ICoroutineHo
         {
             foreach (var subscription in _subscriptions) subscription.Active = false;
             _subscriptions.Clear();
-            --_dispatchDepth; _time?.End(); _time = null; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _saveStore = null; _started = false;
+            --_dispatchDepth; _time?.End(); _time = null; _entries.Clear(); _types.Clear(); _messages.Clear(); _scene = null; _saveStore = null; _started = false; SceneQuery.Unbind();
             var context = _context; _context = null; _coroutines = null; context.Unload(); _stopping = false;
         }
     }

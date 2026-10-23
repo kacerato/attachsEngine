@@ -223,6 +223,10 @@ public:
                           scene::ComponentPropertyValue &out) const;
   WorldStatus setProperty(const ComponentHandle &component, std::string_view propertyId,
                           const scene::ComponentPropertyValue &value);
+  // G7: troca a instância inteira por um candidato do MESMO tipo, validado,
+  // com a invalidação do tipo. Para métodos que mudam estado sem propriedade
+  // refletida (caixas de override do Volume, cópia do perfil).
+  WorldStatus replaceComponent(const ComponentHandle &component, const scene::ComponentValue &candidate);
   WorldStatus validateTweenNumber(const ComponentHandle &component,std::string_view propertyId,float destination,float &initial) const;
   // Only explicitly eligible independent scalars: no component clone per tick.
   WorldStatus setTweenNumber(const ComponentHandle &component,std::string_view propertyId,float value);

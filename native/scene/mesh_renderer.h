@@ -670,9 +670,16 @@ inline const std::array<ComponentSlotNumber,43> meshRendererAllSlotNumbers=[]{
   for(const auto &p:meshRendererSlotMaterial) all[at++]=p;
   return all;
 }();
+// G7: Renderer.sharedMaterial pela Conexão de evento (o script também usa
+// SetMaterial). GUID em duas metades, como em astra.render.environment.
+inline constexpr std::array<ComponentParameter,2> meshRendererAssetParameters{{
+  {"asset_high","Material (64 bits altos)",ComponentValueKind::Integer},{"asset_low","Material (64 bits baixos)",ComponentValueKind::Integer}}};
+inline constexpr std::array<ComponentMethod,1> meshRendererMethods{{
+  {"set_shared_material","Trocar material","Renderer.sharedMaterial: o primeiro slot passa a usar outro Material do projeto",meshRendererAssetParameters},
+}};
 inline const ComponentType MeshRenderer::descriptor{
   "astra.render.mesh",11,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
   meshRendererNumbers,meshRendererBooleans,meshRendererEnums,nullptr,false,{},{},meshRendererResources,
-  meshRendererAllSlotNumbers,meshRendererSlotEnums
+  meshRendererAllSlotNumbers,meshRendererSlotEnums,{},meshRendererMethods
 };
 }

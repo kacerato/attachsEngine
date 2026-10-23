@@ -11,6 +11,10 @@
 #include "runtime/scene_ik.h"
 #include "runtime/scene_probes.h"
 #include "scene/reflection_probe.h"
+#include "scene/environment.h"
+#include "scene/mesh_renderer.h"
+#include "renderer/volume_parameters.h"
+#include "resources/environment_profile.h"
 #include "runtime/scene_physics.h"
 #include "scene/character.h"
 #include "scene/ik_effects.h"
@@ -108,7 +112,91 @@ WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle 
   return s.cameras->command(*s.world,h,method,result);
 }
 
-const std::array<ComponentMethodBinding,86> bindings{{
+// G7: Volume e Volume Profile (scene/environment.h, environmentMethods).
+resources::AssetGuid assetArgument(Arguments args) {
+  return {static_cast<u64>(args[0].integer),static_cast<u64>(args[1].integer)};
+}
+const resources::EnvironmentProfile *sharedVolumeProfile(const ComponentOperationServices &s,const scene::Environment &volume) {
+  if(!volume.profile.valid()||!s.environmentProfiles) return nullptr;
+  for(const auto &profile:*s.environmentProfiles) if(!profile.skybox&&profile.guid==volume.profile) return &profile;
+  return nullptr;
+}
+// Volume.profile da Unity: a primeira leitura clona o sharedProfile para o
+// Volume. Aqui a cópia vira os valores da própria instância e o GUID sai, então
+// a coleta (runtime/scene_environment.cpp) passa a usar a instância.
+WorldStatus instantiateVolumeProfile(const ComponentOperationServices &s,scene::Environment &volume) {
+  if(!volume.profile.valid()) return WorldStatus::Ok;
+  const auto *profile=sharedVolumeProfile(s,volume);
+  if(!profile) return s.environmentProfiles?WorldStatus::UnknownResource:WorldStatus::NotRunning;
+  volume.values=resources::applyEnvironmentProfile(volume.values,*profile);
+  volume.values.syncEffectSwitches();
+  volume.setVolumeOverrides(profile->overrides);
+  volume.legacyProfileCopy=false;volume.profile={};
+  return WorldStatus::Ok;
+}
+WorldStatus environmentOperation(const ComponentOperationServices &s,ComponentHandle h,std::string_view method,Arguments args,Value &result) {
+  if(!s.world) return WorldStatus::NotRunning;
+  const auto valid=s.world->validate(h.object);if(valid!=WorldStatus::Ok) return valid;
+  const auto *value=s.world->readComponent(h);
+  if(!value||&value->type()!=&scene::Environment::descriptor) return WorldStatus::ComponentMissing;
+  if(method=="set_weight") {
+    const double weight=args[0].number;
+    if(!std::isfinite(weight)||weight<0||weight>1) return WorldStatus::InvalidArgument;
+    return s.world->setProperty(h,"weight",scene::ComponentPropertyValue{static_cast<float>(weight)});
+  }
+  if(method=="set_shared_profile") {
+    if(!s.assets) return WorldStatus::NotRunning;
+    const auto profiles=s.environmentProfiles?std::span<const resources::EnvironmentProfile>(*s.environmentProfiles):
+                                              std::span<const resources::EnvironmentProfile>{};
+    return s.world->setResource(h,"profile",0,assetArgument(args),*s.assets,profiles);
+  }
+  const auto &current=static_cast<const scene::Environment &>(*value);
+  const auto *shared=sharedVolumeProfile(s,current);
+  const auto effective=shared?shared->overrides:current.volumeOverrides();
+  if(method=="has_instantiated_profile") {result=Value::makeBoolean(!current.profile.valid());return WorldStatus::Ok;}
+  const auto parameterIndex=[&](i64 index) {return index>=0&&static_cast<usize>(index)<renderer::volumeParameters().size();};
+  const auto groupIndex=[&](i64 index) {return index>=0&&index<static_cast<i64>(renderer::VolumeGroupCount);};
+  if(method=="parameter_overridden") {
+    if(!parameterIndex(args[0].integer)) return WorldStatus::InvalidArgument;
+    result=Value::makeBoolean(effective.overridden(static_cast<u32>(args[0].integer)));return WorldStatus::Ok;
+  }
+  if(method=="component_active") {
+    if(!groupIndex(args[0].integer)) return WorldStatus::InvalidArgument;
+    result=Value::makeBoolean(effective.groupActive(static_cast<renderer::VolumeGroup>(args[0].integer)));return WorldStatus::Ok;
+  }
+  // Escritas: sobre uma cópia, que vira a instância de uma vez só.
+  scene::Environment candidate=current;
+  const auto copied=instantiateVolumeProfile(s,candidate);
+  if(copied!=WorldStatus::Ok) return copied;
+  if(method=="set_parameter_overridden") {
+    if(!parameterIndex(args[0].integer)) return WorldStatus::InvalidArgument;
+    auto overrides=candidate.volumeOverrides();
+    overrides.setOverridden(static_cast<u32>(args[0].integer),args[1].boolean!=0);
+    candidate.setVolumeOverrides(overrides);
+  } else if(method=="set_component_active") {
+    if(!groupIndex(args[0].integer)) return WorldStatus::InvalidArgument;
+    auto overrides=candidate.volumeOverrides();
+    const u32 bit=1u<<static_cast<u32>(args[0].integer);
+    overrides.active=args[1].boolean?(overrides.active|bit):(overrides.active&~bit);
+    candidate.setVolumeOverrides(overrides);
+  } else if(method!="instantiate_profile") return WorldStatus::UnknownOperation;
+  return s.world->replaceComponent(h,candidate);
+}
+WorldStatus meshRendererOperation(const ComponentOperationServices &s,ComponentHandle h,Arguments args) {
+  if(!s.world||!s.assets||!s.resolveResource||!*s.resolveResource) return WorldStatus::NotRunning;
+  return s.world->setResource(h,"material",0,assetArgument(args),*s.assets,{},*s.resolveResource);
+}
+
+const std::array<ComponentMethodBinding,95> bindings{{
+  {&scene::Environment::descriptor,"set_weight",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_weight",a,r);}},
+  {&scene::Environment::descriptor,"set_shared_profile",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_shared_profile",a,r);}},
+  {&scene::Environment::descriptor,"instantiate_profile",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"instantiate_profile",a,r);}},
+  {&scene::Environment::descriptor,"has_instantiated_profile",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"has_instantiated_profile",a,r);}},
+  {&scene::Environment::descriptor,"parameter_overridden",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"parameter_overridden",a,r);}},
+  {&scene::Environment::descriptor,"set_parameter_overridden",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_parameter_overridden",a,r);}},
+  {&scene::Environment::descriptor,"component_active",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"component_active",a,r);}},
+  {&scene::Environment::descriptor,"set_component_active",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_component_active",a,r);}},
+  {&scene::MeshRenderer::descriptor,"set_shared_material",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){return meshRendererOperation(s,h,a);}},
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;
