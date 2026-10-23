@@ -1552,6 +1552,9 @@ private:
   u64 profileReconcileRevision_=~u64{0};
   std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> lensDirtTextures_;
   std::vector<std::string> lensDirtHashes_;
+  // Chave da última varredura (grafo varrido, identidade, revisão, perfis):
+  // quadros sem mutação não percorrem a cena atrás de Ambientes.
+  u64 lensDirtScanKey_[4]{};bool lensDirtScanned_=false;
   usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
