@@ -5,6 +5,7 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/lens_dirt.h"
 #include "renderer/light_probes.h"
 #include "renderer/reflection_probes.h"
 #include "renderer/scene_environment.h"
@@ -244,6 +245,10 @@ public:
   renderer::SceneEnvironment effectiveSceneLook() const { return effectiveSceneLook(sceneEnvironment_); }
   void setSceneEnvironment(const renderer::SceneEnvironment &environment) {
     if (environment.valid()) sceneEnvironment_ = environment;
+  }
+  // PK-5: texturas de sujeira (Bloom › Lens Dirt) que a cena referencia.
+  void setLensDirtTextures(std::span<const std::pair<resources::AssetGuid,renderer::SharedLensDirt>> textures) {
+    lensDirtTextures_.assign(textures.begin(),textures.end());
   }
   void setEnvironmentMaps(std::span<const std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> maps) {
     editorSceneCacheValid_=false;
@@ -853,6 +858,18 @@ private:
                            u32 width, u32 height, const PostPushConstants &push);
   bool recordHalfAmbientOcclusion(const platform::FreeCameraState &camera);
   bool recordBloomChain(const platform::FreeCameraState &camera, float threshold);
+  // PK-5: profundidade de campo em meia resolução e a sujeira da lente
+  // (instanced_depth_of_field.inl).
+  bool createDepthOfFieldResources();
+  bool createDepthOfFieldSets();
+  void destroyDepthOfFieldResources();
+  bool recordDepthOfField(const platform::FreeCameraState &camera);
+  VkImageView depthOfFieldView() const;
+  VkImageView lensDirtView() const;
+  // Sobe a textura de sujeira do look (se mudou) e devolve a proporção dela;
+  // zero quando não há sujeira utilizável.
+  float prepareLensDirt(const renderer::SceneEnvironment &look);
+  void recordDepthOfFieldUploads();
   VkImageView postBloomView() const;
   VkImageView postAmbientOcclusionView() const;
   // G2: LUT 32³ de gradação (instanced_color_grading.inl). Vaga 0 = vista
@@ -1204,7 +1221,7 @@ private:
   bool fogResolvedThisFrame_ = false;
   bool fogResolveReported_ = false;
   // Bloom em cadeia de mips e AO em 1/2 (instanced_post_chain.inl); 10 é a LUT 3D.
-  static constexpr u32 kPostBindingCount = 11;
+  static constexpr u32 kPostBindingCount = 13;
   struct ColorGradingSlot {
     rhi::VulkanImage image{};
     rhi::VulkanBuffer staging{};
@@ -1235,6 +1252,30 @@ private:
   VkPipeline halfAmbientOcclusionPipeline_ = VK_NULL_HANDLE;
   bool bloomChainEnabled_ = false;
   bool halfAmbientOcclusionEnabled_ = false;
+  // PK-5: dois alvos RGBA16F em 1/2 (o resultado termina sempre no 0), o
+  // passe e os conjuntos (cena, cena com névoa, cada alvo).
+  std::array<rhi::VulkanImage, 2> depthOfFieldTargets_{};
+  std::array<VkFramebuffer, 2> depthOfFieldFramebuffers_{};
+  std::array<VkDescriptorSet, 2> depthOfFieldSets_{};
+  VkDescriptorSet depthOfFieldSceneSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet depthOfFieldFogSet_ = VK_NULL_HANDLE;
+  VkRenderPass depthOfFieldRenderPass_ = VK_NULL_HANDLE;
+  VkPipeline depthOfFieldPipeline_ = VK_NULL_HANDLE;
+  VkExtent2D depthOfFieldExtent_{};
+  bool depthOfFieldThisFrame_ = false;
+  bool depthOfFieldLayoutsReady_ = false;
+  bool depthOfFieldReported_ = false;
+  // Sujeira da lente: imagem fixa 512² sRGB, enchida pela textura escolhida.
+  rhi::VulkanImage lensDirtImage_{};
+  rhi::VulkanBuffer lensDirtStaging_{};
+  resources::AssetGuid lensDirtActive_{};
+  float lensDirtAspect_ = 0.0f;
+  bool lensDirtLayoutReady_ = false;
+  bool lensDirtPending_ = false;
+  std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> lensDirtTextures_;
+  // Câmera do quadro anterior para o Motion Blur sem TAA.
+  platform::FreeCameraState motionPreviousCamera_{};
+  bool motionPreviousValid_ = false;
   bool bloomChainThisFrame_ = false;
   bool halfAmbientOcclusionThisFrame_ = false;
   bool aoActiveThisFrame_ = false;

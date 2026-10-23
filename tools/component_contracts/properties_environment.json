@@ -28,7 +28,7 @@
         },
         {
           "id": "vignette_intensity",
-          "label": "Intensidade da vinheta",
+          "label": "Intensidade",
           "member": "values.vignetteIntensity",
           "max": {
             "cpp": "1"
@@ -38,15 +38,16 @@
           },
           "presentation": {
             "visible": {
-              "cpp": "environmentUsesVignette"
+              "cpp": "environmentUsesPost"
             },
-            "capability": "render.post.tonemap",
-            "group": "Vinheta"
+            "capability": "render.post.vignette",
+            "group": "Vinheta",
+            "help": "Intensity: zero desliga a vinheta"
           }
         },
         {
           "id": "film_grain_intensity",
-          "label": "Intensidade do grão",
+          "label": "Intensidade",
           "member": "values.filmGrainIntensity",
           "max": {
             "cpp": "1"
@@ -56,10 +57,11 @@
           },
           "presentation": {
             "visible": {
-              "cpp": "environmentUsesFilmGrain"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.film_grain",
-            "group": "Grão de filme"
+            "group": "Grão de filme",
+            "help": "Intensity: zero desliga o grão"
           }
         }
       ],
@@ -121,7 +123,8 @@
             "cpp": ".05f"
           },
           "presentation": {
-            "unit": ""
+            "unit": "",
+            "help": "Intensity: zero desliga a oclusão"
           }
         },
         {
@@ -167,7 +170,7 @@
             "cpp": "nullptr"
           },
           "visible": {
-            "cpp": "environmentUsesAmbientOcclusion"
+            "cpp": "environmentUsesPost"
           },
           "editable": {
             "cpp": "nullptr"
@@ -693,362 +696,6 @@
           }
         },
         {
-          "id": "bloom",
-          "label": "Ativo",
-          "member": "values.bloom",
-          "presentation": {
-            "group": "Bloom",
-            "help": "Espalha altas luzes antes do tonemap",
-            "visible": {
-              "cpp": "environmentUsesPost"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.bloom",
-            "consumer": "rhi/shaders/post_process_common.glsl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
-          "id": "vignette",
-          "label": "Ativo",
-          "member": "values.vignette",
-          "presentation": {
-            "group": "Vinheta",
-            "help": "Escurece gradualmente as bordas",
-            "visible": {
-              "cpp": "environmentUsesPost"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.tonemap",
-            "consumer": "rhi/shaders/post_process_common.glsl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
-          "id": "film_grain",
-          "label": "Ativo",
-          "member": "values.filmGrain",
-          "presentation": {
-            "group": "Grão de filme",
-            "help": "Adiciona grão sensível à luminância depois da resolução temporal",
-            "visible": {
-              "cpp": "environmentUsesPost"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.film_grain",
-            "consumer": "rhi/shaders/post_process_common.glsl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
-          "id": "ambient_occlusion",
-          "label": "Ativo",
-          "member": "values.ambientOcclusion",
-          "presentation": {
-            "group": "Oclusão ambiente",
-            "help": "Escurece contatos e concavidades a partir da profundidade da câmera",
-            "visible": {
-              "cpp": "environmentUsesPost"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.ambient_occlusion",
-            "consumer": "rhi/shaders/post_process_common.glsl",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          }
-        },
-        {
-          "id": "override_sky",
-          "label": "Sobrescrever céu",
-          "member": "overrideSky",
-          "presentation": {
-            "group": "Volume",
-            "help": "Participa da mistura de céu e atmosfera",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.environment.volumes",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Draw"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_fog",
-          "label": "Sobrescrever neblina",
-          "member": "overrideFog",
-          "presentation": {
-            "group": "Neblina",
-            "help": "Participa da mistura de neblina",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.environment.volumes",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Draw"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_post",
-          "label": "Sobrescrever Tonemapping",
-          "member": "overridePost",
-          "presentation": {
-            "group": "Tonemapping",
-            "help": "Este volume decide a curva de Tonemapping e a chave geral do pós",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.environment.volumes",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_indirect",
-          "label": "Sobrescrever luz indireta",
-          "member": "overrideIndirect",
-          "presentation": {
-            "group": "Luz indireta",
-            "help": "Participa da mistura de difuso e reflexo indiretos",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.environment.volumes",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Draw"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_exposure",
-          "label": "Sobrescrever exposição",
-          "member": "overrideExposure",
-          "presentation": {
-            "group": "Exposição",
-            "help": "Marcado: este volume decide exposição. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.auto_exposure",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_bloom",
-          "label": "Sobrescrever bloom",
-          "member": "overrideBloom",
-          "presentation": {
-            "group": "Bloom",
-            "help": "Marcado: este volume decide bloom. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.bloom",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_vignette",
-          "label": "Sobrescrever vinheta",
-          "member": "overrideVignette",
-          "presentation": {
-            "group": "Vinheta",
-            "help": "Marcado: este volume decide vinheta. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.tonemap",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_color_adjustments",
-          "label": "Sobrescrever ajustes de cor",
-          "member": "overrideColorAdjustments",
-          "presentation": {
-            "group": "Ajustes de cor",
-            "help": "Marcado: este volume decide ajustes de cor. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.tonemap",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_color_grading",
-          "label": "Sobrescrever cor",
-          "member": "overrideColorGrading",
-          "presentation": {
-            "group": "Cor",
-            "help": "Marcado: este volume decide cor. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.color_grading",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_film_grain",
-          "label": "Sobrescrever grão de filme",
-          "member": "overrideFilmGrain",
-          "presentation": {
-            "group": "Grão de filme",
-            "help": "Marcado: este volume decide grão de filme. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.film_grain",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_ambient_occlusion",
-          "label": "Sobrescrever oclusão ambiente",
-          "member": "overrideAmbientOcclusion",
-          "presentation": {
-            "group": "Oclusão ambiente",
-            "help": "Marcado: este volume decide oclusão ambiente. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.post.ambient_occlusion",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Policy"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
-          "id": "override_clouds",
-          "label": "Sobrescrever nuvens",
-          "member": "overrideClouds",
-          "presentation": {
-            "group": "Nuvens",
-            "help": "Marcado: este volume decide as nuvens. Desmarcado: herda do volume de prioridade menor",
-            "visible": {
-              "cpp": "nullptr"
-            },
-            "editable": {
-              "cpp": "nullptr"
-            },
-            "capability": "render.environment.volumes",
-            "consumer": "renderer/scene_environment.cpp",
-            "invalidates": {
-              "cpp": "Invalidate::Draw"
-            }
-          },
-          "default": {
-            "cpp": "true"
-          }
-        },
-        {
           "id": "physical_atmosphere_high_quality",
           "label": "Alta qualidade",
           "member": "values.physicalAtmosphereHighQuality",
@@ -1105,6 +752,503 @@
             "consumer": "rhi/shaders/cloud_layer.glsl",
             "invalidates": {
               "cpp": "Invalidate::Draw"
+            }
+          }
+        },
+        {
+          "id": "override_sky",
+          "label": "Céu no perfil",
+          "member": "overrideSky",
+          "presentation": {
+            "group": "Céu",
+            "help": "Override Skybox Material / Skybox Procedural no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_celestial",
+          "member": "overrideCelestial",
+          "label": "Sol e lua no perfil",
+          "presentation": {
+            "group": "Sol e lua",
+            "help": "Override sol, lua e estrelas do céu no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_physical_atmosphere",
+          "member": "overridePhysicalAtmosphere",
+          "label": "Atmosfera física no perfil",
+          "presentation": {
+            "group": "Atmosfera física",
+            "help": "Override Physically Based Sky no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_indirect",
+          "label": "Luz ambiente no perfil",
+          "member": "overrideIndirect",
+          "presentation": {
+            "group": "Luz ambiente",
+            "help": "Override Environment Lighting e Indirect Lighting Controller no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_fog",
+          "label": "Neblina no perfil",
+          "member": "overrideFog",
+          "presentation": {
+            "group": "Neblina",
+            "help": "Override Fog no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_clouds",
+          "label": "Nuvens no perfil",
+          "member": "overrideClouds",
+          "presentation": {
+            "group": "Nuvens",
+            "help": "Override Cloud Layer no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_exposure",
+          "label": "Exposição no perfil",
+          "member": "overrideExposure",
+          "presentation": {
+            "group": "Exposição",
+            "help": "Override Exposure no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_post",
+          "label": "Tonemapping no perfil",
+          "member": "overridePost",
+          "presentation": {
+            "group": "Tonemapping",
+            "help": "Override Tonemapping no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_bloom",
+          "label": "Bloom no perfil",
+          "member": "overrideBloom",
+          "presentation": {
+            "group": "Bloom",
+            "help": "Override Bloom no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "true"
+          }
+        },
+        {
+          "id": "override_vignette",
+          "label": "Vinheta no perfil",
+          "member": "overrideVignette",
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Override Vignette no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_color_adjustments",
+          "label": "Ajustes de cor no perfil",
+          "member": "overrideColorAdjustments",
+          "presentation": {
+            "group": "Ajustes de cor",
+            "help": "Override Color Adjustments no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_color_grading",
+          "label": "Cor no perfil",
+          "member": "overrideColorGrading",
+          "presentation": {
+            "group": "Cor",
+            "help": "Override White Balance, Lift Gamma Gain e Shadows Midtones Highlights no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_color_curves",
+          "member": "overrideColorCurves",
+          "label": "Curvas de cor no perfil",
+          "presentation": {
+            "group": "Curvas de cor",
+            "help": "Override Color Curves no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_film_grain",
+          "label": "Grão de filme no perfil",
+          "member": "overrideFilmGrain",
+          "presentation": {
+            "group": "Grão de filme",
+            "help": "Override Film Grain no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_ambient_occlusion",
+          "label": "Oclusão ambiente no perfil",
+          "member": "overrideAmbientOcclusion",
+          "presentation": {
+            "group": "Oclusão ambiente",
+            "help": "Override Ambient Occlusion no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_depth_of_field",
+          "member": "overrideDepthOfField",
+          "label": "Profundidade de campo no perfil",
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Override Depth of Field no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_motion_blur",
+          "member": "overrideMotionBlur",
+          "label": "Desfoque de movimento no perfil",
+          "presentation": {
+            "group": "Desfoque de movimento",
+            "help": "Override Motion Blur no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_chromatic_aberration",
+          "member": "overrideChromaticAberration",
+          "label": "Aberração cromática no perfil",
+          "presentation": {
+            "group": "Aberração cromática",
+            "help": "Override Chromatic Aberration no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "override_lens_distortion",
+          "member": "overrideLensDistortion",
+          "label": "Distorção de lente no perfil",
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Override Lens Distortion no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.environment.volumes",
+            "consumer": "renderer/volume_parameters.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw|Invalidate::Policy"
+            }
+          },
+          "default": {
+            "cpp": "false"
+          }
+        },
+        {
+          "id": "vignette_rounded",
+          "label": "Arredondada",
+          "member": "values.vignetteRounded",
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Rounded: círculo perfeito em qualquer proporção de tela",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "bloom_high_quality",
+          "label": "Filtro de alta qualidade",
+          "member": "values.bloomHighQualityFiltering",
+          "presentation": {
+            "group": "Bloom",
+            "help": "High Quality Filtering: leitura bicúbica ao compor (4 leituras em vez de 1)",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            }
+          }
+        },
+        {
+          "id": "dof_gaussian_high_quality",
+          "label": "Amostragem de alta qualidade",
+          "member": "values.gaussianHighQuality",
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "High Quality Sampling: 13 amostras em vez de 9 no desfoque",
+            "visible": {
+              "cpp": "environmentUsesGaussianDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
             }
           }
         }
@@ -1748,7 +1892,7 @@
             "group": "Bloom",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom",
             "consumer": "rhi/shaders/post_process_common.glsl",
@@ -1774,13 +1918,14 @@
             "group": "Bloom",
             "unit": "",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom",
             "consumer": "rhi/shaders/post_process_common.glsl",
             "invalidates": {
               "cpp": "Invalidate::Policy"
-            }
+            },
+            "help": "Intensity: zero desliga o bloom"
           }
         },
         {
@@ -2887,7 +3032,7 @@
             "unit": "",
             "help": "Quanto o brilho se espalha em volta das luzes",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom"
           }
@@ -2910,7 +3055,7 @@
             "unit": "",
             "help": "Cor do brilho",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom"
           }
@@ -2933,7 +3078,7 @@
             "unit": "",
             "help": "Cor do brilho",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom"
           }
@@ -2956,7 +3101,7 @@
             "unit": "",
             "help": "Cor do brilho",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom"
           }
@@ -2979,7 +3124,7 @@
             "unit": "",
             "help": "Corta pixels mais claros que isto antes do bloom",
             "visible": {
-              "cpp": "environmentUsesBloom"
+              "cpp": "environmentUsesPost"
             },
             "capability": "render.post.bloom"
           }
@@ -3664,6 +3809,767 @@
           }
         }
       }
+    },
+    {
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "name": "environmentPostEffectNumbers",
+      "defaults": {
+        "type": "Environment"
+      },
+      "items": [
+        {
+          "id": "vignette_color.r",
+          "label": "Cor R",
+          "member": "values.vignetteColor[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Color: cor das bordas",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "vignette_color.g",
+          "label": "Cor G",
+          "member": "values.vignetteColor[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Color: cor das bordas",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "vignette_color.b",
+          "label": "Cor B",
+          "member": "values.vignetteColor[2]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Color: cor das bordas",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "vignette_center.x",
+          "label": "Centro X",
+          "member": "values.vignetteCenter[0]",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Center: 0,5 é o meio da tela",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "vignette_center.y",
+          "label": "Centro Y",
+          "member": "values.vignetteCenter[1]",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Center: 0,5 é o meio da tela",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "vignette_smoothness",
+          "label": "Suavidade",
+          "member": "values.vignetteSmoothness",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Vinheta",
+            "help": "Smoothness: quanto a borda escura se espalha",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.vignette",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "bloom_dirt_intensity",
+          "label": "Intensidade da sujeira",
+          "member": "values.bloomDirtIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Bloom",
+            "help": "Lens Dirt › Intensity: quanto a textura de sujeira acende com o brilho",
+            "visible": {
+              "cpp": "environmentUsesBloomDirt"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.bloom",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "dof_gaussian_start",
+          "label": "Início",
+          "member": "values.gaussianStart",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Start: distância onde o desfoque começa",
+            "visible": {
+              "cpp": "environmentUsesGaussianDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "m"
+          }
+        },
+        {
+          "id": "dof_gaussian_end",
+          "label": "Fim",
+          "member": "values.gaussianEnd",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "End: distância onde o desfoque chega ao máximo",
+            "visible": {
+              "cpp": "environmentUsesGaussianDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "m"
+          }
+        },
+        {
+          "id": "dof_gaussian_max_radius",
+          "label": "Raio máximo",
+          "member": "values.gaussianMaxRadius",
+          "min": {
+            "cpp": ".5f"
+          },
+          "max": {
+            "cpp": "1.5f"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Max Radius: acima de 1 surgem artefatos de subamostragem",
+            "visible": {
+              "cpp": "environmentUsesGaussianDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "dof_focus_distance",
+          "label": "Distância de foco",
+          "member": "values.focusDistance",
+          "min": {
+            "cpp": ".1f"
+          },
+          "max": {
+            "cpp": "10000"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Focus Distance: a que distância da câmera fica nítido",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "m"
+          }
+        },
+        {
+          "id": "dof_focal_length",
+          "label": "Distância focal",
+          "member": "values.focalLength",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "300"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Focal Length: lente mais longa, foco mais raso",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "mm"
+          }
+        },
+        {
+          "id": "dof_aperture",
+          "label": "Abertura",
+          "member": "values.aperture",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "32"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Aperture: f menor, foco mais raso",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "f/"
+          }
+        },
+        {
+          "id": "dof_blade_count",
+          "label": "Lâminas",
+          "member": "values.bladeCount",
+          "min": {
+            "cpp": "3"
+          },
+          "max": {
+            "cpp": "9"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Blade Count: lados do bokeh",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "dof_blade_curvature",
+          "label": "Curvatura das lâminas",
+          "member": "values.bladeCurvature",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Blade Curvature: 1 deixa o bokeh redondo",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "dof_blade_rotation",
+          "label": "Giro das lâminas",
+          "member": "values.bladeRotation",
+          "min": {
+            "cpp": "-180"
+          },
+          "max": {
+            "cpp": "180"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Profundidade de campo",
+            "help": "Blade Rotation",
+            "visible": {
+              "cpp": "environmentUsesBokehDof"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.depth_of_field",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": "°"
+          }
+        },
+        {
+          "id": "motion_blur_intensity",
+          "label": "Intensidade",
+          "member": "values.motionBlurIntensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Desfoque de movimento",
+            "help": "Intensity: rastro do giro e do deslocamento da câmera; zero desliga",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.motion_blur",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "motion_blur_clamp",
+          "label": "Limite",
+          "member": "values.motionBlurClamp",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": ".2f"
+          },
+          "step": {
+            "cpp": ".005f"
+          },
+          "presentation": {
+            "group": "Desfoque de movimento",
+            "help": "Clamp: comprimento máximo do rastro, em fração da tela",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.motion_blur",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "chromatic_aberration",
+          "label": "Intensidade",
+          "member": "values.chromaticAberration",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Aberração cromática",
+            "help": "Intensity: separa vermelho e azul em direção às bordas; zero desliga",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.chromatic_aberration",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion",
+          "label": "Intensidade",
+          "member": "values.lensDistortion",
+          "min": {
+            "cpp": "-1"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Intensity: positivo é barril, negativo é almofada; zero desliga",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion_x_multiplier",
+          "label": "Multiplicador X",
+          "member": "values.lensDistortionXMultiplier",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "X Multiplier",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion_y_multiplier",
+          "label": "Multiplicador Y",
+          "member": "values.lensDistortionYMultiplier",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Y Multiplier",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion_center.x",
+          "label": "Centro X",
+          "member": "values.lensDistortionCenter[0]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Center",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion_center.y",
+          "label": "Centro Y",
+          "member": "values.lensDistortionCenter[1]",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Center",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        },
+        {
+          "id": "lens_distortion_scale",
+          "label": "Escala",
+          "member": "values.lensDistortionScale",
+          "min": {
+            "cpp": ".01f"
+          },
+          "max": {
+            "cpp": "5"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "group": "Distorção de lente",
+            "help": "Scale: aproxima para esconder as bordas puxadas",
+            "visible": {
+              "cpp": "environmentUsesPost"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.post.lens_distortion",
+            "consumer": "rhi/shaders/post_process_common.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Policy"
+            },
+            "unit": ""
+          }
+        }
+      ]
     }
   ],
   "field_groups": [
@@ -3682,7 +4588,14 @@
         "environmentBooleans/override_color_adjustments",
         "environmentBooleans/override_color_grading",
         "environmentBooleans/override_film_grain",
-        "environmentBooleans/override_ambient_occlusion"
+        "environmentBooleans/override_ambient_occlusion",
+        "environmentBooleans/override_celestial",
+        "environmentBooleans/override_physical_atmosphere",
+        "environmentBooleans/override_color_curves",
+        "environmentBooleans/override_depth_of_field",
+        "environmentBooleans/override_motion_blur",
+        "environmentBooleans/override_chromatic_aberration",
+        "environmentBooleans/override_lens_distortion"
       ]
     }
   ]

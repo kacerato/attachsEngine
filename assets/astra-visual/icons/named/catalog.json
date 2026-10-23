@@ -2419,6 +2419,84 @@
       "name": "sphere",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "volume/profile": {
+      "category": "volume",
+      "name": "profile",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "volume/add-override": {
+      "category": "volume",
+      "name": "add-override",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/bloom": {
+      "category": "post",
+      "name": "bloom",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/vignette": {
+      "category": "post",
+      "name": "vignette",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/depth-of-field": {
+      "category": "post",
+      "name": "depth-of-field",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/motion-blur": {
+      "category": "post",
+      "name": "motion-blur",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/chromatic-aberration": {
+      "category": "post",
+      "name": "chromatic-aberration",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/lens-distortion": {
+      "category": "post",
+      "name": "lens-distortion",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/color-curves": {
+      "category": "post",
+      "name": "color-curves",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/color-adjustments": {
+      "category": "post",
+      "name": "color-adjustments",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/film-grain": {
+      "category": "post",
+      "name": "film-grain",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/tonemapping": {
+      "category": "post",
+      "name": "tonemapping",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "post/ambient-occlusion": {
+      "category": "post",
+      "name": "ambient-occlusion",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

@@ -3869,6 +3869,8 @@ void android_main(android_app *app) {
               shell.instancedRenderer.queueSceneLights(shell.authoredLights);
             if(shell.editorSession.extractEnvironmentVolumes(shell.authoredEnvironmentVolumes))
               shell.instancedRenderer.queueSceneEnvironmentVolumes(shell.authoredEnvironmentVolumes);
+            // PK-5: as texturas de sujeira da lente (Bloom › Lens Dirt) da cena.
+            shell.instancedRenderer.setLensDirtTextures(shell.editorSession.lensDirtTextures());
             // PK-6: as sondas saem do mesmo grafo e no mesmo quadro que as luzes.
             if(shell.editorSession.extractReflectionProbes(shell.authoredReflectionProbes))
               shell.instancedRenderer.queueSceneReflectionProbes(shell.authoredReflectionProbes,editorPlaying);

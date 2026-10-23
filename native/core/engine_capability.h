@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 59> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 65> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -171,7 +171,8 @@ inline constexpr std::array<EngineCapability, 59> engineCapabilities{{
    "resources/environment_profile.cpp + runtime/scene_environment.cpp",
    "Recurso .skybox com shader Procedural (Sun, Sun Size, Convergence, Atmosphere Thickness, Exposure), Panorâmico (HDRI) ou Físico, escolhido na janela Iluminação; sem Cubemap de 6 faces nem override por câmera"},
   {"render.environment.volumes", "Volumes de ambiente por câmera", CapabilityState::Implemented,
-   "runtime/scene_environment.cpp + renderer/scene_environment.cpp", ""},
+   "runtime/scene_environment.cpp + renderer/volume_parameters.cpp",
+   "Volume Profile compartilhado (Novo/Clonar), override por parâmetro com ALL/NONE, Volume Mask por camada de objeto; sem Volume Trigger nem Mesh Collider como forma"},
 
   // --- Câmera (PK-7) -------------------------------------------------------
   {"render.camera.background", "Fundo da câmera: céu, cor sólida ou sem limpeza", CapabilityState::Implemented,
@@ -203,9 +204,23 @@ inline constexpr std::array<EngineCapability, 59> engineCapabilities{{
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.post.color_grading", "Gradação de cor por LUT 32³ e perfis prontos", CapabilityState::Implemented,
    "renderer/color_grading.cpp + rhi/shaders/post_process_common.glsl",
-   "Balanço de branco, lift/gama/ganho, sombras/médios/realces e vibração; sem mixer de canais, curvas nem .cube"},
+   "Balanço de branco, lift/gama/ganho, sombras/médios/realces, vibração e curvas; sem mixer de canais nem .cube"},
   {"render.post.ambient_occlusion", "Oclusão ambiente em tela", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
+  // PK-5: o resto do pós da URP 17, cada efeito um override de Volume.
+  {"render.post.vignette", "Vinheta com cor, centro, suavidade e arredondada", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.depth_of_field", "Profundidade de campo Gaussiana e Bokeh", CapabilityState::Implemented,
+   "platform/android/instanced_depth_of_field.inl + rhi/shaders/post_process_common.glsl",
+   "Em meia resolução; Bokeh com 8, 22 ou 43 amostras (Qualidade); sem foco automático"},
+  {"render.post.motion_blur", "Desfoque de movimento da câmera", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", "Camera Only: o movimento dos objetos não entra"},
+  {"render.post.chromatic_aberration", "Aberração cromática", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.lens_distortion", "Distorção de lente", CapabilityState::Implemented,
+   "rhi/shaders/post_process_common.glsl", ""},
+  {"render.post.color_curves", "Curvas de cor (mestre, RGB, matiz e saturação)", CapabilityState::Implemented,
+   "renderer/color_grading.cpp", "Entram na LUT 32³ da gradação"},
   {"render.aa.fxaa", "Antisserrilhado espacial", CapabilityState::Implemented,
    "rhi/shaders/post_process_common.glsl", ""},
   {"render.aa.temporal", "Antisserrilhado temporal", CapabilityState::DeviceLimited,

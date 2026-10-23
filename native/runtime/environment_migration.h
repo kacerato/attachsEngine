@@ -25,4 +25,13 @@ struct EnvironmentMigrationReport final {
 };
 EnvironmentMigrationReport migrateLegacyEnvironmentLighting(SceneGraph &graph);
 
+// PK-4 (V-04): até o Ambiente v18 o volume tinha camada própria ("Ambiente
+// 0..7") e a câmera um filtro de um bit. Na Unity o Volume usa a camada do
+// GameObject e a câmera a Volume Mask (LayerMask). Cada "Ambiente N" (N > 0)
+// vira a camada de objeto de nome "Ambiente N" (criada numa vaga livre do
+// projeto) e o objeto do volume passa para ela; a máscara antiga da câmera
+// vira as camadas onde estão os volumes que ela via. "Ambiente 0" e "todos"
+// não mudam nada. Devolve quantos objetos (volumes e câmeras) mudaram.
+u32 migrateLegacyVolumeLayers(SceneGraph &graph);
+
 } // namespace ae::runtime

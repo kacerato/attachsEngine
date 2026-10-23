@@ -421,6 +421,7 @@ add_library(aether_renderer STATIC
   renderer/dynamic_resolution.cpp
   renderer/environment_map.cpp
   renderer/scene_environment.cpp
+  renderer/volume_parameters.cpp
   renderer/color_grading.cpp
   renderer/time_of_day.cpp
   renderer/light_probes.cpp
@@ -547,7 +548,8 @@ target_link_libraries(aether_assets PUBLIC aether_convex_bake)
 if(NOT ANDROID)
   # Only descriptors and GUID/archive primitives: regenerating the scripting API
   # must not rebuild/link the renderer, editor, physics or the full test runner.
-  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp scene/collision_recipe.cpp)
+  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp scene/collision_recipe.cpp
+    renderer/volume_parameters.cpp renderer/scene_environment.cpp)
   target_include_directories(aether_component_contract_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   add_dependencies(aether_component_contract_probe aether_component_codegen_check)
   if(MINGW)
@@ -649,6 +651,7 @@ add_library(aether_editor STATIC
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
+  editor/editor_volume_profile.cpp
   editor/editor_physics_materials.cpp
   editor/editor_texture_assets.cpp
   editor/editor_texture_publication.cpp
@@ -956,7 +959,7 @@ if(NOT ANDROID)
     ../tests/native/test_lighting_specialization.cpp
     ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_probes_unity.cpp
-    ../tests/native/test_runtime_environment.cpp
+    ../tests/native/test_runtime_environment.cpp ../tests/native/test_volume_profile.cpp
     ../tests/native/test_environment_lighting_window.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
@@ -1186,7 +1189,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
     ../tests/native/test_environment_lighting_window.cpp ../tests/native/test_sky_celestial.cpp
     ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp
-    ../tests/native/test_night_sky.cpp)
+    ../tests/native/test_night_sky.cpp ../tests/native/test_volume_profile.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1300,6 +1303,11 @@ if(NOT ANDROID)
     target_compile_options(pk6_probe_scene_author PRIVATE -Wa,-mbig-obj)
   endif()
   # V-2: variante noturna da Vila (Hora do dia + Lua) para a prancha da noite.
+  add_executable(pk5_post_scene_author EXCLUDE_FROM_ALL ../tools/pk5_post_scene_author.cpp)
+  target_link_libraries(pk5_post_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(pk5_post_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(v2_night_scene_author EXCLUDE_FROM_ALL ../tools/v2_night_scene_author.cpp)
   target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)

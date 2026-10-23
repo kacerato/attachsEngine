@@ -1151,7 +1151,18 @@ void openProjectSection(Fixture &fixture,EditorProjectSection section) {
   AE_EXPECT_TRUE(fixture.session.screen().workspace==EditorWorkspace::Project,"projeto aberto");
   AE_EXPECT_TRUE(fixture.session.screen().projectSection==section,"seção escolhida");
 }
+// PK-4: o perfil aberto e os cartões de Volume rolam em vez de paginar: desce
+// a rolagem do painel até o widget aparecer.
+bool revealByScroll(Fixture &fixture,u32 widget) {
+  auto &screen=const_cast<EditorScreenState&>(fixture.session.screen());
+  float &scroll=screen.profileRows.empty()?screen.inspectorScroll:screen.profileInspectorScroll;
+  scroll=0;
+  for(u32 step=0;step<300&&locateWidget(fixture.session,widget).x<0;++step) scroll+=30;
+  return locateWidget(fixture.session,widget).x>=0;
+}
 void revealProperty(Fixture &fixture,u32 widget) {
+  if(locateWidget(fixture.session,widget).x<0&&locateWidget(fixture.session,widgetId(EditorWidget::PropertyNext)).x<0&&
+     revealByScroll(fixture,widget)) return;
   // Teto de segurança: a aba Material tem 25 linhas e a superfície de teste é baixa.
   for(u32 page=0;page<64 && locateWidget(fixture.session,widget).x<0;++page) {
     AE_EXPECT_TRUE(locateWidget(fixture.session,widgetId(EditorWidget::PropertyNext)).x>=0,"next property page exists");
@@ -1407,6 +1418,7 @@ AE_TEST(session_material_and_environment_numeric_controls_use_the_same_history_p
   u32 componentIndex=0,skyEnum=0;
   for(u32 i=0;i<root->components.size();++i) if(root->components.at(i)==environment) componentIndex=i;
   for(u32 i=0;i<scene::Environment::descriptor.enums.size();++i) if(scene::Environment::descriptor.enums[i].id=="sky") skyEnum=i;
+  revealProperty(f,widgetId(EditorWidget::ComponentEnumBase)+componentIndex+(skyEnum<<8));
   tapWidget(f,widgetId(EditorWidget::ComponentEnumBase)+componentIndex+(skyEnum<<8));
   AE_EXPECT_TRUE(f.session.screen().enumPicker!=0,"Shader do céu abre o seletor na janela Iluminação");
   AE_EXPECT_TRUE(f.session.history().undo(f.session.document()),"undo environment");
@@ -4528,8 +4540,9 @@ AE_TEST(floating_windows_stay_under_modals) {
 }
 
 // Unity 6000.0 Volume Profile: o perfil em Propriedades mostra só o que ele
-// guarda (descoberto pelo esquema do Ambiente), em abas por grupo; editar muda
-// o perfil e os ambientes que o usam, com Desfazer.
+// guarda (descoberto pelo esquema do Ambiente). PK-4 (V-06): um cartão
+// recolhível por override, numa coluna que rola, no lugar das abas paginadas;
+// editar muda o perfil e os ambientes que o usam, com Desfazer.
 AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
   namespace fs=std::filesystem;
   Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
@@ -4552,28 +4565,31 @@ AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
   const auto &state=f.session.screen();
   AE_EXPECT_TRUE(state.profileInspector==guid,"perfil em Propriedades");
   AE_EXPECT_TRUE(state.profileObjects.size()==1 && state.profileObjects[0]==sky,"um ambiente usa");
-  const auto &groups=state.profileGroups;
-  AE_EXPECT_TRUE(std::find(groups.begin(),groups.end(),"Volume")==groups.end(),"forma e peso são da instância, não do perfil");
-  const auto groupOf=[&](const char *name) {
-    for(u32 i=0;i<groups.size();++i) if(groups[i]==name) return i;
-    return 0xffffffffu;
-  };
-  AE_EXPECT_TRUE(groupOf("Neblina")!=0xffffffffu && groupOf("Tonemapping")!=0xffffffffu,"grupos do esquema");
+  using Kind=EditorScreenState::ProfileRow::Kind;
   const auto rowOf=[&](std::string_view id) {
     for(u32 i=0;i<state.profileRows.size();++i) if(state.profileRows[i].id==id) return i;
     return 0xffffffffu;
   };
+  const auto headerOf=[&](renderer::VolumeGroup group) {
+    for(u32 i=0;i<state.profileRows.size();++i)
+      if(state.profileRows[i].kind==Kind::Header&&state.profileRows[i].group==static_cast<u32>(group)) return i;
+    return 0xffffffffu;
+  };
+  AE_EXPECT_TRUE(rowOf("weight")==0xffffffffu&&rowOf("blend_distance")==0xffffffffu,"forma e peso são da instância, não do perfil");
+  AE_EXPECT_TRUE(headerOf(renderer::VolumeGroup::Fog)!=0xffffffffu&&headerOf(renderer::VolumeGroup::Tonemapping)!=0xffffffffu,
+                 "um cartão por override do perfil");
+  AE_EXPECT_TRUE(headerOf(renderer::VolumeGroup::DepthOfField)==0xffffffffu,"sem o override no perfil, sem cartão");
   const auto profile=[&]{return f.session.findEnvironmentProfile(guid);};
   const auto component=[&]{return static_cast<const scene::Environment *>(doc.find(sky)->components.find(scene::Environment::descriptor));};
-  // Grupos pelo seletor: avança até a neblina.
-  const auto goTo=[&](u32 group) {
-    for(u32 i=0;i<16 && state.profileGroup!=group;++i)
-      tapWidget(f,widgetId(EditorWidget::ProfileGroupBase)+(state.profileGroup<group?state.profileGroup+1:state.profileGroup-1));
+  // A coluna rola até a linha (no lugar da paginação).
+  const auto reveal=[&](u32 widget) {
+    auto &screen=const_cast<EditorScreenState &>(f.session.screen());
+    screen.profileInspectorScroll=0;
+    for(u32 step=0;step<200&&locateWidget(f.session,widget).x<0;++step) screen.profileInspectorScroll+=30;
   };
-  goTo(groupOf("Neblina"));
-  AE_EXPECT_EQ(state.profileGroup,groupOf("Neblina"),"grupo Neblina");
   const bool fog=profile()->values.fog;
   AE_EXPECT_TRUE(rowOf("fog")!=0xffffffffu,"linha da neblina");
+  reveal(widgetId(EditorWidget::ProfileRowBase)+rowOf("fog"));
   tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("fog"));
   AE_EXPECT_EQ(profile()->values.fog,!fog,"perfil mudou");
   AE_EXPECT_EQ(component()->values.fog,!fog,"o ambiente que usa o perfil mudou junto");
@@ -4583,24 +4599,113 @@ AE_TEST(environment_profile_opens_in_properties_and_edits_through_the_schema) {
   if(!profile()->values.fog) {tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("fog"));f.session.update();}
   const u32 color=rowOf("fog_color");
   AE_EXPECT_TRUE(color!=0xffffffffu,"cor da neblina visível com neblina ligada");
-  revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+color);
+  reveal(widgetId(EditorWidget::ProfileRowBase)+color);
   tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+color);
   AE_EXPECT_TRUE(f.session.completeTextEdit(f.session.pendingTextEdit(),"0.1 0.2 0.3",true),"trio aceito");
   AE_EXPECT_TRUE(std::abs(profile()->values.fogColor[2]-.3f)<1e-5f,"cor gravada no perfil");
   // Opção: tonemapping cicla.
-  goTo(groupOf("Tonemapping"));
   if(rowOf("tone_mapper")!=0xffffffffu) {
     const auto before=profile()->values.toneMapper;
-    revealProperty(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
+    reveal(widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
     tapWidget(f,widgetId(EditorWidget::ProfileRowBase)+rowOf("tone_mapper"));
     AE_EXPECT_TRUE(profile()->values.toneMapper!=before,"opção ciclou");
   }
+  // Caixa de override por parâmetro: desmarca a densidade da neblina.
+  const u32 density=rowOf("fog_density");
+  AE_EXPECT_TRUE(density!=0xffffffffu&&state.profileRows[density].overridden,"densidade marcada");
+  reveal(widgetId(EditorWidget::ProfileOverrideBase)+density);
+  tapWidget(f,widgetId(EditorWidget::ProfileOverrideBase)+density);
+  const u32 parameter=renderer::volumeParameterIndex("fog_density");
+  AE_EXPECT_TRUE(!profile()->overrides.overridden(parameter),"caixa desmarcada no perfil");
+  AE_EXPECT_TRUE(!component()->volumeOverrides().overridden(parameter),"e no ambiente que o usa");
+  // Recolher o cartão da neblina tira as linhas dela da coluna.
+  reveal(widgetId(EditorWidget::ProfileSectionBase)+static_cast<u32>(renderer::VolumeGroup::Fog));
+  tapWidget(f,widgetId(EditorWidget::ProfileSectionBase)+static_cast<u32>(renderer::VolumeGroup::Fog));
+  AE_EXPECT_TRUE(rowOf("fog_density")==0xffffffffu&&headerOf(renderer::VolumeGroup::Fog)!=0xffffffffu,"cartão recolhido");
+  // Adicionar override: Profundidade de campo entra com as caixas desmarcadas.
+  reveal(widgetId(EditorWidget::ProfileAddOverride));
+  tapWidget(f,widgetId(EditorWidget::ProfileAddOverride));
+  const u32 dof=static_cast<u32>(renderer::VolumeGroup::DepthOfField);
+  reveal(widgetId(EditorWidget::VolumeAddChoiceBase)+dof);
+  tapWidget(f,widgetId(EditorWidget::VolumeAddChoiceBase)+dof);
+  AE_EXPECT_TRUE(profile()->overrides.hasGroup(renderer::VolumeGroup::DepthOfField)&&
+                 profile()->overrides.overriddenInGroup(renderer::VolumeGroup::DepthOfField)==0,
+                 "override adicionado sem caixas marcadas");
+  AE_EXPECT_TRUE(headerOf(renderer::VolumeGroup::DepthOfField)!=0xffffffffu,"cartão novo");
+  // ALL marca todos os parâmetros do override.
+  reveal(widgetId(EditorWidget::ProfileGroupAllBase)+dof);
+  tapWidget(f,widgetId(EditorWidget::ProfileGroupAllBase)+dof);
+  AE_EXPECT_EQ(profile()->overrides.overriddenInGroup(renderer::VolumeGroup::DepthOfField),
+               profile()->overrides.parametersInGroup(renderer::VolumeGroup::DepthOfField),"ALL");
   // Desfazer volta o perfil.
   const auto depth=history.undoDepth();
   for(u32 i=0;i<depth;++i) history.undo(doc);
   AE_EXPECT_EQ(profile()->values.fog,fog,"Desfazer volta a neblina");
+  AE_EXPECT_TRUE(!profile()->overrides.hasGroup(renderer::VolumeGroup::DepthOfField)&&profile()->overrides.overridden(parameter),
+                 "Desfazer volta as caixas e o override adicionado");
   tapWidget(f,widgetId(EditorWidget::ProfileInspectorClose));
   AE_EXPECT_TRUE(!state.profileInspector.valid(),"voltar");
+}
+
+// PK-4 (V-01): Volume Profile compartilhado, como na Unity. Dois volumes com
+// o mesmo perfil: editar um parâmetro no Inspector de UM deles edita o
+// recurso e o outro muda junto, num Desfazer só; Clonar cria um perfil
+// independente; Novo cria um perfil vazio.
+AE_TEST(volume_profile_is_shared_and_edits_from_any_volume_reach_all) {
+  namespace fs=std::filesystem;
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  const auto root=fs::temp_directory_path()/("aether-perfil-compartilhado-"+
+      std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+  struct Cleanup {fs::path path;~Cleanup(){std::error_code error;fs::remove_all(path,error);}} cleanup{root};
+  fs::create_directories(root);
+  AE_EXPECT_TRUE(f.session.setProjectDirectory(root.string().c_str()),"projeto aberto");
+  const auto make=[&](const char *name) {
+    const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,name);
+    auto value=*doc.find(id);const auto instance=value.components.add(scene::Environment::descriptor)->instanceId();
+    doc.applyEntityValues(id,value);return std::pair{id,instance};
+  };
+  const auto [first,firstInstance]=make("Praça");
+  const auto [second,secondInstance]=make("Rua");
+  std::string diagnostic;
+  const auto guid=f.session.createEnvironmentProfile(first,firstInstance,diagnostic);
+  AE_EXPECT_TRUE(guid.valid(),diagnostic.c_str());
+  // O segundo volume escolhe o mesmo perfil pelo campo Perfil.
+  EditorActionRequest pick;pick.version=f.session.sceneVersion();pick.entity=second;pick.action=EditorAction::ComponentResource;
+  pick.componentInstance=secondInstance;pick.componentProperty="profile";pick.componentResource=guid;
+  AE_EXPECT_TRUE(f.session.dispatch(pick).status==EditorActionStatus::Applied,"segundo volume usa o perfil");
+  f.session.update();history.clear();
+  const auto environment=[&](EditorEntityId id){return static_cast<const scene::Environment *>(doc.find(id)->components.find(scene::Environment::descriptor));};
+  // Editar o bloom no Inspector do primeiro: o perfil e o segundo mudam.
+  EditorActionRequest edit;edit.version=f.session.sceneVersion();edit.entity=first;edit.action=EditorAction::ComponentProperty;
+  edit.componentInstance=firstInstance;edit.componentType=scene::Environment::descriptor.id;
+  edit.componentProperty="bloom_intensity";edit.componentValue=0.75f;
+  AE_EXPECT_TRUE(f.session.dispatch(edit).status==EditorActionStatus::Applied,"edição aplicada");
+  f.session.update();
+  AE_EXPECT_TRUE(std::abs(f.session.findEnvironmentProfile(guid)->values.bloomIntensity-.75f)<1e-6f,"o recurso mudou");
+  AE_EXPECT_TRUE(std::abs(environment(second)->values.bloomIntensity-.75f)<1e-6f,"o outro volume mudou junto");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"um passo, do perfil");
+  // Caixa de override de um parâmetro pelo Inspector do segundo também é do perfil.
+  const u32 threshold=renderer::volumeParameterIndex("bloom_threshold");
+  AE_EXPECT_TRUE(f.session.toggleVolumeParameter(second,secondInstance,threshold),"caixa alternada");
+  f.session.update();
+  AE_EXPECT_TRUE(!f.session.findEnvironmentProfile(guid)->overrides.overridden(threshold)&&
+                 !environment(first)->volumeOverrides().overridden(threshold),"a caixa é do perfil");
+  history.undo(doc);history.undo(doc);f.session.update();
+  AE_EXPECT_TRUE(std::abs(environment(first)->values.bloomIntensity-renderer::SceneEnvironment{}.bloomIntensity)<1e-6f&&
+                 environment(first)->volumeOverrides().overridden(threshold),"Desfazer volta perfil e volumes");
+  // Clonar: perfil novo, independente.
+  const auto clone=f.session.createVolumeProfile(second,secondInstance,true,diagnostic);
+  AE_EXPECT_TRUE(clone.valid()&&clone!=guid&&environment(second)->profile==clone,diagnostic.c_str());
+  AE_EXPECT_TRUE(f.session.findEnvironmentProfile(clone)->name.starts_with("Clone de "),"nome do clone");
+  edit.version=f.session.sceneVersion();edit.entity=second;edit.componentInstance=secondInstance;edit.componentValue=1.5f;
+  AE_EXPECT_TRUE(f.session.dispatch(edit).status==EditorActionStatus::Applied,"edição no clone");
+  f.session.update();
+  AE_EXPECT_TRUE(std::abs(f.session.findEnvironmentProfile(clone)->values.bloomIntensity-1.5f)<1e-6f&&
+                 std::abs(environment(first)->values.bloomIntensity-1.5f)>1e-3f,"o clone não arrasta o original");
+  // Novo: perfil vazio (Volume novo da Unity: nada no perfil).
+  const auto empty=f.session.createVolumeProfile(first,firstInstance,false,diagnostic);
+  AE_EXPECT_TRUE(empty.valid()&&f.session.findEnvironmentProfile(empty)->overrides.added==0,diagnostic.c_str());
+  AE_EXPECT_EQ(f.session.environmentProfileUsers(guid),0u,"o perfil antigo ficou sem usuários");
 }
 
 // Unity 6000.0 Properties de um asset: um recurso numa janela focada convive

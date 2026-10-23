@@ -126,7 +126,7 @@ inline const CreationComponent point[]{{light,pointLight}};
 // G4b: como um Volume global da Unity com só o override Cloud Layer: acima do
 // Ambiente da cena (prioridade 1), não mexe no céu, na neblina nem no pós dele.
 inline constexpr std::string_view environmentType="astra.render.environment";
-inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_celestial",false},{environmentType,"override_physical_atmosphere",false},{environmentType,"override_fog",false},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},
   {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
   {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
@@ -139,14 +139,14 @@ inline const CreationComponent spot[]{{light,spotLight}};
 // sozinho (na Unity nasce com perfil vazio): nasce com todos os grupos
 // desligados, acima do Ambiente da cena; o autor liga os que quiser.
 // Global vale em toda a vista; Caixa e Esfera pelo Transform, com mistura de 1 m.
-inline const CreationValue globalVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+inline const CreationValue globalVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_celestial",false},{environmentType,"override_physical_atmosphere",false},{environmentType,"override_fog",false},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},
   {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
   {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
   {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
   {environmentType,"override_ambient_occlusion",false},{environmentType,"override_clouds",false},{environmentType,"priority",1.f}};
 inline const CreationComponent globalVolume[]{{environmentType,globalVolumeValues}};
-inline const CreationValue boxVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+inline const CreationValue boxVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_celestial",false},{environmentType,"override_physical_atmosphere",false},{environmentType,"override_fog",false},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},
   {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
   {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
@@ -154,7 +154,7 @@ inline const CreationValue boxVolumeValues[]{{environmentType,"override_sky",fal
   {environmentType,"override_ambient_occlusion",false},{environmentType,"override_clouds",false},{environmentType,"priority",1.f},
   {environmentType,"volume_shape",u32{1}},{environmentType,"blend_distance",1.f}};
 inline const CreationComponent boxVolume[]{{environmentType,boxVolumeValues}};
-inline const CreationValue sphereVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",false},
+inline const CreationValue sphereVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_celestial",false},{environmentType,"override_physical_atmosphere",false},{environmentType,"override_fog",false},
   {environmentType,"override_post",false},{environmentType,"override_indirect",false},
   {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
   {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},

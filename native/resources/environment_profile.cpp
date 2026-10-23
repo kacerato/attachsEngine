@@ -1,4 +1,5 @@
 #include "resources/environment_profile.h"
+#include "renderer/volume_parameters.h"
 
 #include <algorithm>
 #include <iomanip>
@@ -39,7 +40,7 @@ bool readGrading(std::istream &in,renderer::ColorGrading &g) {
 }
 
 bool EnvironmentProfile::valid() const {
-  if(!guid.valid()||!revision||name.empty()||name.size()>128||!values.valid()) return false;
+  if(!guid.valid()||!revision||name.empty()||name.size()>128||!values.valid()||!overrides.valid()) return false;
   for(unsigned char c:name) if(c<32||c==127) return false;
   return true;
 }
@@ -93,12 +94,26 @@ std::string EnvironmentProfile::serialize() const {
   writeColor(out,values.ambientGroundColor);writeColor(out,values.ambientColor);
   out<<' '<<static_cast<u32>(values.fogMode)<<' '<<static_cast<u32>(values.fogColorMode)<<' '<<values.fogEnd
      <<' '<<(values.skybox.valid()?values.skybox.text():"-");
+  // v14 (PK-4/PK-5): o pós completo, as curvas e os overrides do perfil.
+  out<<' '<<values.vignetteRounded;writeColor(out,values.vignetteColor);
+  out<<' '<<values.vignetteCenter[0]<<' '<<values.vignetteCenter[1]<<' '<<values.vignetteSmoothness
+     <<' '<<values.bloomHighQualityFiltering<<' '<<(values.bloomDirt.valid()?values.bloomDirt.text():"-")
+     <<' '<<values.bloomDirtIntensity<<' '<<static_cast<u32>(values.depthOfField)
+     <<' '<<static_cast<u32>(values.depthOfFieldQuality)<<' '<<values.gaussianStart<<' '<<values.gaussianEnd
+     <<' '<<values.gaussianMaxRadius<<' '<<values.gaussianHighQuality<<' '<<values.focusDistance
+     <<' '<<values.focalLength<<' '<<values.aperture<<' '<<values.bladeCount<<' '<<values.bladeCurvature
+     <<' '<<values.bladeRotation<<' '<<static_cast<u32>(values.motionBlurQuality)<<' '<<values.motionBlurIntensity
+     <<' '<<values.motionBlurClamp<<' '<<values.chromaticAberration<<' '<<values.lensDistortion
+     <<' '<<values.lensDistortionXMultiplier<<' '<<values.lensDistortionYMultiplier
+     <<' '<<values.lensDistortionCenter[0]<<' '<<values.lensDistortionCenter[1]<<' '<<values.lensDistortionScale;
+  renderer::writeColorCurves(out,values);
+  renderer::writeVolumeOverrides(out,overrides);
   out<<'\n';
   return out.str();
 }
 
 bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &out) {
-  if(text.size()>64u*1024u) return false;
+  if(text.size()>256u*1024u) return false;
   std::istringstream in{std::string(text)};in.imbue(std::locale::classic());
   EnvironmentProfile candidate;std::string magic,guid;u32 version=0,sky=0,tone=0;
   if(!(in>>magic>>version>>guid>>candidate.revision>>std::quoted(candidate.name)) ||
@@ -192,6 +207,31 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
     candidate.values.fogMode=renderer::FogMode::Exponential;
     candidate.values.fogColorMode=renderer::FogColorMode::SkyLight;
   }
+  auto &x=candidate.values;
+  if(version>=14) {
+    u32 dof=0,dofQuality=0,blur=0;std::string dirt;
+    if(!(in>>x.vignetteRounded)||!readColor(in,x.vignetteColor)||
+       !(in>>x.vignetteCenter[0]>>x.vignetteCenter[1]>>x.vignetteSmoothness>>x.bloomHighQualityFiltering>>dirt)||
+       (dirt!="-"&&!AssetGuid::parse(dirt,x.bloomDirt))||
+       !(in>>x.bloomDirtIntensity>>dof>>dofQuality>>x.gaussianStart>>x.gaussianEnd>>x.gaussianMaxRadius>>
+         x.gaussianHighQuality>>x.focusDistance>>x.focalLength>>x.aperture>>x.bladeCount>>x.bladeCurvature>>
+         x.bladeRotation>>blur>>x.motionBlurIntensity>>x.motionBlurClamp>>x.chromaticAberration>>x.lensDistortion>>
+         x.lensDistortionXMultiplier>>x.lensDistortionYMultiplier>>x.lensDistortionCenter[0]>>
+         x.lensDistortionCenter[1]>>x.lensDistortionScale)||dof>2||dofQuality>2||blur>2||
+       !renderer::readColorCurves(in,x)||!renderer::readVolumeOverrides(in,candidate.overrides)) return false;
+    x.depthOfField=static_cast<renderer::DepthOfFieldMode>(dof);
+    x.depthOfFieldQuality=static_cast<renderer::EffectQuality>(dofQuality);
+    x.motionBlurQuality=static_cast<renderer::EffectQuality>(blur);
+  } else {
+    // Perfil antigo: o efeito ligado pela intensidade (Unity) e os overrides
+    // por grupo de antes, todos marcados -- o Ambiente que o usava cobria tudo.
+    if(!x.bloom) x.bloomIntensity=0;
+    if(!x.vignette) x.vignetteIntensity=0;
+    if(!x.filmGrain) x.filmGrainIntensity=0;
+    if(!x.ambientOcclusion) x.ambientOcclusionIntensity=0;
+    candidate.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideAll);
+  }
+  x.syncEffectSwitches();
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }
@@ -200,80 +240,20 @@ renderer::SceneEnvironment applyEnvironmentProfile(const renderer::SceneEnvironm
                                                     const EnvironmentProfile &profile) {
   auto result=profile.values;
   result.active=instance.active;result.priority=instance.priority;
-  // Luz indireta é do LUGAR (a sala escura, o pátio aberto), não da aparência
-  // compartilhada: fica com a instância, como a prioridade.
-  result.indirectDiffuse=instance.indirectDiffuse;result.indirectSpecular=instance.indirectSpecular;
   return result;
 }
 
-bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,
-                               const EnvironmentProfile &profile) {
-  auto normalized=instance;normalized.active=true;normalized.priority=0;
-  auto expected=profile.values;expected.active=true;expected.priority=0;
-  return normalized.skyExposure==expected.skyExposure&&normalized.sunDisk==expected.sunDisk&&
-      normalized.sunSize==expected.sunSize&&normalized.sunSizeConvergence==expected.sunSizeConvergence&&
-      normalized.ambientSource==expected.ambientSource&&
-      std::equal(std::begin(normalized.ambientSkyColor),std::end(normalized.ambientSkyColor),expected.ambientSkyColor)&&
-      std::equal(std::begin(normalized.ambientEquatorColor),std::end(normalized.ambientEquatorColor),expected.ambientEquatorColor)&&
-      std::equal(std::begin(normalized.ambientGroundColor),std::end(normalized.ambientGroundColor),expected.ambientGroundColor)&&
-      std::equal(std::begin(normalized.ambientColor),std::end(normalized.ambientColor),expected.ambientColor)&&
-      normalized.fogMode==expected.fogMode&&normalized.fogColorMode==expected.fogColorMode&&
-      normalized.fogEnd==expected.fogEnd&&normalized.skybox==expected.skybox&&
-      normalized.environmentMap==expected.environmentMap&&
-      normalized.hdriRotationDegrees==expected.hdriRotationDegrees&&normalized.hdriExposureEv==expected.hdriExposureEv&&
-      normalized.fog==expected.fog&&normalized.post==expected.post&&
-      normalized.bloom==expected.bloom&&normalized.vignette==expected.vignette&&
-      normalized.filmGrain==expected.filmGrain&&
-      normalized.ambientOcclusion==expected.ambientOcclusion&&normalized.sky==expected.sky&&
-      normalized.toneMapper==expected.toneMapper&&
-      std::equal(std::begin(normalized.skyZenith),std::end(normalized.skyZenith),expected.skyZenith)&&
-      std::equal(std::begin(normalized.skyHorizon),std::end(normalized.skyHorizon),expected.skyHorizon)&&
-      std::equal(std::begin(normalized.ground),std::end(normalized.ground),expected.ground)&&
-      std::equal(std::begin(normalized.fogColor),std::end(normalized.fogColor),expected.fogColor)&&
-      normalized.atmosphere==expected.atmosphere&&normalized.sunDiskDegrees==expected.sunDiskDegrees&&
-      normalized.sunDiskIntensity==expected.sunDiskIntensity&&
-      normalized.physicalAtmosphereHighQuality==expected.physicalAtmosphereHighQuality&&
-      normalized.physicalSkyIntensity==expected.physicalSkyIntensity&&
-      normalized.airDensity==expected.airDensity&&normalized.aerosolDensity==expected.aerosolDensity&&
-      normalized.aerosolAnisotropy==expected.aerosolAnisotropy&&
-      normalized.planetRadiusKm==expected.planetRadiusKm&&
-      normalized.observerHeightKm==expected.observerHeightKm&&
-      normalized.rayleighScaleHeightKm==expected.rayleighScaleHeightKm&&
-      normalized.aerosolScaleHeightKm==expected.aerosolScaleHeightKm&&
-      normalized.atmosphereHeightKm==expected.atmosphereHeightKm&&
-      normalized.groundAlbedo==expected.groundAlbedo&&normalized.fogDensity==expected.fogDensity&&
-      normalized.fogStart==expected.fogStart&&normalized.fogBaseHeight==expected.fogBaseHeight&&
-      normalized.fogHeightFalloff==expected.fogHeightFalloff&&
-      normalized.fogLightEnergy==expected.fogLightEnergy&&
-      normalized.exposureMode==expected.exposureMode&&normalized.exposureMetering==expected.exposureMetering&&
-      normalized.exposureAdaptation==expected.exposureAdaptation&&
-      normalized.fixedExposure==expected.fixedExposure&&
-      normalized.exposureCompensation==expected.exposureCompensation&&
-      normalized.exposureLimitMin==expected.exposureLimitMin&&
-      normalized.exposureLimitMax==expected.exposureLimitMax&&
-      normalized.exposureHistogramLow==expected.exposureHistogramLow&&
-      normalized.exposureHistogramHigh==expected.exposureHistogramHigh&&
-      normalized.exposureTargetMidGrey==expected.exposureTargetMidGrey&&
-      normalized.exposureSpeedDarkToLight==expected.exposureSpeedDarkToLight&&
-      normalized.exposureSpeedLightToDark==expected.exposureSpeedLightToDark&&
-      normalized.bloomThreshold==expected.bloomThreshold&&normalized.bloomIntensity==expected.bloomIntensity&&
-      normalized.contrast==expected.contrast&&normalized.saturation==expected.saturation&&
-      normalized.vignetteIntensity==expected.vignetteIntensity&&
-      normalized.filmGrainIntensity==expected.filmGrainIntensity&&
-      normalized.ambientOcclusionRadius==expected.ambientOcclusionRadius&&
-      normalized.ambientOcclusionIntensity==expected.ambientOcclusionIntensity&&
-      normalized.ambientOcclusionPower==expected.ambientOcclusionPower&&
-      normalized.ambientOcclusionBias==expected.ambientOcclusionBias&&
-      normalized.grading==expected.grading&&
-      normalized.sunGlare==expected.sunGlare&&normalized.moonPhase==expected.moonPhase&&
-      normalized.moonSizeDegrees==expected.moonSizeDegrees&&
-      normalized.moonIntensity==expected.moonIntensity&&normalized.starIntensity==expected.starIntensity&&
-      normalized.clouds==expected.clouds&&
-      normalized.postExposure==expected.postExposure&&normalized.hueShift==expected.hueShift&&
-      std::equal(std::begin(normalized.colorFilter),std::end(normalized.colorFilter),expected.colorFilter)&&
-      normalized.bloomScatter==expected.bloomScatter&&normalized.bloomClamp==expected.bloomClamp&&
-      std::equal(std::begin(normalized.bloomTint),std::end(normalized.bloomTint),expected.bloomTint);
+bool sameEnvironmentAppearance(const renderer::SceneEnvironment &instance,const EnvironmentProfile &profile) {
+  for(const auto &parameter:renderer::volumeParameters())
+    if(!renderer::sameVolumeParameter(parameter,instance,profile.values)) return false;
+  return true;
 }
+
+bool sameEnvironmentProfileData(const renderer::SceneEnvironment &instance,const renderer::VolumeOverrides &overrides,
+                                const EnvironmentProfile &profile) {
+  return overrides==profile.overrides&&sameEnvironmentAppearance(instance,profile);
+}
+
 renderer::SceneEnvironment applySkyboxMaterial(const renderer::SceneEnvironment &instance,
                                                const EnvironmentProfile &material) {
   auto result=instance;const auto &sky=material.values;

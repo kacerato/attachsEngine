@@ -4075,6 +4075,24 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
+    /// <summary>Cor. Cor linear RGB</summary>
+    public Vector3 VignetteColor
+    {
+        get => new(Component.GetFloat("vignette_color.r"), Component.GetFloat("vignette_color.g"), Component.GetFloat("vignette_color.b"));
+        set => Component.SetVector3("vignette_color", value);
+    }
+    /// <summary>Centro</summary>
+    public Vector2 VignetteCenter
+    {
+        get => new(Component.GetFloat("vignette_center.x"), Component.GetFloat("vignette_center.y"));
+        set => Component.SetVector2("vignette_center", value);
+    }
+    /// <summary>Centro</summary>
+    public Vector2 LensDistortionCenter
+    {
+        get => new(Component.GetFloat("lens_distortion_center.x"), Component.GetFloat("lens_distortion_center.y"));
+        set => Component.SetVector2("lens_distortion_center", value);
+    }
     /// <summary>Filtro de cor. Cor linear RGB</summary>
     public Vector3 ColorFilter
     {
@@ -4260,7 +4278,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("bloom_threshold");
         set => Component.SetFloat("bloom_threshold", value);
     }
-    /// <summary>Intensidade do bloom</summary>
+    /// <summary>Intensidade do bloom. Intensity: zero desliga o bloom</summary>
     /// <remarks>Faixa válida: 0 a 2.</remarks>
     public float BloomIntensity
     {
@@ -4281,14 +4299,14 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("saturation");
         set => Component.SetFloat("saturation", value);
     }
-    /// <summary>Intensidade da vinheta</summary>
+    /// <summary>Intensidade. Intensity: zero desliga a vinheta</summary>
     /// <remarks>Faixa válida: 0 a 1.</remarks>
     public float VignetteIntensity
     {
         get => Component.GetFloat("vignette_intensity");
         set => Component.SetFloat("vignette_intensity", value);
     }
-    /// <summary>Intensidade do grão</summary>
+    /// <summary>Intensidade. Intensity: zero desliga o grão</summary>
     /// <remarks>Faixa válida: 0 a 1.</remarks>
     public float FilmGrainIntensity
     {
@@ -4302,7 +4320,7 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("ambient_occlusion_radius");
         set => Component.SetFloat("ambient_occlusion_radius", value);
     }
-    /// <summary>Intensidade</summary>
+    /// <summary>Intensidade. Intensity: zero desliga a oclusão</summary>
     /// <remarks>Faixa válida: 0 a 4.</remarks>
     public float AmbientOcclusionIntensity
     {
@@ -4757,6 +4775,132 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetFloat("fog_end");
         set => Component.SetFloat("fog_end", value);
     }
+    /// <summary>Suavidade. Smoothness: quanto a borda escura se espalha</summary>
+    /// <remarks>Faixa válida: 0.01 a 1.</remarks>
+    public float VignetteSmoothness
+    {
+        get => Component.GetFloat("vignette_smoothness");
+        set => Component.SetFloat("vignette_smoothness", value);
+    }
+    /// <summary>Intensidade da sujeira. Lens Dirt › Intensity: quanto a textura de sujeira acende com o brilho</summary>
+    /// <remarks>Faixa válida: 0 a 100.</remarks>
+    public float BloomDirtIntensity
+    {
+        get => Component.GetFloat("bloom_dirt_intensity");
+        set => Component.SetFloat("bloom_dirt_intensity", value);
+    }
+    /// <summary>Início (m). Start: distância onde o desfoque começa</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float DofGaussianStart
+    {
+        get => Component.GetFloat("dof_gaussian_start");
+        set => Component.SetFloat("dof_gaussian_start", value);
+    }
+    /// <summary>Fim (m). End: distância onde o desfoque chega ao máximo</summary>
+    /// <remarks>Faixa válida: 0 a 10000.</remarks>
+    public float DofGaussianEnd
+    {
+        get => Component.GetFloat("dof_gaussian_end");
+        set => Component.SetFloat("dof_gaussian_end", value);
+    }
+    /// <summary>Raio máximo. Max Radius: acima de 1 surgem artefatos de subamostragem</summary>
+    /// <remarks>Faixa válida: 0.5 a 1.5.</remarks>
+    public float DofGaussianMaxRadius
+    {
+        get => Component.GetFloat("dof_gaussian_max_radius");
+        set => Component.SetFloat("dof_gaussian_max_radius", value);
+    }
+    /// <summary>Distância de foco (m). Focus Distance: a que distância da câmera fica nítido</summary>
+    /// <remarks>Faixa válida: 0.1 a 10000.</remarks>
+    public float DofFocusDistance
+    {
+        get => Component.GetFloat("dof_focus_distance");
+        set => Component.SetFloat("dof_focus_distance", value);
+    }
+    /// <summary>Distância focal (mm). Focal Length: lente mais longa, foco mais raso</summary>
+    /// <remarks>Faixa válida: 1 a 300.</remarks>
+    public float DofFocalLength
+    {
+        get => Component.GetFloat("dof_focal_length");
+        set => Component.SetFloat("dof_focal_length", value);
+    }
+    /// <summary>Abertura (f/). Aperture: f menor, foco mais raso</summary>
+    /// <remarks>Faixa válida: 1 a 32.</remarks>
+    public float DofAperture
+    {
+        get => Component.GetFloat("dof_aperture");
+        set => Component.SetFloat("dof_aperture", value);
+    }
+    /// <summary>Lâminas. Blade Count: lados do bokeh</summary>
+    /// <remarks>Faixa válida: 3 a 9.</remarks>
+    public float DofBladeCount
+    {
+        get => Component.GetFloat("dof_blade_count");
+        set => Component.SetFloat("dof_blade_count", value);
+    }
+    /// <summary>Curvatura das lâminas. Blade Curvature: 1 deixa o bokeh redondo</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float DofBladeCurvature
+    {
+        get => Component.GetFloat("dof_blade_curvature");
+        set => Component.SetFloat("dof_blade_curvature", value);
+    }
+    /// <summary>Giro das lâminas (°). Blade Rotation</summary>
+    /// <remarks>Faixa válida: -180 a 180.</remarks>
+    public float DofBladeRotation
+    {
+        get => Component.GetFloat("dof_blade_rotation");
+        set => Component.SetFloat("dof_blade_rotation", value);
+    }
+    /// <summary>Intensidade. Intensity: rastro do giro e do deslocamento da câmera; zero desliga</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float MotionBlurIntensity
+    {
+        get => Component.GetFloat("motion_blur_intensity");
+        set => Component.SetFloat("motion_blur_intensity", value);
+    }
+    /// <summary>Limite. Clamp: comprimento máximo do rastro, em fração da tela</summary>
+    /// <remarks>Faixa válida: 0 a 0.2.</remarks>
+    public float MotionBlurClamp
+    {
+        get => Component.GetFloat("motion_blur_clamp");
+        set => Component.SetFloat("motion_blur_clamp", value);
+    }
+    /// <summary>Intensidade. Intensity: separa vermelho e azul em direção às bordas; zero desliga</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float ChromaticAberration
+    {
+        get => Component.GetFloat("chromatic_aberration");
+        set => Component.SetFloat("chromatic_aberration", value);
+    }
+    /// <summary>Intensidade. Intensity: positivo é barril, negativo é almofada; zero desliga</summary>
+    /// <remarks>Faixa válida: -1 a 1.</remarks>
+    public float LensDistortion
+    {
+        get => Component.GetFloat("lens_distortion");
+        set => Component.SetFloat("lens_distortion", value);
+    }
+    /// <summary>Multiplicador X. X Multiplier</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float LensDistortionXMultiplier
+    {
+        get => Component.GetFloat("lens_distortion_x_multiplier");
+        set => Component.SetFloat("lens_distortion_x_multiplier", value);
+    }
+    /// <summary>Multiplicador Y. Y Multiplier</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float LensDistortionYMultiplier
+    {
+        get => Component.GetFloat("lens_distortion_y_multiplier");
+        set => Component.SetFloat("lens_distortion_y_multiplier", value);
+    }
+    /// <summary>Escala. Scale: aproxima para esconder as bordas puxadas</summary>
+    /// <remarks>Faixa válida: 0.01 a 5.</remarks>
+    public float LensDistortionScale
+    {
+        get => Component.GetFloat("lens_distortion_scale");
+        set => Component.SetFloat("lens_distortion_scale", value);
+    }
     /// <summary>Ativo. Participa da seleção por prioridade</summary>
     public bool Enabled
     {
@@ -4775,102 +4919,6 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => Component.GetBool("post");
         set => Component.SetBool("post", value);
     }
-    /// <summary>Ativo. Espalha altas luzes antes do tonemap</summary>
-    public bool Bloom
-    {
-        get => Component.GetBool("bloom");
-        set => Component.SetBool("bloom", value);
-    }
-    /// <summary>Ativo. Escurece gradualmente as bordas</summary>
-    public bool Vignette
-    {
-        get => Component.GetBool("vignette");
-        set => Component.SetBool("vignette", value);
-    }
-    /// <summary>Ativo. Adiciona grão sensível à luminância depois da resolução temporal</summary>
-    public bool FilmGrain
-    {
-        get => Component.GetBool("film_grain");
-        set => Component.SetBool("film_grain", value);
-    }
-    /// <summary>Ativo. Escurece contatos e concavidades a partir da profundidade da câmera</summary>
-    public bool AmbientOcclusion
-    {
-        get => Component.GetBool("ambient_occlusion");
-        set => Component.SetBool("ambient_occlusion", value);
-    }
-    /// <summary>Sobrescrever céu. Participa da mistura de céu e atmosfera</summary>
-    public bool OverrideSky
-    {
-        get => Component.GetBool("override_sky");
-        set => Component.SetBool("override_sky", value);
-    }
-    /// <summary>Sobrescrever neblina. Participa da mistura de neblina</summary>
-    public bool OverrideFog
-    {
-        get => Component.GetBool("override_fog");
-        set => Component.SetBool("override_fog", value);
-    }
-    /// <summary>Sobrescrever Tonemapping. Este volume decide a curva de Tonemapping e a chave geral do pós</summary>
-    public bool OverridePost
-    {
-        get => Component.GetBool("override_post");
-        set => Component.SetBool("override_post", value);
-    }
-    /// <summary>Sobrescrever luz indireta. Participa da mistura de difuso e reflexo indiretos</summary>
-    public bool OverrideIndirect
-    {
-        get => Component.GetBool("override_indirect");
-        set => Component.SetBool("override_indirect", value);
-    }
-    /// <summary>Sobrescrever exposição. Marcado: este volume decide exposição. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideExposure
-    {
-        get => Component.GetBool("override_exposure");
-        set => Component.SetBool("override_exposure", value);
-    }
-    /// <summary>Sobrescrever bloom. Marcado: este volume decide bloom. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideBloom
-    {
-        get => Component.GetBool("override_bloom");
-        set => Component.SetBool("override_bloom", value);
-    }
-    /// <summary>Sobrescrever vinheta. Marcado: este volume decide vinheta. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideVignette
-    {
-        get => Component.GetBool("override_vignette");
-        set => Component.SetBool("override_vignette", value);
-    }
-    /// <summary>Sobrescrever ajustes de cor. Marcado: este volume decide ajustes de cor. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideColorAdjustments
-    {
-        get => Component.GetBool("override_color_adjustments");
-        set => Component.SetBool("override_color_adjustments", value);
-    }
-    /// <summary>Sobrescrever cor. Marcado: este volume decide cor. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideColorGrading
-    {
-        get => Component.GetBool("override_color_grading");
-        set => Component.SetBool("override_color_grading", value);
-    }
-    /// <summary>Sobrescrever grão de filme. Marcado: este volume decide grão de filme. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideFilmGrain
-    {
-        get => Component.GetBool("override_film_grain");
-        set => Component.SetBool("override_film_grain", value);
-    }
-    /// <summary>Sobrescrever oclusão ambiente. Marcado: este volume decide oclusão ambiente. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideAmbientOcclusion
-    {
-        get => Component.GetBool("override_ambient_occlusion");
-        set => Component.SetBool("override_ambient_occlusion", value);
-    }
-    /// <summary>Sobrescrever nuvens. Marcado: este volume decide as nuvens. Desmarcado: herda do volume de prioridade menor</summary>
-    public bool OverrideClouds
-    {
-        get => Component.GetBool("override_clouds");
-        set => Component.SetBool("override_clouds", value);
-    }
     /// <summary>Alta qualidade. Aumenta as amostras de vista e luz; custa mais GPU</summary>
     public bool PhysicalAtmosphereHighQuality
     {
@@ -4888,6 +4936,138 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     {
         get => Component.GetBool("cloud_shadows");
         set => Component.SetBool("cloud_shadows", value);
+    }
+    /// <summary>Céu no perfil. Override Skybox Material / Skybox Procedural no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideSky
+    {
+        get => Component.GetBool("override_sky");
+        set => Component.SetBool("override_sky", value);
+    }
+    /// <summary>Sol e lua no perfil. Override sol, lua e estrelas do céu no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideCelestial
+    {
+        get => Component.GetBool("override_celestial");
+        set => Component.SetBool("override_celestial", value);
+    }
+    /// <summary>Atmosfera física no perfil. Override Physically Based Sky no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverridePhysicalAtmosphere
+    {
+        get => Component.GetBool("override_physical_atmosphere");
+        set => Component.SetBool("override_physical_atmosphere", value);
+    }
+    /// <summary>Luz ambiente no perfil. Override Environment Lighting e Indirect Lighting Controller no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideIndirect
+    {
+        get => Component.GetBool("override_indirect");
+        set => Component.SetBool("override_indirect", value);
+    }
+    /// <summary>Neblina no perfil. Override Fog no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideFog
+    {
+        get => Component.GetBool("override_fog");
+        set => Component.SetBool("override_fog", value);
+    }
+    /// <summary>Nuvens no perfil. Override Cloud Layer no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideClouds
+    {
+        get => Component.GetBool("override_clouds");
+        set => Component.SetBool("override_clouds", value);
+    }
+    /// <summary>Exposição no perfil. Override Exposure no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideExposure
+    {
+        get => Component.GetBool("override_exposure");
+        set => Component.SetBool("override_exposure", value);
+    }
+    /// <summary>Tonemapping no perfil. Override Tonemapping no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverridePost
+    {
+        get => Component.GetBool("override_post");
+        set => Component.SetBool("override_post", value);
+    }
+    /// <summary>Bloom no perfil. Override Bloom no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideBloom
+    {
+        get => Component.GetBool("override_bloom");
+        set => Component.SetBool("override_bloom", value);
+    }
+    /// <summary>Vinheta no perfil. Override Vignette no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideVignette
+    {
+        get => Component.GetBool("override_vignette");
+        set => Component.SetBool("override_vignette", value);
+    }
+    /// <summary>Ajustes de cor no perfil. Override Color Adjustments no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideColorAdjustments
+    {
+        get => Component.GetBool("override_color_adjustments");
+        set => Component.SetBool("override_color_adjustments", value);
+    }
+    /// <summary>Cor no perfil. Override White Balance, Lift Gamma Gain e Shadows Midtones Highlights no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideColorGrading
+    {
+        get => Component.GetBool("override_color_grading");
+        set => Component.SetBool("override_color_grading", value);
+    }
+    /// <summary>Curvas de cor no perfil. Override Color Curves no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideColorCurves
+    {
+        get => Component.GetBool("override_color_curves");
+        set => Component.SetBool("override_color_curves", value);
+    }
+    /// <summary>Grão de filme no perfil. Override Film Grain no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideFilmGrain
+    {
+        get => Component.GetBool("override_film_grain");
+        set => Component.SetBool("override_film_grain", value);
+    }
+    /// <summary>Oclusão ambiente no perfil. Override Ambient Occlusion no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideAmbientOcclusion
+    {
+        get => Component.GetBool("override_ambient_occlusion");
+        set => Component.SetBool("override_ambient_occlusion", value);
+    }
+    /// <summary>Profundidade de campo no perfil. Override Depth of Field no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideDepthOfField
+    {
+        get => Component.GetBool("override_depth_of_field");
+        set => Component.SetBool("override_depth_of_field", value);
+    }
+    /// <summary>Desfoque de movimento no perfil. Override Motion Blur no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideMotionBlur
+    {
+        get => Component.GetBool("override_motion_blur");
+        set => Component.SetBool("override_motion_blur", value);
+    }
+    /// <summary>Aberração cromática no perfil. Override Chromatic Aberration no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideChromaticAberration
+    {
+        get => Component.GetBool("override_chromatic_aberration");
+        set => Component.SetBool("override_chromatic_aberration", value);
+    }
+    /// <summary>Distorção de lente no perfil. Override Lens Distortion no perfil do Volume (Adicionar/Remover override); cada parâmetro tem a própria caixa</summary>
+    public bool OverrideLensDistortion
+    {
+        get => Component.GetBool("override_lens_distortion");
+        set => Component.SetBool("override_lens_distortion", value);
+    }
+    /// <summary>Arredondada. Rounded: círculo perfeito em qualquer proporção de tela</summary>
+    public bool VignetteRounded
+    {
+        get => Component.GetBool("vignette_rounded");
+        set => Component.SetBool("vignette_rounded", value);
+    }
+    /// <summary>Filtro de alta qualidade. High Quality Filtering: leitura bicúbica ao compor (4 leituras em vez de 1)</summary>
+    public bool BloomHighQuality
+    {
+        get => Component.GetBool("bloom_high_quality");
+        set => Component.SetBool("bloom_high_quality", value);
+    }
+    /// <summary>Amostragem de alta qualidade. High Quality Sampling: 13 amostras em vez de 9 no desfoque</summary>
+    public bool DofGaussianHighQuality
+    {
+        get => Component.GetBool("dof_gaussian_high_quality");
+        set => Component.SetBool("dof_gaussian_high_quality", value);
     }
     public enum SkyOption : uint
     {
@@ -5020,22 +5200,41 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
         get => (ExposureTargetMidGreyChoiceOption)Component.GetEnum("exposure_target_mid_grey_choice");
         set => Component.SetEnum("exposure_target_mid_grey_choice", (uint)value);
     }
-    public enum VolumeLayerOption : uint
+    public enum DofModeOption : uint
     {
-        Ambiente0 = 0,
-        Ambiente1 = 1,
-        Ambiente2 = 2,
-        Ambiente3 = 3,
-        Ambiente4 = 4,
-        Ambiente5 = 5,
-        Ambiente6 = 6,
-        Ambiente7 = 7,
+        Desligado = 0,
+        Gaussiano = 1,
+        Bokeh = 2,
     }
-    /// <summary>Camada. Filtro consultado pela câmera</summary>
-    public VolumeLayerOption VolumeLayer
+    /// <summary>Modo. Gaussiano desfoca só o fundo e é o mais barato; Bokeh desfoca perto e longe pela lente</summary>
+    public DofModeOption DofMode
     {
-        get => (VolumeLayerOption)Component.GetEnum("volume_layer");
-        set => Component.SetEnum("volume_layer", (uint)value);
+        get => (DofModeOption)Component.GetEnum("dof_mode");
+        set => Component.SetEnum("dof_mode", (uint)value);
+    }
+    public enum DofQualityOption : uint
+    {
+        Baixa = 0,
+        Media = 1,
+        Alta = 2,
+    }
+    /// <summary>Qualidade. Amostras do bokeh por pixel (8, 22 ou 43, em meia resolução); custo de GPU no celular</summary>
+    public DofQualityOption DofQuality
+    {
+        get => (DofQualityOption)Component.GetEnum("dof_quality");
+        set => Component.SetEnum("dof_quality", (uint)value);
+    }
+    public enum MotionBlurQualityOption : uint
+    {
+        Baixa = 0,
+        Media = 1,
+        Alta = 2,
+    }
+    /// <summary>Qualidade. Quality: 4, 6 ou 8 leituras ao longo do movimento da câmera</summary>
+    public MotionBlurQualityOption MotionBlurQuality
+    {
+        get => (MotionBlurQualityOption)Component.GetEnum("motion_blur_quality");
+        set => Component.SetEnum("motion_blur_quality", (uint)value);
     }
     /// <summary>Perfil. Recurso do projeto por slot</summary>
     public AssetGuid GetProfile(uint slot = 0) => Component.GetResource("profile", slot);
@@ -5046,6 +5245,9 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     /// <summary>Material do céu. Recurso do projeto por slot</summary>
     public AssetGuid GetSkybox(uint slot = 0) => Component.GetResource("skybox", slot);
     public void SetSkybox(AssetGuid value, uint slot = 0) => Component.SetResource("skybox", value, slot);
+    /// <summary>Textura de sujeira. Recurso do projeto por slot</summary>
+    public AssetGuid GetBloomDirt(uint slot = 0) => Component.GetResource("bloom_dirt", slot);
+    public void SetBloomDirt(AssetGuid value, uint slot = 0) => Component.SetResource("bloom_dirt", value, slot);
 }
 
 /// <summary>Luz: Direcional, pontual ou spot. Família Luz · Luzes.</summary>
@@ -5744,19 +5946,43 @@ public readonly struct Camera : IComponentFacade<Camera>
         get => (ProjectionOption)Component.GetEnum("projection");
         set => Component.SetEnum("projection", (uint)value);
     }
+    [System.Flags]
     public enum EnvironmentMaskOption : uint
     {
-        TodosOsAmbientes = 4294967295,
-        Ambiente0 = 1,
-        Ambiente1 = 2,
-        Ambiente2 = 4,
-        Ambiente3 = 8,
-        Ambiente4 = 16,
-        Ambiente5 = 32,
-        Ambiente6 = 64,
-        Ambiente7 = 128,
+        Padrao = 1,
+        Camada1 = 2,
+        Camada2 = 4,
+        Camada3 = 8,
+        Camada4 = 16,
+        Camada5 = 32,
+        Camada6 = 64,
+        Camada7 = 128,
+        Camada8 = 256,
+        Camada9 = 512,
+        Camada10 = 1024,
+        Camada11 = 2048,
+        Camada12 = 4096,
+        Camada13 = 8192,
+        Camada14 = 16384,
+        Camada15 = 32768,
+        Camada16 = 65536,
+        Camada17 = 131072,
+        Camada18 = 262144,
+        Camada19 = 524288,
+        Camada20 = 1048576,
+        Camada21 = 2097152,
+        Camada22 = 4194304,
+        Camada23 = 8388608,
+        Camada24 = 16777216,
+        Camada25 = 33554432,
+        Camada26 = 67108864,
+        Camada27 = 134217728,
+        Camada28 = 268435456,
+        Camada29 = 536870912,
+        Camada30 = 1073741824,
+        Camada31 = 2147483648,
     }
-    /// <summary>Volumes. Volumes que esta câmera consulta</summary>
+    /// <summary>Máscara de volume. Volume Mask: só volumes em objetos destas camadas afetam esta câmera</summary>
     public EnvironmentMaskOption EnvironmentMask
     {
         get => (EnvironmentMaskOption)Component.GetEnum("environment_mask");

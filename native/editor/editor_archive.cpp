@@ -195,6 +195,8 @@ bool deserializeEditorDocument(std::string_view text,u64 fingerprint,EditorDocum
   // PK-1: cena anterior ao Ambiente v17 troca a escala do céu pelo sol e os
   // multiplicadores da raiz pelos campos donos (runtime/environment_migration.h).
   runtime::migrateLegacyEnvironmentLighting(prepared);
+  // PK-4: camadas "Ambiente N" -> camadas de objeto e a Volume Mask da câmera.
+  runtime::migrateLegacyVolumeLayers(prepared);
   document=std::move(prepared);return true;
 }
 bool saveEditorDocument(const char *path,const EditorDocument &document,u64 fingerprint,EditorComponentRegistry registry) {

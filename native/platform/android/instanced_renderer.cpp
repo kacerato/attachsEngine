@@ -201,8 +201,23 @@ struct DirtRoadFrameUniform {
   float skyStarRotation[3][4]{};
   // V-2: brilho do céu noturno (o luar espalhado pelo ar), rgb; w reservado.
   float skyNight[4]{};
+  // PK-5: o resto do pós da URP (post_process_common.glsl). Zero desliga cada
+  // efeito: a imagem de uma cena sem esses overrides é a de antes.
+  float postLensAxis[4]{0,0,1,1};      // centro xy (center*2-1), multiplicadores xy
+  float postLensShape[4]{0,0,1,0};     // theta, sigma, 1/escala, intensidade*100
+  float postChroma[4]{};               // intensidade*0,05, distorção ligada
+  float postVignette[4]{0,0,0,1};      // cor rgb, proporção (arredondada) ou 1
+  float postVignetteShape[4]{.5f,.5f,0,1}; // centro xy, intensidade*3, suavidade*5
+  float postMotion[4]{};               // intensidade, limite, iterações
+  float postDof[4]{};                  // modo, a, b, raio máximo
+  float postDofDetail[4]{};            // amostras do bokeh, 1/aspecto, alta qualidade
+  float postBloomDirt[4]{1,1,0,0};     // escala xy e deslocamento xy da sujeira
+  float postBokeh[22][4]{};            // kernel de lâminas (até 43 pontos xy)
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4256);
+static_assert(sizeof(DirtRoadFrameUniform) == 4752);
+static_assert(offsetof(DirtRoadFrameUniform, postLensAxis) == 4256);
+static_assert(offsetof(DirtRoadFrameUniform, postBloomDirt) == 4384);
+static_assert(offsetof(DirtRoadFrameUniform, postBokeh) == 4400);
 static_assert(offsetof(DirtRoadFrameUniform, skyNight) == 4240);
 static_assert(offsetof(DirtRoadFrameUniform, skySun) == 4160);
 static_assert(offsetof(DirtRoadFrameUniform, skyMoon) == 4176);
@@ -567,6 +582,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_temporal_upscaler.inl"
 #include "platform/android/instanced_post_fog.inl"
 #include "platform/android/instanced_post_chain.inl"
+#include "platform/android/instanced_depth_of_field.inl"
 #include "platform/android/instanced_color_grading.inl"
 #include "platform/android/instanced_skinning.inl"
 
@@ -1802,6 +1818,95 @@ void applyNightSky(DirtRoadFrameUniform &frame,const renderer::SceneEnvironment 
   }
 }
 
+// PK-5: o pós completo da URP no bloco do quadro. Lens Distortion e
+// Chromatic Aberration como o PostProcessPass da URP (SetupLensDistortion,
+// ChromaAmount = intensidade*0,05); Vignette (intensidade*3, suavidade*5,
+// arredondada pela proporção); Motion Blur (Low/Medium/High = 2/3/4
+// iterações); Depth of Field Gaussiano (raio = Max Radius * altura/1080 em
+// meia resolução, até 2) e Bokeh (maxCoC = A*F/(P-F), raio de 14 px, kernel de
+// lâminas do PrepareBokehKernel com 1, 2 ou 3 anéis pela Qualidade).
+void applyScenePostEffects(DirtRoadFrameUniform &frame,const renderer::SceneEnvironment &look,bool postEnabled,
+                           float aspect,float viewHeight,bool motionAllowed,float dirtAspect) {
+  const bool authored=look.active&&look.post&&postEnabled;
+  aspect=std::max(aspect,1.0e-3f);viewHeight=std::max(viewHeight,1.0f);
+  std::fill(std::begin(frame.postChroma),std::end(frame.postChroma),0.0f);
+  std::fill(std::begin(frame.postMotion),std::end(frame.postMotion),0.0f);
+  std::fill(std::begin(frame.postDof),std::end(frame.postDof),0.0f);
+  std::fill(std::begin(frame.postDofDetail),std::end(frame.postDofDetail),0.0f);
+  frame.postVignetteShape[2]=0.0f;frame.postBloomDetail[1]=0.0f;frame.postBloomDetail[2]=0.0f;
+  if(!authored) return;
+  if(look.lensDistortion!=0.0f) {
+    const float amount=1.6f*std::max(std::abs(look.lensDistortion*100.0f),1.0f);
+    const float theta=0.0174532925f*std::min(160.0f,amount);
+    const float sigma=2.0f*std::tan(theta*0.5f);
+    frame.postLensAxis[0]=look.lensDistortionCenter[0]*2.0f-1.0f;
+    frame.postLensAxis[1]=look.lensDistortionCenter[1]*2.0f-1.0f;
+    frame.postLensAxis[2]=std::max(look.lensDistortionXMultiplier,1.0e-4f);
+    frame.postLensAxis[3]=std::max(look.lensDistortionYMultiplier,1.0e-4f);
+    frame.postLensShape[0]=look.lensDistortion>=0.0f?theta:1.0f/theta;
+    frame.postLensShape[1]=sigma;
+    frame.postLensShape[2]=1.0f/look.lensDistortionScale;
+    frame.postLensShape[3]=look.lensDistortion*100.0f;
+    frame.postChroma[1]=1.0f;
+  }
+  frame.postChroma[0]=look.chromaticAberration*0.05f;
+  for(u32 channel=0;channel<3;++channel) frame.postVignette[channel]=look.vignetteColor[channel];
+  frame.postVignette[3]=look.vignetteRounded?aspect:1.0f;
+  frame.postVignetteShape[0]=look.vignetteCenter[0];frame.postVignetteShape[1]=look.vignetteCenter[1];
+  frame.postVignetteShape[2]=look.vignetteIntensity*3.0f;frame.postVignetteShape[3]=look.vignetteSmoothness*5.0f;
+  if(motionAllowed&&look.motionBlurIntensity>0.0f) {
+    frame.postMotion[0]=look.motionBlurIntensity;frame.postMotion[1]=look.motionBlurClamp;
+    frame.postMotion[2]=static_cast<float>(2u+static_cast<u32>(look.motionBlurQuality));
+  }
+  frame.postBloomDetail[2]=look.bloomHighQualityFiltering?1.0f:0.0f;
+  if(look.bloomDirt.valid()&&look.bloomDirtIntensity>0.0f&&dirtAspect>0.0f) {
+    frame.postBloomDetail[1]=look.bloomDirtIntensity;
+    // Cobre a tela mantendo a proporção da textura (cover), como a URP.
+    float scale[2]{1.0f,1.0f},offset[2]{0.0f,0.0f};
+    if(dirtAspect>aspect) {scale[0]=aspect/dirtAspect;offset[0]=(1.0f-scale[0])*0.5f;}
+    else if(aspect>dirtAspect) {scale[1]=dirtAspect/aspect;offset[1]=(1.0f-scale[1])*0.5f;}
+    frame.postBloomDirt[0]=scale[0];frame.postBloomDirt[1]=scale[1];
+    frame.postBloomDirt[2]=offset[0];frame.postBloomDirt[3]=offset[1];
+  }
+  if(look.depthOfField==renderer::DepthOfFieldMode::Gaussian) {
+    frame.postDof[0]=1.0f;frame.postDof[1]=look.gaussianStart;frame.postDof[2]=std::max(look.gaussianEnd,look.gaussianStart+1.0e-3f);
+    frame.postDof[3]=std::min(look.gaussianMaxRadius*(viewHeight*0.5f/1080.0f),2.0f);
+    frame.postDofDetail[2]=look.gaussianHighQuality?1.0f:0.0f;
+  } else if(look.depthOfField==renderer::DepthOfFieldMode::Bokeh) {
+    const float F=look.focalLength/1000.0f,A=look.focalLength/std::max(look.aperture,1.0f),P=std::max(look.focusDistance,F+1.0e-3f);
+    frame.postDof[0]=2.0f;frame.postDof[1]=P;frame.postDof[2]=(A*F)/(P-F);
+    frame.postDof[3]=std::min(0.05f,14.0f/viewHeight);
+    frame.postDofDetail[1]=1.0f/aspect;
+    // PrepareBokehKernel da URP: anéis concêntricos (7, 14, 21 pontos)
+    // levados ao N-ágono rodado das lâminas (CryEngine 3, Sousa 2013).
+    const u32 rings=1u+static_cast<u32>(look.depthOfFieldQuality); // 1, 2 ou 3 anéis
+    const float bladeCount=std::clamp(look.bladeCount,3.0f,9.0f);
+    const float curvature=1.0f-look.bladeCurvature;
+    const float rotation=look.bladeRotation*0.0174532925f;
+    constexpr float pi=3.14159265f;
+    u32 count=0;
+    const auto push=[&](float u,float v) {
+      if(count>=44) return;
+      frame.postBokeh[count>>1][(count&1u)*2]=u;frame.postBokeh[count>>1][(count&1u)*2+1]=v;++count;
+    };
+    push(0.0f,0.0f);
+    constexpr u32 pointsPerRing=7;
+    for(u32 ring=1;ring<=rings;++ring) {
+      const float bias=1.0f/pointsPerRing;
+      const float radius=(static_cast<float>(ring)+bias)/(static_cast<float>(rings)+bias);
+      const u32 points=ring*pointsPerRing;
+      for(u32 point=0;point<points;++point) {
+        const float phi=2.0f*pi*static_cast<float>(point)/static_cast<float>(points);
+        const float nt=std::cos(pi/bladeCount);
+        const float dt=std::cos(phi-(2.0f*pi/bladeCount)*std::floor((bladeCount*phi+pi)/(2.0f*pi)));
+        const float r=radius*std::pow(nt/dt,curvature);
+        push(r*std::cos(phi-rotation),r*std::sin(phi-rotation));
+      }
+    }
+    frame.postDofDetail[0]=static_cast<float>(count);
+  }
+}
+
 // PK-1: o ambiente da cena como a janela Lighting da Unity 6. Cada controle tem
 // um dono só: o brilho do céu é o Exposure do Skybox (ou o EV do HDRI), a luz
 // ambiente é a Environment Lighting (Skybox/Gradient/Color × Intensity
@@ -2350,7 +2455,8 @@ bool InstancedRenderer::createPostResources() {
 
   // 0 cor, 1 histórico, 2 profundidade, 3 UBO, 4 exposição, 5 vetor RG16F,
   // 6 reatividade, 7 composição (entradas temporais unificadas), 8 bloom em
-  // cadeia (nível 1/2), 9 AO em 1/2, 10 LUT 3D da gradação (G2).
+  // cadeia (nível 1/2), 9 AO em 1/2, 10 LUT 3D da gradação (G2), 11 resultado
+  // da profundidade de campo e 12 sujeira da lente (PK-5).
   VkDescriptorSetLayoutBinding bindings[kPostBindingCount]{};
   constexpr u32 bindingCount = kPostBindingCount;
   for (u32 index = 0; index < 3; ++index) {
@@ -2382,8 +2488,9 @@ bool InstancedRenderer::createPostResources() {
   // Conjuntos: o pós normal, a exibição do resultado ampliado, a entrada com
   // névoa resolvida, o de pré-passe e os da cadeia de bloom (cena, névoa e um
   // por nível). Cada um tem nove amostradores, um UBO e um SSBO.
-  constexpr u32 postSetCapacity = 5 + kBloomLevelCount + 2;
-  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 9 * postSetCapacity},
+  // PK-5: mais os quatro da profundidade de campo (cena, névoa, dois alvos).
+  constexpr u32 postSetCapacity = 5 + kBloomLevelCount + 2 + 4;
+  VkDescriptorPoolSize poolSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 11 * postSetCapacity},
                                    {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, postSetCapacity},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, postSetCapacity}};
   VkDescriptorPoolCreateInfo pool{};
@@ -2453,6 +2560,10 @@ bool InstancedRenderer::createPostResources() {
   const VkDescriptorImageInfo gradingLut{postSampler_.handle(), colorGradingView(0),
                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
   writes[10]=writes[5];writes[10].dstBinding=10;writes[10].pImageInfo=&gradingLut;
+  // PK-5: começam na cor da cena; os alvos reais entram quando existem.
+  const VkDescriptorImageInfo lensDirt{postSampler_.handle(), lensDirtView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+  writes[11]=writes[5];writes[11].dstBinding=11;writes[11].pImageInfo=&auxiliary;
+  writes[12]=writes[5];writes[12].dstBinding=12;writes[12].pImageInfo=&lensDirt;
   vkUpdateDescriptorSets(device_, bindingCount, writes, 0, nullptr);
 
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kPost_ProcessVertSpirv,
@@ -2548,6 +2659,23 @@ bool InstancedRenderer::createPostResources() {
     }
     vkUpdateDescriptorSets(device_, 2, auxiliary, 0, nullptr);
   }
+  // PK-5: profundidade de campo em meia resolução (independe do bloom em cadeia).
+  if (!createDepthOfFieldResources()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[DepthOfField] recursos recusados; profundidade de campo desligada.");
+    destroyDepthOfFieldResources();
+  }
+  {
+    const VkDescriptorImageInfo images[2]{
+        {postSampler_.handle(), depthOfFieldView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        {postSampler_.handle(), lensDirtView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+    VkWriteDescriptorSet writes[2]{};
+    for(u32 index=0;index<2;++index) {
+      writes[index].sType=VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;writes[index].dstSet=postDescriptorSet_;
+      writes[index].dstBinding=11+index;writes[index].descriptorCount=1;
+      writes[index].descriptorType=VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;writes[index].pImageInfo=&images[index];
+    }
+    vkUpdateDescriptorSets(device_,2,writes,0,nullptr);
+  }
   if (fogResolveEnabled_ && !createFogResolveResources()) {
     __android_log_print(ANDROID_LOG_WARN, LogTag,
                         "[PostFogResolve] recursos recusados; pós mantém a névoa por amostra.");
@@ -2558,6 +2686,10 @@ bool InstancedRenderer::createPostResources() {
                         "[PostChain] conjuntos recusados; pré-passes desligados.");
     destroyFogResolveResources();
     destroyPostChainResources();
+  }
+  if (!createDepthOfFieldSets()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[DepthOfField] conjuntos recusados; profundidade de campo desligada.");
+    destroyDepthOfFieldResources();
   }
   return true;
 }
@@ -2658,6 +2790,8 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   }
   // Gradação por LUT: vale também depois do ampliador (a parte de exibição é esta).
   if(colorGradingThisFrame_) push.texelFlags[2] += 65536.0f;
+  // PK-5: resultado da profundidade de campo pronto neste quadro.
+  if(depthOfFieldThisFrame_&&!upscaledInput) push.texelFlags[2] += 2097152.0f;
   const bool temporalPoseSupported = sceneOrthographicHalfHeight_==0;
   push.texelFlags[3] = upscaledInput ? 0.0f :
                        sceneAntialiasing_==1 ? 0.0f : sceneAntialiasing_==2 ? 1.0f :
@@ -2671,9 +2805,9 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.bloom[1] = postIsolation_&4u?0.0f:authoredPost?look.bloomIntensity:renderingPolicy_.post.bloomIntensity;
   // FSR 1 e os ampliadores temporais aplicam o próprio RCAS com esta nitidez.
   push.bloom[2] = postEffectsEnabled&&!fsrActive_&&!upscaledInput&&!(postIsolation_&16u)?renderingPolicy_.post.sharpen:0.0f;
-  push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost
-      ? (look.vignette?look.vignetteIntensity:0.0f)
-      : (renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f);
+  // PK-5: a vinheta da URP liga pela intensidade (os parâmetros vêm do UBO).
+  push.bloom[3] = !postEffectsEnabled?0.0f:authoredPost?look.vignetteIntensity:
+      renderingPolicy_.post.vignette?renderingPolicy_.post.vignetteIntensity:0.0f;
   push.grade[0] = !postEffectsEnabled?1.0f:(authoredPost?look.contrast:renderingPolicy_.post.contrast);
   push.grade[1] = !postEffectsEnabled?1.0f:(authoredPost?look.saturation:renderingPolicy_.post.saturation);
   push.grade[2] = (swapchain_->imageFormat() == VK_FORMAT_B8G8R8A8_SRGB ||
@@ -2694,8 +2828,11 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   push.currentCamera[3] = temporalCurrentJitter_[1];
   std::memcpy(push.currentPositionNear, camera.position, sizeof(camera.position));
   push.currentPositionNear[3] = dirtRoadPreview_ ? sceneNearPlane() : 0.1f;
+  // A câmera anterior serve ao TAA e ao Motion Blur (PK-5), que roda também
+  // sem histórico temporal.
   const platform::FreeCameraState &previous = temporalHistoryInitialized_
-                                                   ? temporalPreviousCamera_ : camera;
+                                                   ? temporalPreviousCamera_ :
+                                              motionPreviousValid_ ? motionPreviousCamera_ : camera;
   push.previousCamera[0] = previous.yaw;
   push.previousCamera[1] = previous.pitch;
   push.previousCamera[2] = camera.roll;
@@ -2705,6 +2842,7 @@ bool InstancedRenderer::recordPostProcess(u32 imageIndex,
   vkCmdPushConstants(commandBuffer_, postPipelineLayout_, VK_SHADER_STAGE_FRAGMENT_BIT,
                      0, sizeof(push), &push);
   vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+  motionPreviousCamera_ = camera;motionPreviousValid_ = true;
   if (mergeUi) {
     endGpuRegion(GpuPassClass::Post);
     beginGpuRegion(GpuPassClass::Ui);
@@ -2791,6 +2929,7 @@ bool InstancedRenderer::recordTemporalHistoryCopy() {
 void InstancedRenderer::destroyPostResources() {
   destroyFogResolveResources();
   destroyPostChainResources();
+  destroyDepthOfFieldResources();
   destroyColorGradingResources();
   destroyFsrResources();
   destroyAutoExposureResources();
@@ -6335,6 +6474,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_,ambientProbeCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
+    // PK-5: o desfoque de movimento é do jogo, não da vista de edição (a Scene
+    // View da Unity não mostra Motion Blur).
+    applyScenePostEffects(*frame,look,editorPost,sceneAspectRatio(),static_cast<float>(renderHeight()),
+                          !editorBackground_,prepareLensDirt(look));
+    // Vinheta da política de renderização (sem pós autoral), no formato novo.
+    if(!(look.active&&look.post&&editorPost)&&editorPost&&renderingPolicy_.post.vignette) {
+      frame->postVignetteShape[0]=frame->postVignetteShape[1]=0.5f;
+      frame->postVignetteShape[2]=renderingPolicy_.post.vignetteIntensity*3.0f;frame->postVignetteShape[3]=1.0f;
+      frame->postVignette[0]=frame->postVignette[1]=frame->postVignette[2]=0.0f;frame->postVignette[3]=1.0f;
+    }
     // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
     // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
     // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava
@@ -6703,6 +6852,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     return rhi::SwapchainStatus::FatalError;
   }
   if (gpuTimingEnabled()) gpuFrameTimer_.begin(commandBuffer_);
+  // PK-5: layouts dos alvos da profundidade de campo e a troca da sujeira.
+  recordDepthOfFieldUploads();
   // Antes de QUALQUER desenho: a prévia de câmera também desenha corpos com skin.
   beginGpuRegion(GpuPassClass::Skinning);
   if (!recordSkinning()) return rhi::SwapchainStatus::FatalError;
@@ -7646,7 +7797,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     executedUpscalerStatus_=renderer::TemporalUpscalerAvailability::Available;
   beginGpuRegion(GpuPassClass::Post);
   // Dentro da região Post: o A/B compara o custo dos pré-passes somado ao do pós.
-  bloomChainThisFrame_ = halfAmbientOcclusionThisFrame_ = fogResolvedThisFrame_ = false;
+  bloomChainThisFrame_ = halfAmbientOcclusionThisFrame_ = fogResolvedThisFrame_ = depthOfFieldThisFrame_ = false;
   if (!upscaledFrame && renderingPolicy_.post.dedicatedPass && postPipeline_ != VK_NULL_HANDLE) {
     preparePostChainTargets();
     if (recordFogResolve(camera) && !fogResolveReported_) {
@@ -7657,6 +7808,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     recordHalfAmbientOcclusion(camera);
     const auto bloom = postBloomState();
     if (bloom.active && bloom.intensity > 0.0f) recordBloomChain(camera, bloom.threshold);
+    recordDepthOfField(camera);
     if ((bloomChainThisFrame_ || halfAmbientOcclusionThisFrame_) && !postChainReported_) {
       postChainReported_ = true;
       __android_log_print(ANDROID_LOG_INFO, LogTag, "[PostChain] bloom em cadeia=%d AO em meia resolucao=%d.",

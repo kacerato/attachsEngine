@@ -12,7 +12,7 @@ namespace ae::scene {
 //  - Renderização: pós-processamento, antisserrilhado, sombras, prioridade
 //    (Depth/Priority) e Culling Mask pelas camadas de objeto do projeto.
 //  - Ambiente: Background Type (Skybox, Cor sólida, Não inicializado), cor de
-//    fundo e a máscara de volumes de ambiente.
+//    fundo e a Volume Mask (PK-4: camadas de objeto, como a da URP).
 //  - Saída: HDR e Viewport Rect (origem no canto inferior esquerdo, frações da
 //    tela).
 // Várias câmeras na tela desenham da menor para a maior prioridade; a de cima
@@ -43,6 +43,8 @@ public:
   // Cor de fundo da Unity (49,77,121 sRGB) em RGB linear.
   float backgroundColor[3]{.0307f,.0742f,.1912f};
   u32 cullingMask=kAllObjectLayers;
+  // Máscara lida no formato antigo (camadas "Ambiente N"); não é gravada.
+  bool legacyEnvironmentMask=false;
   CameraAntialiasing antialiasing=CameraAntialiasing::Project;
   CameraGateFit gateFit=CameraGateFit::Horizontal;
   static const ComponentType descriptor;
@@ -50,8 +52,7 @@ public:
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<Camera>(*this);}
   bool valid() const override {
     for(const auto &p:descriptor.numbers) {const auto v=p.read(*this);if(!std::isfinite(v)||v<p.minimum||v>p.maximum) return false;}
-    const bool maskValid=environmentMask==~0u || (environmentMask && !(environmentMask&(environmentMask-1)) && environmentMask<=128u);
-    return farPlane>nearPlane && priority==std::floor(priority) && static_cast<u32>(projection)<=1 && maskValid &&
+    return farPlane>nearPlane && priority==std::floor(priority) && static_cast<u32>(projection)<=1 &&
            static_cast<u32>(background)<=2 && static_cast<u32>(antialiasing)<=2 && static_cast<u32>(gateFit)<=4;
   }
   // v4 acrescenta ao fim de v3: fundo, cor, Culling Mask, Viewport Rect,
@@ -66,12 +67,15 @@ public:
        <<physicalCamera<<' '<<focalLength<<' '<<sensorWidth<<' '<<sensorHeight<<' '<<static_cast<u32>(gateFit)<<' ';
   }
   bool read(std::istream &in,u32 version) override {
-    if((version<1||version>4)||!(in>>enabled>>verticalFov>>nearPlane>>farPlane>>priority)) return false;
-    projection=CameraProjection::Perspective;orthographicHalfHeight=5;environmentMask=~0u;
+    if((version<1||version>5)||!(in>>enabled>>verticalFov>>nearPlane>>farPlane>>priority)) return false;
+    projection=CameraProjection::Perspective;orthographicHalfHeight=5;environmentMask=~0u;legacyEnvironmentMask=false;
     resetV4();
     if(version==2) {u32 mode=0;if(!(in>>orthographicHalfHeight>>mode)||mode>1) return false;projection=static_cast<CameraProjection>(mode);}
     if(version>=3) {u32 mode=0;if(!(in>>orthographicHalfHeight>>mode>>environmentMask)||mode>1) return false;projection=static_cast<CameraProjection>(mode);}
-    if(version==4) {
+    // Até a v4 a máscara apontava as camadas próprias "Ambiente 0..7" (um bit
+    // ou todas); a migração do documento a traduz para camadas de objeto.
+    legacyEnvironmentMask=version<5&&environmentMask!=~0u;
+    if(version>=4) {
       u32 back=0,aa=0,fit=0;
       if(!(in>>back>>backgroundColor[0]>>backgroundColor[1]>>backgroundColor[2]>>cullingMask
              >>viewportX>>viewportY>>viewportWidth>>viewportHeight>>postProcessing>>renderShadows>>hdr>>aa
@@ -132,10 +136,6 @@ inline float cameraFocalLengthForFov(float verticalFovDegrees,float sensorHeight
 #include "scene/generated/camera_cameraNumbers.inc"
 #include "scene/generated/camera_cameraBooleans.inc"
 inline constexpr std::array<ComponentEnumOption,2> cameraProjectionOptions{{{0,"Perspectiva"},{1,"Ortográfica"}}};
-inline constexpr std::array<ComponentEnumOption,9> cameraEnvironmentMaskOptions{{
-  {~0u,"Todos os ambientes"},{1u,"Ambiente 0"},{2u,"Ambiente 1"},{4u,"Ambiente 2"},{8u,"Ambiente 3"},
-  {16u,"Ambiente 4"},{32u,"Ambiente 5"},{64u,"Ambiente 6"},{128u,"Ambiente 7"}
-}};
 inline constexpr std::array<ComponentEnumOption,3> cameraBackgroundOptions{{
   {0,"Céu (Skybox)"},{1,"Cor sólida"},{2,"Não inicializado"}
 }};
@@ -152,7 +152,7 @@ inline constexpr std::array<ComponentTriple,1> cameraTriples{{
   {"background_color","Cor de fundo",{"background_color.r","background_color.g","background_color.b"},ComponentTripleKind::LinearColor}
 }};
 inline const ComponentType Camera::descriptor{
-  "astra.camera",4,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Camera>();},cameraNumbers,cameraBooleans,cameraEnums,
+  "astra.camera",5,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<Camera>();},cameraNumbers,cameraBooleans,cameraEnums,
   nullptr,false,{},cameraTriples
 };
 }

@@ -206,6 +206,8 @@ EditorActionResult EditorSession::dispatch(const EditorActionRequest &request) {
         const auto *profile=findEnvironmentProfile(authored);
         if(!environment||!profile) break;
         environment->values=resources::applyEnvironmentProfile(environment->values,*profile);
+        // PK-4: o perfil traz também os overrides (quais efeitos e caixas).
+        environment->setVolumeOverrides(profile->overrides);environment->legacyProfileCopy=false;
         if(environment->values.environmentMap.valid()&&
            !findEnvironmentMap(environment->values.environmentMap)) break;
       }
@@ -3521,7 +3523,7 @@ u32 EditorSession::settleCurveSelection(u32 selected) {
 }
 
 void EditorSession::openCurveEditor(u32 key,std::string_view value,std::string_view type) {
-  curveEdit_={};
+  curveEdit_={};state_.curveVolumeChannel=0;state_.curveVolumeProfile=false;
   scene::parseScriptCurve(value,curveEdit_);
   state_.curveField=key;state_.curveType=std::string(type);state_.curveSelected=0;
   state_.curvePresetMenu=0;state_.curveLibraryMenu=false;state_.curveText=0;
@@ -3539,6 +3541,8 @@ void EditorSession::saveCurveLibraries() {
 }
 
 bool EditorSession::commitCurveEditor() {
+  // PK-5: curva de Color Curves (Ambiente ou Perfil), não campo de script.
+  if(state_.curveVolumeChannel) return commitVolumeCurve(curveEdit_);
   const auto *entity=document_.find(state_.curveEntity);
   if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
     state_.curveField=0;state_.status="Curva cancelada: a cena mudou";return true;
@@ -5939,6 +5943,13 @@ bool EditorSession::createSceneTemplate(u32 index) {
       environment->overrideBloom=environment->overrideVignette=environment->overrideColorAdjustments=
           environment->overrideColorGrading=environment->overrideFilmGrain=
           environment->overrideAmbientOcclusion=false;
+      environment->overrideCelestial=environment->overridePhysicalAtmosphere=environment->overrideClouds=false;
+      // Da Luz ambiente, só a intensidade indireta é do interior; a fonte e as
+      // cores continuam as do céu de fora.
+      auto overrides=environment->volumeOverrides();
+      for(std::string_view id:{"ambient_source","ambient_sky_color","ambient_equator_color","ambient_ground_color","ambient_color"})
+        overrides.setOverridden(renderer::volumeParameterIndex(id),false);
+      environment->setVolumeOverrides(overrides);
     }
     if(!history_.applyValues(document_,id,values)) complete=false;
   }
@@ -6379,6 +6390,8 @@ void EditorSession::refreshSkinningStatus() {
 }
 void EditorSession::update() {
   state_.studio=studio_.get();
+  // PK-4: edição de um Ambiente com perfil compartilhado vira edição do perfil.
+  reconcileEnvironmentProfiles();
   // G4: Hora do dia gira o sol no documento fora do Play, como um script em
   // [ExecuteAlways] na Unity: mudar a hora move o gizmo e o céu reage.
   if(!isPlaying())
@@ -7974,8 +7987,9 @@ void EditorSession::synchronizeEnvironmentProfile(const resources::EnvironmentPr
         if(environment.values.skybox!=profile.guid) continue;
         environment.values=resources::applySkyboxMaterial(environment.values,profile);changed=true;continue;
       }
-      if(environment.profile!=profile.guid) continue;
-      environment.values=resources::applyEnvironmentProfile(environment.values,profile);changed=true;
+      if(environment.profile!=profile.guid||environment.legacyProfileCopy) continue;
+      environment.values=resources::applyEnvironmentProfile(environment.values,profile);
+      environment.setVolumeOverrides(profile.overrides);changed=true;
     }
     // A cópia é o fallback serializado para recurso ausente. Sua sincronização
     // faz parte da transação do recurso; o callback de undo/redo repete-a.
@@ -7992,6 +8006,7 @@ resources::AssetGuid EditorSession::createEnvironmentProfile(EditorEntityId id,u
   if(isPlaying()||history_.isOpen()||!environment) {diagnostic="Volume de ambiente indisponível.";return {};}
   resources::EnvironmentProfile profile;profile.name=entity->name[0]?entity->name:"Ambiente";
   profile.values=environment->values;profile.values.active=true;profile.values.priority=0;
+  profile.overrides=environment->volumeOverrides();
   std::string stem;for(unsigned char c:profile.name)
     stem.push_back(c<32||c==127||c=='/'||c=='\\'||c==':'||c=='"'?'_':static_cast<char>(c));
   if(stem.empty()||stem=="."||stem=="..") stem="Ambiente";
@@ -8030,7 +8045,7 @@ bool EditorSession::updateEnvironmentProfile(EditorEntityId id,u64 instance,std:
       static_cast<const scene::Environment*>(component):nullptr;
   const auto *current=environment?findEnvironmentProfile(environment->profile):nullptr;
   if(!environment||!current) {diagnostic="Escolha ou crie um perfil antes de atualizá-lo.";return false;}
-  auto candidate=*current;candidate.values=environment->values;
+  auto candidate=*current;candidate.values=environment->values;candidate.overrides=environment->volumeOverrides();
   candidate.values.active=true;candidate.values.priority=0;++candidate.revision;
   if(!commitEnvironmentProfile(candidate,diagnostic)) return false;
   diagnostic="Perfil compartilhado atualizado: "+candidate.name;return true;

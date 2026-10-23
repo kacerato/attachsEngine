@@ -18,6 +18,7 @@ struct EditorScreenLayout final {
   // altura rolável dele.
   std::vector<std::pair<u32,ui::UiRect>> materialSliders;
   float materialInspectorContent=0,materialInspectorWindow=0;
+  float profileInspectorContent=0,profileInspectorWindow=0;
   ui::UiRect gradientBar{},gradientLocation{},gradientAlpha{};
   ui::UiRect curveGraph{};
   ui::UiRect animatorCanvas{};

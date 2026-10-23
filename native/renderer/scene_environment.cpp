@@ -1,5 +1,7 @@
 #include "renderer/scene_environment.h"
 
+#include "renderer/volume_parameters.h"
+
 #include <array>
 
 namespace ae::renderer {
@@ -37,6 +39,8 @@ float distanceOutside(const SceneEnvironmentVolume &volume,const float camera[3]
   return length3(deltaWorld);
 }
 
+float mix(float from,float to,float amount) {return amount>=1.0f?to:from+(to-from)*amount;}
+
 float volumeInfluence(const SceneEnvironmentVolume &volume,const float camera[3]) {
   if(volume.weight<=0) return 0;
   const float distance=distanceOutside(volume,camera);
@@ -45,177 +49,78 @@ float volumeInfluence(const SceneEnvironmentVolume &volume,const float camera[3]
   return volume.weight*(1.0f-distance/volume.blendDistance);
 }
 
-float mix(float from,float to,float amount) {return from+(to-from)*amount;}
-void mixColor(float out[3],const float target[3],float amount) {
-  for(u32 channel=0;channel<3;++channel) out[channel]=mix(out[channel],target[channel],amount);
+// Curvas: Hermite com as tangentes da chave, como o AnimationCurve.Evaluate
+// (o mesmo cálculo do editor de curvas, scene/script_curve.h).
+double curveTangent(const ColorCurve &curve,u32 i,bool incoming) {
+  const auto &k=curve.keys[i];const u32 mode=incoming?k.left:k.right;
+  const auto *previous=i?&curve.keys[i-1]:nullptr,*next=i+1<curve.count?&curve.keys[i+1]:nullptr;
+  const double before=previous?(double(k.value)-previous->value)/(double(k.time)-previous->time):0;
+  const double after=next?(double(next->value)-k.value)/(double(next->time)-k.time):0;
+  const double smooth=previous&&next?(double(next->value)-previous->value)/(double(next->time)-previous->time):0;
+  if(mode==2) return incoming?before:after;          // Linear
+  if(mode==1) return smooth;                          // Auto
+  if(mode==4)                                         // ClampedAuto
+    return before*after>0?std::copysign(std::min(std::abs(smooth),3*std::min(std::abs(before),std::abs(after))),smooth):0;
+  if(!incoming && !k.broken && k.left==0 && k.right==0) return k.in;
+  return incoming?k.in:k.out;
 }
-// A gradação liga a LUT por igualdade exata com o neutro: com peso cheio o
-// resultado tem de ser o alvo bit a bit, não from+(to-from).
-void mixGrading(ColorGrading &out,const ColorGrading &target,float amount) {
-  if(amount>=1.0f) {out=target;return;}
-  out.temperature=mix(out.temperature,target.temperature,amount);
-  out.tint=mix(out.tint,target.tint,amount);
-  mixColor(out.liftColor,target.liftColor,amount);out.lift=mix(out.lift,target.lift,amount);
-  mixColor(out.gammaColor,target.gammaColor,amount);out.gamma=mix(out.gamma,target.gamma,amount);
-  mixColor(out.gainColor,target.gainColor,amount);out.gain=mix(out.gain,target.gain,amount);
-  mixColor(out.shadowsColor,target.shadowsColor,amount);out.shadows=mix(out.shadows,target.shadows,amount);
-  mixColor(out.midtonesColor,target.midtonesColor,amount);out.midtones=mix(out.midtones,target.midtones,amount);
-  mixColor(out.highlightsColor,target.highlightsColor,amount);
-  out.highlights=mix(out.highlights,target.highlights,amount);
-  out.shadowsStart=mix(out.shadowsStart,target.shadowsStart,amount);
-  out.shadowsEnd=mix(out.shadowsEnd,target.shadowsEnd,amount);
-  out.highlightsStart=mix(out.highlightsStart,target.highlightsStart,amount);
-  out.highlightsEnd=mix(out.highlightsEnd,target.highlightsEnd,amount);
-  out.vibrance=mix(out.vibrance,target.vibrance,amount);
+float hermite(const ColorCurveKey &a,const ColorCurveKey &b,double outgoing,double incoming,double time) {
+  if(a.right==3 || b.left==3) return time>=b.time?b.value:a.value; // Constant
+  const double dt=double(b.time)-a.time;
+  if(dt<=0) return b.value;
+  const double s=(time-a.time)/dt,s2=s*s,s3=s2*s;
+  return static_cast<float>((2*s3-3*s2+1)*a.value+(s3-2*s2+s)*dt*outgoing+(-2*s3+3*s2)*b.value+(s3-s2)*dt*incoming);
+}
+} // namespace
+
+bool colorCurveNeutral(u32 channel,const ColorCurve &curve) noexcept {
+  if(curve.count==0) return true;
+  // Neutro quando a curva amostrada coincide com a sem chaves: a diagonal
+  // nas de canal, 0,5 nas de matiz e saturação.
+  for(u32 i=0;i<=32;++i) {
+    const float t=static_cast<float>(i)/32.0f;
+    const float expected=colorCurveIsDiagonal(channel)?t:0.5f;
+    if(std::abs(evaluateColorCurve(channel,curve,t)-expected)>1.0e-4f) return false;
+  }
+  return true;
 }
 
-// Nuvens entram e saem pela opacidade, como a neblina pela densidade: um volume
-// sem nuvens sobre um nublado deixa o céu abrir aos poucos, sem salto de forma.
-// Os demais campos mudam junto (a forma de quem chega é a que vale), e o
-// interruptor fica ligado enquanto alguém ainda contribui.
-void mixClouds(CloudLayer &out,const CloudLayer &target,float amount) {
-  if(amount>=1.0f) {out=target;if(!out.enabled) out.opacity=0.0f;return;}
-  const float from=out.enabled?out.opacity:0.0f;
-  const float to=target.enabled?target.opacity:0.0f;
-  if(!out.enabled && target.enabled) {
-    // A forma vem inteira de quem chega; só a opacidade cresce.
-    const float opacity=out.opacity;out=target;out.opacity=opacity;
-  } else if(target.enabled) {
-    out.coverage=mix(out.coverage,target.coverage,amount);
-    out.cirrus=mix(out.cirrus,target.cirrus,amount);
-    out.altitudeMeters=mix(out.altitudeMeters,target.altitudeMeters,amount);
-    out.sizeMeters=mix(out.sizeMeters,target.sizeMeters,amount);
-    mixColor(out.tint,target.tint,amount);
-    out.exposureEv=mix(out.exposureEv,target.exposureEv,amount);
-    out.windSpeedKmh=mix(out.windSpeedKmh,target.windSpeedKmh,amount);
-    out.density=mix(out.density,target.density,amount);
-    out.ambientDimmer=mix(out.ambientDimmer,target.ambientDimmer,amount);
-    out.shadowMultiplier=mix(out.shadowMultiplier,target.shadowMultiplier,amount);
-    if(amount>0.0f) {out.windOrientationDegrees=target.windOrientationDegrees;out.castShadows=target.castShadows;}
-  }
-  out.opacity=mix(from,to,amount);
-  out.enabled=out.opacity>0.0f;
+float evaluateColorCurve(u32 channel,const ColorCurve &curve,float time) noexcept {
+  if(!std::isfinite(time)) time=0;
+  if(curve.count==0) return colorCurveIsDiagonal(channel)?std::clamp(time,0.0f,1.0f):0.5f;
+  if(curve.count==1) return curve.keys[0].value;
+  const auto &first=curve.keys[0],&last=curve.keys[curve.count-1];
+  if(colorCurveLoops(channel)) {
+    // TextureCurve com loop: o domínio repete de 0 a 1; entre a última chave e
+    // a primeira (+1) a curva continua pela volta.
+    time-=std::floor(time);
+    if(time<first.time || time>last.time) {
+      ColorCurveKey a=last,b=first;
+      double t=time;
+      if(time<first.time) {a.time-=1.0f;} else {b.time+=1.0f;}
+      return hermite(a,b,curveTangent(curve,curve.count-1,false),curveTangent(curve,0,true),t);
+    }
+  } else time=std::clamp(time,first.time,last.time);
+  u32 i=1;
+  while(i<curve.count-1 && curve.keys[i].time<time) ++i;
+  return hermite(curve.keys[i-1],curve.keys[i],curveTangent(curve,i-1,false),curveTangent(curve,i,true),time);
 }
 
-void blend(SceneEnvironment &result,const SceneEnvironment &target,u32 overrides,float amount) {
-  if(overrides&EnvironmentOverrideSky) {
-    mixColor(result.skyZenith,target.skyZenith,amount);
-    mixColor(result.skyHorizon,target.skyHorizon,amount);
-    mixColor(result.ground,target.ground,amount);
-    result.atmosphere=mix(result.atmosphere,target.atmosphere,amount);
-    result.skyExposure=mix(result.skyExposure,target.skyExposure,amount);
-    result.sunSize=mix(result.sunSize,target.sunSize,amount);
-    result.sunSizeConvergence=mix(result.sunSizeConvergence,target.sunSizeConvergence,amount);
-    // Environment Lighting acompanha o céu (é da janela Lighting, não do pós).
-    mixColor(result.ambientSkyColor,target.ambientSkyColor,amount);
-    mixColor(result.ambientEquatorColor,target.ambientEquatorColor,amount);
-    mixColor(result.ambientGroundColor,target.ambientGroundColor,amount);
-    mixColor(result.ambientColor,target.ambientColor,amount);
-    result.sunDiskDegrees=mix(result.sunDiskDegrees,target.sunDiskDegrees,amount);
-    result.sunDiskIntensity=mix(result.sunDiskIntensity,target.sunDiskIntensity,amount);
-    result.sunGlare=mix(result.sunGlare,target.sunGlare,amount);
-    result.moonPhase=mix(result.moonPhase,target.moonPhase,amount);
-    result.moonSizeDegrees=mix(result.moonSizeDegrees,target.moonSizeDegrees,amount);
-    result.moonIntensity=mix(result.moonIntensity,target.moonIntensity,amount);
-    result.starIntensity=mix(result.starIntensity,target.starIntensity,amount);
-    result.physicalSkyIntensity=mix(result.physicalSkyIntensity,target.physicalSkyIntensity,amount);
-    result.airDensity=mix(result.airDensity,target.airDensity,amount);
-    result.aerosolDensity=mix(result.aerosolDensity,target.aerosolDensity,amount);
-    result.aerosolAnisotropy=mix(result.aerosolAnisotropy,target.aerosolAnisotropy,amount);
-    result.planetRadiusKm=mix(result.planetRadiusKm,target.planetRadiusKm,amount);
-    result.observerHeightKm=mix(result.observerHeightKm,target.observerHeightKm,amount);
-    result.rayleighScaleHeightKm=mix(result.rayleighScaleHeightKm,target.rayleighScaleHeightKm,amount);
-    result.aerosolScaleHeightKm=mix(result.aerosolScaleHeightKm,target.aerosolScaleHeightKm,amount);
-    result.atmosphereHeightKm=mix(result.atmosphereHeightKm,target.atmosphereHeightKm,amount);
-    result.groundAlbedo=mix(result.groundAlbedo,target.groundAlbedo,amount);
-    if(amount>0.0f) {
-      result.sky=target.sky;
-      // Resources are selected discretely with the sky group. Never take an
-      // HDRI from a volume overriding only fog/post, nor blend radiance using
-      // the rotation of a different, nonresident panorama.
-      result.environmentMap=target.environmentMap;
-      result.hdriRotationDegrees=target.hdriRotationDegrees;
-      result.hdriExposureEv=target.hdriExposureEv;
-      result.physicalAtmosphereHighQuality=target.physicalAtmosphereHighQuality;
-      result.sunDisk=target.sunDisk;result.ambientSource=target.ambientSource;
-      result.skybox=target.skybox;
-    }
-  }
-  if(overrides&EnvironmentOverrideFog) {
-    mixColor(result.fogColor,target.fogColor,amount);
-    result.fogLightEnergy=mix(result.fogLightEnergy,target.fogLightEnergy,amount);
-    result.fogDensity=mix(result.fogDensity,target.fog?target.fogDensity:0.0f,amount);
-    result.fogStart=mix(result.fogStart,target.fogStart,amount);
-    result.fogBaseHeight=mix(result.fogBaseHeight,target.fogBaseHeight,amount);
-    result.fogHeightFalloff=mix(result.fogHeightFalloff,target.fogHeightFalloff,amount);
-    result.fogEnd=mix(result.fogEnd,target.fogEnd,amount);
-    if(amount>0.0f) {result.fog=target.fog;result.fogMode=target.fogMode;result.fogColorMode=target.fogColorMode;}
-  }
-  if(overrides&EnvironmentOverrideClouds) mixClouds(result.clouds,target.clouds,amount);
-  if(overrides&EnvironmentOverrideIndirect) {
-    result.indirectDiffuse=mix(result.indirectDiffuse,target.indirectDiffuse,amount);
-    result.indirectSpecular=mix(result.indirectSpecular,target.indirectSpecular,amount);
-  }
-  // Cada override de pós é independente, como no Volume da Unity. Escolhas
-  // discretas (modo, curva, chaves) trocam no meio da mistura.
-  const bool discrete=amount>0.0f;
-  if(overrides&EnvironmentOverridePost) {
-    if(discrete) {result.post=target.post;result.toneMapper=target.toneMapper;}
-  }
-  if(overrides&EnvironmentOverrideExposure) {
-    result.fixedExposure=mix(result.fixedExposure,target.fixedExposure,amount);
-    result.exposureCompensation=mix(result.exposureCompensation,target.exposureCompensation,amount);
-    result.exposureLimitMin=mix(result.exposureLimitMin,target.exposureLimitMin,amount);
-    result.exposureLimitMax=mix(result.exposureLimitMax,target.exposureLimitMax,amount);
-    result.exposureHistogramLow=mix(result.exposureHistogramLow,target.exposureHistogramLow,amount);
-    result.exposureHistogramHigh=mix(result.exposureHistogramHigh,target.exposureHistogramHigh,amount);
-    result.exposureTargetMidGrey=mix(result.exposureTargetMidGrey,target.exposureTargetMidGrey,amount);
-    result.exposureSpeedDarkToLight=mix(result.exposureSpeedDarkToLight,target.exposureSpeedDarkToLight,amount);
-    result.exposureSpeedLightToDark=mix(result.exposureSpeedLightToDark,target.exposureSpeedLightToDark,amount);
-    if(discrete) {
-      result.exposureMode=target.exposureMode;result.exposureMetering=target.exposureMetering;
-      result.exposureAdaptation=target.exposureAdaptation;
-    }
-  }
-  if(overrides&EnvironmentOverrideBloom) {
-    result.bloomThreshold=mix(result.bloomThreshold,target.bloomThreshold,amount);
-    result.bloomIntensity=mix(result.bloomIntensity,target.bloom?target.bloomIntensity:0.0f,amount);
-    result.bloomScatter=mix(result.bloomScatter,target.bloomScatter,amount);
-    mixColor(result.bloomTint,target.bloomTint,amount);
-    result.bloomClamp=mix(result.bloomClamp,target.bloomClamp,amount);
-    if(discrete) result.bloom=target.bloom;
-  }
-  if(overrides&EnvironmentOverrideVignette) {
-    result.vignetteIntensity=mix(result.vignetteIntensity,target.vignette?target.vignetteIntensity:0.0f,amount);
-    if(discrete) result.vignette=target.vignette;
-  }
-  if(overrides&EnvironmentOverrideColorAdjustments) {
-    result.contrast=mix(result.contrast,target.contrast,amount);
-    result.saturation=mix(result.saturation,target.saturation,amount);
-    result.postExposure=mix(result.postExposure,target.postExposure,amount);
-    mixColor(result.colorFilter,target.colorFilter,amount);
-    result.hueShift=mix(result.hueShift,target.hueShift,amount);
-  }
-  if(overrides&EnvironmentOverrideColorGrading) mixGrading(result.grading,target.grading,amount);
-  if(overrides&EnvironmentOverrideFilmGrain) {
-    result.filmGrainIntensity=mix(result.filmGrainIntensity,
-        target.filmGrain?target.filmGrainIntensity:0.0f,amount);
-    if(discrete) result.filmGrain=target.filmGrain;
-  }
-  if(overrides&EnvironmentOverrideAmbientOcclusion) {
-    result.ambientOcclusionRadius=mix(result.ambientOcclusionRadius,target.ambientOcclusionRadius,amount);
-    result.ambientOcclusionIntensity=mix(result.ambientOcclusionIntensity,
-        target.ambientOcclusion?target.ambientOcclusionIntensity:0.0f,amount);
-    result.ambientOcclusionPower=mix(result.ambientOcclusionPower,target.ambientOcclusionPower,amount);
-    result.ambientOcclusionBias=mix(result.ambientOcclusionBias,target.ambientOcclusionBias,amount);
-    if(discrete) result.ambientOcclusion=target.ambientOcclusion;
+void updateColorCurveTangents(ColorCurve &curve) noexcept {
+  for(u32 i=0;i<curve.count;++i) {
+    const double incoming=curveTangent(curve,i,true),outgoing=curveTangent(curve,i,false);
+    curve.keys[i].in=static_cast<float>(std::clamp(incoming,-1.0e6,1.0e6));
+    curve.keys[i].out=static_cast<float>(std::clamp(outgoing,-1.0e6,1.0e6));
   }
 }
+
+namespace {
 } // namespace
 
 SceneEnvironment defaultSceneEnvironment() {
   SceneEnvironment result{};
   result.active=true;
+  result.syncEffectSwitches();
   return result;
 }
 
@@ -230,7 +135,7 @@ SceneEnvironment resolveSceneEnvironment(std::span<const SceneEnvironmentVolume>
   std::vector<const SceneEnvironmentVolume*> ordered;
   ordered.reserve(volumes.size());
   for(const auto &volume:volumes) {
-    if(!volume.valid() || !volume.environment.active || !(layerMask&(1u<<volume.layer))) continue;
+    if(!volume.valid() || !volume.environment.active || volume.layer>31 || !(layerMask&(1u<<volume.layer))) continue;
     ordered.push_back(&volume);if(report) ++report->considered;
   }
   std::stable_sort(ordered.begin(),ordered.end(),[](const auto *a,const auto *b) {
@@ -240,11 +145,21 @@ SceneEnvironment resolveSceneEnvironment(std::span<const SceneEnvironmentVolume>
     // último preserva esse contrato ao migrar para mistura de volumes.
     return a->stableId>b->stableId;
   });
-  SceneEnvironment result{};
+  // Sem volume, os padrões do mundo (o Default Volume Profile): parâmetros
+  // desmarcados nunca vazam do primeiro volume da lista.
+  SceneEnvironment result=defaultSceneEnvironment();
   bool initialized=false;
+  // Neblina e nuvens entram e saem pela "presença", como antes pela densidade
+  // e pela opacidade: um volume que as desliga as apaga aos poucos.
+  float fogPresence=result.fog?1.0f:0.0f,cloudPresence=result.clouds.enabled?1.0f:0.0f;
+  const auto parameters=volumeParameters();
+  const u32 fogIndex=volumeParameterIndex("fog"),cloudIndex=volumeParameterIndex("clouds");
+  const u32 mapIndex=volumeParameterIndex("environment_map"),mapRotationIndex=volumeParameterIndex("hdri_rotation_degrees"),
+            mapExposureIndex=volumeParameterIndex("hdri_exposure_ev");
   for(const auto *volume:ordered) {
     const float amount=sceneEnvironmentVolumeInfluence(*volume,cameraPosition);
     if(amount<=0) continue;
+    initialized=true;
     if(report) {
       ++report->contributing;
       if(amount>report->dominantInfluence ||
@@ -252,13 +167,33 @@ SceneEnvironment resolveSceneEnvironment(std::span<const SceneEnvironmentVolume>
         report->dominant=volume->stableId;report->dominantInfluence=amount;
       }
     }
-    if(!initialized) {
-      // Sem perfil global, grupos não sobrescritos herdam os padrões do mundo;
-      // nunca vazam valores desmarcados só porque este foi o primeiro volume.
-      result=defaultSceneEnvironment();initialized=true;
-      blend(result,volume->environment,volume->overrides,amount);
-    } else blend(result,volume->environment,volume->overrides,amount);
+    // Nuvens: quem as desliga só apaga a opacidade (a forma fica); quem as
+    // traz para um céu sem nuvens traz a forma inteira e só a opacidade cresce.
+    const bool cloudsArrive=cloudPresence<=0.0f&&volume->environment.clouds.enabled;
+    // O panorama troca com t > 0 e leva junto a orientação e a exposição dele:
+    // misturar o giro de um HDRI com o de outro não tem sentido.
+    const bool mapSwaps=volume->overrides.contributes(mapIndex)&&
+                        volume->environment.environmentMap!=result.environmentMap;
+    for(u32 index=0;index<parameters.size();++index) {
+      if(!volume->overrides.contributes(index)) continue;
+      if(mapSwaps&&(index==mapRotationIndex||index==mapExposureIndex)) {
+        blendVolumeParameter(parameters[index],result,volume->environment,1.0f);continue;
+      }
+      if(parameters[index].group==VolumeGroup::Clouds&&index!=cloudIndex) {
+        if(!volume->environment.clouds.enabled) continue;
+        blendVolumeParameter(parameters[index],result,volume->environment,cloudsArrive?1.0f:amount);
+        continue;
+      }
+      if(index==fogIndex) {fogPresence=mix(fogPresence,volume->environment.fog?1.0f:0.0f,amount);continue;}
+      if(index==cloudIndex) {cloudPresence=mix(cloudPresence,volume->environment.clouds.enabled?1.0f:0.0f,amount);continue;}
+      blendVolumeParameter(parameters[index],result,volume->environment,amount);
+    }
   }
+  result.fog=fogPresence>0.0f;
+  result.fogDensity*=fogPresence;
+  result.clouds.opacity*=cloudPresence;
+  result.clouds.enabled=cloudPresence>0.0f&&result.clouds.opacity>0.0f;
+  result.syncEffectSwitches();
   result.active=initialized;
   return result;
 }

@@ -51,7 +51,7 @@ AE_TEST(environment_v18_round_trips_lighting_window_fields) {
   AE_EXPECT_TRUE(environment.valid(),"valores da janela Lighting são válidos");
   std::ostringstream out;out.imbue(std::locale::classic());environment.write(out);
   scene::Environment back;std::istringstream in(out.str());
-  AE_EXPECT_TRUE(back.read(in,scene::Environment::CurrentVersion),"v18 relido");
+  AE_EXPECT_TRUE(back.read(in,scene::Environment::CurrentVersion),"v19 relido");
   AE_EXPECT_TRUE(back.values.skyExposure==2.5f&&back.values.sunDisk==renderer::SunDiskMode::Simple&&
                  back.values.sunSize==.1f&&back.values.sunSizeConvergence==7.0f&&back.values.atmosphere==2.0f,
                  "Exposure, Sun, Sun Size, Convergence e Atmosphere Thickness preservados");
@@ -61,7 +61,7 @@ AE_TEST(environment_v18_round_trips_lighting_window_fields) {
   AE_EXPECT_TRUE(back.values.fogMode==renderer::FogMode::Linear&&back.values.fogEnd==420.0f&&
                  back.values.fogColorMode==renderer::FogColorMode::SkyLight,"Fog Mode, End e cor preservados");
   AE_EXPECT_TRUE(back.values.skybox==v.skybox,"Material do céu preservado");
-  AE_EXPECT_EQ(back.loadedVersion,18u,"lido na versão atual");
+  AE_EXPECT_EQ(back.loadedVersion,19u,"lido na versão atual");
 }
 
 AE_TEST(environment_v17_migrates_to_the_same_image) {
@@ -187,7 +187,7 @@ AE_TEST(skybox_material_shares_only_the_sky) {
   material.values=resources::skyboxMaterialValues(source);
   AE_EXPECT_TRUE(!material.values.fog&&material.values.postExposure==0.0f,"material guarda só o céu");
   const auto text=material.serialize();
-  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 13 ",0)==0,"cabeçalho próprio do Material do céu");
+  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 14 ",0)==0,"cabeçalho próprio do Material do céu");
   resources::EnvironmentProfile back;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text,back)&&back.skybox,"material relido");
   AE_EXPECT_TRUE(back.assetType()==resources::AssetType::SkyboxMaterial,"tipo de recurso SkyboxMaterial");
@@ -217,7 +217,7 @@ AE_TEST(scene_without_environment_uses_unity_defaults_everywhere) {
   AE_EXPECT_TRUE(look.sunSize==.04f&&look.sunSizeConvergence==5.0f,"Sun Size 0,04 e Convergence 5");
   // Só um volume local: fora dele vale o padrão; dentro, o padrão é a base.
   renderer::SceneEnvironmentVolume local;local.environment.active=true;local.shape=renderer::EnvironmentVolumeShape::Box;
-  local.environment.exposureCompensation=2.0f;local.overrides=renderer::EnvironmentOverrideAll;
+  local.environment.exposureCompensation=2.0f;local.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideAll);
   const float inside[3]{};
   const auto resolved=renderer::resolveSceneEnvironment(std::span(&local,1),inside);
   AE_EXPECT_TRUE(resolved.active&&resolved.sky==renderer::SkyModel::Atmosphere&&resolved.exposureCompensation==2.0f,
