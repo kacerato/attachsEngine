@@ -29,6 +29,7 @@ struct InstancedRenderer::ParticleResources {
   float timestampPeriod = 0;
   bool timestampPending = false;
   bool softAvailable = false;
+  bool projectTextures = false;  // PK-10a: variante bindless com set 2
   renderer::particles::ParticleFrame frame;
   renderer::particles::ParticleRenderStats stats;
 };
@@ -197,19 +198,24 @@ bool InstancedRenderer::createParticleResources() {
   // Pipelines: um por família de mistura, mesmo vértice e mesmo fragmento.
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kParticle_BillboardVertSpirv,
                                            rhi::shaders::kParticle_BillboardVertSpirvSize);
-  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kParticle_MaterialFragSpirv,
-                                           rhi::shaders::kParticle_MaterialFragSpirvSize);
+  // PK-10a: com bindless, a variante que lê a textura do Material de projeto
+  // no mesmo conjunto das texturas da cena (set 2).
+  const bool projectTextures = useBindless_ && textureSetLayout_ != VK_NULL_HANDLE && textureSet_ != VK_NULL_HANDLE;
+  VkShaderModule frag = projectTextures
+      ? createShaderModule(device_, rhi::shaders::kParticle_Material_ProjectFragSpirv, rhi::shaders::kParticle_Material_ProjectFragSpirvSize)
+      : createShaderModule(device_, rhi::shaders::kParticle_MaterialFragSpirv, rhi::shaders::kParticle_MaterialFragSpirvSize);
+  p.projectTextures = projectTextures;
   const auto releaseModules = [&] {
     if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
     if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
   };
   if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) { releaseModules(); return false; }
-  const VkDescriptorSetLayout setLayouts[2]{environmentSetLayout_, p.setLayout};
+  const VkDescriptorSetLayout setLayouts[3]{environmentSetLayout_, p.setLayout, textureSetLayout_};
   VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                            sizeof(renderer::particles::ParticlePushConstants)};
   VkPipelineLayoutCreateInfo layoutInfo{};
   layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  layoutInfo.setLayoutCount = 2;
+  layoutInfo.setLayoutCount = projectTextures ? 3 : 2;
   layoutInfo.pSetLayouts = setLayouts;
   layoutInfo.pushConstantRangeCount = 1;
   layoutInfo.pPushConstantRanges = &push;
@@ -218,16 +224,17 @@ bool InstancedRenderer::createParticleResources() {
   stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
   stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
   VkVertexInputBindingDescription binding{0, sizeof(renderer::particles::ParticleInstance), VK_VERTEX_INPUT_RATE_INSTANCE};
-  VkVertexInputAttributeDescription attributes[4]{
+  VkVertexInputAttributeDescription attributes[5]{
     {0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
     {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
     {2, 0, VK_FORMAT_R16G16B16A16_SFLOAT, 32},
-    {3, 0, VK_FORMAT_R32_UINT, 40}};
+    {3, 0, VK_FORMAT_R32_UINT, 40},
+    {4, 0, VK_FORMAT_R32_SFLOAT, 44}};
   VkPipelineVertexInputStateCreateInfo vertex{};
   vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertex.vertexBindingDescriptionCount = 1;
   vertex.pVertexBindingDescriptions = &binding;
-  vertex.vertexAttributeDescriptionCount = 4;
+  vertex.vertexAttributeDescriptionCount = 5;
   vertex.pVertexAttributeDescriptions = attributes;
   VkPipelineInputAssemblyStateCreateInfo assembly{};
   assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -391,8 +398,8 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
   scissor.extent = {std::min(renderWidth() - static_cast<u32>(scissor.offset.x), static_cast<u32>(std::ceil(viewport.width))),
                     std::min(renderHeight() - static_cast<u32>(scissor.offset.y), static_cast<u32>(std::ceil(viewport.height)))};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
-  const VkDescriptorSet sets[2]{environmentSet_, p.set};
-  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, p.layout, 0, 2, sets, 0, nullptr);
+  const VkDescriptorSet sets[3]{environmentSet_, p.set, textureSet_};
+  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, p.layout, 0, p.projectTextures ? 3u : 2u, sets, 0, nullptr);
   const VkBuffer buffer = p.instances.handle();
   const VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &buffer, &offset);
@@ -404,8 +411,11 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
       bound = pipeline;
     }
+    // Índice da biblioteca publicada -> slot bindless (o mesmo mapa das malhas).
+    const u32 texture = batch.material.projectTexture;
+    const u32 projectSlot = p.projectTextures && texture < dirtTextureSlots_.size() ? dirtTextureSlots_[texture] : ~0u;
     const auto push = renderer::particles::particlePushConstants(batch.material, timeSeconds,
-        static_cast<float>(renderTargetWidth()), static_cast<float>(renderTargetHeight()), p.softAvailable);
+        static_cast<float>(renderTargetWidth()), static_cast<float>(renderTargetHeight()), p.softAvailable, projectSlot);
     vkCmdPushConstants(commandBuffer_, p.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
     vkCmdDraw(commandBuffer_, 6, batch.instanceCount, 0, batch.firstInstance);
     p.stats.drawn += batch.instanceCount;

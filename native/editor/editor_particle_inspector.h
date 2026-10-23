@@ -17,7 +17,7 @@ namespace ae::editor {
 
 inline constexpr std::string_view kParticlePreviewRow = "preview";
 
-inline constexpr std::array<std::string_view, 258> particleInspectorOrder{{
+inline constexpr std::array<std::string_view, 275> particleInspectorOrder{{
   // Principal
   kParticlePreviewRow, "duration", "looping", "prewarm",
   "start_delay_mode", "start_delay", "start_delay_min",
@@ -70,10 +70,14 @@ inline constexpr std::array<std::string_view, 258> particleInspectorOrder{{
   // Colisão e sub-emissores (P2b)
   "collision_enabled", "collision_plane_0", "collision_plane_1", "collision_dampen", "collision_bounce", "collision_lifetime_loss", "collision_min_kill_speed", "collision_radius_scale",
   "sub_emitters_enabled", "sub_emitter_birth", "sub_emitter_birth_count", "sub_emitter_collision", "sub_emitter_collision_count", "sub_emitter_death", "sub_emitter_death_count",
+  // Folha de textura (PK-10a): grade, linha, quadro no tempo, início e ciclos
+  "texture_sheet_enabled", "sheet_tiles_x", "sheet_tiles_y", "sheet_animation", "sheet_row_mode", "sheet_row",
+  "sheet_frame_mode", "sheet_frame", "sheet_frame_min", "sheet_frame_multiplier", "sheet_frame.max", "sheet_frame.min",
+  "sheet_start_frame_mode", "sheet_start_frame", "sheet_start_frame_min", "sheet_cycles",
   // Renderização
   "render_mode", "stretch_velocity_scale", "stretch_length_scale", "sort_mode", "sorting_fudge", "max_particle_size",
-  // Material
-  "material_blend", "material_texture", "material_tint", "material_tint_r", "material_tint_g", "material_tint_b", "material_emission",
+  // Material: o recurso do projeto primeiro (como o Material do Renderer da Unity)
+  "material", "material_blend", "material_texture", "material_tint", "material_tint_r", "material_tint_g", "material_tint_b", "material_emission",
   "material_scroll", "material_scroll_x", "material_scroll_y", "material_noise", "material_noise_scale",
   "material_noise_scroll_x", "material_noise_scroll_y", "material_noise_strength", "material_noise_distortion",
   "material_mask", "material_center_glow", "material_center_glow_power", "material_soft_distance",
@@ -97,6 +101,7 @@ inline std::string_view particleModuleToggle(std::string_view group) {
   if (group == "Cor pela velocidade") return "color_by_speed_enabled";
   if (group == "Rotação pela velocidade") return "rotation_by_speed_enabled";
   if (group == "Sub-emissores") return "sub_emitters_enabled";
+  if (group == "Folha de textura") return "texture_sheet_enabled";
   return {};
 }
 // Rótulo curto do chip de modo Min/Max (cabe ao lado do valor).
@@ -135,6 +140,7 @@ inline std::string_view particleSlotGroup(std::string_view slot) {
   if (base == "size_by_speed") return "Tamanho pela velocidade";
   if (base == "color_by_speed") return "Cor pela velocidade";
   if (base == "rotation_by_speed") return "Rotação pela velocidade";
+  if (base == "sheet_frame") return "Folha de textura";
   return "Principal";
 }
 inline const char *particleSlotName(std::string_view slot) {
@@ -162,6 +168,7 @@ inline const char *particleSlotName(std::string_view slot) {
   if (base == "size_by_speed") return "Tamanho pela velocidade";
   if (base == "color_by_speed") return "Cor pela velocidade";
   if (base == "rotation_by_speed") return "Velocidade angular";
+  if (base == "sheet_frame") return "Quadro no tempo";
   return "";
 }
 

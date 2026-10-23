@@ -15,6 +15,7 @@
 #include "runtime/scene_graph.h"
 #include "scene/particle_system.h"
 
+#include <functional>
 #include <map>
 #include <span>
 #include <string>
@@ -22,6 +23,17 @@
 #include <vector>
 
 namespace ae::runtime {
+
+// PK-10a: o que o Material de projeto de um sistema entrega ao lote. `texture`
+// é o índice da biblioteca publicada (~0 = sem imagem: fica a textura própria).
+struct ParticleMaterialLook {
+  u32 texture = ~0u;
+  float color[3]{1, 1, 1};
+  bool additive = false;
+};
+// Quem conhece os recursos do projeto (o editor) resolve; falso = material
+// ausente ou sem shader Partícula, e o lote usa o material embutido.
+using ParticleMaterialResolver = std::function<bool(const resources::AssetGuid &, ParticleMaterialLook &)>;
 
 class SceneParticles final {
 public:
@@ -50,7 +62,8 @@ public:
   // Reconcilia com o grafo e avança `deltaSeconds`. Zero só reconcilia.
   void advance(const SceneGraph &graph, float deltaSeconds, std::vector<Finished> *finished = nullptr);
   // Instâncias e lotes do quadro, ordenados de trás para a frente pela câmera.
-  void build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out) const;
+  void build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out,
+             const ParticleMaterialResolver *materials = nullptr) const;
 
   // Operação de script/editor sobre um componente. Falso quando o componente
   // não existe neste grafo.

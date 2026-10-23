@@ -13,6 +13,7 @@
 #include "rhi/shaders/editor_grid_spirv.h"
 #include "rhi/shaders/particle_billboard_spirv.h"
 #include "rhi/shaders/particle_material_spirv.h"
+#include "rhi/shaders/particle_material_project_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
 #include "rhi/shaders/scene_preview_spirv.h"
@@ -2069,6 +2070,31 @@ bool applySceneEnvironmentLook(
     grey(frame.environment.ambientColorStrength);
     grey(frame.atmosphereGroundIrradiance);
     if(probe) for(auto &coefficient:frame.diffuseIrradianceSh) grey(coefficient.data());
+    // G4c: o sol que a sombra das nuvens tira volta como céu cinza difuso -- a
+    // luz que a camada espalha para baixo, como a sonda de ambiente do HDRP
+    // renderizada com as nuvens. Sem isso o tempo fechado ficava só com o
+    // reflexo do céu e a cena perdia a cor (Vila sépia na chuva). Na convenção
+    // da Unity (cor de ambiente c ilumina albedo*c), a parte bloqueada do sol
+    // num chão plano, vezes a fração que a nuvem transmite difusa.
+    const float shadowStrength=look.clouds.castShadows?look.clouds.shadowMultiplier:0.0f;
+    const float sunHeight=std::max(frame.environment.sunDirectionIntensity[1],0.0f);
+    const float sunLuminance=luminance(frame.environment.sunColorAngularRadius)*std::max(frame.environment.sunDirectionIntensity[3],0.0f);
+    constexpr float kCloudDiffuseTransmission=0.45f;
+    const float scattered=sunLuminance*sunHeight*occlusion*shadowStrength*kCloudDiffuseTransmission;
+    if(scattered>0.0f) {
+      const float sky[3]{scattered,scattered,scattered};
+      const float equator[3]{scattered*0.7f,scattered*0.7f,scattered*0.7f};
+      const float ground[3]{scattered*0.25f,scattered*0.25f,scattered*0.25f};
+      if(probe) {
+        renderer::DiffuseIrradianceSh9 overcast{};
+        renderer::ambientProbeFromGradient(sky,equator,ground,overcast);
+        for(u32 k=0;k<overcast.size();++k) for(u32 c=0;c<3;++c) frame.diffuseIrradianceSh[k][c]+=overcast[k][c];
+      }
+      for(u32 c=0;c<3;++c) {
+        frame.environment.ambientColorStrength[c]+=scattered;
+        frame.environment.groundColorSaturation[c]+=scattered*0.25f;
+      }
+    }
   }
   return true;
 }

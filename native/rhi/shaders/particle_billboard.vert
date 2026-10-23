@@ -17,20 +17,23 @@ layout(location=0) in vec4 inPositionSize;
 layout(location=1) in vec4 inVelocityRotation;
 layout(location=2) in vec4 inColor;
 layout(location=3) in uint inRandom;
+layout(location=4) in float inFrame;  // PK-10a: quadro da folha de textura
 
 layout(push_constant) uniform ParticleBatch {
   vec4 tint;     // rgb tinta x emissão, w tempo
   vec4 scroll;   // principal xy, ruído zw
   vec4 noise;    // escala, recorte, distorção, distância suave
   vec4 glow;     // brilho central, concentração, tamanho máximo na tela, escala do comprimento
-  vec4 stretch;  // escala da velocidade, 1/largura, 1/altura, reservado
+  vec4 stretch;  // escala da velocidade, 1/largura, 1/altura, slot da textura de projeto
   uvec4 layers;  // principal, ruído, máscara, flags
+  vec4 sheet;    // colunas, linhas da folha de textura
 } batch;
 
 layout(location=0) out vec2 vUv;
 layout(location=1) out vec4 vColor;
 layout(location=2) out vec2 vNoiseOffset;
 layout(location=3) out float vViewDepth;
+layout(location=4) out vec2 vSheetUv;
 
 const vec2 kCorners[6] = vec2[](vec2(-1.0,-1.0), vec2(1.0,-1.0), vec2(1.0,1.0),
                                 vec2(-1.0,-1.0), vec2(1.0,1.0), vec2(-1.0,1.0));
@@ -82,4 +85,11 @@ void main() {
   vColor = inColor;
   vNoiseOffset = vec2(float(inRandom & 0xffffu), float(inRandom >> 16u)) * (1.0 / 65535.0);
   vViewDepth = view.z;
+  // Quadro N da grade: da esquerda para a direita, de cima para baixo, como a
+  // Texture Sheet Animation da Unity.
+  vec2 tiles = max(batch.sheet.xy, vec2(1.0));
+  float frame = floor(inFrame + 0.5);
+  float column = mod(frame, tiles.x);
+  float row = min(floor(frame / tiles.x), tiles.y - 1.0);
+  vSheetUv = (vec2(column, row) + vUv) / tiles;
 }

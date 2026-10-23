@@ -3676,6 +3676,231 @@
               "cpp": "particleShapeDonut"
             }
           }
+        },
+        {
+          "id": "sheet_tiles_x",
+          "label": "Colunas",
+          "type": "ParticleSystem",
+          "member": "sheetTiles[0]",
+          "min": {
+            "cpp": "1.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quadros na horizontal da imagem (Tiles X)",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
+          }
+        },
+        {
+          "id": "sheet_tiles_y",
+          "label": "Linhas",
+          "type": "ParticleSystem",
+          "member": "sheetTiles[1]",
+          "min": {
+            "cpp": "1.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quadros na vertical da imagem (Tiles Y)",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
+          }
+        },
+        {
+          "id": "sheet_row",
+          "label": "Linha",
+          "type": "ParticleSystem",
+          "member": "sheetRow",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "63.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Linha usada no modo Uma linha (0 é a de cima)",
+            "visible": {
+              "cpp": "particleSheetCustomRow"
+            }
+          }
+        },
+        {
+          "id": "sheet_frame",
+          "label": "Quadro no tempo",
+          "type": "ParticleSystem",
+          "member": "sheetFrameOverTime.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Posição na sequência (0 = primeiro quadro, 1 = fim)",
+            "visible": {
+              "cpp": "particleSheetCurveShowsConstant<&ParticleSystemSettings::sheetFrameOverTime>"
+            }
+          }
+        },
+        {
+          "id": "sheet_frame_min",
+          "label": "Quadro no tempo mínimo",
+          "type": "ParticleSystem",
+          "member": "sheetFrameOverTime.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleSheetCurveShowsMin<&ParticleSystemSettings::sheetFrameOverTime>"
+            }
+          }
+        },
+        {
+          "id": "sheet_frame_multiplier",
+          "label": "Quadro no tempo · multiplicador",
+          "type": "ParticleSystem",
+          "member": "sheetFrameOverTime.multiplier",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "×",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva (1 percorre a sequência inteira)",
+            "visible": {
+              "cpp": "particleSheetCurveShowsCurve<&ParticleSystemSettings::sheetFrameOverTime>"
+            }
+          }
+        },
+        {
+          "id": "sheet_start_frame",
+          "label": "Quadro inicial",
+          "type": "ParticleSystem",
+          "member": "sheetStartFrame.constantMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "4095.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quadro somado ao do tempo; sorteado entre dois para variar o início",
+            "visible": {
+              "cpp": "particleSheetCurveShowsConstant<&ParticleSystemSettings::sheetStartFrame>"
+            }
+          }
+        },
+        {
+          "id": "sheet_start_frame_min",
+          "label": "Quadro inicial mínimo",
+          "type": "ParticleSystem",
+          "member": "sheetStartFrame.constantMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "4095.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleSheetCurveShowsMin<&ParticleSystemSettings::sheetStartFrame>"
+            }
+          }
+        },
+        {
+          "id": "sheet_cycles",
+          "label": "Ciclos",
+          "type": "ParticleSystem",
+          "member": "sheetCycles",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "×",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Quantas vezes a sequência roda durante a vida da partícula",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
+          }
         }
       ]
     },
@@ -3931,6 +4156,19 @@
             "capability": "render.particles.simulation",
             "consumer": "renderer/particles/particle_simulation.cpp",
             "help": "Rotation by Speed: velocidade angular lida pela velocidade da partícula"
+          }
+        },
+        {
+          "id": "texture_sheet_enabled",
+          "label": "Folha de textura ativa",
+          "type": "ParticleSystem",
+          "member": "textureSheetEnabled",
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Texture Sheet Animation: anima a partícula por quadros de uma grade na imagem do Material"
           }
         }
       ]
@@ -4445,6 +4683,74 @@
             "capability": "render.particles.simulation",
             "consumer": "renderer/particles/particle_simulation.cpp",
             "help": "Constante, curva pela velocidade, ou sorteio entre dois valores"
+          }
+        },
+        {
+          "id": "sheet_animation",
+          "label": "Animação",
+          "type": "ParticleSystem",
+          "member": "sheetAnimation",
+          "options": "particleSheetAnimationOptions",
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Folha inteira (todos os quadros em ordem) ou uma linha só",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
+          }
+        },
+        {
+          "id": "sheet_row_mode",
+          "label": "Escolha da linha",
+          "type": "ParticleSystem",
+          "member": "sheetRowMode",
+          "options": "particleSheetRowModeOptions",
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Linha fixa ou sorteada por partícula",
+            "visible": {
+              "cpp": "particleSheetSingleRow"
+            }
+          }
+        },
+        {
+          "id": "sheet_frame_mode",
+          "label": "Quadro no tempo · modo",
+          "type": "ParticleSystem",
+          "member": "sheetFrameOverTime.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Curva ao longo da vida (o padrão sobe de 0 a 1), constante, ou sorteio por partícula",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
+          }
+        },
+        {
+          "id": "sheet_start_frame_mode",
+          "label": "Quadro inicial · modo",
+          "type": "ParticleSystem",
+          "member": "sheetStartFrame.mode",
+          "options": "particleConstantModeOptions",
+          "presentation": {
+            "group": "Folha de textura",
+            "unit": "",
+            "capability": "render.particles.texture_sheet",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, ou sorteio entre dois quadros por partícula",
+            "visible": {
+              "cpp": "particleSheetOn"
+            }
           }
         }
       ]

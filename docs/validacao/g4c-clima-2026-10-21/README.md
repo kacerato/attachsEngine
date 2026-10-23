@@ -79,6 +79,25 @@ sobem e descem devagar entre 3.003 e 3.553, longe do teto de 8.000, sem os burac
 (`12-chuva-continua-gotas-vivas.png`); quadros aos 10, 50 e 90 s em `13-chuva-continua-quadros-10s-50s-90s.png`.
 Passe das partículas: 0,06–0,08 ms de GPU.
 
+## Chuva sem cor depois do merge da base (23/10)
+
+Depois do merge com `codex/ui-play-performance-apk-export` (V-2, PK-1/PK-2, PK-9) a Vila ficava
+sépia com o Clima (`16-defeito-...`, `18-defeito-play-chuva-sem-cor-1033.png`). Três causas, em ordem:
+
+1. **Grupos de pós no volume do Clima.** A base dividiu o pós em overrides por efeito (Exposição,
+   Ajustes de cor, Grading...); a receita os deixava ligados e o volume trocava a exposição e a cor da
+   cena pelos padrões. Receita desliga todos (`73b970ca`).
+2. **Neblina nova.** Volumes novos nascem com Exp² e cor fixa (o céu fica limpo); o Clima herdou e a
+   chuva perdeu o véu cinza sobre céu e cena. Diagnóstico de host com a cena puxada do aparelho
+   (Ambiente resolvido com e sem o Clima): só neblina e nuvens mudam. Receita: Exponencial + Acompanhar
+   o céu (`21021140`), o visual calibrado no APK 410 (`17-clima-criado-edicao-1033.png`).
+3. **Sombra das nuvens sem a luz que elas espalham.** A/B no POCO: com "Projetar sombras" desligado a
+   cor volta (`19-ab-sombra-das-nuvens-desligada-1033.png`). A sombra tira ~80 % do sol no tempo
+   fechado e, com a sonda SH do PK-1, o ambiente era só o céu acinzentado — sobrava o reflexo bege.
+   Agora a parte bloqueada do sol volta como céu cinza difuso (× 0,45, céu/equador/chão 1/0,7/0,25),
+   somada à sonda e ao ambiente constante, como a sonda do HDRP renderizada com as nuvens
+   (`platform/android/instanced_renderer.cpp`).
+
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
 `tools/measure-g0-baseline.ps1 -Order S -Seconds 40`, 4 rodadas intercaladas, bateria ≤ 37,9 °C no

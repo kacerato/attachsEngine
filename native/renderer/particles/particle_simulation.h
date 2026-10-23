@@ -25,7 +25,7 @@
 namespace ae::renderer::particles {
 
 // Instância por partícula, consumida como atributo por instância pelo
-// rhi/shaders/particle.vert. 44 bytes; cor em meia precisão (HDR linear).
+// rhi/shaders/particle.vert. 48 bytes; cor em meia precisão (HDR linear).
 struct ParticleInstance {
   float position[3]{};
   float size = 0;
@@ -33,8 +33,9 @@ struct ParticleInstance {
   float rotation = 0;  // radianos, no plano da tela
   u16 color[4]{};      // half float
   u32 random = 0;      // semente da partícula: desloca o ruído do material
+  float frame = 0;     // PK-10a: quadro da folha de textura (índice na grade, da esquerda para a direita, de cima para baixo)
 };
-static_assert(sizeof(ParticleInstance) == 44);
+static_assert(sizeof(ParticleInstance) == 48);
 
 // Parâmetros do material de um lote, já resolvidos (tinta × emissão etc.).
 struct ParticleMaterialParameters {
@@ -45,6 +46,11 @@ struct ParticleMaterialParameters {
   float noiseScale = 1, noiseStrength = 1, noiseDistortion = 0;
   float centerGlow = 0, centerGlowPower = 4, softDistance = 0;
   float stretchVelocityScale = 0, stretchLengthScale = 2, maxScreenSize = 0.5f;
+  // PK-10a: grade da folha de textura (1x1 = imagem inteira) e a textura do
+  // Material de projeto, já resolvida para o índice da biblioteca publicada
+  // (~0 = textura própria). A cor base do Material multiplica a tinta.
+  float sheetTiles[2]{1, 1};
+  u32 projectTexture = ~0u;
 };
 
 struct ParticleBatch {
@@ -167,12 +173,14 @@ private:
   void record(std::vector<ParticleEvent> &events, u32 index, const float (&world)[16]);
   void collide(float dt, const float (&world)[16]);
   void advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]);
+  float sheetFrame(float t, u32 seed) const;
 
   scene::ParticleSystemSettings settings_;
   BakedMinMaxCurve startDelay_, startLifetime_, startSpeed_, startSize_, startRotation_, gravity_, rate_;
   BakedMinMaxCurve sizeOverLifetime_, rotationOverLifetime_;
   BakedMinMaxCurve velocity_[3], speedModifier_, limitSpeed_, force_[3], noiseStrength_, sizeBySpeed_, rotationBySpeed_;
   BakedMinMaxGradient colorBySpeed_;
+  BakedMinMaxCurve sheetFrame_, sheetStart_;
   // Velocidade do emissor (mundo), para Herdar velocidade e Taxa por distância.
   float lastOrigin_[3]{}, emitterVelocity_[3]{}, distanceAccumulator_ = 0;
   bool hasLastOrigin_ = false;

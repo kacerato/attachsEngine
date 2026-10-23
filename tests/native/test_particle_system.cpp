@@ -124,7 +124,7 @@ AE_TEST(particle_system_archive_rejects_unknown_ids_versions_and_ranges) {
   auto text = serialize(source);
   {
     std::istringstream in(text);
-    AE_EXPECT_TRUE(!target.read(in, 3), "versão futura recusada");
+    AE_EXPECT_TRUE(!target.read(in, 4), "versão futura recusada");
   }
   {
     auto bad = text;
@@ -724,4 +724,117 @@ AE_TEST(particle_p2d_donut_and_rectangle_shapes_stay_in_their_volumes) {
     flat = flat && std::abs(p.position[0]) <= 2 + 1e-4f && std::abs(p.position[1]) <= .5f + 1e-4f && p.velocity[2] > 0.99f;
   }
   AE_EXPECT_TRUE(flat, "retângulo 4×1 no plano XY emitindo para +Z");
+}
+
+// PK-10a: Texture Sheet Animation (modo Grid da Unity) e Material de projeto.
+AE_TEST(particle_pk10a_texture_sheet_walks_the_grid_over_lifetime) {
+  AE_EXPECT_EQ(sizeof(ParticleInstance), usize(48), "instância com o quadro da folha");
+  scene::ParticleSystemSettings sheet;
+  sheet.startLifetime = scene::particleCurveDefault(1);
+  sheet.startSpeed = scene::particleCurveDefault(0);
+  sheet.emissionRate = scene::particleCurveDefault(0);
+  sheet.textureSheetEnabled = true;
+  sheet.sheetTiles[0] = 4;sheet.sheetTiles[1] = 2;
+  const auto frameAt = [&](const scene::ParticleSystemSettings &settings, float age) {
+    ParticleEmitter emitter;
+    emitter.configure(settings, 3);
+    emitter.play();
+    emitter.emit(1, kIdentity);
+    // Passos de 0,1 s: o passo da simulação é limitado a 0,25 s.
+    for (float left = age; left > 1e-6f; left -= 0.1f) emitter.simulate(std::min(left, 0.1f), kIdentity);
+    std::vector<ParticleInstance> out;
+    emitter.build(kIdentity, kCamera, out);
+    return out.empty() ? -1.0f : out[0].frame;
+  };
+  AE_EXPECT_EQ(frameAt(sheet, 0), 0.0f, "nasce no primeiro quadro");
+  AE_EXPECT_EQ(frameAt(sheet, 0.26f), 2.0f, "um quarto da vida: quadro 2 de 8");
+  AE_EXPECT_EQ(frameAt(sheet, 0.9f), 7.0f, "fim da vida: último quadro");
+  auto twice = sheet;twice.sheetCycles = 2;
+  AE_EXPECT_EQ(frameAt(twice, 0.55f), 0.0f, "dois ciclos: recomeça na metade");
+  auto start = sheet;start.sheetStartFrame = scene::particleCurveDefault(3);
+  AE_EXPECT_EQ(frameAt(start, 0.9f), 2.0f, "quadro inicial soma e dá a volta (7 + 3 = 10 → 2)");
+  auto row = sheet;row.sheetAnimation = scene::ParticleSheetAnimation::SingleRow;row.sheetRow = 1;
+  AE_EXPECT_EQ(frameAt(row, 0), 4.0f, "uma linha: começa na linha escolhida");
+  AE_EXPECT_EQ(frameAt(row, 0.9f), 7.0f, "e anda só pelas colunas dela");
+  auto random = row;random.sheetRowMode = scene::ParticleSheetRowMode::Random;
+  bool inside = true;
+  for (u32 seed = 0; seed < 16; ++seed) {
+    ParticleEmitter emitter;
+    emitter.configure(random, seed);
+    emitter.play();
+    emitter.emit(8, kIdentity);
+    std::vector<ParticleInstance> out;
+    emitter.build(kIdentity, kCamera, out);
+    for (const auto &p : out) inside = inside && (p.frame == 0 || p.frame == 4);
+  }
+  AE_EXPECT_TRUE(inside, "linha sorteada é o início de uma das linhas");
+  auto off = sheet;off.textureSheetEnabled = false;
+  AE_EXPECT_EQ(frameAt(off, 0.9f), 0.0f, "módulo desligado: imagem inteira");
+  ParticleEmitter emitter;
+  emitter.configure(sheet, 1);
+  const auto material = emitter.material();
+  AE_EXPECT_TRUE(material.sheetTiles[0] == 4 && material.sheetTiles[1] == 2 && material.projectTexture == ~0u,
+                 "a grade vai ao lote; sem Material de projeto, textura própria");
+}
+
+AE_TEST(particle_pk10a_archive_v3_keeps_material_and_sheet_and_reads_v2) {
+  scene::ParticleSystem source;
+  source.materialAsset = resources::assetGuidFromSeed("material:fogo");
+  source.textureSheetEnabled = true;source.sheetTiles[0] = 8;source.sheetTiles[1] = 4;
+  source.sheetAnimation = scene::ParticleSheetAnimation::SingleRow;source.sheetRowMode = scene::ParticleSheetRowMode::Random;
+  source.sheetCycles = 3;source.sheetStartFrame.mode = scene::ParticleCurveMode::TwoConstants;
+  source.sheetStartFrame.constantMin = 1;source.sheetStartFrame.constantMax = 5;
+  source.sheetFrameOverTime.curveMax = scene::particleLinearCurve(0, 0.5f);
+  scene::ParticleSystem back;
+  AE_EXPECT_TRUE(roundTrip(source, back), "ida e volta v3");
+  AE_EXPECT_TRUE(back.materialAsset == source.materialAsset && back.textureSheetEnabled && back.sheetTiles[0] == 8 &&
+                 back.sheetTiles[1] == 4 && back.sheetAnimation == scene::ParticleSheetAnimation::SingleRow &&
+                 back.sheetRowMode == scene::ParticleSheetRowMode::Random && back.sheetCycles == 3 &&
+                 back.sheetStartFrame.constantMin == 1 && back.sheetFrameOverTime.curveMax.keys.size() == 2,
+                 "material e folha preservados");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.version, 3u, "versão 3");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.resourceBindings.size(), usize(1), "binding do Material");
+  scene::ParticleSystem none;
+  AE_EXPECT_TRUE(roundTrip(scene::ParticleSystem{}, none) && !none.materialAsset.valid(), "sem material grava '-'");
+  // Um arquivo v2 não tem o token do material no fim.
+  std::istringstream v2("1 duration 2 0 0 0");
+  scene::ParticleSystem old;
+  AE_EXPECT_TRUE(old.read(v2, 2) && !old.materialAsset.valid() && !old.textureSheetEnabled, "v2 abre com folha desligada");
+  std::istringstream v3missing("1 duration 2 0 0 0");
+  AE_EXPECT_TRUE(!old.read(v3missing, 3), "v3 sem o material é recusado");
+  scene::ParticleSystem fraction = source;fraction.sheetTiles[0] = 2.5f;
+  AE_EXPECT_TRUE(!fraction.valid(), "grade inteira");
+  fraction = source;fraction.sheetStartFrame.mode = scene::ParticleCurveMode::Curve;
+  AE_EXPECT_TRUE(!fraction.valid(), "quadro inicial só constante ou sorteio");
+}
+
+AE_TEST(particle_pk10a_project_material_reaches_the_batch) {
+  runtime::SceneGraph graph;
+  const auto fire = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Fogo");
+  auto &system = scene::particleSystem(*graph.editComponents(fire)->add(scene::ParticleSystem::descriptor));
+  system.emissionRate = scene::particleCurveDefault(50);
+  system.materialTint[0] = 0.8f;
+  const auto guid = resources::assetGuidFromSeed("material:fogo");
+  system.materialAsset = guid;
+  runtime::SceneParticles particles;
+  particles.advance(graph, 0.2f);
+  renderer::particles::ParticleFrame frame;
+  particles.build(graph, kCamera, frame);
+  AE_EXPECT_TRUE(!frame.batches.empty() && frame.batches[0].material.projectTexture == ~0u, "sem resolvedor, textura própria");
+  u32 asked = 0;
+  const runtime::ParticleMaterialResolver resolver = [&](const resources::AssetGuid &id, runtime::ParticleMaterialLook &look) {
+    ++asked;
+    if (id != guid) return false;
+    look.texture = 7;look.color[0] = 0.5f;look.additive = true;
+    return true;
+  };
+  particles.build(graph, kCamera, frame, &resolver);
+  AE_EXPECT_TRUE(asked == 1 && frame.batches.size() == 1, "resolvido uma vez por lote");
+  const auto &m = frame.batches[0].material;
+  AE_EXPECT_TRUE(m.projectTexture == 7 && std::abs(m.tint[0] - 0.4f) < 1e-6f &&
+                 m.blend == static_cast<u32>(scene::ParticleBlend::Additive), "imagem, cor base e mistura do Material");
+  const runtime::ParticleMaterialResolver refuse = [](const resources::AssetGuid &, runtime::ParticleMaterialLook &) { return false; };
+  particles.build(graph, kCamera, frame, &refuse);
+  AE_EXPECT_TRUE(frame.batches[0].material.projectTexture == ~0u && frame.batches[0].material.blend == 0,
+                 "Material sem shader Partícula: material embutido");
 }

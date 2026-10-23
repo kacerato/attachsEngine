@@ -5,21 +5,26 @@
 #include "renderer/particles/particle_simulation.h"
 #include "renderer/particles/particle_textures.h"
 
+#include <cstring>
+
 namespace ae::renderer::particles {
 
 inline constexpr u32 kParticleFlagStretched = 1u << 0;
 inline constexpr u32 kParticleFlagAdditive = 1u << 1;
 inline constexpr u32 kParticleFlagSoft = 1u << 2;
+// PK-10a: a imagem vem do Material de projeto (slot bindless em stretch.w).
+inline constexpr u32 kParticleFlagProjectTexture = 1u << 3;
 
 struct ParticlePushConstants {
   float tint[4]{};     // rgb = tinta × emissão; w = tempo em segundos
   float scroll[4]{};   // rolagem da principal (xy) e do ruído (zw), por segundo
   float noise[4]{};    // escala, recorte, distorção, distância suave (m)
   float glow[4]{};     // brilho central, concentração, tamanho máximo na tela, escala do comprimento
-  float stretch[4]{};  // escala da velocidade, 1/largura e 1/altura do alvo, reservado
+  float stretch[4]{};  // escala da velocidade, 1/largura e 1/altura do alvo, bits do slot da textura de projeto
   u32 layers[4]{};     // bloco da principal, do ruído (~0 nenhum), da máscara (~0 nenhuma), flags
+  float sheet[4]{1, 1, 0, 0};  // colunas e linhas da folha de textura
 };
-static_assert(sizeof(ParticlePushConstants) == 96);
+static_assert(sizeof(ParticlePushConstants) == 112);
 
 // O que o passe fez no último quadro: entra no perfil do editor e na bancada.
 struct ParticleRenderStats {
@@ -28,8 +33,10 @@ struct ParticleRenderStats {
   bool softAvailable = false;
 };
 
+// `projectSlot`: slot bindless da textura do Material de projeto, ou ~0 quando
+// o aparelho não tem bindless ou o lote usa a textura própria.
 inline ParticlePushConstants particlePushConstants(const ParticleMaterialParameters &m, float time, float targetWidth,
-                                                   float targetHeight, bool softAvailable) {
+                                                   float targetHeight, bool softAvailable, u32 projectSlot = ~0u) {
   ParticlePushConstants p;
   for (u32 k = 0; k < 3; ++k) p.tint[k] = m.tint[k];
   p.tint[3] = time;
@@ -44,7 +51,11 @@ inline ParticlePushConstants particlePushConstants(const ParticleMaterialParamet
   p.layers[2] = particleMaskLayer(static_cast<scene::ParticleMask>(m.mask));
   p.layers[3] = (m.renderMode == static_cast<u32>(scene::ParticleRenderMode::StretchedBillboard) ? kParticleFlagStretched : 0u) |
                 (m.blend == static_cast<u32>(scene::ParticleBlend::Additive) ? kParticleFlagAdditive : 0u) |
-                (softAvailable && m.softDistance > 0 ? kParticleFlagSoft : 0u);
+                (softAvailable && m.softDistance > 0 ? kParticleFlagSoft : 0u) |
+                (projectSlot != ~0u ? kParticleFlagProjectTexture : 0u);
+  if (projectSlot != ~0u) std::memcpy(&p.stretch[3], &projectSlot, sizeof projectSlot);
+  p.sheet[0] = m.sheetTiles[0];
+  p.sheet[1] = m.sheetTiles[1];
   return p;
 }
 

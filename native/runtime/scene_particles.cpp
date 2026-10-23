@@ -215,7 +215,8 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
   simulationMs_ = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - start).count();
 }
 
-void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out) const {
+void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out,
+                           const ParticleMaterialResolver *materials) const {
   (void)graph;
   const auto start = std::chrono::steady_clock::now();
   out.clear();
@@ -229,6 +230,16 @@ void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], re
     batch.instanceCount = static_cast<u32>(out.instances.size()) - batch.firstInstance;
     if (!batch.instanceCount) continue;
     batch.material = entry.emitter.material();
+    // Material de projeto: a imagem dele e a cor base, como o Material do
+    // Particle System Renderer da Unity. A mistura segue o Surface do material.
+    if (const auto &asset = entry.emitter.settings().materialAsset; asset.valid() && materials && *materials) {
+      ParticleMaterialLook look;
+      if ((*materials)(asset, look)) {
+        batch.material.projectTexture = look.texture;
+        for (u32 k = 0; k < 3; ++k) batch.material.tint[k] *= look.color[k];
+        batch.material.blend = static_cast<u32>(look.additive ? scene::ParticleBlend::Additive : scene::ParticleBlend::AlphaBlend);
+      }
+    }
     const float d[3]{entry.world[12] - camera[0], entry.world[13] - camera[1], entry.world[14] - camera[2]};
     batch.sortDistance = std::sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]) + entry.emitter.sortingFudge();
     out.batches.push_back(batch);

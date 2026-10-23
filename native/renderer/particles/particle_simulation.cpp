@@ -17,7 +17,8 @@ enum Channel : u32 {
   ChannelSizeOverLifetime, ChannelRotationOverLifetime, ChannelColorOverLifetime, ChannelGravity,
   ChannelVelocityX, ChannelVelocityY, ChannelVelocityZ, ChannelSpeedModifier, ChannelLimit,
   ChannelForceX, ChannelForceY, ChannelForceZ, ChannelNoise,
-  ChannelSizeBySpeed, ChannelColorBySpeed, ChannelRotationBySpeed
+  ChannelSizeBySpeed, ChannelColorBySpeed, ChannelRotationBySpeed,
+  ChannelSheetFrame, ChannelSheetStart, ChannelSheetRow
 };
 // Velocidade normalizada na faixa autoral (Size/Color/Rotation by Speed).
 float speedFraction(float speed, const float (&range)[2]) {
@@ -245,6 +246,8 @@ void ParticleEmitter::configure(const scene::ParticleSystemSettings &settings, u
   sizeBySpeed_.bake(settings.sizeBySpeed);
   rotationBySpeed_.bake(settings.rotationBySpeed);
   colorBySpeed_.bake(settings.colorBySpeed);
+  sheetFrame_.bake(settings.sheetFrameOverTime);
+  sheetStart_.bake(settings.sheetStartFrame);
   rotationOverLifetime_.bake(settings.rotationOverLifetime);
   startColor_.bake(settings.startColor);
   colorOverLifetime_.bake(settings.colorOverLifetime);
@@ -826,7 +829,30 @@ void ParticleEmitter::build(const float (&world)[16], const float (&camera)[3], 
     }
     for (u32 k = 0; k < 4; ++k) instance.color[k] = floatToHalf(std::max(0.0f, color[k]));
     instance.random = seed_[i];
+    instance.frame = sheetFrame(t, seed_[i]);
   }
+}
+
+// Texture Sheet Animation, modo Grid da Unity: a curva Frame over Time (em
+// fração da sequência) é lida em fract(t × Ciclos), soma o Quadro inicial e dá
+// a volta na sequência. Em Uma linha, a sequência é a linha escolhida ou
+// sorteada por partícula.
+float ParticleEmitter::sheetFrame(float t, u32 seed) const {
+  const auto &s = settings_;
+  if (!s.textureSheetEnabled) return 0;
+  const u32 columns = static_cast<u32>(std::max(1.0f, s.sheetTiles[0])), rows = static_cast<u32>(std::max(1.0f, s.sheetTiles[1]));
+  const u32 frames = s.sheetFrameCount();
+  if (frames <= 1 && rows <= 1) return 0;
+  const float cycle = t * std::max(s.sheetCycles, 0.0f);
+  const float phase = cycle - std::floor(cycle);
+  const float over = std::clamp(sheetFrame_.evaluate(phase, particleRandom(seed, ChannelSheetFrame)), 0.0f, 1.0f);
+  const float start = std::floor(std::max(0.0f, sheetStart_.evaluate(0, particleRandom(seed, ChannelSheetStart))));
+  const u32 index = static_cast<u32>(std::fmod(std::floor(over * static_cast<float>(frames) + start), static_cast<float>(std::max(frames, 1u))));
+  if (s.sheetAnimation == scene::ParticleSheetAnimation::WholeSheet) return static_cast<float>(std::min(index, columns * rows - 1));
+  const u32 row = s.sheetRowMode == scene::ParticleSheetRowMode::Random
+      ? std::min(rows - 1, static_cast<u32>(particleRandom(seed, ChannelSheetRow) * static_cast<float>(rows)))
+      : std::min(rows - 1, static_cast<u32>(s.sheetRow));
+  return static_cast<float>(row * columns + std::min(index, columns - 1));
 }
 
 ParticleMaterialParameters ParticleEmitter::material() const {
@@ -849,6 +875,10 @@ ParticleMaterialParameters ParticleEmitter::material() const {
   m.stretchVelocityScale = s.stretchVelocityScale;
   m.stretchLengthScale = s.stretchLengthScale;
   m.maxScreenSize = s.maxParticleSize;
+  if (s.textureSheetEnabled) {
+    m.sheetTiles[0] = std::max(1.0f, s.sheetTiles[0]);
+    m.sheetTiles[1] = std::max(1.0f, s.sheetTiles[1]);
+  }
   return m;
 }
 

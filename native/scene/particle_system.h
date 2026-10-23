@@ -48,6 +48,11 @@ enum class ParticleBlend : u32 { AlphaBlend = 0, Additive = 1 };
 enum class ParticleTexture : u32 { SoftDot = 0, Glow = 1, Flame = 2, Smoke = 3, Spark = 4, Ring = 5, Star = 6, Square = 7 };
 enum class ParticleNoise : u32 { None = 0, Clouds = 1, Cells = 2, Streaks = 3 };
 enum class ParticleMask : u32 { None = 0, Radial = 1, VerticalFade = 2, Ring = 3 };
+// Texture Sheet Animation (Unity Manual/PartSysTexSheetAnimModule.html, modo Grid):
+// a imagem do Material vira uma grade de Colunas x Linhas; a partícula percorre a
+// folha inteira ou uma linha só.
+enum class ParticleSheetAnimation : u32 { WholeSheet = 0, SingleRow = 1 };
+enum class ParticleSheetRowMode : u32 { Custom = 0, Random = 1 };
 
 inline constexpr u32 kParticleTextureCount = 8;
 inline constexpr u32 kParticleNoiseCount = 3;  // sem "Nenhum"
@@ -285,6 +290,32 @@ struct ParticleSystemSettings {
   float materialCenterGlow = 0;
   float materialCenterGlowPower = 4;
   float materialSoftDistance = 0;
+
+  // --- Material de projeto e Folha de textura (PK-10a) -----------------------
+  // Como o Particle System Renderer da Unity: um Material do projeto com shader
+  // Partícula (Particles Unlit/Lit do PK-9) dá a imagem; a cor base dele tinge.
+  // Sem Material, ou com outro shader, valem a textura própria e a tinta acima.
+  resources::AssetGuid materialAsset{};
+  bool textureSheetEnabled = false;
+  float sheetTiles[2]{1, 1};
+  ParticleSheetAnimation sheetAnimation = ParticleSheetAnimation::WholeSheet;
+  ParticleSheetRowMode sheetRowMode = ParticleSheetRowMode::Custom;
+  float sheetRow = 0;
+  // Frame over Time em fração da sequência (0 = primeiro quadro, 1 = depois do
+  // último), como a curva da Unity normalizada; o padrão percorre a vida toda.
+  ParticleMinMaxCurve sheetFrameOverTime = [] {
+    auto value = particleCurveDefault(0);
+    value.mode = ParticleCurveMode::Curve;
+    value.multiplier = 1;
+    value.curveMin = value.curveMax = particleLinearCurve(0, 1);
+    return value;
+  }();
+  ParticleMinMaxCurve sheetStartFrame = particleCurveDefault(0);
+  float sheetCycles = 1;
+  u32 sheetFrameCount() const noexcept {
+    const u32 columns = static_cast<u32>(sheetTiles[0]), rows = static_cast<u32>(sheetTiles[1]);
+    return sheetAnimation == ParticleSheetAnimation::SingleRow ? columns : columns * rows;
+  }
 };
 
 class ParticleSystem final : public ComponentValue, public ParticleSystemSettings {
@@ -384,6 +415,24 @@ inline constexpr std::array<ComponentEnumOption, 4> particleMaskOptions{{
   {0, "Nenhuma"}, {1, "Radial"}, {2, "Desvanece para cima"}, {3, "Anel"}}};
 
 inline bool particleCollides(const ComponentValue &v) { return particleSystem(v).collisionEnabled; }
+inline bool particleSheetOn(const ComponentValue &v) { return particleSystem(v).textureSheetEnabled; }
+inline bool particleSheetSingleRow(const ComponentValue &v) {
+  return particleSheetOn(v) && particleSystem(v).sheetAnimation == ParticleSheetAnimation::SingleRow;
+}
+inline bool particleSheetCustomRow(const ComponentValue &v) {
+  return particleSheetSingleRow(v) && particleSystem(v).sheetRowMode == ParticleSheetRowMode::Custom;
+}
+template <ParticleMinMaxCurve ParticleSystemSettings::*M> bool particleSheetCurveShowsConstant(const ComponentValue &v) {
+  return particleSheetOn(v) && particleCurveShowsConstant<M>(v);
+}
+template <ParticleMinMaxCurve ParticleSystemSettings::*M> bool particleSheetCurveShowsMin(const ComponentValue &v) {
+  return particleSheetOn(v) && particleCurveShowsMin<M>(v);
+}
+template <ParticleMinMaxCurve ParticleSystemSettings::*M> bool particleSheetCurveShowsCurve(const ComponentValue &v) {
+  return particleSheetOn(v) && particleCurveShowsCurve<M>(v);
+}
+inline constexpr std::array<ComponentEnumOption, 2> particleSheetAnimationOptions{{{0, "Folha inteira"}, {1, "Uma linha"}}};
+inline constexpr std::array<ComponentEnumOption, 2> particleSheetRowModeOptions{{{0, "Escolhida"}, {1, "Sorteada"}}};
 inline bool particleHasSubEmitters(const ComponentValue &v) { return particleSystem(v).subEmittersEnabled; }
 #include "scene/generated/particle_system_particleSystemNumbers.inc"
 #include "scene/generated/particle_system_particleSystemBooleans.inc"
@@ -418,6 +467,18 @@ inline constexpr std::array<ComponentObjectReference, 5> particleSystemReference
     "render.particles.sub_emitters", "runtime/scene_particles.cpp"}},
 }};
 
+// Material do projeto (PK-10a). Ausente = material embutido do componente.
+inline constexpr std::array<ComponentResourceBinding, 1> particleSystemResources{{
+  {"material", "Material", resources::AssetType::Material, [](const ComponentValue &) -> u32 { return 1; },
+   [](const ComponentValue &v, u32) { return particleSystem(v).materialAsset; },
+   [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
+     if (slot) return false;
+     particleSystem(v).materialAsset = value;
+     return true;
+   },
+   {"Material", "", "Material do projeto com shader Partícula: a imagem dele (e a folha de quadros) substitui a textura própria",
+    nullptr, nullptr, "render.particles.material", "platform/android/instanced_particles.inl"}}}};
+
 inline constexpr std::array<ComponentTriple, 7> particleSystemTriples{{
   {"start_color", "Cor inicial", {"start_color_r", "start_color_g", "start_color_b"}, ComponentTripleKind::LinearColor},
   {"start_color_min", "Cor mínima", {"start_color_min_r", "start_color_min_g", "start_color_min_b"}, ComponentTripleKind::LinearColor},
@@ -448,12 +509,12 @@ inline constexpr std::array<ComponentEvent, 1> particleSystemEvents{{
   {"stopped", "Parou", "O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)"}}};
 
 inline const ComponentType ParticleSystem::descriptor{
-  "astra.effects.particle_system", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
+  "astra.effects.particle_system", 3, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
   particleSystemNumbers, particleSystemBooleans, particleSystemEnums, nullptr, false, particleSystemReferences, particleSystemTriples,
-  {}, {}, {}, {}, particleSystemMethods, particleSystemEvents};
+  particleSystemResources, {}, {}, {}, particleSystemMethods, particleSystemEvents};
 
 inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
-  static constexpr std::array<CurveSlot, 40> slots{{
+  static constexpr std::array<CurveSlot, 42> slots{{
     {"start_delay.min", &ParticleSystem::startDelay, false}, {"start_delay.max", &ParticleSystem::startDelay, true},
     {"start_lifetime.min", &ParticleSystem::startLifetime, false}, {"start_lifetime.max", &ParticleSystem::startLifetime, true},
     {"start_speed.min", &ParticleSystem::startSpeed, false}, {"start_speed.max", &ParticleSystem::startSpeed, true},
@@ -474,6 +535,7 @@ inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
     {"noise_strength.min", &ParticleSystem::noiseStrength, false}, {"noise_strength.max", &ParticleSystem::noiseStrength, true},
     {"size_by_speed.min", &ParticleSystem::sizeBySpeed, false}, {"size_by_speed.max", &ParticleSystem::sizeBySpeed, true},
     {"rotation_by_speed.min", &ParticleSystem::rotationBySpeed, false}, {"rotation_by_speed.max", &ParticleSystem::rotationBySpeed, true},
+    {"sheet_frame.min", &ParticleSystem::sheetFrameOverTime, false}, {"sheet_frame.max", &ParticleSystem::sheetFrameOverTime, true},
   }};
   return slots;
 }
@@ -516,7 +578,10 @@ inline bool ParticleSystem::valid() const {
     if (reference.read(*this) > std::numeric_limits<u32>::max()) return false;
   return maxParticles == std::floor(maxParticles) && randomSeed == std::floor(randomSeed) && burstCount == std::floor(burstCount) &&
          noiseOctaves == std::floor(noiseOctaves) && subEmitterBirthCount == std::floor(subEmitterBirthCount) &&
-         subEmitterCollisionCount == std::floor(subEmitterCollisionCount) && subEmitterDeathCount == std::floor(subEmitterDeathCount);
+         subEmitterCollisionCount == std::floor(subEmitterCollisionCount) && subEmitterDeathCount == std::floor(subEmitterDeathCount) &&
+         sheetTiles[0] == std::floor(sheetTiles[0]) && sheetTiles[1] == std::floor(sheetTiles[1]) && sheetRow == std::floor(sheetRow) &&
+         sheetStartFrame.constantMin == std::floor(sheetStartFrame.constantMin) &&
+         sheetStartFrame.constantMax == std::floor(sheetStartFrame.constantMax) && !sheetStartFrame.usesCurves();
 }
 
 // v1: "<n> id valor … <c> id "curva" … <g> id "gradiente" …".
@@ -534,12 +599,15 @@ inline void ParticleSystem::write(std::ostream &out) const {
   out << ' ' << gradientSlots().size();
   for (const auto &slot : gradientSlots())
     out << ' ' << slot.id << ' ' << std::quoted(scriptGradientValue(*gradient(slot.id)));
+  // v3: o Material do projeto, por identidade ("-" = material embutido).
+  out << ' ' << (materialAsset.valid() ? materialAsset.text() : std::string("-"));
 }
 
 inline bool ParticleSystem::read(std::istream &in, u32 version) {
   // v2 (P2a) só acrescenta ids; um arquivo v1 lê os mesmos campos e deixa os
   // módulos novos desligados no padrão. Versão futura é recusada.
-  if (version < 1 || version > 2) return false;
+  // v3 (PK-10a) acrescenta ids e, no fim, o Material do projeto.
+  if (version < 1 || version > 3) return false;
   ParticleSystem candidate;
   std::vector<std::string> seen;
   const auto fresh = [&](const std::string &id) {
@@ -583,6 +651,11 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
     if (!(in >> id >> std::quoted(text)) || !fresh(id)) return false;
     auto *target = candidate.gradient(id);
     if (!target || !parseScriptGradient(text, *target)) return false;
+  }
+  if (version >= 3) {
+    std::string material;
+    if (!(in >> material)) return false;
+    if (material != "-" && !resources::AssetGuid::parse(material, candidate.materialAsset)) return false;
   }
   if (!candidate.valid()) return false;
   static_cast<ParticleSystemSettings &>(*this) = candidate;
