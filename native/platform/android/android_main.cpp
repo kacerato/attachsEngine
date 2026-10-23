@@ -2408,6 +2408,10 @@ void android_main(android_app *app) {
       app->activity, "aether.punctual_light_mask", false));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[PunctualLightMask] %s",
                       shell.instancedRenderer.punctualLightMaskEnabled() ? "por desenho" : "desligada");
+  shell.instancedRenderer.setShadowGatherEnabled(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.shadow_gather", true));
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[ShadowGather] %s",
+                      shell.instancedRenderer.shadowGatherEnabled() ? "gather 4" : "busca 3x3");
   applyRuntimeControls(shell);
 
   // O projeto aberto no editor decide primeiro (painel Qualidade); as opções

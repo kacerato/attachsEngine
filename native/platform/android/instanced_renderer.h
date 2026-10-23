@@ -452,6 +452,9 @@ public:
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
+  // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
+  void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
+  bool shadowGatherEnabled() const { return shadowGatherEnabled_; }
   bool pointLightingSpecializationLastFrame() const { return pointLightingSpecializationLastFrame_; }
   // Chave diagnóstica de A/B, no mesmo espírito de GpuCostIsolation: força o
   // anexo de profundidade a ser alocado como render target comum, mesmo quando
@@ -1138,6 +1141,7 @@ private:
   VkPipeline pointLightingMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
   bool pointLightingSpecializationEnabled_ = true;
   bool punctualLightMaskEnabled_ = false;
+  bool shadowGatherEnabled_ = true;
   bool pointLightingSpecializationLastFrame_ = false;
   VkPipeline coverageDistantPipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentDistantPipeline_ = VK_NULL_HANDLE;

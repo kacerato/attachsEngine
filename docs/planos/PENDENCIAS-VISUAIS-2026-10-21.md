@@ -30,6 +30,11 @@ ligado e desligado) e o custo de GPU foi medido.
 
 ## V-3 — Sem sombra / sem sol por objeto nunca valeram no aparelho
 
+**FECHADA em 23/10/2026** (`docs/validacao/2026-10-22-medicoes/v3/`): com o PK-9 na base, Receber
+sombras desligado, Projetar sombras desligado e objeto fora do sol pela Máscara de culling valem no
+POCO; prancha Unity × POCO. Objeto fora do Culling Mask continua projetando, como na URP 6.
+A sombra lavada da V-1 não vem destas flags.
+
 **Achado do PK-9 (22/10, commit 5b1b938c na branch claude/beautiful-kalam-695ced):**
 `dirt_road_shading.glsl` declara `precision mediump int`, e as constantes
 declaradas depois saem com RelaxedPrecision no SPIR-V; a Adreno do POCO as

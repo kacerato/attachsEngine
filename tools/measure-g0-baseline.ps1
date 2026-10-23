@@ -30,6 +30,8 @@ param(
     [switch]$HalfAo,
     # G1: máscara por desenho das luzes pontuais (aether.punctual_light_mask).
     [switch]$LightMask,
+    # G1: A/B do gather PCF (aether.shadow_gather=false volta às nove buscas filtradas).
+    [switch]$NoShadowGather,
     # G2: LUT de gradação forçada mesmo no Neutro (aether.post_grading_force):
     # mede o custo da leitura 3D por pixel e a diferença de imagem contra o caminho sem LUT.
     [switch]$GradingLut,
@@ -100,6 +102,7 @@ try {
             if($GpuIsolation) { $launch+=@('--ei','aether.gpu_isolation',[string]$GpuIsolation) }
             $launch+=@('--ez','aether.post_fog_resolve',$(if($FogResolve){'true'}else{'false'}))
             $launch+=@('--ez','aether.punctual_light_mask',$(if($LightMask){'true'}else{'false'}))
+            $launch+=@('--ez','aether.shadow_gather',$(if($NoShadowGather){'false'}else{'true'}))
             $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
@@ -130,7 +133,7 @@ try {
             }
             & $Adb logcat -d -s Aether.Android:I | Set-Content (Join-Path $run 'profile.log')
             $logText=Get-Content (Join-Path $run 'profile.log') -Raw
-            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask|ColorGrading)\][^\r\n]*') | ForEach-Object Value
+            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask|ShadowGather|ColorGrading)\][^\r\n]*') | ForEach-Object Value
             $policy | Set-Content (Join-Path $run 'policy.txt')
             if($PostIsolation -and !($policy -match "\[PostIsolation\] mask=$PostIsolation ")) {
                 throw "A máscara de pós $PostIsolation não foi aplicada ($project/$tier)."
@@ -159,7 +162,11 @@ try {
             & $Adb shell dumpsys battery | Set-Content (Join-Path $run 'battery-after.txt')
             & $Adb shell dumpsys thermalservice | Set-Content (Join-Path $run 'thermal-after.txt')
             $fogResolved=[bool]($policy -match '\[PostFogResolve\] .*por texel')
-            if($fogResolved -ne [bool]$FogResolve) { throw "Névoa resolvida=$fogResolved difere do pedido ($project/$tier)." }
+            # Cena sem névoa (Sponza) não executa a resolução mesmo pedida: aviso, não erro.
+            if($fogResolved -and !$FogResolve) { throw "Névoa resolvida sem pedido ($project/$tier)." }
+            if($FogResolve -and !$fogResolved) { Write-Warning "Névoa resolvida pedida e não executada ($project/$tier): cena sem névoa?" }
+            $gathered=[bool]($policy -match '\[ShadowGather\] gather')
+            if($gathered -eq [bool]$NoShadowGather) { throw "Gather de sombra=$gathered difere do pedido ($project/$tier)." }
             $lightMasked=[bool]($policy -match '\[PunctualLightMask\] por desenho')
             if($lightMasked -ne [bool]$LightMask) { throw "Máscara de luzes=$lightMasked difere do pedido ($project/$tier)." }
             # A última linha vale: a LUT pode ligar e desligar durante a carga da cena.
