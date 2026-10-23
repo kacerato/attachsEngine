@@ -193,6 +193,8 @@ private:
   const AnimationLibrary *library_ = nullptr;
   std::vector<Player> players_;
   std::unordered_map<ObjectId, Rest> rest_;
+  // Muda quando rest_ é limpo: invalida os ponteiros guardados no rascunho.
+  u64 restGeneration_ = 0;
   std::vector<ExternalSample> external_;
   std::string compositionDiagnostic_;
   AnimationPropertyMixer propertyMixer_;

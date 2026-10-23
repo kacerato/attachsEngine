@@ -398,11 +398,29 @@ const char *qualityPresetName(QualityPreset preset) {
   }
 }
 
+// Teto de cada nível: o que o projeto pode pedir naquele nível, como os campos
+// do URP Asset que Project Settings > Quality aponta (Render Scale, Shadows >
+// Max Distance/Cascade Count/Resolution, Additional Lights > Per Object Limit e
+// o Renderer com ou sem SSAO). O ponto do preset acima é o padrão; o teto é o
+// limite: eixos autorais acima dele cedem com motivo `Quality` registrado.
+// Números do C e do B vêm da medição de 22-23/10/2026 no POCO (Vila S: AO 1/2
+// -1,5 ms, bloom em cadeia -0,65 ms, 4 cascatas @4096 = 2,8 ms de passe no C).
+QualityLevelCeiling qualityLevelCeiling(rhi::DeviceProfile profile) {
+  switch (profile) {
+    case rhi::DeviceProfile::S: return {1.0f, 4, 4096, 25, 8, true, false, false};
+    case rhi::DeviceProfile::A: return {1.0f, 4, 2048, 25, 8, true, false, false};
+    case rhi::DeviceProfile::B: return {1.0f, 3, 2048, 9, 8, true, true, true};
+    case rhi::DeviceProfile::C:
+    default: return {0.85f, 2, 1024, 9, 4, false, true, true};
+  }
+}
+
 const char *policyClampName(PolicyClamp clamp) {
   switch (clamp) {
     case PolicyClamp::Capability: return "capability";
     case PolicyClamp::Budget: return "budget";
     case PolicyClamp::Thermal: return "thermal";
+    case PolicyClamp::Quality: return "quality";
     default: return "none";
   }
 }
@@ -433,6 +451,12 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   WaterMeshQuality waterMesh = inherited(settings.waterMesh, point.waterMesh);
   float resolutionScale = settings.resolutionScale > 0.0f ? settings.resolutionScale
                                                           : point.resolutionScale;
+  const bool ceilingActive = settings.qualityLevelCeiling;
+  const QualityLevelCeiling ceiling = qualityLevelCeiling(policy.effectiveProfile);
+  if (ceilingActive && resolutionScale > ceiling.resolutionScale + 1.0e-4f) {
+    resolutionScale = ceiling.resolutionScale;
+    note("resolutionScale", PolicyClamp::Quality);
+  }
 
   // --- pressão térmica: piora imediata, um degrau por nível ------------------
   // Recuperação com histerese é responsabilidade de quem alimenta `thermal`, não
@@ -533,6 +557,20 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
       shadowSettings.distanceFadeRatio =
           std::clamp(settings.shadowDistanceFadeRatio, 0.0f, 0.50f);
     }
+    if (ceilingActive) {
+      // O nível limita o que a cena pede; o gather PCF continua no shader.
+      const auto cap = [&note](u32 &value, u32 maximum, const char *axis) {
+        if (value <= maximum) return;
+        value = maximum;
+        note(axis, PolicyClamp::Quality);
+      };
+      cap(shadowSettings.cascadeCount, ceiling.shadowCascadeCount, "shadows.cascadeCount");
+      cap(shadowSettings.cascadeResolution, ceiling.shadowCascadeResolution,
+          "shadows.cascadeResolution");
+      cap(shadowSettings.filterTaps, ceiling.shadowFilterTaps, "shadows.filterTaps");
+      shadowSettings.farFilterTaps = std::min(shadowSettings.farFilterTaps,
+                                               shadowSettings.filterTaps);
+    }
     // O backend móvel atual empacota até quatro cascatas num atlas 2x2. Limitar
     // aqui preserva a mesma política auditável em vez de deixar vkCreateImage
     // falhar tarde ou criar uma tabela privada dentro do backend.
@@ -547,7 +585,8 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
     shadowSettings.cascadeCount = std::max(1u, capabilities.maximumImageArrayLayers);
     note("shadows.cascadeCount", PolicyClamp::Capability);
   }
-  if (shadowSettings.enabled &&
+  if (shadowSettings.enabled && settings.shadowCascadeResolution == 0 &&
+      !(ceilingActive && shadowSettings.cascadeResolution == ceiling.shadowCascadeResolution) &&
       deriveShadows(shadows, 4096u).cascadeResolution != shadowSettings.cascadeResolution) {
     note("shadows.cascadeResolution", PolicyClamp::Capability);
   }
@@ -714,7 +753,12 @@ ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &s
   // percorre só as luzes que alcançam o desenho, até 8 por objeto.
   policy.lights.additionalLights = policy.effectiveProfile == rhi::DeviceProfile::C ? 8u
                                  : policy.effectiveProfile == rhi::DeviceProfile::B ? 12u : 16u;
-  policy.lights.additionalLightsPerObject = 8u;
+  policy.lights.additionalLightsPerObject = ceilingActive ? ceiling.additionalLightsPerObject : 8u;
+  if (ceilingActive) {
+    policy.post.ambientOcclusion = ceiling.ambientOcclusion;
+    policy.post.halfResolutionAmbientOcclusion = ceiling.halfResolutionAmbientOcclusion;
+    policy.post.bloomMipChain = ceiling.bloomMipChain;
+  }
   policy.resolutionScale = std::clamp(resolutionScale, 0.5f, 1.0f);
   // --- cadência alta: o preset foi autorado para 60 Hz ------------------------
   //

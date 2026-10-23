@@ -162,6 +162,9 @@ struct AnimatorProperty {
 struct AnimatorPose {
   float t[3], q[4], s[3];
   bool changed = false;
+  // Bits 1 T, 2 R, 4 S escritos pela mistura. Só o que falta vem da
+  // transformação atual: um osso com T, R e S no clipe não decompõe nada.
+  u8 written = 0;
 };
 } // namespace
 
@@ -182,6 +185,12 @@ struct SceneAnimator::AdvanceScratch {
   std::vector<std::pair<ObjectId, AnimatorPose>> poses;
   FlatIndex poseIndex;
   std::vector<ExternalBinding> nextBindings;
+  // Repouso de cada propriedade (CPU, 23/10/2026: o lookup em rest_ por osso e
+  // quadro era 2% da thread do jogo na Vila). Nós de unordered_map não mudam de
+  // endereço; o ponteiro vale até rest_ ser limpo (geração) ou o animador mudar.
+  std::vector<std::pair<ObjectId, Rest *>> restCache;
+  const void *restOwner = nullptr;
+  u64 restGeneration = 0;
 };
 
 void resolveAnimationTargets(const SceneGraph &graph, ObjectId owner, const SourceAnimations &source,
@@ -254,6 +263,7 @@ void SceneAnimator::reset() {
   library_ = nullptr;
   players_.clear();
   rest_.clear();
+  ++restGeneration_;
   external_.clear();
   compositionDiagnostic_.clear();
   externalTargets_.clear();
@@ -842,8 +852,18 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   }
 
   // Repouso: a pose (e os pesos) do nó quando a animação o tocou primeiro.
-  const auto restOf = [&](ObjectId object) -> Rest & {
-    auto &rest = rest_[object];
+  if (scratch.restOwner != &rest_ || scratch.restGeneration != restGeneration_) {
+    scratch.restCache.clear();
+    scratch.restOwner = &rest_;
+    scratch.restGeneration = restGeneration_;
+  }
+  if (scratch.restCache.size() < scratch.propertyCount)
+    scratch.restCache.resize(scratch.propertyCount, {kInvalidObject, nullptr});
+  const auto restOf = [&](ObjectId object, usize slot) -> Rest & {
+    auto &cached = scratch.restCache[slot];
+    if (cached.first != object || !cached.second) cached = {object, &rest_[object]};
+    auto &rest = *cached.second;
+    if (rest.hasTransform && rest.hasWeights) return rest;
     const auto *entity = graph.find(object);
     if (!rest.hasTransform && entity) {
       rest.transform = entity->transform;
@@ -863,7 +883,7 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   for (usize propertyIndexValue = 0; propertyIndexValue < scratch.propertyCount; ++propertyIndexValue) {
     auto &property = properties[propertyIndexValue];
     const auto object = property.object;
-    auto &rest = restOf(object);
+    auto &rest = restOf(object, propertyIndexValue);
     AnimationValue restValue;
     if (!rest.decomposed && rest.hasTransform) {
       decompose(rest.transform, rest.t, rest.q, rest.s);
@@ -985,20 +1005,23 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     }
     bool insertedPose = false;
     const u32 poseSlot = scratch.poseIndex.insert(object, static_cast<u32>(poses.size()), insertedPose);
-    if (insertedPose) {
-      AnimatorPose pose;
-      decompose(graph.find(object)->transform, pose.t, pose.q, pose.s);
-      poses.emplace_back(object, pose);
-    }
+    if (insertedPose) poses.emplace_back(object, AnimatorPose{});
     auto &pose = poses[poseSlot].second;
-    if (property.path == AnimationPath::Translation) std::copy(result.begin(), result.end(), pose.t);
-    else if (property.path == AnimationPath::Rotation) std::copy(result.begin(), result.end(), pose.q);
-    else std::copy(result.begin(), result.end(), pose.s);
+    if (property.path == AnimationPath::Translation) {std::copy(result.begin(), result.end(), pose.t);pose.written |= 1;}
+    else if (property.path == AnimationPath::Rotation) {std::copy(result.begin(), result.end(), pose.q);pose.written |= 2;}
+    else {std::copy(result.begin(), result.end(), pose.s);pose.written |= 4;}
     pose.changed = true;
   }
   const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-  for (const auto &[object, pose] : poses) {
+  for (auto &[object, pose] : poses) {
     if (!pose.changed) continue;
+    if (pose.written != 7) {
+      float t[3], q[4], s[3];
+      decompose(graph.find(object)->transform, t, q, s);
+      if (!(pose.written & 1)) std::copy(t, t + 3, pose.t);
+      if (!(pose.written & 2)) std::copy(q, q + 4, pose.q);
+      if (!(pose.written & 4)) std::copy(s, s + 3, pose.s);
+    }
     float local[16];
     resources::composeTransform(pose.t, pose.q, pose.s, local);
     Transform transform;

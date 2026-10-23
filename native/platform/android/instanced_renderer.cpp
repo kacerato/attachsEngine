@@ -2639,7 +2639,7 @@ bool InstancedRenderer::createPostResources() {
   vkDestroyShaderModule(device_, frag, nullptr);
   if (!ok) return false;
   // Opcionais: sem eles o pós segue pelos caminhos originais.
-  if ((bloomChainEnabled_ || halfAmbientOcclusionEnabled_) && !createPostChainResources()) {
+  if ((bloomChainEnabled() || halfAmbientOcclusionEnabled()) && !createPostChainResources()) {
     __android_log_print(ANDROID_LOG_WARN, LogTag,
                         "[PostChain] recursos recusados; bloom e AO seguem no passe único.");
     destroyPostChainResources();
@@ -6499,6 +6499,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
+    // Nível sem SSAO (o C, como um Renderer da URP sem a feature): o AO do Volume não roda.
+    if(!renderingPolicy_.post.ambientOcclusion) frame->sceneAo[0]=0.0f;
     // V-1: ambiente difuso (céu/SH/sondas, todos escalados por .w) e reflexo do ambiente.
     if(postIsolation_&32u) frame->environment.ambientColorStrength[3]=0.0f;
     if(postIsolation_&64u) frame->sceneAoDetail[3]=0.0f;

@@ -247,6 +247,7 @@ AE_TEST(light_budget_follows_the_device_profile_like_the_urp_asset) {
   capabilities.profile = rhi::DeviceProfile::C;
   auto policy = renderer::resolveRenderingPolicy(settings, capabilities, renderer::ThermalPressure::None);
   AE_EXPECT_EQ(policy.lights.additionalLights, 8u, "perfil C mantém o teto histórico");
+  AE_EXPECT_EQ(policy.lights.additionalLightsPerObject, 4u, "nível C: Per Object Limit 4");
   capabilities.profile = rhi::DeviceProfile::S;
   policy = renderer::resolveRenderingPolicy(settings, capabilities, renderer::ThermalPressure::None);
   AE_EXPECT_EQ(policy.lights.additionalLights, renderer::MaximumPunctualLights, "perfil S usa o bloco inteiro");

@@ -11076,11 +11076,24 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     std::to_string(static_cast<int>(value*100.0f+.5f))+"%";};
   const auto measure=[](float value,float inherited,const char *unit,int digits=1) {return value==inherited?std::string("Do nível"):
     decimalText(value,digits)+unit;};
+  // Nível escolhido é teto, como o URP Asset do Quality: o valor pedido acima
+  // dele aparece com o que roda de fato ("4 → 2 no nível").
+  const bool explicitLevel=draft.preset==renderer::QualityPreset::C||draft.preset==renderer::QualityPreset::B||
+                           draft.preset==renderer::QualityPreset::A||draft.preset==renderer::QualityPreset::S;
+  const auto ceiling=renderer::qualityLevelCeiling(
+      draft.preset==renderer::QualityPreset::C?rhi::DeviceProfile::C:draft.preset==renderer::QualityPreset::B?rhi::DeviceProfile::B:
+      draft.preset==renderer::QualityPreset::A?rhi::DeviceProfile::A:rhi::DeviceProfile::S);
+  const auto capped=[&](std::string value,u32 requested,u32 maximum,const char *unit) {
+    if(explicitLevel&&requested>maximum) value+=" → "+std::to_string(maximum)+unit+" no nível";
+    return value;
+  };
   if(state.qualityTab==0) {
     std::string level=renderer::qualityLevelLabel(draft.preset);
     if(draft.preset==renderer::QualityPreset::Auto&&!state.qualityDetected.empty()) level+=" ("+state.qualityDetected+")";
     row("Nível",level,EditorWidget::QualityLevel);
-    stepper("Escala de renderização",percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
+    stepper("Escala de renderização",explicitLevel&&draft.resolutionScale>ceiling.resolutionScale+1.0e-4f
+            ?percent(draft.resolutionScale,0.0f)+" → "+percent(ceiling.resolutionScale,0.0f)+" no nível"
+            :percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
     // Ampliação temporal mostra um de quatro estados: indisponível com o
     // motivo do aparelho, pendente de Aplicar, ativa (o que o renderer
     // executou no último quadro) ou apenas disponível.
@@ -11112,8 +11125,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
   } else if(state.qualityTab==1) {
     row("Sombras",renderer::shadowQualityLabel(draft.shadows),EditorWidget::QualityShadows);
-    row("Cascatas",draft.shadowCascadeCount?std::to_string(draft.shadowCascadeCount):std::string("Do nível"),EditorWidget::QualityShadowCascades);
-    row("Resolução por cascata",draft.shadowCascadeResolution?std::to_string(draft.shadowCascadeResolution)+" px":std::string("Do nível"),EditorWidget::QualityShadowResolution);
+    row("Cascatas",draft.shadowCascadeCount?capped(std::to_string(draft.shadowCascadeCount),draft.shadowCascadeCount,
+        ceiling.shadowCascadeCount,""):std::string("Do nível"),EditorWidget::QualityShadowCascades);
+    row("Resolução por cascata",draft.shadowCascadeResolution?capped(std::to_string(draft.shadowCascadeResolution)+" px",
+        draft.shadowCascadeResolution,ceiling.shadowCascadeResolution," px"):std::string("Do nível"),EditorWidget::QualityShadowResolution);
     stepper("Distância máxima",measure(draft.shadowMaximumDistance,0.0f," m",0),EditorWidget::QualityShadowDistanceDown,EditorWidget::QualityShadowDistanceUp);
     stepper("Bias constante",measure(draft.shadowDepthBiasConstant,-1.0f,"",1),EditorWidget::QualityShadowBiasDown,EditorWidget::QualityShadowBiasUp);
     stepper("Bias de inclinação",measure(draft.shadowDepthBiasSlope,-1.0f,"",1),EditorWidget::QualityShadowSlopeDown,EditorWidget::QualityShadowSlopeUp);

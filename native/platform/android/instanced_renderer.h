@@ -438,8 +438,18 @@ public:
   bool fogResolvedLastFrame() const { return fogResolvedThisFrame_; }
   // Candidatas do G1/G2: bloom em cadeia de mips e AO em 1/2. Desligadas por
   // padrão até o A/B; precisam valer antes da criação dos recursos do pós.
-  void setBloomChainEnabled(bool enabled) { bloomChainEnabled_ = enabled; }
-  void setHalfAmbientOcclusionEnabled(bool enabled) { halfAmbientOcclusionEnabled_ = enabled; }
+  // Bloom em cadeia e AO em 1/2 seguem o nível de qualidade (PostSettings);
+  // -1 devolve a decisão ao nível, 0/1 é override de diagnóstico.
+  void setBloomChainOverride(int value) { bloomChainOverride_ = value; }
+  void setHalfAmbientOcclusionOverride(int value) { halfAmbientOcclusionOverride_ = value; }
+  bool bloomChainEnabled() const {
+    return bloomChainOverride_ >= 0 ? bloomChainOverride_ != 0
+                                    : resourceRenderingPolicy_.post.bloomMipChain;
+  }
+  bool halfAmbientOcclusionEnabled() const {
+    return halfAmbientOcclusionOverride_ >= 0 ? halfAmbientOcclusionOverride_ != 0
+                                              : resourceRenderingPolicy_.post.halfResolutionAmbientOcclusion;
+  }
   // Bancada do G2: liga a LUT mesmo no Neutro, para medir o custo da leitura 3D
   // e comparar a imagem com o caminho sem LUT (aceite: até 3/255).
   void setColorGradingForced(bool forced) { colorGradingForced_ = forced; }
@@ -1254,8 +1264,8 @@ private:
   VkRenderPass halfAmbientOcclusionRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer halfAmbientOcclusionFramebuffer_ = VK_NULL_HANDLE;
   VkPipeline halfAmbientOcclusionPipeline_ = VK_NULL_HANDLE;
-  bool bloomChainEnabled_ = false;
-  bool halfAmbientOcclusionEnabled_ = false;
+  int bloomChainOverride_ = -1;
+  int halfAmbientOcclusionOverride_ = -1;
   // PK-5: dois alvos RGBA16F em 1/2 (o resultado termina sempre no 0), o
   // passe e os conjuntos (cena, cena com névoa, cada alvo).
   std::array<rhi::VulkanImage, 2> depthOfFieldTargets_{};

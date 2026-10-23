@@ -239,6 +239,10 @@ struct ProjectRenderingSettings final {
   u32 textureStreamingBudgetMegabytes = 0;       // Memory Budget
   u32 textureStreamingMaxLevelReduction = 0;     // Max Level Reduction
   u32 textureStreamingUploadKilobytesPerFrame = 0; // teto de envio por quadro
+
+  // Diagnóstico de bancada, nunca serializado: `false` desliga o teto do nível
+  // (aether.quality_ceiling=false) para medir o "antes" no mesmo binário.
+  bool qualityLevelCeiling = true;
 };
 
 // ---------------------------------------------------------------------------
@@ -330,6 +334,12 @@ struct PostSettings final {
   float temporalHistoryWeight = 0.88f;
   // Arm ASR shader preset; meaningful only with a temporal upscaler.
   TemporalUpscalerQuality temporalUpscalerQuality = TemporalUpscalerQuality::Quality;
+  // Recursos do nível, como o Renderer que cada URP Asset aponta: o AO do
+  // Volume só roda se o nível tiver SSAO (o C não tem); "Downsample" do SSAO
+  // da URP roda o AO em 1/2; o bloom em cadeia de mips é o caminho da URP.
+  bool ambientOcclusion = true;
+  bool halfResolutionAmbientOcclusion = false;
+  bool bloomMipChain = false;
 };
 
 struct MaterialDistanceSettings final {
@@ -378,6 +388,7 @@ enum class PolicyClamp : u32 {
   Capability, // o dispositivo não suporta o que foi pedido
   Budget,     // o orçamento de frame não comporta
   Thermal,    // pressão térmica transitória
+  Quality,    // teto do nível de qualidade (URP Asset do nível)
 };
 
 struct PolicyClampRecord final {
@@ -388,7 +399,7 @@ struct PolicyClampRecord final {
 
 // Capacidade fixa: o número de eixos é conhecido em tempo de compilação e a
 // resolução acontece no caminho quente de reconfiguração, sem heap.
-constexpr u32 MaximumPolicyClamps = 16;
+constexpr u32 MaximumPolicyClamps = 24;
 
 struct ResolvedRenderingPolicy final {
   FrameBudget frame{};
@@ -458,6 +469,20 @@ TemporalUpscalerAvailability temporalUpscalerAvailability(const RenderingCapabil
 ResolvedRenderingPolicy resolveRenderingPolicy(const ProjectRenderingSettings &settings,
                                                const RenderingCapabilities &capabilities,
                                                ThermalPressure thermal);
+
+// Teto de cada nível (ver rendering_policy.cpp): o painel Qualidade mostra o
+// corte no valor do eixo, e a política aplica com motivo `Quality`.
+struct QualityLevelCeiling final {
+  float resolutionScale;
+  u32 shadowCascadeCount;
+  u32 shadowCascadeResolution;
+  u32 shadowFilterTaps;
+  u32 additionalLightsPerObject;
+  bool ambientOcclusion;
+  bool halfResolutionAmbientOcclusion;
+  bool bloomMipChain;
+};
+QualityLevelCeiling qualityLevelCeiling(rhi::DeviceProfile profile);
 
 // Nome estável do preset para relatório/serialização. Nunca usado para ramificar
 // comportamento de renderização.

@@ -858,6 +858,14 @@ namespace {
 std::string projectRenderingSettingsPath(const char *projectPath) {
   return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/rendering.astra" : std::string();
 }
+// Booleano tri-estado: -1 quando a opção não veio (o nível decide), 0/1 quando veio.
+// Ler com os dois padrões distingue "ausente" de "false" sem outra API de Intent.
+int readLaunchOverride(ANativeActivity *activity,const char *option) {
+  const bool whenFalse=ae::platform::android::readBooleanLaunchOption(activity,option,false);
+  const bool whenTrue=ae::platform::android::readBooleanLaunchOption(activity,option,true);
+  return whenFalse==whenTrue?(whenFalse?1:0):-1;
+}
+
 bool readProjectRenderingSettings(const char *projectPath,ae::renderer::ProjectRenderingSettings &settings) {
   const auto path=projectRenderingSettingsPath(projectPath);
   if(path.empty()) return false;
@@ -1540,6 +1548,15 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       static_cast<double>(shell.renderingPolicy.dynamicResolution.minimumScale),
       static_cast<double>(shell.renderingPolicy.dynamicResolution.maximumScale),
       shell.renderingPolicy.clampCount);
+  // Teto do nível (Quality da Unity): o que o coletor de medição confere.
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RenderPolicy] nivel teto=%s ao=%s ao_meia=%d bloom_cadeia=%d luzes_por_objeto=%u luzes_quadro=%u",
+      shell.activeRenderingSettings.qualityLevelCeiling ? "on" : "off",
+      shell.renderingPolicy.post.ambientOcclusion ? "on" : "off",
+      shell.renderingPolicy.post.halfResolutionAmbientOcclusion ? 1 : 0,
+      shell.renderingPolicy.post.bloomMipChain ? 1 : 0,
+      shell.renderingPolicy.lights.additionalLightsPerObject,
+      shell.renderingPolicy.lights.additionalLights);
   for (ae::u32 index = 0; index < shell.renderingPolicy.clampCount; ++index) {
     const auto &clamp = shell.renderingPolicy.clamps[index];
     __android_log_print(ANDROID_LOG_INFO, LogTag, "[RenderPolicy] %s reduzido por %s.",
@@ -2382,11 +2399,10 @@ void android_main(android_app *app) {
   // Promovida no A/B de 17/10/2026 (pós -38%, imagem equivalente); false volta ao caminho anterior.
   shell.instancedRenderer.setFogResolveEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_fog_resolve", true));
-  // Candidatas do G1/G2, desligadas até o A/B no aparelho.
-  shell.instancedRenderer.setBloomChainEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.post_bloom_chain"));
-  shell.instancedRenderer.setHalfAmbientOcclusionEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.post_half_ao"));
+  // Bloom em cadeia e AO em 1/2 seguem o nível (padrão de B e C desde o A/B de
+  // 23/10/2026). A opção, quando presente, sobrepõe o nível para diagnóstico.
+  shell.instancedRenderer.setBloomChainOverride(readLaunchOverride(app->activity, "aether.post_bloom_chain"));
+  shell.instancedRenderer.setHalfAmbientOcclusionOverride(readLaunchOverride(app->activity, "aether.post_half_ao"));
   // G2: LUT de gradação também no Neutro, para medir a leitura 3D e comparar imagem.
   shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_grading_force"));
@@ -2404,8 +2420,9 @@ void android_main(android_app *app) {
       app->activity, "aether.full_detail_sampling"));
   shell.instancedRenderer.setPointLightingSpecializationEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.point_lighting_specialization", true));
+  // Padrão desde o A/B de 23/10/2026 (Vila S: -0,44 ms de GPU); false volta ao laço sobre todas.
   shell.instancedRenderer.setPunctualLightMaskEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.punctual_light_mask", false));
+      app->activity, "aether.punctual_light_mask", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[PunctualLightMask] %s",
                       shell.instancedRenderer.punctualLightMaskEnabled() ? "por desenho" : "desligada");
   shell.instancedRenderer.setShadowGatherEnabled(ae::platform::android::readBooleanLaunchOption(
@@ -2430,6 +2447,9 @@ void android_main(android_app *app) {
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.preset = ae::renderer::parseQualityPreset(buffer);
     }
+    // Bancada: false mede o "antes" do teto por nível no mesmo binário.
+    shell.renderingSettings.qualityLevelCeiling = ae::platform::android::readBooleanLaunchOption(
+        app->activity, "aether.quality_ceiling", true);
     if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_shadows",
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.shadows = ae::renderer::parseShadowQuality(buffer);
