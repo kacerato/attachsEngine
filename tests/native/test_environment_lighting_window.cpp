@@ -187,7 +187,7 @@ AE_TEST(skybox_material_shares_only_the_sky) {
   material.values=resources::skyboxMaterialValues(source);
   AE_EXPECT_TRUE(!material.values.fog&&material.values.postExposure==0.0f,"material guarda só o céu");
   const auto text=material.serialize();
-  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 14 ",0)==0,"cabeçalho próprio do Material do céu");
+  AE_EXPECT_TRUE(text.rfind("ASTRA_SKYBOX_MATERIAL 15 ",0)==0,"cabeçalho próprio do Material do céu");
   resources::EnvironmentProfile back;
   AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(text,back)&&back.skybox,"material relido");
   AE_EXPECT_TRUE(back.assetType()==resources::AssetType::SkyboxMaterial,"tipo de recurso SkyboxMaterial");

@@ -168,7 +168,7 @@ AE_TEST(environment_v19_roundtrips_every_post_effect_and_curve) {
   overrides.active&=~(1u<<static_cast<u32>(renderer::VolumeGroup::Fog));
   source.setVolumeOverrides(overrides);
   scene::Environment restored;std::istringstream in(written(source));in.imbue(std::locale::classic());
-  AE_EXPECT_TRUE(restored.read(in,19),"v19 relida");
+  AE_EXPECT_TRUE(restored.read(in,scene::Environment::CurrentVersion),"versão atual relida");
   in>>std::ws;AE_EXPECT_TRUE(in.eof(),"consumiu a linha inteira");
   bool same=true;
   for(const auto &parameter:renderer::volumeParameters())
