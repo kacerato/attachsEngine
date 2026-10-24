@@ -632,6 +632,10 @@ void main() {
       mediump float grain=aetherWeatherNoise(vPosition.xz*23.0)*0.6+aetherWeatherNoise(vPosition.xz*61.0)*0.4;
       mediump vec3 snowColor=mix(vec3(0.78,0.81,0.87),vec3(0.93,0.95,0.98),grain);
       base.rgb=mix(base.rgb,snowColor,cover);
+      // Borda da camada: uma faixa mais escura onde a cobertura começa, como a
+      // lateral da neve com espessura (sem deslocar vértice: sombra e
+      // profundidade continuam batendo com a malha).
+      base.rgb*=1.0-0.35*cover*(1.0-cover)*4.0;
       rough=mix(rough,mix(0.55,0.8,grain),cover);
       metal=mix(metal,0.0,cover);
       mediump float bumpX=aetherWeatherNoise(vPosition.xz*9.0+vec2(3.1,0.0))-0.5;

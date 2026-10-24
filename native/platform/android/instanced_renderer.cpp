@@ -2063,9 +2063,14 @@ bool applySceneEnvironmentLook(
   std::copy_n(clouds.shadow,4,frame.cloudShadow);
   const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
   if(occlusion>0.0f) {
+    // Céu nublado é cinza-azulado (~7000 K), não cinza neutro: com o cinza puro
+    // o albedo quente da cena dominava e tudo virava bege (Vila sépia na chuva
+    // e sob as nuvens do G4). Luminância de cada tom: 1.
+    constexpr float overcastTint[3]{0.9f,0.97f,1.12f};
     const auto grey=[&](float color[3]) {
       const float luminance=0.2126f*color[0]+0.7152f*color[1]+0.0722f*color[2];
-      for(u32 channel=0;channel<3;++channel) color[channel]+=(luminance*0.92f-color[channel])*occlusion*0.75f;
+      for(u32 channel=0;channel<3;++channel)
+        color[channel]+=(luminance*0.92f*overcastTint[channel]-color[channel])*occlusion*0.75f;
     };
     grey(frame.environment.ambientColorStrength);
     grey(frame.atmosphereGroundIrradiance);
@@ -2084,8 +2089,8 @@ bool applySceneEnvironmentLook(
     const float diffuseTransmission=std::clamp(0.5f-0.35f*look.clouds.density,0.1f,0.5f);
     const float scattered=sunLuminance*sunHeight*occlusion*shadowStrength*diffuseTransmission;
     if(scattered>0.0f) {
-      const float sky[3]{scattered,scattered,scattered};
-      const float equator[3]{scattered*0.7f,scattered*0.7f,scattered*0.7f};
+      const float sky[3]{scattered*overcastTint[0],scattered*overcastTint[1],scattered*overcastTint[2]};
+      const float equator[3]{sky[0]*0.7f,sky[1]*0.7f,sky[2]*0.7f};
       const float ground[3]{scattered*0.25f,scattered*0.25f,scattered*0.25f};
       if(probe) {
         renderer::DiffuseIrradianceSh9 overcast{};
@@ -2093,7 +2098,7 @@ bool applySceneEnvironmentLook(
         for(u32 k=0;k<overcast.size();++k) for(u32 c=0;c<3;++c) frame.diffuseIrradianceSh[k][c]+=overcast[k][c];
       }
       for(u32 c=0;c<3;++c) {
-        frame.environment.ambientColorStrength[c]+=scattered;
+        frame.environment.ambientColorStrength[c]+=sky[c];
         frame.environment.groundColorSaturation[c]+=scattered*0.25f;
       }
     }

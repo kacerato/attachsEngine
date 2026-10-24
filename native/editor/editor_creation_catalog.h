@@ -61,6 +61,9 @@ struct CreationChild {
   std::string_view component{},property{};
   // Filho que nasce desativado (a luz modelo das Faíscas: só é copiada).
   bool active=true;
+  // A referência vai num IRMÃO com este nome em vez do pai (o plano e os
+  // respingos da Chuva do Clima).
+  std::string_view sibling{};
 };
 struct EditorCreationEntry {
   // Identidade persistente da receita: não muda com nome, ordem ou idioma.
@@ -175,11 +178,24 @@ inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{
 inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
   {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
-  {particleType,"start_speed",14.f},{particleType,"start_size",.022f},{particleType,"gravity_modifier",.3f},
+  {particleType,"start_speed_mode",u32{2}},{particleType,"start_speed_min",11.f},{particleType,"start_speed",17.f},
+  {particleType,"start_size_mode",u32{2}},{particleType,"start_size_min",.008f},{particleType,"start_size",.016f},
+  {particleType,"gravity_modifier",.3f},
+  {particleType,"collision_enabled",true},{particleType,"collision_bounce",0.f},{particleType,"collision_lifetime_loss",1.f},
+  {particleType,"sub_emitters_enabled",true},{particleType,"sub_emitter_collision_count",1.f},
   {particleType,"max_particles",14000.f},{particleType,"emission_rate",7000.f},{particleType,"render_mode",u32{1}},
   {particleType,"stretch_velocity_scale",.06f},{particleType,"stretch_length_scale",1.f},
-  {particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},{particleType,"start_color_b",.88f},
-  {particleType,"start_color_a",.4f}};
+  {particleType,"start_color_r",.6f},{particleType,"start_color_g",.66f},{particleType,"start_color_b",.76f},
+  {particleType,"start_color_a",.28f}};
+// Respingo: coroa curta de gotículas para cima no ponto do toque (o splash dos
+// climas da Unity), emitido só pelo sub-emissor da Chuva.
+inline const CreationValue splashValues[]{{particleType,"emission_rate",0.f},{particleType,"simulation_space",u32{1}},
+  {particleType,"start_lifetime",.28f},{particleType,"start_speed_mode",u32{2}},{particleType,"start_speed_min",.8f},
+  {particleType,"start_speed",2.2f},{particleType,"start_size_mode",u32{2}},{particleType,"start_size_min",.015f},
+  {particleType,"start_size",.035f},{particleType,"gravity_modifier",1.f},{particleType,"shape_type",u32{2}},
+  {particleType,"shape_angle",45.f},{particleType,"shape_radius",.02f},{particleType,"shape_rotation_x",-90.f},
+  {particleType,"max_particles",3000.f},{particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},
+  {particleType,"start_color_b",.86f},{particleType,"start_color_a",.45f},{particleType,"color_over_lifetime_enabled",true}};
 inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",24.f},
   {particleType,"shape_box_y",24.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
   {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
@@ -189,7 +205,12 @@ inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{part
   {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
 inline const CreationComponent rain[]{{particleType,rainValues}};
 inline const CreationComponent snow[]{{particleType,snowValues}};
-inline const CreationChild weatherChildren[]{{"Chuva",rain,weatherType,"rain"},{"Neve",snow,weatherType,"snow"}};
+inline const CreationComponent splash[]{{particleType,splashValues}};
+// O Chão da chuva é só um plano (o +Y é a normal) na altura do Clima; a Chuva
+// colide com ele e solta os Respingos.
+inline const CreationChild weatherChildren[]{{"Chuva",rain,weatherType,"rain"},{"Neve",snow,weatherType,"snow"},
+  {"Chão da chuva",{},particleType,"collision_plane_0",true,"Chuva"},
+  {"Respingos",splash,particleType,"sub_emitter_collision",true,"Chuva"}};
 // PK-2 (V-03/E-01): GameObject › Volume da Unity. Um Volume novo não muda nada
 // sozinho (na Unity nasce com perfil vazio): nasce com todos os grupos
 // desligados, acima do Ambiente da cena; o autor liga os que quiser.

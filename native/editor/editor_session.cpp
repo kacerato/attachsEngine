@@ -6190,6 +6190,7 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   // referência do pai recebe cada filho criado.
   if(!recipe.children.empty()) {
     auto parentValues=*document_.find(id);
+    std::vector<std::pair<std::string_view,EditorEntityId>> createdChildren;
     for(const auto &child:recipe.children) {
       EditorEntity entity;
       for(const auto &part:child.components) {
@@ -6205,9 +6206,26 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
       entity.active=child.active;
       const auto created=history_.createEntity(document_,id,runtime::ObjectKind::Folder,child.name);
       if(!created||!history_.applyValues(document_,created,entity)) {history_.cancel(document_);return refuse("Não foi possível criar "+std::string(child.name));}
-      if(!child.component.empty() &&
+      createdChildren.emplace_back(child.name,created);
+      if(!child.component.empty() && child.sibling.empty() &&
          scene::setComponentProperty(parentValues.components,child.component,child.property,scene::ObjectReference{created})!=scene::ComponentPropertyStatus::Applied) {
         history_.cancel(document_);return refuse(std::string(recipe.name)+": referência a "+child.name+" recusada");
+      }
+    }
+    // Referências entre irmãos (o plano e os respingos da Chuva).
+    for(const auto &child:recipe.children) {
+      if(child.sibling.empty()||child.component.empty()) continue;
+      EditorEntityId from=0,to=0;
+      for(const auto &[name,created]:createdChildren) {
+        if(name==child.sibling) from=created;
+        if(name==std::string_view{child.name}) to=created;
+      }
+      const auto *source=from?document_.find(from):nullptr;
+      if(!source||!to) {history_.cancel(document_);return refuse(std::string(recipe.name)+": "+child.name+" sem o irmão "+std::string(child.sibling));}
+      auto siblingValues=*source;
+      if(scene::setComponentProperty(siblingValues.components,child.component,child.property,scene::ObjectReference{to})!=scene::ComponentPropertyStatus::Applied||
+         !history_.applyValues(document_,from,siblingValues)) {
+        history_.cancel(document_);return refuse(std::string(recipe.name)+": referência de "+std::string(child.sibling)+" a "+child.name+" recusada");
       }
     }
     if(!history_.applyValues(document_,id,parentValues)) {history_.cancel(document_);return refuse("Não foi possível ligar os filhos");}

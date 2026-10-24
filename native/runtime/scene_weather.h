@@ -27,6 +27,12 @@ struct WeatherLook {
   // e ambientIntensityModifier dos tipos de clima do Enviro 3: a chuva escurece
   // a cena inteira, não só o céu.
   float sunScale = 1, ambientScale = 1;
+  // Atmosfera do tipo, como o Fog e o pós de cada Weather Type do Enviro 3:
+  // cor da neblina, filtro de cor, saturação, contraste e exposição do pós.
+  // O clima liga o override Ajustes de cor do próprio volume e escreve isto.
+  float fogColor[3]{0.74f, 0.8f, 0.9f};
+  float colorFilter[3]{1, 1, 1};
+  float saturation = 1, contrast = 1, postExposure = 0;
 };
 // Alvos de cada tipo na intensidade dada. Os pontos fixos seguem a ideia dos
 // presets Sparse/Cloudy/Overcast/Stormy das Volumetric Clouds do HDRP 17.

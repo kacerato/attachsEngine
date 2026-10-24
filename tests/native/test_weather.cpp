@@ -231,6 +231,20 @@ AE_TEST(weather_recipe_creates_climate_with_linked_rain_and_snow) {
   session.update();
   AE_EXPECT_TRUE(environmentOf(graph, created).values.clouds.coverage ==
                  runtime::weatherTarget(scene::WeatherKind::Rain, 0.7f).coverage, "a edição já mostra o céu de chuva");
+  {
+    // Chuva colide com o Chão da chuva e solta os Respingos (irmãos ligados).
+    const auto &weatherComponent = static_cast<const scene::Weather &>(*graph.find(created)->components.find(scene::Weather::descriptor));
+    const auto &rainSystem = particlesOf(graph, weatherComponent.rain);
+    runtime::ObjectId plane = 0, splash = 0;
+    for (const auto child : graph.childrenOf(created)) {
+      if (std::string_view(graph.find(child)->name) == "Chão da chuva") plane = child;
+      if (std::string_view(graph.find(child)->name) == "Respingos") splash = child;
+    }
+    AE_EXPECT_TRUE(plane && splash && rainSystem.collisionEnabled && rainSystem.collisionPlane0 == plane &&
+                   rainSystem.subEmittersEnabled && rainSystem.subEmitterCollision == splash &&
+                   rainSystem.startSize.mode == scene::ParticleCurveMode::TwoConstants && rainSystem.startColor.colorMax[3] < 0.35f,
+                   "gotas finas e variadas que respingam no chão");
+  }
   AE_EXPECT_TRUE(session.history().undo(graph) && !graph.exists(created), "um desfazer remove clima e filhos");
 }
 
@@ -270,4 +284,24 @@ AE_TEST(weather_surfaces_wet_puddle_and_snow_over_time_like_unity_weather) {
   const auto clear = runtime::weatherTarget(scene::WeatherKind::Clear, 1.0f);
   AE_EXPECT_TRUE(rain.sunScale == 0.5f && rain.ambientScale == 0.6f && snowy.sunScale > rain.sunScale &&
                  clear.sunScale == 1.0f && clear.ambientScale == 1.0f, "multiplicadores de luz por tipo");
+}
+
+// Atmosfera por tipo (Enviro 3: Fog e pós por Weather Type): chuva azul-acinzentada,
+// dessaturada e mais escura; neve com sol, branca e com contraste. O clima liga
+// o override Ajustes de cor do próprio volume e escreve os valores.
+AE_TEST(weather_types_bring_their_own_fog_colour_and_grade) {
+  const auto rain = runtime::weatherTarget(scene::WeatherKind::Rain, 1.0f);
+  const auto snow = runtime::weatherTarget(scene::WeatherKind::Snow, 1.0f);
+  AE_EXPECT_TRUE(rain.colorFilter[2] > rain.colorFilter[0] && rain.fogColor[2] > rain.fogColor[0] &&
+                 rain.saturation < 0.7f && rain.postExposure < 0.0f, "chuva azul-acinzentada, dessaturada e escura");
+  AE_EXPECT_TRUE(snow.coverage < 0.6f && snow.sunScale == 1.0f && snow.postExposure > 0.0f && snow.contrast > 1.0f,
+                 "neve com sol e contraste");
+  auto s = makeWeatherScene(scene::WeatherKind::Rain, 1.0f);
+  runtime::SceneWeather weather;
+  weather.advance(s.graph, 0, 0, false, nullptr,
+                  [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); });
+  const auto &env = environmentOf(s.graph, s.weather);
+  AE_EXPECT_TRUE(env.overrideColorAdjustments && std::abs(env.values.saturation - rain.saturation) < 1e-6f &&
+                 std::abs(env.values.colorFilter[0] - rain.colorFilter[0]) < 1e-6f &&
+                 std::abs(env.values.fogColor[2] - rain.fogColor[2]) < 1e-6f, "o volume do clima recebe a atmosfera do tipo");
 }

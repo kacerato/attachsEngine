@@ -70,7 +70,16 @@ bool applyEnvironment(SceneGraph &graph, ObjectId id, const scene::Weather &weat
     // frames da Pixagon) e acende no clarão do relâmpago.
     const float shade = lerp(1.0f, std::clamp(look.tint, 0.0f, 1.0f), 0.8f);
     assign(next.values.fogLightEnergy, shade + flash * (std::exp2(weather.lightningBrightness) - 1.0f) * 0.35f, changed);
+    for (u32 c = 0; c < 3; ++c) assign(next.values.fogColor[c], std::clamp(look.fogColor[c], 0.0f, 1.0f), changed);
   }
+  // Pós do tipo de clima (Ajustes de cor do volume): o resto do pós da cena
+  // (tonemap, bloom, exposição automática) continua o do Ambiente da cena.
+  assign(next.overrideColorAdjustments, true, changed);
+  for (u32 c = 0; c < 3; ++c) assign(next.values.colorFilter[c], std::clamp(look.colorFilter[c], 0.0f, 2.0f), changed);
+  assign(next.values.saturation, std::clamp(look.saturation, 0.0f, 2.0f), changed);
+  assign(next.values.contrast, std::clamp(look.contrast, 0.5f, 2.0f), changed);
+  assign(next.values.postExposure, std::clamp(look.postExposure, -4.0f, 4.0f), changed);
+  assign(next.values.hueShift, 0.0f, changed);
   if (!changed || !next.valid()) return false;
   auto *components = graph.editComponents(id);
   auto *target = components ? components->edit(scene::Environment::descriptor) : nullptr;
@@ -153,6 +162,10 @@ bool followCamera(const SceneGraph &graph, ObjectId id, const WeatherCamera &cam
 WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
   const float i = std::clamp(intensity, 0.0f, 1.0f);
   WeatherLook look;
+  const auto rgb = [](float (&out)[3], float r, float g, float b) { out[0] = r; out[1] = g; out[2] = b; };
+  const auto rgbLerp = [&](float (&out)[3], const float (&a)[3], const float (&b)[3]) {
+    for (u32 c = 0; c < 3; ++c) out[c] = lerp(a[c], b[c], i);
+  };
   switch (kind) {
   case scene::WeatherKind::Clear:
     look.coverage = lerp(0.2f, 0.05f, i);
@@ -169,6 +182,10 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.density = lerp(0.6f, 0.75f, i);
     look.tint = lerp(0.95f, 0.85f, i);
     look.fog = lerp(0.15f, 0.3f, i);
+    rgb(look.fogColor, 0.62f, 0.67f, 0.74f);
+    rgb(look.colorFilter, 0.96f, 0.98f, 1.0f);
+    look.saturation = lerp(0.95f, 0.88f, i);
+    look.postExposure = lerp(0.0f, -0.1f, i);
     break;
   case scene::WeatherKind::Rain:
     // Céu fechado por inteiro, como o Overcast do HDRP: sem buracos de céu azul.
@@ -180,6 +197,18 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.fog = lerp(0.3f, 0.7f, i);
     look.sunScale = lerp(0.8f, 0.5f, i);
     look.ambientScale = lerp(0.85f, 0.6f, i);
+    // Chuva da Unity (Pixagon, Enviro Rain): azul-acinzentada, dessaturada e
+    // mais escura; a névoa apaga o fundo.
+    look.fog = lerp(0.5f, 0.95f, i);
+    {
+      const float lightFog[3]{0.56f, 0.61f, 0.69f}, darkFog[3]{0.4f, 0.46f, 0.55f};
+      const float lightFilter[3]{0.92f, 0.95f, 1.0f}, darkFilter[3]{0.8f, 0.87f, 1.0f};
+      rgbLerp(look.fogColor, lightFog, darkFog);
+      rgbLerp(look.colorFilter, lightFilter, darkFilter);
+    }
+    look.saturation = lerp(0.82f, 0.62f, i);
+    look.contrast = 1.05f;
+    look.postExposure = lerp(-0.15f, -0.5f, i);
     break;
   case scene::WeatherKind::Storm:
     look.coverage = lerp(0.95f, 1.0f, i);
@@ -191,16 +220,29 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.storm = 1.0f;
     look.sunScale = lerp(0.45f, 0.3f, i);
     look.ambientScale = lerp(0.55f, 0.4f, i);
+    rgb(look.fogColor, 0.3f, 0.35f, 0.44f);
+    rgb(look.colorFilter, 0.76f, 0.84f, 1.0f);
+    look.saturation = lerp(0.6f, 0.5f, i);
+    look.contrast = 1.1f;
+    look.postExposure = lerp(-0.5f, -0.8f, i);
     break;
   case scene::WeatherKind::Snow:
-    look.coverage = lerp(0.85f, 0.97f, i);
-    look.cirrus = 0.6f;
-    look.density = lerp(0.65f, 0.75f, i);
-    look.tint = lerp(0.95f, 0.85f, i);
+    // Neve com sol (o par da Synty): céu azul com nuvens soltas, sombras
+    // azuladas pelo céu, neve branca e brilhante com contraste. A neblina é
+    // fina e fria; a neve que cai é a dos flocos, não a da névoa.
+    look.coverage = lerp(0.25f, 0.55f, i);
+    look.cirrus = 0.35f;
+    look.density = lerp(0.45f, 0.6f, i);
+    look.tint = 1.0f;
     look.snow = i;
-    look.fog = lerp(0.4f, 1.0f, i);
-    look.sunScale = lerp(0.9f, 0.8f, i);
-    look.ambientScale = lerp(0.95f, 0.8f, i);
+    look.fog = lerp(0.12f, 0.3f, i);
+    look.sunScale = 1.0f;
+    look.ambientScale = 1.0f;
+    rgb(look.fogColor, 0.8f, 0.86f, 0.95f);
+    rgb(look.colorFilter, 0.97f, 0.99f, 1.04f);
+    look.saturation = 1.0f;
+    look.contrast = 1.08f;
+    look.postExposure = lerp(0.05f, 0.2f, i);
     break;
   }
   return look;
@@ -262,6 +304,13 @@ SceneWeather::Report SceneWeather::advance(SceneGraph &graph, double seconds, fl
       l.storm = lerp(l.storm, target.storm, k);
       l.sunScale = lerp(l.sunScale, target.sunScale, k);
       l.ambientScale = lerp(l.ambientScale, target.ambientScale, k);
+      for (u32 c = 0; c < 3; ++c) {
+        l.fogColor[c] = lerp(l.fogColor[c], target.fogColor[c], k);
+        l.colorFilter[c] = lerp(l.colorFilter[c], target.colorFilter[c], k);
+      }
+      l.saturation = lerp(l.saturation, target.saturation, k);
+      l.contrast = lerp(l.contrast, target.contrast, k);
+      l.postExposure = lerp(l.postExposure, target.postExposure, k);
       // Sem resíduo eterno: a emissão chega a zero de verdade.
       if (std::abs(l.rain - target.rain) < 1e-3f) l.rain = target.rain;
       if (std::abs(l.snow - target.snow) < 1e-3f) l.snow = target.snow;
