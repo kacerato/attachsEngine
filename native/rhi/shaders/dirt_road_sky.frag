@@ -325,7 +325,7 @@ void main() {
       // Volumetric Clouds: os fatores do passe próprio viram cor com as mesmas
       // radiâncias da camada 2D; longe a nuvem se perde na névoa do horizonte.
       float distanceKm=volume.b/volume.a;
-      float fade=mix(1.0,0.1,1.0-exp(-distanceKm/55.0))*smoothstep(-0.002,0.03,visibleDirection.y)*
+      float fade=mix(1.0,0.25,1.0-exp(-distanceKm/120.0))*smoothstep(-0.002,0.03,visibleDirection.y)*
                  environment.cloudParameters.x;
       // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
       // cor de base e de topo interpoladas pela altura): topo com o céu, base

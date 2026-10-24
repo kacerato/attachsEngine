@@ -97,7 +97,8 @@ float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap
   vec3 e3=textureLod(cloudErosionNoise,q*10.0,noiseLod+4.32).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
   erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
-  float threshold=erosion*environment.cloudVolume.y*1.5*(1.0-clamp(cloud*3.0,0.0,1.0));
+  // Mais forte no topo (couve-flor), mais fraca na base (fiapos finos).
+  float threshold=erosion*environment.cloudVolume.y*mix(0.9,2.2,height)*(1.0-clamp(cloud*2.5,0.0,1.0));
   return clamp(remapValue(cloud,threshold,1.0,0.0,1.0),0.0,1.0);
 }
 
@@ -118,8 +119,9 @@ void main() {
     float thicknessKm=max(environment.cloudShadow.y,200.0)*0.001;
     float startKm=cloudShellDistanceKm(baseKm,y);
     float endKm=cloudShellDistanceKm(baseKm+thicknessKm,y);
-    // Raios rasantes cruzam dezenas de km de casca; além de 40 km é névoa.
-    float pathKm=min(endKm-startKm,40.0);
+    // Raios rasantes cruzam dezenas de km de casca; a camada segue até o
+    // horizonte (60 km de caminho) e a névoa do céu a dissolve aos poucos.
+    float pathKm=min(endKm-startKm,60.0);
     int steps=int(clamp(environment.cloudShadow.w,8.0,64.0));
     float stepKm=pathKm/float(steps);
     // Ruído de gradiente intercalado que muda a cada quadro: o acúmulo
@@ -148,25 +150,27 @@ void main() {
       if(density<=0.003) continue;
       // Marcha de luz: 4 passos crescentes rumo ao sol, sem erosão.
       float optical=0.0;
-      for(int j=0;j<4;++j) {
-        float d=thicknessKm*(0.06+0.14*float(j));
+      // 3 passos crescentes (custo); cobrem a mesma espessura que os 4 de antes.
+      for(int j=0;j<3;++j) {
+        float d=thicknessKm*(0.08+0.2*float(j));
         vec3 lp=p+toSun*d;
         float lh=(cloudPointHeightKm(lp)-baseKm)/thicknessKm;
         if(lh>1.0) break;
-        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.14;
+        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.19;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
-      float od=optical*extinction*2.0;
+      float od=optical*extinction*2.6;
       float beer=exp(-od)+0.5*exp(-od*0.25)+0.25*exp(-od*0.0625);
-      float powder=1.0-exp(-density*extinction*0.08-0.05);
-      float sunLight=beer*(0.6+0.4*powder)*(0.5+0.5*phase);
+      // Powder mais forte contra o sol: bordas finas claras, miolo escuro.
+      float powder=1.0-exp(-density*extinction*0.12-0.03);
+      float sunLight=beer*(0.35+0.65*powder)*(0.5+0.5*phase);
       // Ambiente por altura: o céu converte em topo azul-claro e base cinza-azulada.
       float ambientLight=height;
       float sampleTransmittance=exp(-density*extinction*stepKm);
       float absorbed=transmittance*(1.0-sampleTransmittance);
       sums+=absorbed*vec3(sunLight,ambientLight,t);
       transmittance*=sampleTransmittance;
-      if(transmittance<0.02) break;
+      if(transmittance<0.05) break;
     }
     result=vec4(sums,1.0-transmittance);
   }
@@ -187,7 +191,14 @@ void main() {
     vec2 previousUv=uv+(previousNdc-currentNdc)*0.5;
     if(previous.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       vec4 history=textureLod(cloudHistory,previousUv,0.0);
-      result=mix(result,history,0.85);
+      // Rejeição do histórico: cobertura ou distância da nuvem que mudaram
+      // muito (borda que passou, céu que abriu) não arrastam o quadro velho —
+      // é o rastro vertical que a reprojeção deixava.
+      float coverageChange=abs(history.a-result.a);
+      float currentKm=result.b/max(result.a,1e-3),historyKm=history.b/max(history.a,1e-3);
+      float depthChange=(result.a>0.05&&history.a>0.05)?abs(currentKm-historyKm)/max(currentKm,1.0):0.0;
+      float keep=0.85*(1.0-smoothstep(0.12,0.35,coverageChange))*(1.0-smoothstep(0.15,0.4,depthChange));
+      result=mix(result,history,keep);
     }
   }
   outCloud=result;
