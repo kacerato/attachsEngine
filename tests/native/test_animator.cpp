@@ -476,6 +476,40 @@ AE_TEST(animator_blend_tree_state_follows_its_parameter_and_speed) {
   p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),.25f),"o estado acompanha o parâmetro a cada quadro");
 }
 
+// A composição paralela (pool de animação) tem de dar exatamente a pose serial:
+// 120 personagens passam do limiar e dividem as propriedades entre workers.
+AE_TEST(animator_parallel_composition_matches_serial_pose) {
+  const auto run=[](bool parallel) {
+    SceneAnimator::setParallelEvaluation(parallel);
+    Library library;const auto walk=library.add("Andar",0,1);const auto wave=library.add("Acenar",1,10);
+    SceneGraph g;std::vector<ObjectId> hips;
+    for(u32 i=0;i<120;++i) {
+      const auto owner=g.createEntity(g.root(),ObjectKind::Folder,"Personagem");
+      hips.push_back(g.createEntity(owner,ObjectKind::Folder,"Quadril"));
+      g.createEntity(hips.back(),ObjectKind::Folder,"Braço");
+      auto &a=scene::animator(*g.editComponents(owner)->add(scene::Animator::descriptor));
+      a.layers[0].states[0].motions={{i%2?walk:wave}};
+    }
+    GameWorld world;world.load(g);SceneAnimator mixer;SceneAnimatorGraphs graphs;
+    mixer.begin(world.poseGraph(),library);graphs.setLibrary(&library);graphs.setComposer(&mixer);
+    for(u32 frame=0;frame<3;++frame) {
+      world.beginFrame(.1f);std::vector<SceneAnimator::ExternalSample> samples;
+      graphs.advance(world,library,.1f,.1f,samples);mixer.setExternalSamples(std::move(samples));mixer.advance(.1f,nullptr);
+    }
+    std::vector<float> pose;
+    for(const auto id:world.graph().childrenOf(world.graph().root())) {
+      std::vector<ObjectId> subtree;world.graph().collectSubtree(id,subtree);
+      for(const auto node:subtree) {const auto &t=world.graph().find(node)->transform;pose.insert(pose.end(),t.position,t.position+3);}
+    }
+    return pose;
+  };
+  const auto serial=run(false),parallel=run(true);
+  SceneAnimator::setParallelEvaluation(true);
+  AE_EXPECT_TRUE(!serial.empty()&&serial==parallel,"mesma pose com e sem paralelismo");
+  bool moved=false;for(float v:serial) moved=moved||v!=0;
+  AE_EXPECT_TRUE(moved,"os personagens foram de fato animados");
+}
+
 // Culling Mode da Unity: fora da vista, Cull Update Transforms segue o tempo
 // sem escrever a pose; Cull Completely para; Always Animate ignora a vista.
 AE_TEST(animator_culling_mode_follows_visibility_like_unity) {
