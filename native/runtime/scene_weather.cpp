@@ -76,7 +76,9 @@ bool applyEnvironment(SceneGraph &graph, ObjectId id, const scene::Weather &weat
   // Pós do tipo de clima (Ajustes de cor do volume): o resto do pós da cena
   // (tonemap, bloom, exposição automática) continua o do Ambiente da cena.
   assign(next.overrideColorAdjustments, true, changed);
-  for (u32 c = 0; c < 3; ++c) assign(next.values.colorFilter[c], std::clamp(look.colorFilter[c], 0.0f, 2.0f), changed);
+  // O Ambiente aceita filtro em [0, 1] (mais que 1 o recusava inteiro e o
+  // volume ficava com o clima anterior: a neve saía com o céu da chuva).
+  for (u32 c = 0; c < 3; ++c) assign(next.values.colorFilter[c], std::clamp(look.colorFilter[c], 0.0f, 1.0f), changed);
   assign(next.values.saturation, std::clamp(look.saturation, 0.0f, 2.0f), changed);
   assign(next.values.contrast, std::clamp(look.contrast, 0.5f, 2.0f), changed);
   assign(next.values.postExposure, std::clamp(look.postExposure, -4.0f, 4.0f), changed);
@@ -244,7 +246,7 @@ WeatherLook weatherTarget(scene::WeatherKind kind, float intensity) {
     look.sunScale = 1.0f;
     look.ambientScale = 1.0f;
     rgb(look.fogColor, 0.8f, 0.86f, 0.95f);
-    rgb(look.colorFilter, 0.97f, 0.99f, 1.04f);
+    rgb(look.colorFilter, 0.95f, 0.98f, 1.0f);
     look.saturation = 1.0f;
     look.contrast = 1.08f;
     look.postExposure = lerp(0.05f, 0.2f, i);

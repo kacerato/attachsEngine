@@ -306,4 +306,16 @@ AE_TEST(weather_types_bring_their_own_fog_colour_and_grade) {
   AE_EXPECT_TRUE(env.overrideColorAdjustments && std::abs(env.values.saturation - rain.saturation) < 1e-6f &&
                  std::abs(env.values.colorFilter[0] - rain.colorFilter[0]) < 1e-6f &&
                  std::abs(env.values.fogColor[2] - rain.fogColor[2]) < 1e-6f, "o volume do clima recebe a atmosfera do tipo");
+  // Toda troca de tipo é aceita pelo Ambiente (valores dentro dos limites dele):
+  // chuva -> neve -> limpo -> nublado -> tempestade, cada uma com a sua cobertura.
+  for (const auto kind : {scene::WeatherKind::Snow, scene::WeatherKind::Clear, scene::WeatherKind::Cloudy, scene::WeatherKind::Storm}) {
+    auto values = *s.graph.find(s.weather);
+    static_cast<scene::Weather *>(values.components.edit(scene::Weather::descriptor))->kind = kind;
+    s.graph.applyEntityValues(s.weather, values);
+    weather.advance(s.graph, 0, 0, false, nullptr,
+                    [&](runtime::ObjectId id, const runtime::Transform &t) { return writeTransform(s.graph, id, t); });
+    const auto expected = runtime::weatherTarget(kind, 1.0f);
+    AE_EXPECT_TRUE(environmentOf(s.graph, s.weather).values.clouds.coverage == expected.coverage &&
+                   environmentOf(s.graph, s.weather).valid(), "cada tipo chega ao Ambiente");
+  }
 }
