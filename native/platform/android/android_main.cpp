@@ -2950,6 +2950,18 @@ void android_main(android_app *app) {
             const auto &lod=shell.instancedRenderer.meshLodStats();
             statistics.lodDraws=lod.drawsWithLods;statistics.lodReducedDraws=lod.reducedDraws;
             statistics.lodBaseTriangles=lod.baseTriangles;statistics.lodSelectedTriangles=lod.selectedTriangles;
+            // Média da GPU a cada 120 quadros medidos (estatísticas abertas):
+            // a comparação luz em tempo real x assada sai do logcat.
+            static double gpuSum=0,intervalSum=0;
+            static ae::u32 gpuCount=0;
+            if(statistics.gpuFrameMs>0) {
+              gpuSum+=statistics.gpuFrameMs;intervalSum+=statistics.frameIntervalMs;
+              if(++gpuCount==120) {
+                __android_log_print(ANDROID_LOG_INFO,LogTag,"[GpuMedia] gpu=%.2f ms quadro=%.2f ms desenhos=%u lightmap=%u",
+                    gpuSum/gpuCount,intervalSum/gpuCount,statistics.drawCalls,shell.instancedRenderer.lightmapStats().drawsLightmapped);
+                gpuSum=intervalSum=0;gpuCount=0;
+              }
+            }
             shell.editorSession.setSceneStatistics(statistics);
           }
           shell.editorSession.setTextureStreamingStatus(shell.instancedRenderer.textureStreamingStats());
@@ -3993,6 +4005,7 @@ void android_main(android_app *app) {
           !editorActive||editorPlaying||editorScreen.sceneSky,
           !editorActive||editorPlaying||editorScreen.sceneFog,
           !editorActive||editorPlaying||editorScreen.scenePost);
+      shell.instancedRenderer.setLightmapView(editorActive&&!editorPlaying&&editorScreen.sceneBakedLightmap);
       if (editorActive) {
         const auto &projection = shell.editorSession.view().frustum;
         sceneNear=projection.nearPlane;sceneFar=projection.farPlane;

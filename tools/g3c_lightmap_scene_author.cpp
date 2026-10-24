@@ -5,8 +5,9 @@
 //  - a arquitetura marcada Static, com Contribuir para iluminação global e
 //    Receber = Lightmaps (o padrão da Unity para um objeto Static);
 //  - o sol com Hora do dia (e a Lua), que continua em tempo real com sombra;
-//  - três lanternas quentes em modo Assado na arcada norte e uma em modo Misto
-//    na arcada sul, para o rebote local aparecer debaixo do teto;
+//  - três luzes coloridas (vermelha, verde, azul) em modo Assado na arcada
+//    norte, cada uma diante de um estandarte da mesma cor, e uma lanterna
+//    quente em modo Misto na arcada sul: o rebote colorido debaixo do teto;
 //  - as Configurações de iluminação com valores de cena média para o aparelho
 //    (8 texels/m, 1024 px, 2 rebotes, 128/128 amostras);
 //  - um Grupo de sondas de luz de 50 pontos (o do PK-6) e uma esfera fosca
@@ -41,21 +42,42 @@ std::string readText(const std::filesystem::path &p) {
   std::ifstream in(p, std::ios::binary);
   return {std::istreambuf_iterator<char>(in), {}};
 }
-EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, u32 mode) {
+EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, u32 mode,
+                       const float *color = nullptr) {
   const auto id = doc.createEntity(parent, EditorEntityKind::Folder, name);
   auto values = *doc.find(id);
   values.transform.position[0] = x; values.transform.position[1] = y; values.transform.position[2] = z;
   values.isStatic = true;
   auto *light = static_cast<scene::Light *>(values.components.add(scene::Light::descriptor));
   scene::applyLightDefault(*light, scene::LightKind::Point);
-  light->useColorTemperature = true;
+  light->useColorTemperature = color == nullptr;
   light->colorTemperature = 2700;
-  light->intensity = 2500; // lúmens: uma lanterna forte, visível com o sol baixo
-  light->range = 7;
+  if (color) for (u32 k = 0; k < 3; ++k) light->color[k] = color[k];
+  // Lúmens: a lanterna quente é forte com o sol baixo; as coloridas, mais
+  // fortes, para o rebote tingido aparecer ao lado do céu da tarde.
+  light->intensity = color ? 8000.0f : 2500.0f;
+  light->range = color ? 9.0f : 7.0f;
   light->shadowMode = 2;
   light->lightmapMode = mode;
   if (!light->valid() || !doc.applyEntityValues(id, values)) fail(std::string("lanterna recusada: ") + name);
   return id;
+}
+// Estandarte de pano colorido (esfera achatada, fosca): a luz assada ao lado
+// bate nele e o rebote tinge colunas e chão, como as cortinas do Sponza.
+void banner(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, const float color[3]) {
+  const auto id = doc.createEntity(parent, EditorEntityKind::Mesh, name);
+  auto values = *doc.find(id);
+  values.transform.position[0] = x; values.transform.position[1] = y; values.transform.position[2] = z;
+  values.transform.scale[0] = 1.3f; values.transform.scale[1] = 2.4f; values.transform.scale[2] = .08f;
+  values.isStatic = true;
+  auto *mesh = static_cast<scene::MeshRenderer *>(values.components.edit(scene::MeshRenderer::descriptor));
+  mesh->asset = resources::assetGuidFromSeed("astra:builtin:sphere:v1");
+  mesh->mesh = 1;
+  mesh->material.enabled = true;
+  for (u32 k = 0; k < 3; ++k) mesh->material.baseColor[k] = color[k];
+  mesh->material.roughness = 1;
+  mesh->contributeGlobalIllumination = true;
+  if (!doc.applyEntityValues(id, values)) fail(std::string("estandarte recusado: ") + name);
 }
 } // namespace
 
@@ -129,12 +151,20 @@ int main(int argc, char **argv) {
     time->hour = hour; time->dayLengthMinutes = dayMinutes; time->dayOfYear = 172.0f; time->latitude = -15.0f; time->moonLight = moonId;
     if (!time->valid() || !doc.applyEntityValues(sunId, sun)) fail("Hora do dia recusada");
   }
-  // Lanternas: três Assadas na arcada norte, uma Mista na sul.
+  // Arcada norte: três luzes Assadas coloridas, cada uma diante de um
+  // estandarte da mesma cor (vermelho, verde, azul), como as cortinas e as
+  // luzes coloridas do vídeo da Unity; a arcada sul fica com uma Mista quente.
   const auto lights = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Lanternas (G3c)");
-  lantern(doc, lights, "Lanterna assada oeste", -6.5f, 2.3f, 4.9f, 2);
-  lantern(doc, lights, "Lanterna assada centro", 0.5f, 2.3f, 4.9f, 2);
-  lantern(doc, lights, "Lanterna assada leste", 7.5f, 2.3f, 4.9f, 2);
+  const float red[3]{1.0f, .22f, .16f}, green[3]{.25f, 1.0f, .3f}, blue[3]{.25f, .4f, 1.0f};
+  const float redCloth[3]{.75f, .05f, .04f}, greenCloth[3]{.06f, .6f, .1f}, blueCloth[3]{.05f, .12f, .7f};
+  lantern(doc, lights, "Luz assada vermelha", -6.5f, 2.3f, 4.9f, 2, red);
+  lantern(doc, lights, "Luz assada verde", 0.5f, 2.3f, 4.9f, 2, green);
+  lantern(doc, lights, "Luz assada azul", 7.5f, 2.3f, 4.9f, 2, blue);
   lantern(doc, lights, "Lanterna mista sul", 0.5f, 2.3f, -4.9f, 1);
+  const auto cloths = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Estandartes (G3c)");
+  banner(doc, cloths, "Estandarte vermelho", -6.5f, 2.0f, 5.5f, redCloth);
+  banner(doc, cloths, "Estandarte verde", 0.5f, 2.0f, 5.5f, greenCloth);
+  banner(doc, cloths, "Estandarte azul", 7.5f, 2.0f, 5.5f, blueCloth);
   }
   // Configurações de iluminação na raiz (o Lighting Settings da cena).
   {
@@ -220,7 +250,8 @@ int main(int argc, char **argv) {
       std::ofstream(output / ".astra/imports" / profilePath.filename(), std::ios::binary) << resources::serializeImportProfile(profile);
       ++profiles;
     }
-  std::cout << "Static: " << statics << " · lanternas: 3 assadas + 1 mista · sondas: 50 · perfis com UV de lightmap: " << profiles
+  std::cout << "Static: " << statics << (generic ? " · luzes locais em Misto" : " · luzes: 3 assadas coloridas + 1 mista · estandartes: 3 · sondas: 50")
+            << " · perfis com UV de lightmap: " << profiles
             << " · hora " << hour << '\n';
   return 0;
 }

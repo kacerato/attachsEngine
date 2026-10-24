@@ -328,6 +328,14 @@ bool EditorSession::handleLightmapWidget(u32 widget) {
   case Generate: generateLighting(); return true;
   case Cancel: cancelLighting(); return true;
   case Clear: clearBakedLighting(); return true;
+  // Contador Sem UV2: seleciona esses objetos na cena (recebem pelas sondas).
+  case SelectWithoutUv: {
+    const auto &ids = lightmapView_.withoutUv;
+    if (ids.empty()) return true;
+    state_.workspace = EditorWorkspace::Scene;
+    selectEntities(std::vector<EditorEntityId>(ids.begin(), ids.end()));
+    return true;
+  }
   case CreateSettings: {
     if (isPlaying() || history_.isOpen()) { state_.status = "Finalize a edição antes"; return true; }
     EditorEntityId owner = kInvalidEntity;
@@ -428,13 +436,18 @@ void EditorSession::refreshLightmaps() {
   std::vector<u32> textures;
   std::string error;
   view.contributors = view.receivers = view.receiversWithoutUv = 0;
+  view.withoutUv.clear();
   view.bakedLights = view.mixedLights = view.realtimeLights = 0;
   if (mapScene_.collectLightmapScene(evaluatedEditorScene(), bakeTextureBase_, scene, textures, error)) {
     view.contributors = static_cast<u32>(scene.instances.size());
     for (const auto &instanceValue : scene.instances) {
       if (!instanceValue.receives) continue;
       ++view.receivers;
-      if (instanceValue.mesh < scene.meshes.size() && !scene.meshes[instanceValue.mesh].uv1Valid) ++view.receiversWithoutUv;
+      if (instanceValue.mesh < scene.meshes.size() && !scene.meshes[instanceValue.mesh].uv1Valid) {
+        ++view.receiversWithoutUv;
+        if (std::find(view.withoutUv.begin(), view.withoutUv.end(), instanceValue.objectId) == view.withoutUv.end())
+          view.withoutUv.push_back(instanceValue.objectId);
+      }
     }
   }
   std::vector<renderer::SceneLight> lights;

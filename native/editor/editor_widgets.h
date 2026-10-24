@@ -120,6 +120,7 @@ enum class EditorWidget : u32 {
   SceneSkyToggle,
   SceneFogToggle,
   ScenePostToggle,
+  SceneBakedLightmapView,
 
   ToolSelect,
   ToolMove,
@@ -617,7 +618,7 @@ inline constexpr u32 code(u32 widget) noexcept {return widget&0x00ffffffu;}
 namespace lightmap_widget {
 // Abas da janela Iluminação, Gerar/Cancelar/Limpar, criar as Configurações e
 // os controles de UV de lightmap do perfil de importação.
-enum Code : u32 {TabEnvironment=1,TabLightmaps=2,Generate=3,Cancel=4,Clear=5,CreateSettings=6,
+enum Code : u32 {TabEnvironment=1,TabLightmaps=2,Generate=3,Cancel=4,Clear=5,CreateSettings=6,SelectWithoutUv=7,
                  ImportUvs=0x20,ImportHardAngleDown=0x21,ImportHardAngleUp=0x22,ImportMarginDown=0x23,ImportMarginUp=0x24};
 inline constexpr u32 id(u32 code) noexcept {return widgetId(EditorWidget::LightmapBase)+code;}
 inline constexpr bool owns(u32 widget) noexcept {return (widget&0xff000000u)==widgetId(EditorWidget::LightmapBase);}

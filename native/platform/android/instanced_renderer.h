@@ -109,6 +109,8 @@ public:
   // publicar de novo simplesmente não desenha interface, sem estado preso.
   void setUiInstances(std::span<const ui::UiInstance> instances);
   void setTemporalDebugView(TemporalDebugView view) { temporalDebugView_ = view; }
+  // G3c: modo de visão Lightmap assado (bit 3 do cabeçalho das sondas).
+  void setLightmapView(bool enabled) noexcept { lightmapView_ = enabled; }
   bool temporalDebugAvailable() const {
     return temporalInputsActive_ &&
            (temporalUpscaler_.ready() || (temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f));
@@ -1291,6 +1293,7 @@ private:
   VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
   bool temporalAaActive_ = false;
   TemporalDebugView temporalDebugView_ = TemporalDebugView::Final;
+  bool lightmapView_ = false;
   // Image layout and color validity are separate states. The descriptor is
   // statically used by the temporal shader even on its first-frame branch, so
   // the image must already be shader-readable before it contains history.

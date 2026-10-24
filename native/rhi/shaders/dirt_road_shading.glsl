@@ -614,12 +614,15 @@ void main() {
   // DA HORA ATUAL -- o sol não está no lightmap e o meio-dia não congela.
   // A visibilidade também oclui o reflexo do céu: debaixo do beiral e dentro
   // da arcada o céu não chega (G3a item 1, "visibilidade do céu").
+  // Modo de visão Lightmap assado: sem lightmap, cinza-escuro neutro.
+  mediump vec3 astraLightmapShown=vec3(0.02);
   if(astraLightmapActive()) {
     highp vec4 baked=astraLightmapTexel(vUv1);
     mediump float skyVisibility=clamp(baked.a,0.0,4.0);
     diffuseIrradiance=(vec3(min(baked.rgb*0.31830988618,vec3(AETHER_MEDIUMP_MAX)))+
         environmentAmbientDiffuse(n)*skyVisibility)*occlusion;
     astraSkySpecularOcclusion=clamp(skyVisibility*2.0,0.0,1.0);
+    astraLightmapShown=vec3(min(baked.rgb*0.31830988618,vec3(AETHER_MEDIUMP_MAX)))+environmentAmbientDiffuse(n)*skyVisibility;
   }
 #ifdef OCCLUSION_MAP
   // External lightmaps contain linear indirect irradiance E, not reflected color.
@@ -732,6 +735,12 @@ void main() {
       outColor=vec4(shown,1.0);
       return;
     }
+  }
+  // G3c: draw mode Baked Lightmap da Unity -- a luz que o lightmap devolve
+  // (luzes locais assadas e o céu da hora pela visibilidade) sobre albedo branco.
+  if((astraProbes.header.x&8u)!=0u) {
+    aetherWriteSurface(astraLightmapShown,vec3(0.0),base.a,flags,blendOutput,shadingBits);
+    return;
   }
   aetherWriteSurface(color,aetherSpecularSum,base.a,flags,blendOutput,shadingBits);
 }

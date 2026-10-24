@@ -9904,27 +9904,29 @@ void buildLightmapPanel(ScreenBuilder &builder,UiRect &content,const EditorEntit
   // 2. O que o próximo bake vai encontrar, em blocos.
   {
     auto row=takeTop(content,58);takeTop(content,6);
-    struct Chip {const char *label;std::string value;bool warning;};
+    // Rótulos curtos: cabem no bloco sem cortar. "Sem UV2" é estado com ação --
+    // tocar seleciona esses objetos (recebem pelas sondas de luz).
+    struct Chip {const char *label;std::string value;bool warning;u32 action;};
     const Chip chips[]{
-      {"Static com GI",std::to_string(view->contributors),view->contributors==0},
-      {"Recebem lightmap",std::to_string(view->receivers),false},
-      {"Sem UV2",std::to_string(view->receiversWithoutUv),view->receiversWithoutUv>0},
-      {"Luzes assadas",std::to_string(view->bakedLights)+" + "+std::to_string(view->mixedLights)+" mistas",false}};
+      {"Static",std::to_string(view->contributors),view->contributors==0,0},
+      {"Recebem",std::to_string(view->receivers),false,0},
+      {"Sem UV2",std::to_string(view->receiversWithoutUv),view->receiversWithoutUv>0,view->receiversWithoutUv>0?lw::id(lw::SelectWithoutUv):0u},
+      {"Assada · Mista",std::to_string(view->bakedLights)+" · "+std::to_string(view->mixedLights),false,0}};
     const float width=row.width/4;
     for(const auto &chip:chips) {
       auto cell=deflate(takeLeft(row,width),UiInsets{2,0,2,0});
-      builder.list.addRect(cell,theme.color.silhouette,theme.radius.control);
+      builder.list.addRect(cell,chip.action?theme.color.raised:theme.color.silhouette,theme.radius.control);
       if(chip.warning) builder.list.addBorder(cell,theme.color.warning,1,theme.radius.control);
       auto inner=deflate(cell,UiInsets{6,6,6,4});
-      builder.label(takeTop(inner,24),fitMiddle(builder.list,chip.value,inner.width,theme.type.body),
+      auto top=takeTop(inner,24);
+      if(chip.action) {
+        builder.list.addImage(centred(takeRight(top,18),14,14),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.warning);
+        if(authoring) builder.router.addRegion(cell,chip.action,theme.touch.minimumTarget);
+      }
+      builder.label(top,fitMiddle(builder.list,chip.value,top.width,theme.type.body),
                     chip.warning?theme.color.warning:theme.color.text,theme.type.body,UiAlign::Center);
       builder.label(inner,fitMiddle(builder.list,chip.label,inner.width,theme.type.caption),theme.color.textMuted,theme.type.caption,UiAlign::Center);
     }
-  }
-  if(view->receiversWithoutUv>0) {
-    auto note=takeTop(content,22);takeTop(content,4);
-    builder.label(note,fitMiddle(builder.list,"Objetos sem UV2 ficam com as sondas: ligue Gerar UV de lightmap na importação da fonte",note.width,
-                  theme.type.caption),theme.color.warning,theme.type.caption);
   }
   // 3. A ação principal e as secundárias.
   if(authoring) {
@@ -12259,7 +12261,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     builder.iconButton(effectsMenu,state.sceneEffectsMenu?UiIcon::UiChevronUp:UiIcon::UiChevronDown,
                        widgetId(EditorWidget::SceneEffectsMenu),state.sceneEffectsMenu);
     if(state.sceneEffectsMenu) {
-      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 126.0f};
+      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 165.0f};
       list.addRect(panel,withAlpha(theme.color.surface,.97f),theme.radius.control);
       // Construção explícita para preservar o retângulo completo como alvo.
       const auto row=[&](float y,UiIcon glyph,const char *label,EditorWidget widget,bool active) {
@@ -12274,6 +12276,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       row(panel.y+6.0f,UiIcon::LightingSky,"Sky",EditorWidget::SceneSkyToggle,state.sceneSky);
       row(panel.y+45.0f,UiIcon::LightingFog,"Fog",EditorWidget::SceneFogToggle,state.sceneFog);
       row(panel.y+84.0f,UiIcon::LightingPostProcessing,"Post Processing",EditorWidget::ScenePostToggle,state.scenePost);
+      // Draw mode Baked Lightmap da Unity: o que o lightmap guarda, sem albedo.
+      row(panel.y+123.0f,UiIcon::LightingLightmapBaked,"Lightmap assado",EditorWidget::SceneBakedLightmapView,state.sceneBakedLightmap);
     }
     }
     if(state.cameraViewEntity) {

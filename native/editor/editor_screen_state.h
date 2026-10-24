@@ -739,6 +739,8 @@ struct EditorScreenState final {
   // View. São estado do editor: não alteram o Ambiente salvo nem entram no
   // histórico da cena.
   bool sceneLighting=true,sceneEffects=true,sceneSky=true,sceneFog=true,scenePost=true;
+  // G3c: modo de visão Baked Lightmap do Scene view (só o lightmap, sem albedo).
+  bool sceneBakedLightmap=false;
   bool sceneEffectsMenu=false;
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;

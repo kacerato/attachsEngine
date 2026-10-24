@@ -7,6 +7,7 @@
 #include "core/base.h"
 
 #include <string>
+#include <vector>
 
 namespace ae::editor {
 
@@ -21,6 +22,7 @@ struct EditorLightmapView {
   u64 settingsEntity = 0, settingsInstance = 0;
   // O que o próximo bake vai encontrar (contado ao abrir a aba e a cada edição).
   u32 contributors = 0, receivers = 0, receiversWithoutUv = 0;
+  std::vector<u64> withoutUv; // objetos que recebem pelas sondas por falta de UV2
   u32 bakedLights = 0, mixedLights = 0, realtimeLights = 0;
   // O recurso em vigor.
   bool hasData = false, missing = false, stale = false;

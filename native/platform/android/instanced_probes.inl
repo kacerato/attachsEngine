@@ -750,7 +750,7 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
   const auto *set = lightProbeSet_.get();
   const bool lightProbes = set && !set->empty();
   const bool lightmaps = lightmapLayers_ > 0 && lightmapResident_;
-  header.header[0] = (anyReady ? 1u : 0u) | (lightProbes ? 2u : 0u) | (lightmaps ? 4u : 0u);
+  header.header[0] = (anyReady ? 1u : 0u) | (lightProbes ? 2u : 0u) | (lightmaps ? 4u : 0u) | (lightmapView_ ? 8u : 0u);
   header.header[1] = frameCount;
   const auto &draws = dirtRoadResources_.draws();
   if (probeDrawCache_.size() != draws.size()) probeDrawCache_.assign(draws.size(), {});

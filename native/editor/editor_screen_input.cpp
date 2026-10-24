@@ -403,6 +403,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget==widgetId(EditorWidget::SceneSkyToggle)) {state.sceneSky=!state.sceneSky;return outcome;}
   if(widget==widgetId(EditorWidget::SceneFogToggle)) {state.sceneFog=!state.sceneFog;return outcome;}
   if(widget==widgetId(EditorWidget::ScenePostToggle)) {state.scenePost=!state.scenePost;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneBakedLightmapView)) {state.sceneBakedLightmap=!state.sceneBakedLightmap;return outcome;}
   if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
     const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
     if(componentVisualSelectable(document,id,state.hiddenLayers,state.unpickableLayers,
