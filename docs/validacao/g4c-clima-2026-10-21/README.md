@@ -169,6 +169,25 @@ Lacunas:
 - Folha de textura e Material de projeto ainda não foram vistos no aparelho.
 - A linha em arco no chão é a face vertical da borda da praça, que não recebe neve.
 
+### Chuva azul-petróleo, neve com sol e PK-10 no aparelho (24/10, clima-0921 e clima-0953)
+
+- Chuva (0921): filtro e névoa azul-esverdeados, névoa densa cobrindo céu e fundo
+  (`33-play-chuva-petroleo-0921.png`, `prancha-chuva-pixagon-1m38-x-poco-0921.png`).
+- Neve: no 0921 saía com o céu da chuva (`34-defeito-neve-com-ceu-da-chuva-0921.png`), porque o preset
+  escrevia filtro 1,04 e o Ambiente aceita só [0, 1]. Com isso recusava o volume inteiro, que ficava
+  com a chuva. Corrigido no 0953: céu aberto com nuvens soltas, sol cheio, sombras longas azuladas,
+  neve branca e telhados com espessura (subida de 7 cm nos vértices voltados para cima)
+  (`37-play-neve-com-sol-0953.png`, `38-edicao-neve-com-sol-0953.png`, `prancha-neve-synty-3m51-x-poco-0953.png`).
+  O horizonte fica esverdeado com o sol baixo da Vila (fim de tarde); a Synty é meio-dia.
+- Luzes das faíscas (0921, Tempestade): entram na cena. O log do editor diz "Orçamento de luzes: 16
+  pontuais acesas, 6 fora", mas os postes da Vila ocupam quase todo o teto e no chão só aparecem
+  reflexos laranja fracos (`35`/`36-faiscas-luzes-*`).
+- Folha de textura (0953): Partículas com a folha 2×2 na textura própria. Cada partícula mostra um
+  quarto do ponto (`39-folha-de-textura-2x2-0953.png`, `40-folha-de-textura-detalhe-0953.png`). O
+  Inspector mostra Colunas, Linhas, Animação, Quadro no tempo (curva), Quadro inicial e Ciclos.
+- Material do projeto na partícula: ainda não visto no aparelho (precisa de um Material com shader
+  Partícula e uma imagem de folha no projeto).
+
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
 `tools/measure-g0-baseline.ps1 -Order S -Seconds 40`, 4 rodadas intercaladas, bateria ≤ 37,9 °C no
