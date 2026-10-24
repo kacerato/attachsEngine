@@ -477,13 +477,13 @@ AE_TEST(animator_blend_tree_state_follows_its_parameter_and_speed) {
 }
 
 // A composição paralela (pool de animação) tem de dar exatamente a pose serial:
-// 120 personagens passam do limiar e dividem as propriedades entre workers.
+// 300 personagens passam do limiar (256 canais): cada job avalia Animators inteiros.
 AE_TEST(animator_parallel_composition_matches_serial_pose) {
   const auto run=[](bool parallel) {
     SceneAnimator::setParallelEvaluation(parallel);
     Library library;const auto walk=library.add("Andar",0,1);const auto wave=library.add("Acenar",1,10);
     SceneGraph g;std::vector<ObjectId> hips;
-    for(u32 i=0;i<120;++i) {
+    for(u32 i=0;i<300;++i) {
       const auto owner=g.createEntity(g.root(),ObjectKind::Folder,"Personagem");
       hips.push_back(g.createEntity(owner,ObjectKind::Folder,"Quadril"));
       g.createEntity(hips.back(),ObjectKind::Folder,"Braço");
