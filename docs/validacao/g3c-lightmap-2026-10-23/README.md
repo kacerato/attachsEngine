@@ -59,8 +59,41 @@ mandando — o lightmap não congela o meio-dia.
 `aether_lightmap_tests` (também dentro de `aether_tests` e `aether_environment_authoring_tests`): UV2 do cubo sem
 sobreposição e com as costuras do Hard Angle, compactação, perfil schema 13 e leitura do 12, ida e volta do
 recurso nos dois formatos, lei do inverso do quadrado e sombra de uma luz assada, céu sob um telhado, Misto ×
-Assado, emissivo, cancelamento, filtro da luz Assada e migração do Mesh Renderer v11 e das Configurações v1.
+Assado, emissivo, cancelamento, filtro da luz Assada, migração do Mesh Renderer v11 e das Configurações v1,
+instância espelhada, enrolamento contra a normal, normal por inversa-transposta e malha fechada double-sided com
+normais para dentro (13 cenários).
 
 ## Validação no aparelho
 
-(preenchido na validação no POCO F7)
+POCO F7, APK `0.3.0-dev.261024999-lightmap-0924` (commit 0daadc5a), 24/10/2026.
+Prancha: [`prancha-unity-x-poco.png`](prancha-unity-x-poco.png); capturas em [`poco/`](poco/).
+
+**Vila Astra (variante de teste, devolvida ao original depois).** 140 objetos Static com GI, 15 sem UV2 válida,
+14 luzes locais em Misto, Configurações 8 texels/m, 1024, 2 rebotes, 128/128/16 amostras.
+
+| Medida | Resultado |
+|---|---|
+| Importação com UV2 automática ao abrir | ~30 s para os 21 modelos |
+| Bake no aparelho | 32,3 s, 125 receptores, 1,0 M texels, 282 M raios, 3 páginas de 1024 (12,0 MB, RGBA8 comprimido) |
+| Editor durante o bake | editável; barra "Luz indireta e céu · rebote 2 de 2 · 71%" e tempo restante (V4) |
+| Desenhos com lightmap | 125 |
+| Visual (V1 × V2) | com lightmap, a fachada sob o beiral e as quinas perdem o céu (V baixo) e o pátio aberto continua igual; nenhum objeto acende na sombra |
+
+**Sponza (23/10, APK lightmap-0203).** Bake de 307 objetos em ~47–50 s no aparelho (0,7 M texels, ~195 M raios,
+2 páginas, 8 MB). As manchas escuras do Sponza vinham dos decalques transparentes do térreo e do 1º andar
+tapando o céu: slots com material Blend não ocluem nem recebem (fbe930e8).
+
+**Defeito achado e corrigido no aparelho.** A primeira geração da Vila (APK 0203) deixou as copas das 14 árvores
+com V≈0: a malha da copa na Vila.glb é fechada, com enrolamento e normais para dentro e material double-sided,
+então o texel integrava o interior da copa. Correção 0daadc5a: em material double-sided, uma sondagem de 16 raios
+inverte o lado do texel quando o lado da normal está fechado pelo próprio objeto e o outro lado vê claramente mais
+céu. Depois dela a copa ficou com V 0,2–0,3.
+
+**Lacunas abertas (não validadas).**
+- As copas aparecem pretas **também sem lightmap** (pixel 0,0,0 em V1): o caminho de tempo real não sombreia a
+  face de trás de material double-sided com normais para dentro. É defeito anterior ao G3c e fica de fora.
+- A prancha da Vila é de dia. O rebote das lanternas Mistas aparece à noite, e a caminhada de 24 h sem salto
+  de luz ainda não foi capturada no aparelho.
+- Sponza lado a lado com e sem lightmap depois da correção dos decalques não foi recapturada: a Sponza original
+  foi devolvida ao G1b.
+- Custo por quadro do lightmap (A/B com Limpar) não foi medido no profiler.
