@@ -243,6 +243,9 @@ inline const CreationValue soundTriggerBody[]{{body,"motion",Static},{body,"sens
 inline const CreationValue soundTriggerConnection[]{{eventConnection,"event",u32{3}},{eventConnection,"action",u32{4}},{eventConnection,"method",u32{1}}};
 inline const CreationComponent soundTrigger[]{{body,soundTriggerBody},{collider},{"astra.audio.source"},{eventConnection,soundTriggerConnection}};
 inline const CreationComponent eventConnectionRecipe[]{{eventConnection}};
+// G7: Entrada do jogador já com uma Conexão de evento pronta para "ação executada".
+inline const CreationValue playerInputConnection[]{{eventConnection,"event",u32{43}}};
+inline const CreationComponent playerInputRecipe[]{{"astra.input.player_input"},{eventConnection,playerInputConnection}};
 inline const CreationComponent audioListener[]{{"astra.audio.listener"}};
 inline const CreationComponent audioBus[]{{"astra.audio.bus"}};
 // Mixer (bloco H): bus que só devolve reverberação, para receber Envios;
@@ -307,7 +310,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,105> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,106> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -400,6 +403,8 @@ inline const std::array<EditorCreationEntry,105> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::connectedSensor,CreationPose::ViewTarget,0,recipe::physicsConnection,"receiver","Trigger Area3D Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::physicsConnection},
   {"gameplay.event_connection",EditorWidget::None,5,"Conexão de evento","Evento deste objeto aciona objeto ou método, sem script.",ui::UiIcon::ComponentEventConnection,
     runtime::ObjectKind::Folder,recipe::eventConnectionRecipe,CreationPose::ViewTarget,0,recipe::eventConnection,"receiver","UnityEvent Signal Evento Conexao",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
+  {"gameplay.player_input",EditorWidget::None,5,"Entrada do jogador","Ações de entrada (botões, toque) disparam objetos ou métodos, sem script.",ui::UiIcon::ComponentPlayerInput,
+    runtime::ObjectKind::Folder,recipe::playerInputRecipe,CreationPose::ViewTarget,0,recipe::eventConnection,"receiver","PlayerInput Input System Invoke Unity Events Acao Botao",scene::PrimitiveType::Count,false,{},"astra.input.player_input"},
   {"gameplay.sound_trigger",EditorWidget::None,5,"Gatilho sonoro","Sensor que toca o próprio som quando outro corpo entra.",ui::UiIcon::EventSoundTrigger,
     runtime::ObjectKind::Folder,recipe::soundTrigger,CreationPose::ViewTarget,0,{},{},"Trigger Audio Som Evento",scene::PrimitiveType::Count,false,{},recipe::eventConnection},
   {"gameplay.timer",EditorWidget::None,5,"Timer","Dispara eventos para comportamentos em intervalos configuráveis.",ui::UiIcon::ComponentTimer,

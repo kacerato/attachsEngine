@@ -11,6 +11,7 @@
 #include "runtime/scene_ik.h"
 #include "runtime/scene_probes.h"
 #include "scene/reflection_probe.h"
+#include "scene/light_probe_group.h"
 #include "scene/environment.h"
 #include "scene/mesh_renderer.h"
 #include "renderer/volume_parameters.h"
@@ -187,7 +188,12 @@ WorldStatus meshRendererOperation(const ComponentOperationServices &s,ComponentH
   return s.world->setResource(h,"material",0,assetArgument(args),*s.assets,{},*s.resolveResource);
 }
 
-const std::array<ComponentMethodBinding,95> bindings{{
+const std::array<ComponentMethodBinding,96> bindings{{
+  {&scene::LightProbeGroup::descriptor,"probe_count",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
+    if(!s.world) return WorldStatus::NotRunning;
+    const auto *value=s.world->readComponent(h);
+    if(!value||&value->type()!=&scene::LightProbeGroup::descriptor) return WorldStatus::ComponentMissing;
+    r=Value::makeInteger(static_cast<i64>(static_cast<const scene::LightProbeGroup &>(*value).points.size()));return WorldStatus::Ok;}},
   {&scene::Environment::descriptor,"set_weight",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_weight",a,r);}},
   {&scene::Environment::descriptor,"set_shared_profile",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_shared_profile",a,r);}},
   {&scene::Environment::descriptor,"instantiate_profile",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"instantiate_profile",a,r);}},

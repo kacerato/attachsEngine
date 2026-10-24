@@ -4,6 +4,7 @@
 #include "renderer/primitive_geometry.h"
 #include "renderer/water_authoring_geometry.h"
 #include "runtime/scene_time_of_day.h"
+#include "runtime/scene_player_input.h"
 #include "runtime/game_world.h"
 #include "runtime/scene_physics.h"
 #include "runtime/input_actions.h"
@@ -454,6 +455,8 @@ private:
     };
     if(!stage(world_.beginFrame(elapsed,editorStep),"relógio"))return false;
     const double frameElapsed=world_.clock().delta();
+    // G7: Entrada do jogador — as ações deste quadro viram eventos antes do Update.
+    if(!editorStep) runtime::emitPlayerInputEvents(world_,input_,events_);
     debugLines_.advance(frameElapsed);
     const float scriptElapsed=world_.clock().delta();
     gui_.advance(frameElapsed);

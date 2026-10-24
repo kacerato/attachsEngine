@@ -51,9 +51,10 @@ Legenda: ✅ coberto com nome/assinatura da Unity · 🟡 coberto com nome da As
 | Camera | `clearFlags, cullingMask, rect, usePhysicalProperties, focalLength, sensorSize, gateFit, allowHDR, fieldOfView, near/farClipPlane, orthographic(Size), depth`; URP `renderPostProcessing`, `volumeLayerMask` | 🟡 `BackgroundType`, `ViewportX..`, `PhysicalCamera`, `Hdr`, `VerticalFov`, `PostProcessing`, `EnvironmentMask` | ✅ aliases com os nomes da Unity |
 | ReflectionProbe | `RenderProbe()`, `mode, refreshMode, timeSlicingMode, size, center, bakedTexture` | 🟡 `RenderProbe()` + `Type/RefreshMode/TimeSlicing/BoxSize/BoxOffset` | ✅ `Mode`, `RefreshModeUnity`, `TimeSlicingMode`, `Size`, `Center`, `BakedTexture`; Flow: **Sonda de reflexo: capturar agora** |
 | ReflectionProbe › bake | `Lightmapping.BakeReflectionProbe` (só editor na Unity) | 🟡 bake na janela Iluminação | 🟡 igual; no Play, `RenderProbe()` numa sonda Tempo real “Via script”. `IsFinishedRendering` **não existe** |
-| LightProbeGroup | `probePositions` | 🟡 X/Y/Z por slot | ✅ `GetProbePosition/SetProbePosition(i)`; quantidade de pontos sem API (lacuna) |
+| LightProbeGroup | `probePositions` | 🟡 X/Y/Z por slot | ✅ `GetProbePosition/SetProbePosition(i)`, `ProbeCount()` |
 | Material | `renderer.material.SetFloat/SetColor/SetTexture` com `_BaseColor, _Smoothness, _Metallic, _BumpScale, _Cutoff, _OcclusionStrength, _EmissionColor, _BaseMap, _BumpMap, _MetallicGlossMap, _EmissionMap, _OcclusionMap` (+ `_Color/_MainTex/_Glossiness`) | 🟡 `MaterialSlot.BaseColor/Smoothness/...` | ✅ `MaterialSlot.SetFloat/GetFloat/SetColor/GetColor/SetTexture/GetTexture/SetTextureOffset/SetTextureScale/HasProperty`; nome desconhecido lança |
 | Material › shader | `material.shader = Shader.Find("…/Unlit")` | ❌ por renderer | 🟡 trocar para um Material Lit/Simple Lit/Unlit (`SharedMaterial`, Flow “Malha: trocar material`). **Trocar o shader de um override por objeto continua fora** |
+| Entrada como evento (Flow) | Input System 1.11 `PlayerInput` (Behavior = Invoke Unity Events): `performed`/`canceled` por ação | ❌ ações só por script (`Input.Pressed`) | ✅ componente **Entrada do jogador** (`astra.input.player_input`): ações observadas (nomes do mapa da cena), eventos **Entrada: ação executada/cancelada** com filtro **Ação** na Conexão de evento; C# `PlayerInput.OnPerformed/Performed`; ícone `component/player-input`; catálogo “Entrada do jogador” |
 | Busca no mundo | `FindFirstObjectByType<T>`, `FindObjectsByType<T>` | ❌ | ✅ `SceneQuery.FindFirstObjectByType<T>/FindObjectsByType<T>/Root` |
 
 Contagem (nesta tabela, 31 linhas): antes ✅ 0 · 🟡 22 · ❌ 7 · ⚠️ 2. Depois ✅ 24 · 🟡 5 · ❌ 2
@@ -79,7 +80,7 @@ e “G7 n … (Flow)”). Capturas do POCO em `capturas/`.
 |---|---|---|---|
 | 1 | Ciclo de dia acelerado | `DiaAcelerado`: `Hour = 16`, `Speed = 720`, `HourChanged`/`Sunset` | Duração do dia 2 min; **Hora mudou → Sonda: capturar agora** |
 | 2 | Perfil de Volume ao entrar numa área | `PerfilPorArea`: `TriggerEnter` → `Volume.SharedProfile = Área coberta` | **Sensor 3D: entrou → Volume: trocar perfil (Área coberta)**; saiu → Exterior |
-| 3 | Desfoque ao mirar | `MiraComDesfoque`: botão “Mirar” → `Volume.Weight` 0→1, `DepthOfField.FocusDistance.Override(raio)`, `Camera.FieldOfView` | **Câmera virtual de mira entrou ao vivo → Volume: definir peso 1**; saiu → 0 (Timers priorizam as câmeras) |
+| 3 | Desfoque ao mirar | `MiraComDesfoque`: botão “Mirar” → `Volume.Weight` 0→1, `DepthOfField.FocusDistance.Override(raio)`, `Camera.FieldOfView` | **Entrada do jogador: ação executada (Mirar) → Volume: definir peso 1**; cancelada → 0 |
 | 4 | Postes ao anoitecer | `PostesAoAnoitecer`: `Sunset/Sunrise` → `Light.Enabled` + `_EmissionColor` | **Pôr do sol → Ativar Postes**; nascer → Desativar |
 | 5 | Assar sonda por script | `SondaPorScript`: troca a cor do painel e `RenderProbe()` | **Timer 2 s → Sonda de reflexo: capturar agora** (painel em tween) |
 | 6 | Trocar material | `TrocaDeMaterial`: `SharedMaterial` Ouro (Lit) ↔ Neon (Unlit), `SetFloat("_Smoothness")` | **Timer → Malha: trocar material (Neon)**, outro Timer volta ao Ouro |

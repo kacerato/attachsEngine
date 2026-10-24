@@ -24,6 +24,7 @@
 #include "scene/light.h"
 #include "scene/lighting_settings.h"
 #include "scene/mesh_renderer.h"
+#include "scene/player_input.h"
 #include "scene/reflection_probe.h"
 #include "scene/script_behavior.h"
 #include "scene/time_of_day.h"
@@ -355,36 +356,26 @@ int main(int argc, char **argv) {
         environment->weight = 0;
         if (!b.doc.applyEntityValues(aim, values)) fail("volume de mira recusado");
       }
-      if (csharp) {
-        b.script(b.camera, "g7.mira_com_desfoque", "MiraComDesfoque.cs", {{"volume_de_mira", "object", std::to_string(aim)}});
-        auto map = b.doc.inputActions();
-        runtime::InputAction action;action.id = "Mirar";action.kind = runtime::ActionKind::Button;
-        runtime::InputBinding touch;touch.source = runtime::InputSource::TouchButton;touch.code = 1;
-        action.bindings.push_back(touch);
-        if (!map.add(action) || !b.doc.setInputActions(map)) fail("ação Mirar recusada");
-      } else {
-        // Flow: o Cérebro mostra a câmera virtual de prioridade maior; um Timer
-        // prioriza a Mira, outro devolve a Geral. A Mira ao vivo liga o Volume.
-        {
-          auto values = *b.doc.find(b.camera);
-          values.components.add(scene::CameraBrain::descriptor);
-          if (!b.doc.applyEntityValues(b.camera, values)) fail("cérebro recusado");
+      // Ação "Mirar" no botão de toque secundário do Play, nas duas variantes.
+      auto map = b.doc.inputActions();
+      runtime::InputAction action;action.id = "Mirar";action.kind = runtime::ActionKind::Button;
+      runtime::InputBinding touch;touch.source = runtime::InputSource::TouchButton;touch.code = 1;
+      action.bindings.push_back(touch);
+      if (!map.add(action) || !b.doc.setInputActions(map)) fail("ação Mirar recusada");
+      const u32 aimAction = static_cast<u32>(map.actions().size());
+      if (csharp) b.script(b.camera, "g7.mira_com_desfoque", "MiraComDesfoque.cs", {{"volume_de_mira", "object", std::to_string(aim)}});
+      else {
+        // Flow: Entrada do jogador (PlayerInput › Invoke Unity Events). Mirar
+        // executada liga o Volume de mira; cancelada desliga.
+        auto values = *b.doc.find(b.camera);
+        values.components.add(scene::PlayerInput::descriptor);
+        for (const u32 event : {43u, 44u}) {
+          auto *c = static_cast<scene::EventConnection *>(values.components.add(scene::EventConnection::descriptor));
+          c->event = event;c->action = call;c->method = 36;c->receiver = aim;c->argument = event == 43 ? 1.0f : 0.0f;
+          c->inputAction = aimAction;
+          if (!c->valid()) fail("conexão de entrada recusada");
         }
-        const auto general = b.folder(0, "Câmera virtual geral");
-        b.place(general, 0, 3.2f, -9, 1, 1, 1, 9, 0);
-        const auto sight = b.folder(0, "Câmera virtual de mira");
-        b.place(sight, 0, 2.2f, -1, 1, 1, 1, 4, 0);
-        for (const auto id : {general, sight}) {
-          auto values = *b.doc.find(id);
-          values.components.add(scene::VirtualCamera::descriptor);
-          set(values, scene::VirtualCamera::descriptor, "priority", Value{10.0f});
-          set(values, scene::VirtualCamera::descriptor, "vertical_fov", Value{id == sight ? 30.0f : 60.0f});
-          if (!b.doc.applyEntityValues(id, values)) fail("câmera virtual recusada");
-        }
-        b.connection(b.timer("Timer: mirar", 2, false), 1, call, 26, sight);
-        b.connection(b.timer("Timer: soltar", 7, false), 1, call, 26, general);
-        b.connection(sight, 20, call, 36, aim, 1);
-        b.connection(sight, 21, call, 36, aim, 0);
+        if (!b.doc.applyEntityValues(b.camera, values)) fail("entrada recusada");
       }
       publish(output, "G7 3 Desfoque ao mirar" + suffix, b, assets, scripts, csharp ? "MiraComDesfoque.cs" : nullptr);
     }

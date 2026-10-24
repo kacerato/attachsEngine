@@ -4,6 +4,7 @@
 #include "scene/script_behavior.h"
 #include "scene/timer.h"
 #include "scene/event_connection.h"
+#include "scene/player_input.h"
 #include "scene/transform_constraints.h"
 #include "scene/ik_constraints.h"
 #include "scene/ik_effects.h"

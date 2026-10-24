@@ -139,3 +139,13 @@ public readonly partial struct LightingSettings
     /// <summary>Lighting › Sun Source (RenderSettings.sun).</summary>
     public ObjectReference Sun { get => SunSource; set => SunSource = value; }
 }
+
+public readonly partial struct PlayerInput
+{
+    /// <summary>PlayerInput › Invoke Unity Events › performed: recebe o índice da ação no mapa (a partir de 1).</summary>
+    public ComponentSubscription Performed(Behavior owner, Action<int> handler) =>
+        OnPerformed(owner, e => handler((int)e[0].AsInteger()));
+    /// <summary>PlayerInput › Invoke Unity Events › canceled.</summary>
+    public ComponentSubscription Canceled(Behavior owner, Action<int> handler) =>
+        OnCanceled(owner, e => handler((int)e[0].AsInteger()));
+}

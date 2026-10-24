@@ -579,6 +579,7 @@ add_library(aether_runtime STATIC
   runtime/scene_lights.cpp
   runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
+  runtime/scene_player_input.cpp
   runtime/scene_environment.cpp
   runtime/environment_migration.cpp
   runtime/scene_physics.cpp

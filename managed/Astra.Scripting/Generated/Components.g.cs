@@ -1331,6 +1331,8 @@ public readonly partial struct EventConnection : IComponentFacade<EventConnectio
         HoraDoDiaNascerDoSol = 40,
         HoraDoDiaPorDoSol = 41,
         HoraDoDiaDiaMudou = 42,
+        EntradaAcaoExecutada = 43,
+        EntradaAcaoCancelada = 44,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1401,6 +1403,48 @@ public readonly partial struct EventConnection : IComponentFacade<EventConnectio
         get => (MethodOption)Component.GetEnum("method");
         set => Component.SetEnum("method", (uint)value);
     }
+    public enum InputActionOption : uint
+    {
+        QualquerAcao = 0,
+        Acao1 = 1,
+        Acao2 = 2,
+        Acao3 = 3,
+        Acao4 = 4,
+        Acao5 = 5,
+        Acao6 = 6,
+        Acao7 = 7,
+        Acao8 = 8,
+        Acao9 = 9,
+        Acao10 = 10,
+        Acao11 = 11,
+        Acao12 = 12,
+        Acao13 = 13,
+        Acao14 = 14,
+        Acao15 = 15,
+        Acao16 = 16,
+        Acao17 = 17,
+        Acao18 = 18,
+        Acao19 = 19,
+        Acao20 = 20,
+        Acao21 = 21,
+        Acao22 = 22,
+        Acao23 = 23,
+        Acao24 = 24,
+        Acao25 = 25,
+        Acao26 = 26,
+        Acao27 = 27,
+        Acao28 = 28,
+        Acao29 = 29,
+        Acao30 = 30,
+        Acao31 = 31,
+        Acao32 = 32,
+    }
+    /// <summary>Ação. Ação do mapa de entrada da cena; Qualquer ação aceita todas as observadas pela Entrada do jogador</summary>
+    public InputActionOption InputAction
+    {
+        get => (InputActionOption)Component.GetEnum("input_action");
+        set => Component.SetEnum("input_action", (uint)value);
+    }
     /// <summary>Receptor. Objeto ativado ou dono do componente chamado; vazio usa o próprio emissor</summary>
     public ObjectReference Receiver
     {
@@ -1419,6 +1463,77 @@ public readonly partial struct EventConnection : IComponentFacade<EventConnectio
     /// <summary>Material. Recurso do projeto por slot</summary>
     public AssetGuid GetArgumentMaterial(uint slot = 0) => Component.GetResource("argument_material", slot);
     public void SetArgumentMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("argument_material", value, slot);
+}
+
+/// <summary>Entrada do jogador: Ações do mapa de entrada viram eventos deste objeto. Família Lógica · Eventos.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.inputsystem@1.11/manual/PlayerInput.html</remarks>
+public readonly partial struct PlayerInput : IComponentFacade<PlayerInput>
+{
+    public static string TypeId => "astra.input.player_input";
+    public static PlayerInput Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PlayerInput(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativa. Desligada não emite eventos; as ações continuam valendo para scripts e personagem</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    [System.Flags]
+    public enum ActionsOption : uint
+    {
+        Acao1 = 1,
+        Acao2 = 2,
+        Acao3 = 4,
+        Acao4 = 8,
+        Acao5 = 16,
+        Acao6 = 32,
+        Acao7 = 64,
+        Acao8 = 128,
+        Acao9 = 256,
+        Acao10 = 512,
+        Acao11 = 1024,
+        Acao12 = 2048,
+        Acao13 = 4096,
+        Acao14 = 8192,
+        Acao15 = 16384,
+        Acao16 = 32768,
+        Acao17 = 65536,
+        Acao18 = 131072,
+        Acao19 = 262144,
+        Acao20 = 524288,
+        Acao21 = 1048576,
+        Acao22 = 2097152,
+        Acao23 = 4194304,
+        Acao24 = 8388608,
+        Acao25 = 16777216,
+        Acao26 = 33554432,
+        Acao27 = 67108864,
+        Acao28 = 134217728,
+        Acao29 = 268435456,
+        Acao30 = 536870912,
+        Acao31 = 1073741824,
+        Acao32 = 2147483648,
+    }
+    /// <summary>Ações. Ações do mapa de entrada da cena que geram eventos neste objeto</summary>
+    public ActionsOption Actions
+    {
+        get => (ActionsOption)Component.GetEnum("actions");
+        set => Component.SetEnum("actions", (uint)value);
+    }
+    /// <summary>Ação executada. A ação disparou neste quadro (performed do Input System); o valor é o índice da ação, a partir de 1. Payload: Ação: inteiro</summary>
+    public ComponentSubscription OnPerformed(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "performed", handler);
+    /// <summary>Ação cancelada. A ação foi solta neste quadro (canceled do Input System). Payload: Ação: inteiro</summary>
+    public ComponentSubscription OnCanceled(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "canceled", handler);
 }
 
 /// <summary>IK de dois ossos: Raiz e meio da cadeia levam a ponta ao alvo, com direção da dobra. Família Lógica · IK.</summary>
@@ -5845,6 +5960,9 @@ public readonly partial struct LightProbeGroup : IComponentFacade<LightProbeGrou
     /// <summary>Posição Z (m). Valor por slot</summary>
     public float GetProbePositionZ(uint slot) => Component.GetSlotFloat("probe_position_z", slot);
     public void SetProbePositionZ(uint slot, float value) => Component.SetSlotFloat("probe_position_z", value, slot);
+    /// <summary>Quantidade de sondas. Quantos pontos o grupo tem (probePositions.Length da Unity)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long ProbeCount() => Component.Invoke("probe_count").AsInteger();
 }
 
 /// <summary>Câmera: Projeção e enquadramento. Família Câmera · Projeção.</summary>

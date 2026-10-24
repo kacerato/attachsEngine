@@ -2497,6 +2497,12 @@
       "name": "ambient-occlusion",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/player-input": {
+      "category": "component",
+      "name": "player-input",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

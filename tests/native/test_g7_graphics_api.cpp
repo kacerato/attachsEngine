@@ -14,6 +14,7 @@
 #include "scene/event_connection.h"
 #include "scene/light.h"
 #include "scene/mesh_renderer.h"
+#include "scene/player_input.h"
 #include "scene/time_of_day.h"
 #include "scene/timer.h"
 
@@ -211,4 +212,47 @@ AE_TEST(g7_generated_facade_is_partial_with_asset_methods_and_parameter_table) {
   AE_EXPECT_TRUE(api.find("public static class VolumeParameterTable")!=std::string::npos&&
                  api.find("\"override_lens_distortion\",")!=std::string::npos,"tabela de parâmetros e overrides");
   AE_EXPECT_TRUE(api.find("public bool ParameterOverridden(long parameter)")!=std::string::npos,"overrideState por índice");
+  AE_EXPECT_TRUE(api.find("public long ProbeCount() => Component.Invoke(\"probe_count\").AsInteger();")!=std::string::npos,
+                 "probePositions.Length do Light Probe Group");
+}
+
+AE_TEST(g7_player_input_turns_actions_into_events_filtered_by_action) {
+  EditorDocument doc;
+  // Mapa com duas ações de tecla; a Conexão só reage à segunda ("Mirar").
+  auto map=doc.inputActions();
+  const auto base=static_cast<u32>(map.actions().size());
+  runtime::InputAction fire;fire.id="Disparar";fire.bindings={{runtime::InputSource::Key,62,0,0,1,false}};
+  runtime::InputAction aim;aim.id="Mirar";aim.bindings={{runtime::InputSource::Key,29,0,0,1,false}};
+  AE_EXPECT_TRUE(map.add(fire)&&map.add(aim)&&doc.setInputActions(map),"mapa");
+  const auto player=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Jogador");
+  const auto lamp=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Luz da mira");
+  auto values=*doc.find(lamp);values.active=false;doc.applyEntityValues(lamp,values);
+  values=*doc.find(player);
+  values.components.add(scene::PlayerInput::descriptor);
+  auto *pressed=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
+  pressed->event=43;pressed->action=1;pressed->receiver=lamp;pressed->inputAction=base+2;
+  auto *released=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
+  released->event=44;released->action=2;released->receiver=lamp;released->inputAction=base+2;
+  AE_EXPECT_TRUE(doc.applyEntityValues(player,values),"entrada e conexões");
+  // Ida e volta: o filtro pela ação persiste na v3.
+  EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"ida e volta");
+  AE_EXPECT_TRUE(reopened.find(player)->components.find(scene::PlayerInput::descriptor)!=nullptr,"Entrada do jogador persiste");
+
+  EditorMapScene resources;EditorPlayScene play;AE_EXPECT_TRUE(play.start(doc,resources),"Play");
+  const auto frame=[&](std::vector<u32> keys) {
+    runtime::InputDeviceState state;state.keys=std::move(keys);
+    play.input().submit(state,1.0/60);
+    return play.advance(1.0/60);
+  };
+  AE_EXPECT_TRUE(frame({62}),"Disparar");
+  AE_EXPECT_TRUE(!play.world().activeSelf(play.world().handle(lamp)),"outra ação não passa no filtro");
+  AE_EXPECT_TRUE(frame({62,29}),"Mirar");
+  AE_EXPECT_TRUE(play.world().activeSelf(play.world().handle(lamp)),"ação executada acende");
+  AE_EXPECT_TRUE(frame({62,29}),"segurando");
+  AE_EXPECT_TRUE(play.world().activeSelf(play.world().handle(lamp)),"segurar não repete");
+  AE_EXPECT_TRUE(frame({}),"soltar");
+  AE_EXPECT_TRUE(!play.world().activeSelf(play.world().handle(lamp)),"ação cancelada apaga");
+  play.stop();
+  const auto api=scene::componentCSharpApi();
+  AE_EXPECT_TRUE(api.find("public ComponentSubscription OnPerformed(Behavior owner")!=std::string::npos,"script assina ação executada");
 }
