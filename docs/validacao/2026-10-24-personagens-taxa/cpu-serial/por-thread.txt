@@ -1,0 +1,16 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 13295
+Event count: 6647500000
+
+Overhead  Command
+89.82%    AstraGame
+3.87%     binder:26139_2
+2.32%     dev.aether.editor.u07
+1.42%     binder:26139_1
+1.31%     binder:26139_4
+0.99%     blastAsyncWork
+0.18%     .NET TP Worker
+0.05%     .NET TP Gate
+0.03%     26139-ScoutStat

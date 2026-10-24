@@ -175,10 +175,11 @@ struct AnimatorPose {
 namespace {
 // Pool da composição de animação. Próprio, e não o da física: waitIdle espera
 // a fila inteira do pool. Até 4 workers além da thread do jogo.
-// Desligado por padrão: no POCO (24/10) as fases paralelas eram só ~6% da
-// thread do jogo; a thread caiu 0,47 ms e o processo subiu 1,3 ms. Volta a
-// ligar quando a amostragem por personagem também for paralela.
-std::atomic<bool> parallelAnimationEnabled{false};
+// Ligado: com personagens inteiros por job e a taxa por tamanho na tela, a
+// Vila S no POCO (24/10, cortes-0444) foi de 13,83 → 10,00 ms na thread do
+// jogo e 14,72 → 12,53 ms no processo. Só a mistura em paralelo (sem taxa)
+// subia o processo; o A/B continua com aether.animation_parallel.
+std::atomic<bool> parallelAnimationEnabled{true};
 JobSystem &animationJobs() {
   static JobSystem jobs(std::clamp(std::thread::hardware_concurrency(), 2u, 5u) - 1u);
   return jobs;

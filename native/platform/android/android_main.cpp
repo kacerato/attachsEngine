@@ -2407,12 +2407,13 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_grading_force"));
   {
-    // Composição de animação em paralelo: desligada por padrão (A/B de 24/10); true liga para medir.
+    // Animação em paralelo por personagem (padrão desde o A/B de 24/10); false volta à thread do jogo.
     ae::runtime::SceneAnimator::setParallelEvaluation(ae::platform::android::readBooleanLaunchOption(
-        app->activity,"aether.animation_parallel",false));
-    // Taxa da animação por tamanho na tela: desligada até o A/B; true liga.
+        app->activity,"aether.animation_parallel",true));
+    // Taxa da animação por tamanho na tela (padrão desde o A/B de 24/10: processo
+    // -2,1 ms na Vila S); false volta a avaliar todo Animator a cada quadro.
     shell.editorSession.setAnimationUpdateRate(ae::platform::android::readBooleanLaunchOption(
-        app->activity,"aether.animation_rate",false));
+        app->activity,"aether.animation_rate",true));
     // Bancada do Culling Mode do Animator: força o modo em todos (0 sempre, 1 só o tempo, 2 parado).
     ae::u32 culling=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.animator_culling",culling)) {

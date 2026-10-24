@@ -1560,7 +1560,7 @@ private:
   u64 lensDirtScanKey_[4]{};bool lensDirtScanned_=false;
   // Bancada (aether.animator_culling): -1 respeita o Culling Mode de cada Animator.
   int animatorCullingOverride_=-1;
-  bool animationUpdateRate_=false;
+  bool animationUpdateRate_=true;
   usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
