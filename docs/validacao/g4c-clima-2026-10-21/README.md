@@ -115,6 +115,36 @@ Pranchas Unity × POCO:
 Lacunas que continuam: chão molhado/poças, acúmulo de neve, respingo no chão (sub-emissor de
 colisão disponível, sem receita pronta).
 
+### Superfícies do clima no POCO (24/10, `0.3.0-dev.261024999-clima-0058`)
+
+Depois das pranchas -1245 (cena clara e seca), o clima passou a agir nas superfícies, como
+nos climas da Unity (Enviro 3: wetness/snow globais com acumular e secar, luz direta e ambiente por
+tipo; UniStorm: neve pela normal com grão e relevo).
+
+- Chuva: chão escuro, liso e refletindo; chuva 7.000/s com rastros perto da câmera; céu
+  fechado; luz direta 0,5 e ambiente 0,6 em Chuva cheia (`23-play-chuva-molhada-0058.png`,
+  `24-edicao-chuva-chao-molhado-0058.png`).
+- Neve: cobre o chão, os telhados inclinados, as copas e o topo do muro em ~60 s de Play
+  (`25-play-neve-acumulada-0058.png`, `26-edicao-neve-acumulada-0058.png`).
+- Pranchas: `prancha-chuva-pixagon-1m38-x-poco-0058.png` e `prancha-neve-synty-3m51-x-poco-0058.png`.
+
+Defeito achado no caminho: o APK clima-2003/2349 caía no compilador de shader da Adreno ao criar o
+pipeline principal. A causa era ler uma linha nova do bloco de ambiente depois de 4112 (offset 4256).
+A bisseção no aparelho confirmou: sem o bloco, o APK abria. Agora os valores vão em campos
+reservados do começo do bloco (`shadowTransitionParameters.w`; neve e poças empacotadas em
+`materialDistanceParameters.w`), e o relógio vem do da água.
+
+Lacunas desta rodada:
+- As poças não apareceram no 0058, porque a máscara usava a normal do normal map e o relevo das
+  pedras tirava o piso da faixa "plano". A correção usa a normal da geometria e ainda não foi vista no
+  aparelho.
+- A chuva continua mais quente e clara que a tempestade azulada da Pixagon.
+- A neve fica num dia cinza; a Synty é ensolarada.
+- PK-10 no aparelho: Efeitos › Faíscas cria e emite (36 vivas). O passe desenha 3 lotes (neve,
+  faíscas e as trilhas delas, ~330 segmentos a mais que as vivas). Mas faíscas aditivas pequenas
+  sobre a neve clara não aparecem na captura (`27-faiscas-emitindo-0058.png`). Luzes e Folha de
+  textura ainda não foram vistas.
+
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
 `tools/measure-g0-baseline.ps1 -Order S -Seconds 40`, 4 rodadas intercaladas, bateria ≤ 37,9 °C no

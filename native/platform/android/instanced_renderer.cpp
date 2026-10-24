@@ -204,12 +204,8 @@ struct DirtRoadFrameUniform {
   float skyStarRotation[3][4]{};
   // V-2: brilho do céu noturno (o luar espalhado pelo ar), rgb; w reservado.
   float skyNight[4]{};
-  // G4c: superfícies do clima (dirt_road_shading.glsl): molhado, poças, neve
-  // acumulada, reservado. Fim do bloco: nenhum offset anterior muda.
-  float weatherSurface[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4272);
-static_assert(offsetof(DirtRoadFrameUniform, weatherSurface) == 4256);
+static_assert(sizeof(DirtRoadFrameUniform) == 4256);
 static_assert(offsetof(DirtRoadFrameUniform, skyNight) == 4240);
 static_assert(offsetof(DirtRoadFrameUniform, skySun) == 4160);
 static_assert(offsetof(DirtRoadFrameUniform, skyMoon) == 4176);
@@ -6377,9 +6373,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           look,mapDescription,renderingPolicy_.ambient.splitSumBrdf,
           editorFog,editorPost,lights,atmosphereGroundCache_,ambientProbeCache_,timeSeconds))
       return rhi::SwapchainStatus::FatalError;
-    std::copy(std::begin(weatherSurface_),std::end(weatherSurface_),std::begin(frame->weatherSurface));
-    // Relógio das ondulações nas poças (a linha só tem três valores do clima).
-    frame->weatherSurface[3]=static_cast<float>(std::fmod(timeSeconds,3600.0));
+    // Superfícies do clima nos reservados (dirt_road_shading.glsl): molhado;
+    // neve em centésimos + poças como fração no mesmo float.
+    frame->shadowTransitionParameters[3]=std::clamp(weatherSurface_[0],0.0f,1.0f);
+    frame->materialDistanceParameters[3]=std::round(std::clamp(weatherSurface_[2],0.0f,1.0f)*100.0f)+
+        std::clamp(weatherSurface_[1],0.0f,1.0f)*0.99f;
     // Clima: luz direta e ambiente escurecem com a intensidade (Enviro 3:
     // directLightIntensityModifier/ambientIntensityModifier). A força do
     // ambiente multiplica a sonda SH e o ambiente constante no shader.

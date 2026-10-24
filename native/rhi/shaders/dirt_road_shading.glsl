@@ -614,11 +614,18 @@ void main() {
   // o resultado normalizado, que vive em [-1,1], desce para mediump.
   mediump vec3 v=environment.worldToViewRow0.w>0.0?-environment.worldToViewRow2.xyz:normalize(eye-vPosition);
   // G4c: clima nas superfícies (molhado, poças, neve), antes de f0 e da luz.
-  if(!impostor && (environment.weatherSurface.x>0.0 || environment.weatherSurface.z>0.0)) {
-    mediump float wetness=environment.weatherSurface.x;
-    mediump float puddles=environment.weatherSurface.y;
-    mediump float snow=environment.weatherSurface.z;
-    mediump float up=clamp(n.y,0.0,1.0);
+  // Superfícies do clima nos campos reservados do começo do bloco (ler uma
+  // linha depois de 4112 derrubava o compilador da Adreno): molhado em
+  // shadowTransitionParameters.w; neve (centésimos) e poças (fração) juntas em
+  // materialDistanceParameters.w; o relógio é o da água.
+  highp float weatherPacked=environment.materialDistanceParameters.w;
+  mediump float wetness=environment.shadowTransitionParameters.w;
+  mediump float snow=floor(weatherPacked)*0.01;
+  mediump float puddles=fract(weatherPacked)*1.0101;
+  if(!impostor && (wetness>0.0 || snow>0.0)) {
+    // Normal da geometria, não a do normal map: o relevo das pedras tirava o
+    // piso da faixa "plano" e as poças e a neve sumiam.
+    mediump float up=clamp(normalize(vNormal).y,0.0,1.0);
     if(snow>0.0) {
       mediump float cover=aetherSnowCover(vPosition,up,snow);
       // Grão da neve (o _SnowLayerTex/_SnowLayerBump do UniStorm, por ruído).
@@ -643,7 +650,7 @@ void main() {
         base.rgb*=mix(1.0,0.3,puddle);
         rough=mix(rough,0.02,puddle);
         metal=mix(metal,0.0,puddle);
-        mediump vec2 tilt=wetness>0.05?aetherRipple(vPosition,environment.weatherSurface.w):vec2(0.0);
+        mediump vec2 tilt=wetness>0.05?aetherRipple(vPosition,environment.waterParameters.z):vec2(0.0);
         n=normalize(mix(n,normalize(vec3(tilt.x,1.0,tilt.y)),puddle));
       }
     }
