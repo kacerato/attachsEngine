@@ -259,12 +259,16 @@ bool InstancedRenderer::recordSkinning() {
       bounds={draw.boundsCenter[0],draw.boundsCenter[1],draw.boundsCenter[2],draw.boundsRadius};
     }
     if(moved&&shadowDirtyAll_) shadowCascadeDirtyMask_=0xffffffffu;
+    // Pele é projetor dinâmico desde o primeiro quadro: sai do atlas estático.
+    markShadowDynamic(slot.drawIndex,bounds,true);
     if(moved) {
       for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
         const auto &region=shadowCascades_[cascade];
         if(renderer::isShadowCasterVisible(region,bounds.data(),bounds[3])||
-           (slot.hasShadowBounds&&renderer::isShadowCasterVisible(region,slot.shadowBounds.data(),slot.shadowBounds[3])))
-          shadowCascadeDirtyMask_|=1u<<cascade;
+           (slot.hasShadowBounds&&renderer::isShadowCasterVisible(region,slot.shadowBounds.data(),slot.shadowBounds[3]))) {
+          if(!(shadowDynamicDirtyMask_&(1u<<cascade))) ++shadowDirtyReasons_[2];
+          shadowDynamicDirtyMask_|=1u<<cascade;
+        }
       }
     }
     slot.shadowBounds=bounds;slot.hasShadowBounds=true;

@@ -2964,6 +2964,112 @@ void InstancedRenderer::destroyPostResources() {
   temporalPreviousJitter_[0] = temporalPreviousJitter_[1] = 0.0f;
 }
 
+namespace {
+// Passe de profundidade da sombra. As dependências são as mesmas em todos os
+// passes (clear, preservado, estático): compatibilidade de render pass exige
+// isso para os pipelines de sombra servirem a todos; layouts e load/store
+// podem diferir. A sincronização da cópia do atlas estático é por barreira.
+bool createShadowDepthPass(VkDevice device, VkFormat format, bool preserve, VkImageLayout preservedLayout,
+                           VkImageLayout finalLayout, VkImageView view, u32 width, u32 height,
+                           VkRenderPass &outPass, VkFramebuffer &outFramebuffer) {
+  VkAttachmentReference depthReference{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+  VkSubpassDescription subpass{};
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.pDepthStencilAttachment = &depthReference;
+  VkAttachmentDescription attachment{};
+  attachment.format = format;
+  attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+  attachment.loadOp = preserve ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachment.initialLayout = preserve ? preservedLayout : VK_IMAGE_LAYOUT_UNDEFINED;
+  attachment.finalLayout = finalLayout;
+  VkSubpassDependency dependencies[2]{};
+  dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+  dependencies[0].dstSubpass = 0;
+  // Clear and cached passes share the shadow pipelines. Render-pass
+  // compatibility includes subpass dependencies (only attachment load/store
+  // operations and layouts may differ here). Both also have to wait for a
+  // previous frame sampling the atlas before writing it again.
+  dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
+                                  VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  dependencies[1].srcSubpass = 0;
+  dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+  dependencies[1].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
+                                 VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+  dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  VkRenderPassCreateInfo pass{};
+  pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  pass.attachmentCount = 1; pass.pAttachments = &attachment;
+  pass.subpassCount = 1; pass.pSubpasses = &subpass;
+  pass.dependencyCount = 2; pass.pDependencies = dependencies;
+  if (vkCreateRenderPass(device, &pass, nullptr, &outPass) != VK_SUCCESS) return false;
+  VkFramebufferCreateInfo framebuffer{};
+  framebuffer.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  framebuffer.renderPass = outPass;
+  framebuffer.attachmentCount = 1;
+  framebuffer.pAttachments = &view;
+  framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
+  return vkCreateFramebuffer(device, &framebuffer, nullptr, &outFramebuffer) == VK_SUCCESS;
+}
+
+void depthImageBarrier(VkCommandBuffer commands, VkImage image, VkImageLayout oldLayout, VkImageLayout newLayout,
+                       VkPipelineStageFlags srcStage, VkAccessFlags srcAccess,
+                       VkPipelineStageFlags dstStage, VkAccessFlags dstAccess) {
+  VkImageMemoryBarrier barrier{};
+  barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  barrier.oldLayout = oldLayout;barrier.newLayout = newLayout;
+  barrier.srcAccessMask = srcAccess;barrier.dstAccessMask = dstAccess;
+  barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+  barrier.image = image;
+  barrier.subresourceRange = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, 1};
+  vkCmdPipelineBarrier(commands, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+} // namespace
+
+bool InstancedRenderer::ensureStaticShadowAtlas() {
+  if (shadowStaticAtlas_.isReady()) return true;
+  if (shadowStaticFailed_ || !shadowAtlas_.isReady()) return false;
+  rhi::ImageDesc image{};
+  image.width = shadowAtlas_.width();
+  image.height = shadowAtlas_.height();
+  image.format = shadowDepthFormat_;
+  image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+  image.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  image.memoryClass = rhi::MemoryClass::RenderTarget;
+  if (!memoryAllocator_->createImage(image, &shadowStaticAtlas_) ||
+      !createShadowDepthPass(device_, shadowDepthFormat_, false, VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, shadowStaticAtlas_.view(), image.width, image.height,
+                             shadowStaticRenderPass_, shadowStaticFramebuffer_) ||
+      !createShadowDepthPass(device_, shadowDepthFormat_, true, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                             VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, shadowStaticAtlas_.view(), image.width, image.height,
+                             shadowStaticCachedRenderPass_, shadowStaticCachedFramebuffer_)) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[ShadowCache] atlas estático recusado; sombra segue sem o split.");
+    shadowStaticFailed_ = true;
+    return false;
+  }
+  shadowStaticInitialized_ = false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[ShadowCache] atlas estático %ux%u criado (primeiro projetor dinâmico).",
+                      image.width, image.height);
+  return true;
+}
+
+void InstancedRenderer::markShadowDynamic(u32 drawIndex, const std::array<float, 4> &oldBounds, bool knownBounds) {
+  if (shadowDynamic_.size() <= drawIndex) shadowDynamic_.resize(dirtRoadResources_.draws().size(), 0);
+  if (drawIndex >= shadowDynamic_.size() || shadowDynamic_[drawIndex]) return;
+  shadowDynamic_[drawIndex] = 1;
+  ++shadowDynamicCount_;
+  // O atlas estático tinha este projetor: as cascatas onde ele estava regravam.
+  if (knownBounds) shadowStaticStaleBounds_.push_back(oldBounds);
+  else shadowStaticInitialized_ = false;
+}
+
 bool InstancedRenderer::createShadowResources() {
   if (!dirtRoadPreview_) return true;
   shadowDepthFormat_ = chooseDepthFormat(physicalDevice_, true);
@@ -2981,7 +3087,8 @@ bool InstancedRenderer::createShadowResources() {
   image.width = resolution * grid;
   image.height = resolution * grid;
   image.format = shadowDepthFormat_;
-  image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   image.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
   image.memoryClass = rhi::MemoryClass::RenderTarget;
   if (!memoryAllocator_->createImage(image, &shadowAtlas_)) return false;
@@ -3013,59 +3120,12 @@ bool InstancedRenderer::createShadowResources() {
       "[Shadow] PCF de hardware ativo: filtro=%s compare=LESS_OR_EQUAL.",
       linearShadowFilter ? "linear" : "nearest");
 
-  VkAttachmentReference depthReference{0, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
-  VkSubpassDescription subpass{};
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.pDepthStencilAttachment = &depthReference;
-  const auto createPassAndFramebuffer = [&](bool preserve, VkImageView atlasView, u32 width, u32 height,
-                                             VkRenderPass &outPass, VkFramebuffer &outFramebuffer) {
-    VkAttachmentDescription attachment{};
-    attachment.format = shadowDepthFormat_;
-    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment.loadOp = preserve ? VK_ATTACHMENT_LOAD_OP_LOAD : VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment.initialLayout = preserve ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                                        : VK_IMAGE_LAYOUT_UNDEFINED;
-    attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    VkSubpassDependency dependencies[2]{};
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    // Clear and cached passes share the shadow pipelines. Render-pass
-    // compatibility includes subpass dependencies (only attachment load/store
-    // operations and layouts may differ here). Both also have to wait for a
-    // previous frame sampling the atlas before writing it again.
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[0].dstStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    dependencies[0].dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |
-                                   VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-    dependencies[1].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    VkRenderPassCreateInfo pass{};
-    pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    pass.attachmentCount = 1; pass.pAttachments = &attachment;
-    pass.subpassCount = 1; pass.pSubpasses = &subpass;
-    pass.dependencyCount = 2; pass.pDependencies = dependencies;
-    if (vkCreateRenderPass(device_, &pass, nullptr, &outPass) != VK_SUCCESS) return false;
-    VkFramebufferCreateInfo framebuffer{};
-    framebuffer.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebuffer.renderPass = outPass;
-    framebuffer.attachmentCount = 1;
-    framebuffer.pAttachments = &atlasView;
-    framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
-    return vkCreateFramebuffer(device_, &framebuffer, nullptr, &outFramebuffer) == VK_SUCCESS;
-  };
-  if (!createPassAndFramebuffer(false, shadowAtlas_.view(), image.width, image.height,
-                                shadowRenderPass_, shadowFramebuffer_) ||
-      !createPassAndFramebuffer(true, shadowAtlas_.view(), image.width, image.height,
-                                shadowCachedRenderPass_, shadowCachedFramebuffer_))
+  if (!createShadowDepthPass(device_, shadowDepthFormat_, false, VK_IMAGE_LAYOUT_UNDEFINED,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, shadowAtlas_.view(), image.width, image.height,
+                             shadowRenderPass_, shadowFramebuffer_) ||
+      !createShadowDepthPass(device_, shadowDepthFormat_, true, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, shadowAtlas_.view(), image.width, image.height,
+                             shadowCachedRenderPass_, shadowCachedFramebuffer_))
     return false;
   invalidateStaticShadowCache();
 
@@ -3080,8 +3140,9 @@ bool InstancedRenderer::createShadowResources() {
     local.width = side;
     local.height = side;
     if (!memoryAllocator_->createImage(local, &localShadowAtlas_)) return false;
-    if (!createPassAndFramebuffer(false, localShadowAtlas_.view(), side, side,
-                                  localShadowRenderPass_, localShadowFramebuffer_))
+    if (!createShadowDepthPass(device_, shadowDepthFormat_, false, VK_IMAGE_LAYOUT_UNDEFINED,
+                               VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, localShadowAtlas_.view(), side, side,
+                               localShadowRenderPass_, localShadowFramebuffer_))
       return false;
   }
 
@@ -3196,7 +3257,13 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   if (!dirtRoadPreview_ || shadowRenderPass_ == VK_NULL_HANDLE) return;
   const u32 activeMask = shadowCascadeCount_ == 0 ? 0u : (1u << shadowCascadeCount_) - 1u;
   const bool initializeAtlas = !shadowCacheInitialized_;
-  const u32 dirtyMask = initializeAtlas ? activeMask : (shadowCascadeDirtyMask_ & activeMask);
+  // Split estático/dinâmico só com projetores dinâmicos e o atlas estático
+  // disponível; sem eles, o atlas único de antes (movimento suja direto).
+  const bool split = shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ &&
+                     shadowOpaquePipeline_ != VK_NULL_HANDLE && ensureStaticShadowAtlas();
+  const u32 staticMask = split ? (!shadowStaticInitialized_ ? activeMask : (shadowCascadeDirtyMask_ & activeMask)) : 0u;
+  const u32 dirtyMask = initializeAtlas ? activeMask
+                      : ((shadowCascadeDirtyMask_ | shadowDynamicDirtyMask_ | staticMask) & activeMask);
   if (!initializeAtlas && dirtyMask == 0) {
     ++shadowCacheHitFrames_;
     return;
@@ -3209,7 +3276,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   begin.renderArea.extent = {shadowAtlas_.width(), shadowAtlas_.height()};
   begin.clearValueCount = initializeAtlas ? 1u : 0u;
   begin.pClearValues = initializeAtlas ? &clear : nullptr;
-  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
+  if (!split) vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
   if (shadowCascadeCount_ == 0 || shadowOpaquePipeline_ == VK_NULL_HANDLE) {
     vkCmdEndRenderPass(commandBuffer_);
     shadowCacheInitialized_ = true;
@@ -3225,7 +3292,7 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   // Desenho com skin lê a pose deste quadro do buffer do compute.
   VkBuffer boundGeometry = mesh;
   const u32 resolution = renderingPolicy_.shadows.cascadeResolution;
-  if (!initializeAtlas) {
+  if (!initializeAtlas && !split) {
     VkClearAttachment depthClear{};
     depthClear.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     depthClear.clearValue.depthStencil = {1.0f, 0};
@@ -3244,10 +3311,16 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   // não uma vez por cascata (com 4 cascatas era 4× applyMaterialOverride).
   ++shadowPrepStamp_;
   if (shadowDrawPrep_.size() < dirtRoadResources_.draws().size()) shadowDrawPrep_.resize(dirtRoadResources_.draws().size());
+  // 0 todos os projetores, 1 só estáticos (atlas estático), 2 só dinâmicos.
+  u32 casterFilter = 0;
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
     // Só o modo de Projetar sombras decide aqui: "Só sombra" some da câmera
     // (authoredVisibility_) e continua no mapa.
     if (!authoredShadows_.empty() && !authoredShadows_[drawIndex]) return;
+    if (casterFilter != 0) {
+      const bool dynamicCaster = drawIndex < shadowDynamic_.size() && shadowDynamic_[drawIndex];
+      if ((casterFilter == 1) == dynamicCaster) return;
+    }
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
     auto &prep=shadowDrawPrep_[drawIndex];
     if(prep.stamp!=shadowPrepStamp_) {
@@ -3304,10 +3377,12 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     const auto range=drawIndexRange(drawIndex);
     vkCmdDrawIndexed(commandBuffer_,range.indexCount,1,range.firstIndex,geometry.vertexOffset,drawIndex);
     ++shadowSubmittedDraws_;
+    if (casterFilter == 2) ++shadowDynamicDrawsWindow_;
   };
   bool shadowDrawsSplit=false;
+  const auto recordCascades=[&](u32 mask) {
   for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
-    if ((dirtyMask & (1u << cascade)) == 0) continue;
+    if ((mask & (1u << cascade)) == 0) continue;
     ++shadowRenderedCascades_;
     VkViewport viewport{static_cast<float>((cascade&1u)*resolution),
                         static_cast<float>((cascade>>1u)*resolution),
@@ -3330,9 +3405,93 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     if(!shadowDrawsSplit) {splitShadowDraws(shadowSolidDraws,shadowCoverageDraws);shadowDrawsSplit=true;}
     recordShadowCasters([&](u32 drawIndex,bool masked){pushAndDraw(cascade,drawIndex,masked);});
   }
-  vkCmdEndRenderPass(commandBuffer_);
+  };
+  if (!split) {
+    recordCascades(dirtyMask);
+    vkCmdEndRenderPass(commandBuffer_);
+  } else {
+    // O split grava os próprios passes: estático, cópia e dinâmicos.
+    const u32 resolution2 = renderingPolicy_.shadows.cascadeResolution;
+    const VkImage staticImage = shadowStaticAtlas_.handle(), activeImage = shadowAtlas_.handle();
+    if (staticMask != 0) {
+      // 1) Estáticos das cascatas sujas no atlas estático.
+      const bool staticClear = !shadowStaticInitialized_;
+      if (!staticClear)
+        depthImageBarrier(commandBuffer_, staticImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                          VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+      VkRenderPassBeginInfo staticBegin = begin;
+      staticBegin.renderPass = staticClear ? shadowStaticRenderPass_ : shadowStaticCachedRenderPass_;
+      staticBegin.framebuffer = staticClear ? shadowStaticFramebuffer_ : shadowStaticCachedFramebuffer_;
+      staticBegin.clearValueCount = staticClear ? 1u : 0u;
+      staticBegin.pClearValues = staticClear ? &clear : nullptr;
+      vkCmdBeginRenderPass(commandBuffer_, &staticBegin, VK_SUBPASS_CONTENTS_INLINE);
+      vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
+      vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
+      vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+      boundGeometry = mesh;
+      if (!staticClear) {
+        VkClearAttachment depthClear{};
+        depthClear.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+        depthClear.clearValue.depthStencil = {1.0f, 0};
+        for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
+          if ((staticMask & (1u << cascade)) == 0) continue;
+          VkClearRect rect{};
+          rect.rect.offset = {static_cast<i32>((cascade & 1u) * resolution2), static_cast<i32>((cascade >> 1u) * resolution2)};
+          rect.rect.extent = {resolution2, resolution2};
+          rect.layerCount = 1;
+          vkCmdClearAttachments(commandBuffer_, 1, &depthClear, 1, &rect);
+        }
+      }
+      casterFilter = 1;
+      recordCascades(staticMask);
+      vkCmdEndRenderPass(commandBuffer_);
+      shadowStaticInitialized_ = true;
+    }
+    // 2) Cópia estático → ativo nas cascatas a atualizar.
+    depthImageBarrier(commandBuffer_, staticImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                      VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_READ_BIT);
+    depthImageBarrier(commandBuffer_, activeImage, initializeAtlas ? VK_IMAGE_LAYOUT_UNDEFINED : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,
+                      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT);
+    VkImageCopy regions[renderer::MaximumShadowCascades]{};
+    u32 regionCount = 0;
+    for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
+      if ((dirtyMask & (1u << cascade)) == 0) continue;
+      auto &region = regions[regionCount++];
+      region.srcSubresource = {VK_IMAGE_ASPECT_DEPTH_BIT, 0, 0, 1};
+      region.dstSubresource = region.srcSubresource;
+      region.srcOffset = {static_cast<i32>((cascade & 1u) * resolution2), static_cast<i32>((cascade >> 1u) * resolution2), 0};
+      region.dstOffset = region.srcOffset;
+      region.extent = {resolution2, resolution2, 1};
+    }
+    if (regionCount)
+      vkCmdCopyImage(commandBuffer_, staticImage, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, activeImage,
+                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, regionCount, regions);
+    depthImageBarrier(commandBuffer_, activeImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+                      VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT);
+    // 3) Só os dinâmicos por cima, no atlas ativo preservado.
+    VkRenderPassBeginInfo dynamicBegin = begin;
+    dynamicBegin.renderPass = shadowCachedRenderPass_;
+    dynamicBegin.framebuffer = shadowCachedFramebuffer_;
+    dynamicBegin.clearValueCount = 0;dynamicBegin.pClearValues = nullptr;
+    vkCmdBeginRenderPass(commandBuffer_, &dynamicBegin, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
+    vkCmdBindVertexBuffers(commandBuffer_,1,1,&instances,&offset);
+    vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
+    boundGeometry = mesh;
+    casterFilter = 2;
+    recordCascades(dirtyMask);
+    vkCmdEndRenderPass(commandBuffer_);
+  }
   shadowCacheInitialized_ = true;
   shadowCascadeDirtyMask_ = 0;
+  shadowDynamicDirtyMask_ = 0;
+  shadowRenderedWindow_ += shadowRenderedCascades_;
 }
 
 void InstancedRenderer::destroyShadowResources() {
@@ -3358,6 +3517,14 @@ void InstancedRenderer::destroyShadowResources() {
   shadowCachedRenderPass_=VK_NULL_HANDLE; shadowCascadeCount_=0;
   shadowCacheInitialized_=false; shadowCascadeDirtyMask_=0xffffffffu;
   shadowCacheHitFrames_=0;
+  for (VkFramebuffer framebuffer : {shadowStaticFramebuffer_, shadowStaticCachedFramebuffer_})
+    if (framebuffer != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, framebuffer, nullptr);
+  for (VkRenderPass pass : {shadowStaticRenderPass_, shadowStaticCachedRenderPass_})
+    if (pass != VK_NULL_HANDLE) vkDestroyRenderPass(device_, pass, nullptr);
+  shadowStaticFramebuffer_ = shadowStaticCachedFramebuffer_ = VK_NULL_HANDLE;
+  shadowStaticRenderPass_ = shadowStaticCachedRenderPass_ = VK_NULL_HANDLE;
+  shadowStaticAtlas_.reset();shadowStaticInitialized_ = false;shadowStaticFailed_ = false;
+  shadowDynamicDirtyMask_ = 0;shadowDynamic_.clear();shadowDynamicCount_ = 0;shadowStaticStaleBounds_.clear();
   shadowSampler_.shutdown(); shadowAtlas_.reset(); shadowDepthFormat_=VK_FORMAT_UNDEFINED;
 }
 
@@ -6119,6 +6286,7 @@ bool InstancedRenderer::commitAuthoredScene() {
     useMultiDrawIndirect_=false;
     instanceCount_=count;
     hzbHysteresis_.assign(count,{});dynamicMapDraws_.assign(count,1);
+    shadowDynamic_.assign(count,0);shadowDynamicCount_=0;shadowStaticInitialized_=false;
   }
   auto *instances=static_cast<renderer::GpuMeshInstance *>(instanceBuffer_.mappedData());
   if(!instances) return false;
@@ -6297,6 +6465,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           (tracked ? (authoredBaseVisibility_[i] != visible || authoredBaseShadows_[i] != shadows || authoredLayers_[i] != layer)
                    : (authoredVisibility_[i] != visible || authoredShadows_[i] != shadows))) {
         shadowCascadeDirtyMask_ = 0xffffffffu;
+        ++shadowDirtyReasons_[3];
         authoredAppearanceChanged=true;
       }
       authoredMaterials_[i] = state.material;
@@ -6334,6 +6503,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                                    sizeof(prepared.model))!=0;
       if (moved) {
         const auto &now = dirtRoadResources_.draws()[update.drawIndex];
+        markShadowDynamic(update.drawIndex, before, true);
         shadowMovedBounds_.push_back(before);
         shadowMovedBounds_.push_back({now.boundsCenter[0], now.boundsCenter[1], now.boundsCenter[2], now.boundsRadius});
       }
@@ -6833,6 +7003,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
                   renderingPolicy_.shadows.cacheGuardBandRatio)) {
             shadowCascades_[cascade] = desiredCascades[cascade];
             shadowCascadeDirtyMask_ |= 1u << cascade;
+            ++shadowDirtyReasons_[0];
           }
         }
       }
@@ -6840,6 +7011,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       // Só as cascatas onde um projetor movido estava ou está precisam regravar.
       if (shadowDirtyAll_ && !shadowMovedBounds_.empty()) shadowCascadeDirtyMask_ = 0xffffffffu;
       for (const auto &bounds : shadowMovedBounds_)
+        for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade)
+          if (renderer::isShadowCasterVisible(shadowCascades_[cascade], bounds.data(), bounds[3])) {
+            if (!(shadowDynamicDirtyMask_ & (1u << cascade))) ++shadowDirtyReasons_[1];
+            shadowDynamicDirtyMask_ |= 1u << cascade;
+          }
+      for (const auto &bounds : shadowStaticStaleBounds_)
         for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade)
           if (renderer::isShadowCasterVisible(shadowCascades_[cascade], bounds.data(), bounds[3]))
             shadowCascadeDirtyMask_ |= 1u << cascade;
@@ -6855,6 +7032,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       return rhi::SwapchainStatus::FatalError;
   }
   shadowMovedBounds_.clear();
+  shadowStaticStaleBounds_.clear();
 
   // A exposição automática não impede o reaproveitamento: ele exige o mesmo
   // tempo, e com dt zero o estado adaptado da câmera não muda.
@@ -6918,6 +7096,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   endGpuRegion(GpuPassClass::WaterSimulation);
   beginGpuRegion(GpuPassClass::Shadow);
   recordShadowPass(camera);
+  if (++shadowWindowFrames_ >= 120) {
+    __android_log_print(ANDROID_LOG_INFO, LogTag,
+        "[ShadowCache] cascatas regravadas=%u em %u quadros (%u cascatas); sujas por camera=%u poses=%u ossos=%u aparencia=%u; "
+        "split=%s dinamicos=%u desenhos dinamicos=%u",
+        shadowRenderedWindow_, shadowWindowFrames_, shadowCascadeCount_, shadowDirtyReasons_[0], shadowDirtyReasons_[1],
+        shadowDirtyReasons_[2], shadowDirtyReasons_[3], shadowStaticAtlas_.isReady() ? "on" : "off", shadowDynamicCount_,
+        shadowDynamicDrawsWindow_);
+    shadowRenderedWindow_ = shadowWindowFrames_ = shadowDynamicDrawsWindow_ = 0;
+    for (auto &count : shadowDirtyReasons_) count = 0;
+  }
   endGpuRegion(GpuPassClass::Shadow);
   beginGpuRegion(GpuPassClass::LocalShadow);
   recordLocalShadowPass();
