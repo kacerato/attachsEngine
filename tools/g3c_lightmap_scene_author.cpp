@@ -19,6 +19,7 @@
 #include "resources/asset_registry.h"
 #include "resources/import_profile.h"
 #include "scene/camera.h"
+#include "scene/environment.h"
 #include "scene/light.h"
 #include "scene/light_probe_group.h"
 #include "scene/lighting_settings.h"
@@ -29,6 +30,7 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <vector>
 
 using namespace ae;
 using namespace ae::editor;
@@ -53,10 +55,10 @@ EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *n
   light->useColorTemperature = color == nullptr;
   light->colorTemperature = 2700;
   if (color) for (u32 k = 0; k < 3; ++k) light->color[k] = color[k];
-  // Lúmens: a lanterna quente é forte com o sol baixo; as coloridas, mais
-  // fortes, para o rebote tingido aparecer ao lado do céu da tarde.
-  light->intensity = color ? 8000.0f : 2500.0f;
-  light->range = color ? 9.0f : 7.0f;
+  // Lúmens: lanternas de 2000-2500 lm. A 8000 lm as superfícies a 1-2 m
+  // da luz estouravam e o par ficava duro (validação de 24/10).
+  light->intensity = color ? 2000.0f : 2500.0f;
+  light->range = color ? 8.0f : 7.0f;
   light->shadowMode = 2;
   light->lightmapMode = mode;
   if (!light->valid() || !doc.applyEntityValues(id, values)) fail(std::string("lanterna recusada: ") + name);
@@ -82,7 +84,20 @@ void banner(EditorDocument &doc, EditorEntityId parent, const char *name, float 
 } // namespace
 
 int main(int argc, char **argv) {
-  if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia]\n"; return 1; }
+  // "ev=<EV100>" em qualquer posição: Ambiente na raiz com exposição Fixa, para
+  // o par tempo real x assado ser julgado na mesma exposição (a automática
+  // estica o contraste quando a arcada escurece).
+  float fixedEv = 0;
+  bool fixedExposure = false;
+  std::vector<char *> args;
+  for (int i = 0; i < argc; ++i) {
+    const std::string a = argv[i];
+    if (a.rfind("ev=", 0) == 0) { fixedEv = std::stof(a.substr(3)); fixedExposure = true; }
+    else args.push_back(argv[i]);
+  }
+  argc = static_cast<int>(args.size());
+  argv = args.data();
+  if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia] [ev=EV100]\n"; return 1; }
   const std::filesystem::path root = std::filesystem::absolute(argv[1]), output = std::filesystem::absolute(argv[2]);
   // "generico": qualquer projeto (a Vila) -- só Static + GI, as Configurações
   // e a UV2 no perfil; as luzes locais existentes passam a Misto (rebote assado).
@@ -180,6 +195,16 @@ int main(int argc, char **argv) {
     settings->directSamples = 16;
     settings->bounces = 2;
     if (!settings->valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("Configurações recusadas");
+  }
+  if (fixedExposure) {
+    auto rootValues = *doc.find(doc.root());
+    auto *environment = static_cast<scene::Environment *>(rootValues.components.find(scene::Environment::descriptor) ?
+        rootValues.components.edit(scene::Environment::descriptor) : rootValues.components.add(scene::Environment::descriptor));
+    if (!environment) fail("Ambiente recusado");
+    environment->values.active = true;
+    environment->values.exposureMode = renderer::ExposureMode::Fixed;
+    environment->values.fixedExposure = fixedEv;
+    if (!environment->values.valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("exposição fixa recusada");
   }
   if (!generic) {
   // Sondas de luz do PK-6 e uma esfera móvel na arcada.
