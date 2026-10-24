@@ -2407,6 +2407,14 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_grading_force"));
   {
+    // Bancada do Culling Mode do Animator: força o modo em todos (0 sempre, 1 só o tempo, 2 parado).
+    ae::u32 culling=0;
+    if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.animator_culling",culling)) {
+      shell.editorSession.setAnimatorCullingOverride(static_cast<int>(std::min(culling,2u)));
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[AnimatorCulling] modo forçado=%u em todos os Animators.",std::min(culling,2u));
+    }
+  }
+  {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {
       shell.instancedRenderer.setPostIsolation(postIsolation);

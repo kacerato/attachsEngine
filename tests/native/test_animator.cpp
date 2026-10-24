@@ -476,6 +476,38 @@ AE_TEST(animator_blend_tree_state_follows_its_parameter_and_speed) {
   p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),.25f),"o estado acompanha o parâmetro a cada quadro");
 }
 
+// Culling Mode da Unity: fora da vista, Cull Update Transforms segue o tempo
+// sem escrever a pose; Cull Completely para; Always Animate ignora a vista.
+AE_TEST(animator_culling_mode_follows_visibility_like_unity) {
+  Rig r;auto &a=r.animator();
+  a.layers[0].states[0].motions={{r.run}};
+  a.cullingMode=scene::AnimatorCullingMode::CullUpdateTransforms;
+  std::stringstream text;a.write(text);scene::Animator back;
+  AE_EXPECT_TRUE(back.read(text,7)&&back.cullingMode==scene::AnimatorCullingMode::CullUpdateTransforms,"modo relido na v7");
+  std::stringstream legacy;a.write(legacy);scene::Animator old;
+  AE_EXPECT_TRUE(old.read(legacy,6)&&old.cullingMode==scene::AnimatorCullingMode::AlwaysAnimate,"v6 abre como Sempre animar");
+  Play p(r);const auto instance=p.handle().instance;
+  p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),2),"sem culling conhecido o personagem anima");
+  p.graphs.setVisibleObjects({});
+  SceneAnimatorGraphs::Info before;p.graphs.info(p.world,r.owner,instance,0,before);
+  // Fora da vista a máquina e o tempo continuam, mas nenhuma amostra chega ao
+  // misturador: os ossos guardam a última pose escrita.
+  {
+    p.world.beginFrame(.25f);std::vector<SceneAnimator::ExternalSample> samples;
+    AE_EXPECT_TRUE(p.graphs.advance(p.world,r.library,.25f,.25f,samples)&&samples.empty(),"sem amostras fora da vista");
+  }
+  SceneAnimatorGraphs::Info after;p.graphs.info(p.world,r.owner,instance,0,after);
+  AE_EXPECT_TRUE(after.normalizedTime>before.normalizedTime,"Cull Update Transforms avança o tempo");
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),1u,"o Animator conta como fora da vista");
+  p.graphs.setCullingOverride(2);
+  p.graphs.info(p.world,r.owner,instance,0,before);p.step(.25f);p.graphs.info(p.world,r.owner,instance,0,after);
+  AE_EXPECT_TRUE(near(after.normalizedTime,before.normalizedTime),"Cull Completely para o tempo");
+  p.graphs.setCullingOverride(0);p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),0u,"Sempre animar ignora a vista");
+  p.graphs.setCullingOverride(-1);p.graphs.setVisibleObjects({r.arm});p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),0u,"um renderer da hierarquia na vista basta");
+}
+
 AE_TEST(animator_layer_with_mask_overrides_only_its_subtree_and_emits_events) {
   Rig r;auto &a=r.animator();
   a.layers[0].states[0].motions.push_back({r.walk});a.layers[0].states[0].events.push_back({.5f,9});

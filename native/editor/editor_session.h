@@ -1077,6 +1077,7 @@ public:
   // retângulo dela em pixels, a lente efetiva e a saída (fundo, máscara, pós).
   bool playStackView(renderer::RenderViewSnapshot &out);
   void setPlayStackImage(bool ready) {state_.playStackReady=ready&&!state_.playStackRect.isEmpty();}
+  void setAnimatorCullingOverride(int mode) noexcept {animatorCullingOverride_=mode;}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
@@ -1555,6 +1556,8 @@ private:
   // Chave da última varredura (grafo varrido, identidade, revisão, perfis):
   // quadros sem mutação não percorrem a cena atrás de Ambientes.
   u64 lensDirtScanKey_[4]{};bool lensDirtScanned_=false;
+  // Bancada (aether.animator_culling): -1 respeita o Culling Mode de cada Animator.
+  int animatorCullingOverride_=-1;
   usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela

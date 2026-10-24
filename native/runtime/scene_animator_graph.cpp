@@ -328,17 +328,50 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
   u32 cueBudget=256;
   library_=&library;
   if(!std::isfinite(scaled)||!std::isfinite(unscaled)||scaled<0||unscaled<0) return false;
-  std::vector<ObjectId> ids;world.graph().collectSubtree(world.graph().root(),ids);
-  std::vector<std::pair<ObjectId,u64>> live;
-  for(const auto id:ids) if(const auto *o=world.graph().find(id))
-    if(const auto *c=o->components.find(scene::Animator::descriptor)) live.emplace_back(id,c->instanceId());
+  const auto &graph=world.graph();
+  if(!liveValid_||liveIdentity_!=graph.identity()||liveStructure_!=graph.structureRevision()) {
+    liveValid_=true;liveIdentity_=graph.identity();liveStructure_=graph.structureRevision();
+    graph.collectSubtree(graph.root(),liveIds_);live_.clear();
+    for(const auto id:liveIds_) if(const auto *o=graph.find(id))
+      if(const auto *c=o->components.find(scene::Animator::descriptor)) live_.emplace_back(id,c->instanceId());
+  }
+  const auto &live=live_;
   std::erase_if(instances_,[&](const Instance &i){return std::find(live.begin(),live.end(),std::pair(i.owner,i.instance))==live.end();});
+  // Ancestrais dos objetos visíveis: um Animator está na vista quando algum
+  // renderer da sua hierarquia esteve no quadro anterior.
+  culledAnimators_=0;
+  bool ancestryReady=false;
+  const auto inView=[&](ObjectId root) {
+    if(!visibilityKnown_) return true;
+    if(!ancestryReady) {
+      ancestryReady=true;visibleAncestry_.clear();
+      for(ObjectId id:visibleObjects_) for(u32 depth=0;id!=kInvalidObject&&depth<256;++depth) {
+        visibleAncestry_.push_back(id);
+        const auto *object=graph.find(id);if(!object||id==graph.root()) break;id=object->parent;
+      }
+      std::sort(visibleAncestry_.begin(),visibleAncestry_.end());
+      visibleAncestry_.erase(std::unique(visibleAncestry_.begin(),visibleAncestry_.end()),visibleAncestry_.end());
+    }
+    return std::binary_search(visibleAncestry_.begin(),visibleAncestry_.end(),root);
+  };
 
   std::vector<animator_detail::WeightedMotion> weights;
   for(const auto &[owner,instance]:live) {
     if(!world.activeInHierarchy(world.handle(owner))) continue;
     const scene::Animator *a=nullptr;auto *runtime=ensure(world,owner,instance,&a);
     if(!runtime||!a||!a->enabled) continue;
+    const auto culling=cullingOverride_>=0?static_cast<scene::AnimatorCullingMode>(std::min(cullingOverride_,2)):a->cullingMode;
+    const bool outOfView=culling!=scene::AnimatorCullingMode::AlwaysAnimate&&
+        !inView(a->target&&graph.exists(static_cast<ObjectId>(a->target))?static_cast<ObjectId>(a->target):owner);
+    if(outOfView) ++culledAnimators_;
+    // Cull Completely: estados, tempo e parâmetros param junto com a pose.
+    if(outOfView&&culling==scene::AnimatorCullingMode::CullCompletely) continue;
+    // Cull Update Transforms: a máquina segue; as amostras deste Animator saem
+    // antes do misturador, e os ossos guardam a última pose escrita.
+    struct SampleTrim {
+      std::vector<SceneAnimator::ExternalSample> &list;usize from;bool active;
+      ~SampleTrim(){if(active&&list.size()>from) list.erase(list.begin()+static_cast<std::ptrdiff_t>(from),list.end());}
+    } trim{samples,samples.size(),outOfView};
     const ObjectId motionOwner=a->motionSource?static_cast<ObjectId>(a->motionSource):owner;
     bool bound=false;for(const auto &p:a->parameters) bound=bound||p.source!=scene::AnimatorParameterSource::Manual;
     if(bound) {

@@ -261,6 +261,16 @@ bool EditorSession::extractPlayMap(std::vector<renderer::MapDrawState> &out,
   if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
   if(!playScene_.extract(mapScene_,out)) {reportProblem(EditorConsoleSeverity::Error,"Play: recurso da malha não pôde ser extraído");return false;}
   applyLodGroups(playScene_.document(),out);
+  // Culling Mode do Animator: quem tem renderer dentro da câmera do jogo neste
+  // quadro anima no próximo (a Unity também decide pelo culling do quadro anterior).
+  playScene_.animatorGraphs().setCullingOverride(animatorCullingOverride_);
+  if(const auto game=gameView();game.frustum.valid) {
+    std::vector<runtime::ObjectId> visible;visible.reserve(out.size());
+    for(const auto &draw:out)
+      if(draw.visible&&renderer::isSphereVisible(game.frustum,draw.pose.draw.boundsCenter,draw.pose.draw.boundsRadius))
+        visible.push_back(static_cast<runtime::ObjectId>(draw.objectId));
+    playScene_.animatorGraphs().setVisibleObjects(std::move(visible));
+  }
   return true;
 }
 

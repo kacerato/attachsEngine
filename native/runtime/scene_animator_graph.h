@@ -76,14 +76,22 @@ public:
   void setEvents(ComponentEventQueue *events) noexcept {events_=events;}
   void setPhysics(const ScenePhysics *physics) noexcept {physics_=physics;}
   // Snapshot at Play start: no disk I/O or shared authoring changes in Play.
-  void setControllers(std::span<const resources::AnimatorControllerAsset> assets) {controllers_.assign(assets.begin(),assets.end());instances_.clear();}
+  void setControllers(std::span<const resources::AnimatorControllerAsset> assets) {controllers_.assign(assets.begin(),assets.end());instances_.clear();liveValid_=false;visibleObjects_.clear();visibilityKnown_=false;}
   const scene::Animator *configuration(const GameWorld &world,ObjectId owner,u64 instance) const;
   bool resolve(const scene::Animator &value,scene::Animator &out,std::string &diagnostic) const {
     return resources::resolveAnimatorController(value,controllers_,out,diagnostic);
   }
-  void reset() {instances_.clear();library_=nullptr;composer_=nullptr;}
+  void reset() {instances_.clear();library_=nullptr;composer_=nullptr;liveValid_=false;visibleObjects_.clear();visibilityKnown_=false;culledAnimators_=0;}
   // Avalia todos os Animators e acrescenta as amostras para o SceneAnimator.
   bool advance(GameWorld &world,const AnimationLibrary &library,float scaled,float unscaled,std::vector<SceneAnimator::ExternalSample> &samples);
+  // Culling Mode: objetos com renderer dentro da vista no quadro anterior, como
+  // a Unity decide pelo culling do quadro passado. Antes da primeira chamada
+  // nada é considerado fora da vista.
+  void setVisibleObjects(std::vector<ObjectId> objects) {visibleObjects_=std::move(objects);visibilityKnown_=true;}
+  // Bancada: -1 respeita o Culling Mode de cada Animator; 0..2 força o modo em todos.
+  void setCullingOverride(int mode) noexcept {cullingOverride_=mode;}
+  // Animators fora da vista no último advance (pose não escrita ou parados).
+  u32 culledAnimators() const noexcept {return culledAnimators_;}
 
   Status parameter(GameWorld &world,ObjectId owner,u64 instance,std::string_view name,ParameterOperation operation,float value,float &result);
   Status parameterById(GameWorld &world,ObjectId owner,u64 instance,u64 id,resources::AssetGuid controller,float &result);
@@ -102,6 +110,15 @@ private:
   std::vector<resources::AnimatorControllerAsset> controllers_;
   const AnimationLibrary *library_=nullptr;
   const SceneAnimator *composer_=nullptr;
+  std::vector<ObjectId> visibleObjects_,visibleAncestry_;
+  bool visibilityKnown_=false;
+  int cullingOverride_=-1;
+  u32 culledAnimators_=0;
+  // Animators vivos, refeitos só quando a estrutura do grafo muda.
+  std::vector<ObjectId> liveIds_;
+  std::vector<std::pair<ObjectId,u64>> live_;
+  u64 liveIdentity_=0,liveStructure_=0;
+  bool liveValid_=false;
 };
 
 } // namespace ae::runtime
