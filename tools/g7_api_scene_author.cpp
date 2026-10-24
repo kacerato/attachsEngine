@@ -316,8 +316,11 @@ int main(int argc, char **argv) {
     // 1. Ciclo de dia acelerado.
     {
       Builder b;b.base(assets, 16, csharp ? 0 : 2);
-      EditorEntityId probe = 0;b.chromeProbe(probe, csharp ? 0u : 2u);
-      if (csharp) b.script(b.sun, "g7.dia_acelerado", "DiaAcelerado.cs", {{"velocidade", "float", "720"}, {"hora_inicial", "float", "16"}});
+      // Sonda Via script nas duas variantes: o script (C#) ou a Conexão (Flow)
+      // a recaptura com o céu da hora. "Ao acordar" refletiria a tarde à noite.
+      EditorEntityId probe = 0;b.chromeProbe(probe, 2u);
+      if (csharp) b.script(b.sun, "g7.dia_acelerado", "DiaAcelerado.cs",
+                           {{"velocidade", "float", "720"}, {"hora_inicial", "float", "16"}, {"sonda", "object", std::to_string(probe)}});
       // Flow: Duração do dia de 2 min no Inspector; a cada hora a sonda recaptura o céu.
       else b.connection(b.sun, 39, call, 35, probe);
       publish(output, "G7 1 Dia acelerado" + suffix, b, assets, scripts, csharp ? "DiaAcelerado.cs" : nullptr);
