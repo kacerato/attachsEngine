@@ -208,6 +208,18 @@ int main(int argc, char **argv) {
     std::ofstream(output / ".astra/imports" / entry.path().filename(), std::ios::binary) << resources::serializeImportProfile(profile);
     ++profiles;
   }
+  // Modo genérico: fonte sem perfil próprio usa o embutido; ganha um com UV2.
+  if (generic)
+    for (const auto &entry : std::filesystem::directory_iterator(root / ".astra/imports", e)) {
+      if (entry.path().extension() != ".nodes") continue;
+      auto profilePath = entry.path();
+      profilePath.replace_extension(".profile");
+      if (std::filesystem::exists(profilePath)) continue;
+      resources::ImportProfile profile;
+      profile.generateLightmapUvs = true;
+      std::ofstream(output / ".astra/imports" / profilePath.filename(), std::ios::binary) << resources::serializeImportProfile(profile);
+      ++profiles;
+    }
   std::cout << "Static: " << statics << " · lanternas: 3 assadas + 1 mista · sondas: 50 · perfis com UV de lightmap: " << profiles
             << " · hora " << hour << '\n';
   return 0;
