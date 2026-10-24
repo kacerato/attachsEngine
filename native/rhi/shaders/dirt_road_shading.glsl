@@ -125,68 +125,46 @@ mediump float materialDetailWeight(highp float cameraDistance, highp float maxim
 // (UniStorm, Enviro): o molhado escurece o albedo poroso, alisa a rugosidade e
 // liga o reflexo; poças por máscara de ruído nos pisos planos; neve cobrindo o
 // que olha para cima, com borda irregular. Ruído de valor em mundo (xz), sem
-// textura: o mesmo em todo material, sem costura entre objetos.
+// textura. Hash só aritmético (sem sin) e funções sem inout: a primeira versão
+// derrubava o compilador de shader da Adreno do POCO na criação do pipeline.
 highp float aetherWeatherHash(highp vec2 p) {
-  return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
+  highp vec3 q=fract(vec3(p.x,p.y,p.x)*0.1031);
+  q+=dot(q,q.yzx+33.33);
+  return fract((q.x+q.y)*q.z);
 }
 mediump float aetherWeatherNoise(highp vec2 p) {
-  highp vec2 i=floor(p),f=fract(p);
-  f=f*f*(3.0-2.0*f);
-  return mix(mix(aetherWeatherHash(i),aetherWeatherHash(i+vec2(1,0)),f.x),
-             mix(aetherWeatherHash(i+vec2(0,1)),aetherWeatherHash(i+vec2(1,1)),f.x),f.y);
+  highp vec2 i=floor(p);
+  highp vec2 f=fract(p);
+  highp vec2 w=f*f*(3.0-2.0*f);
+  highp float a=aetherWeatherHash(i);
+  highp float b=aetherWeatherHash(i+vec2(1.0,0.0));
+  highp float c=aetherWeatherHash(i+vec2(0.0,1.0));
+  highp float d=aetherWeatherHash(i+vec2(1.0,1.0));
+  return mix(mix(a,b,w.x),mix(c,d,w.x),w.y);
 }
-void aetherWeatherSurface(highp vec3 position,inout mediump vec3 n,inout mediump vec3 albedo,
-                          inout mediump float rough,inout mediump float metal) {
-  mediump float wetness=environment.weatherSurface.x;
-  mediump float puddles=environment.weatherSurface.y;
-  mediump float snow=environment.weatherSurface.z;
-  if(wetness<=0.0 && snow<=0.0) return;
-  mediump float up=clamp(n.y,0.0,1.0);
-  if(snow>0.0) {
-    mediump float breakup=aetherWeatherNoise(position.xz*1.3)*0.65+aetherWeatherNoise(position.xz*5.1)*0.35;
-    // A neve começa no que é bem plano e desce para as encostas com a quantidade.
-    mediump float slope=smoothstep(0.85-0.45*snow,1.0-0.3*snow,up);
-    mediump float cover=slope*smoothstep(0.0,0.2,snow*1.35-breakup*(1.0-snow*0.5));
-    // Grão da neve (o _SnowLayerTex/_SnowLayerBump do UniStorm, aqui por ruído):
-    // brancos levemente diferentes e um relevo fino, para não virar tinta lisa.
-    mediump float grain=aetherWeatherNoise(position.xz*23.0)*0.6+aetherWeatherNoise(position.xz*61.0)*0.4;
-    mediump vec3 snowColor=mix(vec3(0.78,0.81,0.87),vec3(0.93,0.95,0.98),grain);
-    albedo=mix(albedo,snowColor,cover);
-    rough=mix(rough,mix(0.55,0.8,grain),cover);
-    metal=mix(metal,0.0,cover);
-    mediump vec2 bump=vec2(aetherWeatherNoise(position.xz*9.0+vec2(3.1,0.0)),aetherWeatherNoise(position.xz*9.0+vec2(0.0,5.7)))-0.5;
-    n=normalize(mix(n,normalize(vec3(bump.x*0.35,1.0,bump.y*0.35)),cover*0.7));
-    wetness*=1.0-cover;
-    puddles*=1.0-cover;
-  }
-  if(wetness>0.0) {
-    // Paredes molham menos que o chão; metal não escurece (não é poroso).
-    mediump float wet=wetness*mix(0.55,1.0,up);
-    albedo*=mix(1.0,mix(0.5,1.0,metal),wet);
-    rough=mix(rough,0.12,wet);
-    if(puddles>0.0 && up>0.9) {
-      mediump float mask=aetherWeatherNoise(position.xz*0.35)*0.7+aetherWeatherNoise(position.xz*1.4)*0.3;
-      mediump float puddle=smoothstep(1.0-puddles*0.6,1.0-puddles*0.6+0.06,mask)*smoothstep(0.9,0.97,up)*wetness;
-      albedo*=mix(1.0,0.3,puddle);
-      rough=mix(rough,0.02,puddle);
-      metal=mix(metal,0.0,puddle);
-      // Gotas caindo na poça (o Rain do sample da Unity): em cada célula de
-      // 25 cm um anel abre e some, cada um na sua fase; inclina a normal para
-      // fora do centro na crista do anel.
-      mediump vec3 ripple=vec3(0.0,1.0,0.0);
-      if(environment.weatherSurface.x>0.05) {
-        highp vec2 cellPosition=position.xz*4.0;
-        highp vec2 cell=floor(cellPosition);
-        mediump float seed=aetherWeatherHash(cell);
-        mediump float phase=fract(environment.weatherSurface.w*1.3+seed);
-        mediump vec2 toCenter=fract(cellPosition)-(0.3+0.4*vec2(seed,fract(seed*7.13)));
-        mediump float distanceToCenter=length(toCenter);
-        mediump float crest=smoothstep(0.06,0.0,abs(distanceToCenter-phase*0.45))*(1.0-phase);
-        ripple=normalize(vec3(toCenter/max(distanceToCenter,1.0e-3)*crest*0.6,1.0).xzy);
-      }
-      n=normalize(mix(n,ripple,puddle));
-    }
-  }
+// Cobertura de neve 0..1 na posição e na normal dadas.
+mediump float aetherSnowCover(highp vec3 position,mediump float up,mediump float snow) {
+  mediump float breakup=aetherWeatherNoise(position.xz*1.3)*0.65+aetherWeatherNoise(position.xz*5.1)*0.35;
+  mediump float slope=smoothstep(0.85-0.45*snow,1.0-0.3*snow,up);
+  return slope*smoothstep(0.0,0.2,snow*1.35-breakup*(1.0-snow*0.5));
+}
+// Poça 0..1 nos pisos planos (máscara de ruído largo).
+mediump float aetherPuddle(highp vec3 position,mediump float up,mediump float puddles,mediump float wetness) {
+  mediump float mask=aetherWeatherNoise(position.xz*0.35)*0.7+aetherWeatherNoise(position.xz*1.4)*0.3;
+  mediump float edge=1.0-puddles*0.6;
+  return smoothstep(edge,edge+0.06,mask)*smoothstep(0.9,0.97,up)*wetness;
+}
+// Inclinação da normal pela gota caindo na poça: x e z, para somar à normal.
+mediump vec2 aetherRipple(highp vec3 position,highp float time) {
+  highp vec2 cellPosition=position.xz*4.0;
+  highp vec2 cell=floor(cellPosition);
+  mediump float seed=aetherWeatherHash(cell);
+  mediump float phase=fract(time*1.3+seed);
+  mediump vec2 center=vec2(0.3+0.4*seed,0.3+0.4*fract(seed*7.13));
+  mediump vec2 toCenter=fract(cellPosition)-center;
+  mediump float distanceToCenter=max(length(toCenter),1.0e-3);
+  mediump float crest=(1.0-smoothstep(0.0,0.06,abs(distanceToCenter-phase*0.45)))*(1.0-phase);
+  return toCenter/distanceToCenter*crest*0.6;
 }
 
 mediump float pow5(mediump float value) {
@@ -636,10 +614,39 @@ void main() {
   // o resultado normalizado, que vive em [-1,1], desce para mediump.
   mediump vec3 v=environment.worldToViewRow0.w>0.0?-environment.worldToViewRow2.xyz:normalize(eye-vPosition);
   // G4c: clima nas superfícies (molhado, poças, neve), antes de f0 e da luz.
-  if(!impostor) {
-    mediump vec3 weatherAlbedo=base.rgb;
-    aetherWeatherSurface(vPosition,n,weatherAlbedo,rough,metal);
-    base.rgb=weatherAlbedo;
+  if(!impostor && (environment.weatherSurface.x>0.0 || environment.weatherSurface.z>0.0)) {
+    mediump float wetness=environment.weatherSurface.x;
+    mediump float puddles=environment.weatherSurface.y;
+    mediump float snow=environment.weatherSurface.z;
+    mediump float up=clamp(n.y,0.0,1.0);
+    if(snow>0.0) {
+      mediump float cover=aetherSnowCover(vPosition,up,snow);
+      // Grão da neve (o _SnowLayerTex/_SnowLayerBump do UniStorm, por ruído).
+      mediump float grain=aetherWeatherNoise(vPosition.xz*23.0)*0.6+aetherWeatherNoise(vPosition.xz*61.0)*0.4;
+      mediump vec3 snowColor=mix(vec3(0.78,0.81,0.87),vec3(0.93,0.95,0.98),grain);
+      base.rgb=mix(base.rgb,snowColor,cover);
+      rough=mix(rough,mix(0.55,0.8,grain),cover);
+      metal=mix(metal,0.0,cover);
+      mediump float bumpX=aetherWeatherNoise(vPosition.xz*9.0+vec2(3.1,0.0))-0.5;
+      mediump float bumpZ=aetherWeatherNoise(vPosition.xz*9.0+vec2(0.0,5.7))-0.5;
+      n=normalize(mix(n,normalize(vec3(bumpX*0.35,1.0,bumpZ*0.35)),cover*0.7));
+      wetness*=1.0-cover;
+      puddles*=1.0-cover;
+    }
+    if(wetness>0.0) {
+      // Paredes molham menos que o chão; metal não escurece (não é poroso).
+      mediump float wet=wetness*mix(0.55,1.0,up);
+      base.rgb*=mix(1.0,mix(0.5,1.0,metal),wet);
+      rough=mix(rough,0.12,wet);
+      if(puddles>0.0 && up>0.9) {
+        mediump float puddle=aetherPuddle(vPosition,up,puddles,wetness);
+        base.rgb*=mix(1.0,0.3,puddle);
+        rough=mix(rough,0.02,puddle);
+        metal=mix(metal,0.0,puddle);
+        mediump vec2 tilt=wetness>0.05?aetherRipple(vPosition,environment.weatherSurface.w):vec2(0.0);
+        n=normalize(mix(n,normalize(vec3(tilt.x,1.0,tilt.y)),puddle));
+      }
+    }
   }
   mediump float dielectricSpecular=clamp(frame.materialFactors.w,0.0,1.0);
   mediump vec3 f0=mix(vec3(.04*dielectricSpecular),base.rgb,metal);
