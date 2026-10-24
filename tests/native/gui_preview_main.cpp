@@ -438,6 +438,79 @@ int main(int argc,char **argv) {
     if(!editor::EditorImportTransaction::writeText(out/"project.json",descriptor)||!editor::EditorImportTransaction::writeText(out/"scenes/editor.aescene",archive)||!editor::EditorImportTransaction::write(out/(u07?"Scripts/U07Controller.cs":"Scripts/GuiAuthoredControls.cs"),read(root/(u07?"examples/ui/U07Controller.cs":"examples/ui/GuiAuthoredControls.cs"))))return 59;
     std::printf("Authored controls project: %s\n",out.generic_string().c_str());return 0;
   }
+  // PK-10/G4c: projeto de exemplo para ver no aparelho as Luzes das Faíscas e a
+  // Folha de textura com Material do projeto: noite (Sol com dia e noite às 23 h),
+  // chão escuro sem postes, Faíscas a 0,3 m e um fogo animado por folha 4x4
+  // (imagem gerada por tools/generate-fire-flipbook.py, sem asset de pacote).
+  if(std::string_view(argv[1])=="write-pk10-night") {
+    if(argc!=3)return 60;
+    const auto out=std::filesystem::absolute(argv[2]);std::error_code ec;
+    if(std::filesystem::exists(out,ec))return 61;
+    for(const auto *folder:{"scenes","Texturas","Materiais",".astra"})std::filesystem::create_directories(out/folder,ec);
+    if(ec)return 62;
+    const auto image=read(root/"examples/particles/fogo-folha-4x4.png");
+    if(image.empty()||!editor::EditorImportTransaction::write(out/"Texturas/fogo-folha-4x4.png",image))return 63;
+    editor::EditorSession session;if(!session.setProjectDirectory(out.generic_string().c_str()))return 64;
+    std::vector<u8> vertices;std::vector<u32> indices;std::vector<renderer::MapDrawRecord> draws;std::vector<renderer::MapMaterialRecord> materials;
+    if(!renderer::appendPrimitiveLibrary(renderer::MapVertexStride,vertices,indices,draws,materials)||!session.importMap(draws,materials,false,vertices,indices,0))return 65;
+    // Textura e Material do projeto (shader Partícula Unlit, Aditivo), no registro.
+    resources::AssetRegistry registry;if(!resources::AssetRegistry::deserialize(session.serializeAssets(),registry))return 66;
+    resources::AssetRecord texture;texture.guid=resources::assetGuidFromSeed("texture:Texturas/fogo-folha-4x4.png:pk10");
+    texture.type=resources::AssetType::Texture;texture.path="Texturas/fogo-folha-4x4.png";texture.contentHash=Sha256::hex(image);
+    texture.importerParameters="gerada-por tools/generate-fire-flipbook.py";
+    resources::MaterialAsset fire;fire.guid=resources::assetGuidFromSeed("material:Materiais/Fogo animado.material:pk10");
+    fire.name="Fogo animado";fire.values.baseColor[0]=1;fire.values.baseColor[1]=.85f;fire.values.baseColor[2]=.7f;
+    fire.textures[0]=texture.guid;fire.shading.shader=scene::MaterialShaderParticlesUnlit;fire.shading.blend=scene::MaterialBlendAdditive;
+    if(!fire.valid())return 67;
+    const auto fireText=fire.serialize();
+    resources::AssetRecord material;material.guid=fire.guid;material.type=resources::AssetType::Material;material.path="Materiais/Fogo animado.material";
+    material.contentHash=Sha256::hex(std::span<const u8>(reinterpret_cast<const u8*>(fireText.data()),fireText.size()));
+    if(!registry.add(texture)||!registry.add(material))return 68;
+    if(!editor::EditorImportTransaction::writeText(out/"Materiais/Fogo animado.material",fireText))return 69;
+    auto &g=session.document();
+    // Chão escuro (plano 10 m da biblioteca de primitivas, cor quase preta).
+    const auto floor=g.createEntity(g.root(),runtime::ObjectKind::Mesh,"Chão escuro");auto object=*g.find(floor);
+    if(!runtime::configurePrimitive(object,scene::PrimitiveType::Plane,{5,session.mapScene().assetGuid(4),session.mapScene().materialForAsset(4)}))return 70;
+    if(auto *render=runtime::editMeshRenderer(object)) {
+      auto *m=render->editSlotMaterial(0);
+      if(m) {m->enabled=true;m->baseColor[0]=m->baseColor[1]=m->baseColor[2]=.06f;m->roughness=.35f;}
+    }
+    if(!g.applyEntityValues(floor,object))return 70;
+    // Noite: Sol com dia e noite às 23 h (a Lua ilumina pouco, sob as estrelas).
+    u32 recipe=0;
+    if(!editor::findCreationRecipe("light.day_night",&recipe))return 71;
+    const auto sun=session.createRecipe(recipe,g.root());if(!sun)return 71;
+    object=*g.find(sun);
+    if(scene::setComponentProperty(object.components,"astra.render.time_of_day","hour",23.f)!=scene::ComponentPropertyStatus::Applied||
+       !g.applyEntityValues(sun,object))return 72;
+    // Faíscas a 0,3 m (Trilhas e Luzes da receita).
+    if(!editor::findCreationRecipe("effect.sparks",&recipe))return 73;
+    const auto sparks=session.createRecipe(recipe,g.root());if(!sparks)return 73;
+    object=*g.find(sparks);object.transform.position[0]=-1.5f;object.transform.position[1]=.3f;object.transform.position[2]=0;
+    if(!g.applyEntityValues(sparks,object))return 73;
+    // Fogo: Partículas com o Material do projeto e Folha de textura 4x4.
+    if(!editor::findCreationRecipe("effect.particles",&recipe))return 74;
+    const auto flame=session.createRecipe(recipe,g.root());if(!flame)return 74;
+    object=*g.find(flame);object.transform.position[0]=1.5f;object.transform.position[1]=0;object.transform.position[2]=0;
+    {
+      auto &system=scene::particleSystem(*object.components.edit(scene::ParticleSystem::descriptor));
+      system.materialAsset=fire.guid;system.textureSheetEnabled=true;system.sheetTiles[0]=system.sheetTiles[1]=4;
+      system.startLifetime=scene::particleCurveDefault(1.2f);system.startSpeed=scene::particleCurveDefault(.6f);
+      system.startSize=scene::particleCurveDefault(1.4f);system.emissionRate=scene::particleCurveDefault(14);
+      system.shapeAngle=8;system.shapeRadius=.15f;system.maxParticles=60;
+      system.colorOverLifetimeEnabled=true;
+      if(!system.valid())return 75;
+    }
+    if(!g.applyEntityValues(flame,object))return 75;
+    const auto camera=g.createEntity(g.root(),runtime::ObjectKind::Camera,"Câmera");object=*g.find(camera);
+    object.components.add(scene::Camera::descriptor);object.transform.position[1]=1.6f;object.transform.position[2]=-5.5f;
+    if(!g.applyEntityValues(camera,object))return 76;
+    const auto data=editor::serializeEditorDocument(g,0);editor::EditorDocument reopened;if(!editor::deserializeEditorDocument(data,0,reopened))return 77;
+    const std::string descriptor="{\"format\":\"ASTRA-PROJECT-1\",\"resourceSource\":\"independent\",\"project\":{\"name\":\"PK10 Noite\",\"template\":\"empty\",\"scenes\":1,\"assets\":2},\"mainScene\":\"scenes/editor.aescene\",\"editorScene\":\"scenes/editor.aescene\"}";
+    if(!editor::EditorImportTransaction::writeText(out/"project.json",descriptor)||!editor::EditorImportTransaction::writeText(out/"scenes/editor.aescene",data)||
+       !editor::EditorImportTransaction::writeText(out/".astra/assets.astra",registry.serialize()))return 78;
+    std::printf("PK10 night project: %s\n",out.generic_string().c_str());return 0;
+  }
   if(std::string_view(argv[1])=="write-instances") {
     if(argc!=3)return 30;
     const auto out=std::filesystem::absolute(argv[2]);std::error_code ec;

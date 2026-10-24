@@ -185,8 +185,31 @@ Lacunas:
 - Folha de textura (0953): Partículas com a folha 2×2 na textura própria. Cada partícula mostra um
   quarto do ponto (`39-folha-de-textura-2x2-0953.png`, `40-folha-de-textura-detalhe-0953.png`). O
   Inspector mostra Colunas, Linhas, Animação, Quadro no tempo (curva), Quadro inicial e Ciclos.
-- Material do projeto na partícula: ainda não visto no aparelho (precisa de um Material com shader
-  Partícula e uma imagem de folha no projeto).
+- Material do projeto e luzes à noite (24/10 16:43, mesmo APK clima-0953): projeto de exemplo
+  "PK10 Noite", gerado por `aether_gui_preview write-pk10-night <pasta>`. A cena tem chão escuro,
+  Sol com dia e noite às 23 h, nenhum poste, Faíscas e Partículas com o Material "Fogo animado"
+  (shader Partícula, aditivo). A folha `fogo-folha-4x4.png` sai de `tools/generate-fire-flipbook.py`
+  com Folha 4×4. No POCO, o halo quente das luzes das faíscas acende o chão e muda de um quadro para
+  outro, e a chama troca de forma com a animação da folha (`41-pk10-noite-edicao-0953.png` e
+  `42-pk10-noite-play-3-quadros-0953.png`, três quadros em Play com cerca de 0,4 s entre eles).
+
+## Mescla com o G4 (nuvens volumétricas): trecho de céu fechado
+
+Conflito esperado em `native/platform/android/instanced_renderer.cpp`, no bloco
+`G4b: Cloud Layer ... cloudSkyOcclusion` dentro de `applySceneEnvironmentLook`.
+Vale a versão da g4c-clima nestes três pontos, aplicados sobre a ocupação de nuvens que o G4
+calcular (2D ou volumétrica):
+1. O acinzentamento do ambiente e da sonda SH puxa para cinza-AZULADO
+   (`overcastTint` 0,9 / 0,97 / 1,12), não para cinza neutro. O cinza neutro era a causa do bege.
+2. A parte do sol bloqueada pela sombra das nuvens volta como céu difuso
+   (`scattered`, gradiente céu/equador/chão 1 / 0,7 / 0,25), com transmissão
+   `clamp(0,5 − 0,35 × densidade, 0,1, 0,5)`.
+3. Depois de `applySceneEnvironmentLook`: os multiplicadores do clima no sol e no ambiente
+   (`weatherSunScale_`, `weatherAmbientScale_`) e as superfícies em
+   `shadowTransitionParameters[3]`/`materialDistanceParameters[3]` (não usar linha nova no fim do
+   bloco: leitura depois de 4112 derruba o compilador da Adreno).
+Se o G4 tiver o próprio termo de luz espalhada pelas volumétricas, fica o dele no lugar do item 2,
+mantendo o tom do item 1.
 
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
