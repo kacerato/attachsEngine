@@ -58,6 +58,7 @@
 #include "resources/import_node_map.h"
 #include "resources/material_asset.h"
 #include "resources/environment_profile.h"
+#include "renderer/lens_dirt.h"
 #include "resources/physics_material.h"
 #include "resources/environment_map_asset.h"
 #include "resources/texture_budget.h"
@@ -87,6 +88,8 @@
 #include <span>
 #include <string>
 #include <vector>
+
+namespace ae::scene { class Environment; struct ScriptCurve; }
 
 namespace ae::editor {
 // Copia atrito, restituição, combinação e superfície do recurso para o corpo
@@ -804,6 +807,24 @@ public:
   }
   resources::AssetGuid createEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
   bool updateEnvironmentProfile(EditorEntityId id,u64 instance,std::string &diagnostic);
+  // PK-4: Volume Profile compartilhado (ver editor_volume_profile.cpp).
+  resources::AssetGuid createVolumeProfile(EditorEntityId id,u64 instance,bool clone,std::string &diagnostic);
+  u32 environmentProfileUsers(const resources::AssetGuid &guid) const;
+  bool toggleVolumeParameter(EditorEntityId id,u64 instance,u32 parameter);
+  bool setVolumeGroupParameters(EditorEntityId id,u64 instance,renderer::VolumeGroup group,bool value);
+  bool toggleVolumeGroupActive(EditorEntityId id,u64 instance,renderer::VolumeGroup group);
+  bool addVolumeGroup(EditorEntityId id,u64 instance,renderer::VolumeGroup group);
+  bool removeVolumeGroup(EditorEntityId id,u64 instance,renderer::VolumeGroup group);
+  bool resetVolumeGroup(EditorEntityId id,u64 instance,renderer::VolumeGroup group);
+  bool setEnvironmentCurve(EditorEntityId id,u64 instance,u32 channel,const renderer::ColorCurve &curve);
+  void reconcileEnvironmentProfiles();
+  // PK-5: texturas de sujeira da lente referenciadas pela cena e pelos perfis.
+  const std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> &lensDirtTextures();
+  bool handleVolumeWidget(u32 key);
+  bool handleProfileVolumeWidget(u32 key);
+  void openVolumeCurve(u32 key,u32 channel,const renderer::ColorCurve &curve,bool profile);
+  bool commitVolumeCurve(const scene::ScriptCurve &curve);
+  bool editProfileVolume(const std::function<bool(scene::Environment&)> &edit);
   // PK-2: Material do céu (.skybox) a partir do céu do Ambiente, já escolhido
   // nele; e o Ambiente da cena (Volume global de prioridade mínima na raiz)
   // para a janela Iluminação quando a cena só tem o ambiente padrão.
@@ -1043,6 +1064,20 @@ public:
   bool extractEnvironmentVolumes(std::vector<renderer::SceneEnvironmentVolume> &out) const {
     return runtime::collectSceneEnvironmentVolumes(
         isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,environmentProfiles_);
+  }
+  // Partículas (G5): no Play, o mundo de execução (avançado pelo quadro do
+  // Play); fora dele, a prévia sobre o documento avaliado, como o GPUParticles3D
+  // da Godot emitindo na vista. Sistemas sem repetir recomeçam na prévia.
+  void updateParticles(float deltaSeconds, const float (&camera)[3], renderer::particles::ParticleFrame &out);
+  // Teto do nível do aparelho; vale para a prévia e para o Play.
+  void setParticleBudget(u32 total);
+  // Reinicia a prévia de todos os sistemas (botão do inspetor).
+  void restartParticlePreview() { previewParticles_.restartAll(); }
+  const runtime::SceneParticles &previewParticles() const noexcept { return previewParticles_; }
+  // G4c: molhado, poças e neve acumulada do quadro (Play ou prévia da edição),
+  // para o shader de superfície.
+  runtime::SceneWeather::Surface weatherSurface() const noexcept {
+    return isPlaying() && playScene_.active() ? playScene_.weatherReport().surface : previewWeatherReport_.surface;
   }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
@@ -1524,6 +1559,14 @@ private:
   bool writeEnvironmentProfile(const resources::EnvironmentProfile &profile,const std::string &path,std::string &diagnostic);
   bool commitEnvironmentProfile(const resources::EnvironmentProfile &candidate,std::string &diagnostic,bool recordHistory=true);
   void synchronizeEnvironmentProfile(const resources::EnvironmentProfile &profile);
+  bool editVolumeOverrides(EditorEntityId id,u64 instance,const std::function<bool(scene::Environment&)> &edit);
+  void migrateLegacyEnvironmentProfile(EditorEntityId id,u64 instance);
+  resources::AssetGuid writeNewEnvironmentProfile(std::string name,const renderer::SceneEnvironment &values,
+                                                  const renderer::VolumeOverrides &overrides,std::string &diagnostic);
+  u64 profileReconcileRevision_=~u64{0};
+  std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> lensDirtTextures_;
+  std::vector<std::string> lensDirtHashes_;
+  usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela
   // que deriva a identidade das primitivas internas em toda adoção posterior.
@@ -1613,6 +1656,10 @@ private:
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
+  runtime::SceneParticles previewParticles_;
+  runtime::SceneWeather previewWeather_;
+  runtime::SceneWeather::Report previewWeatherReport_;
+  u32 particleBudget_ = 100000;
   std::string reportedPhysicsConnectionDiagnostic_;
   std::string reportedEventConnectionDiagnostic_;
   double playLastSeconds_=0;
@@ -1752,6 +1799,9 @@ private:
   double curveLastTap_=-1;
   ui::UiPoint curveLastTapPoint_{};
   void openCurveEditor(u32 key,std::string_view value,std::string_view type);
+  // Alvo "partícula" dos editores de curva e gradiente (state_.curveType/gradientType).
+  static constexpr std::string_view kParticleCurveType="particle-curve";
+  static constexpr std::string_view kParticleGradientType="particle-gradient:hdr";
   void publishCurveDraft();
   u32 settleCurveSelection(u32 selected);
   void refreshPathEditorState();
@@ -1945,6 +1995,7 @@ private:
   float animatorPinchDistance_=1,animatorPinchZoom_=1;
   std::optional<EditorEntity> animatorDragOriginal_;
   bool commitCurveEditor();
+  bool commitParticleValue(bool curve);
   void saveCurveLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.

@@ -89,20 +89,19 @@ renderer::SceneEnvironment lookValues(EnvironmentLook look) {
 void copyPost(renderer::SceneEnvironment &target, const renderer::SceneEnvironment &source) {
   target.post = source.post;
   target.toneMapper = source.toneMapper;
-  target.bloom = source.bloom;target.bloomThreshold = source.bloomThreshold;
-  target.bloomIntensity = source.bloomIntensity;
-  target.vignette = source.vignette;target.vignetteIntensity = source.vignetteIntensity;
-  target.filmGrain = source.filmGrain;target.filmGrainIntensity = source.filmGrainIntensity;
+  target.bloomThreshold = source.bloomThreshold;target.bloomIntensity = source.bloomIntensity;
+  target.vignetteIntensity = source.vignetteIntensity;
+  target.filmGrainIntensity = source.filmGrainIntensity;
   target.contrast = source.contrast;target.saturation = source.saturation;
   target.grading = source.grading;
+  target.syncEffectSwitches();
 }
 
 bool samePost(const renderer::SceneEnvironment &a, const renderer::SceneEnvironment &b) {
-  // Intensidades desligadas não contam: vinheta desligada a 0,18 ou 0,30 é a mesma imagem.
-  return a.post == b.post && a.toneMapper == b.toneMapper && a.bloom == b.bloom &&
-         (!a.bloom || (a.bloomThreshold == b.bloomThreshold && a.bloomIntensity == b.bloomIntensity)) &&
-         a.vignette == b.vignette && (!a.vignette || a.vignetteIntensity == b.vignetteIntensity) &&
-         a.filmGrain == b.filmGrain && (!a.filmGrain || a.filmGrainIntensity == b.filmGrainIntensity) &&
+  // PK-5: o efeito liga pela intensidade (Unity); limiar só conta com bloom.
+  return a.post == b.post && a.toneMapper == b.toneMapper && a.bloomIntensity == b.bloomIntensity &&
+         (a.bloomIntensity <= 0.0f || a.bloomThreshold == b.bloomThreshold) &&
+         a.vignetteIntensity == b.vignetteIntensity && a.filmGrainIntensity == b.filmGrainIntensity &&
          a.contrast == b.contrast && a.saturation == b.saturation && a.grading == b.grading;
 }
 

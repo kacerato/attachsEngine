@@ -13,6 +13,8 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "renderer/volume_parameters.h"
+
 namespace ae::editor {
 using namespace ae::ui;
 
@@ -27,6 +29,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
   collect(type.references);collect(type.resourceBindings);collect(type.slotNumbers);
   if(type.id==std::string_view{"astra.physics2d.joint"}) {
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
+  // Partículas: a ordem dos módulos da Unity, não a ordem do tipo de controle.
+  if(type.id==std::string_view{"astra.effects.particle_system"}) {
+    static constexpr std::string_view order[]{"Principal","Emissão","Forma","Velocidade no tempo","Limite de velocidade","Herdar velocidade","Força no tempo",
+      "Cor no tempo","Cor pela velocidade","Tamanho no tempo","Tamanho pela velocidade","Rotação no tempo","Rotação pela velocidade","Ruído","Colisão","Sub-emissores","Folha de textura","Luzes","Trilhas","Renderização","Material"};
+    const auto rank=[](std::string_view group){for(u32 i=0;i<std::size(order);++i) if(order[i]==group) return i;return u32(std::size(order));};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
   // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
@@ -52,14 +61,29 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
 std::vector<std::string_view> componentGroups(const scene::ComponentValue &component,bool lightingWindow) {
   auto groups=componentGroups(component);
   if(&component.type()!=&scene::Environment::descriptor) return groups;
+  // PK-4: só os overrides que o perfil tem (Adicionar override põe os outros);
+  // as Curvas de cor não têm propriedade no esquema e entram aqui.
+  const auto overrides=static_cast<const scene::Environment&>(component).volumeOverrides();
+  std::erase_if(groups,[&](std::string_view group){
+    const auto volumeGroup=renderer::volumeGroupForPresentation(group);
+    return volumeGroup!=renderer::VolumeGroup::Count&&!overrides.hasGroup(volumeGroup);});
+  if(overrides.hasGroup(renderer::VolumeGroup::ColorCurves)) groups.push_back("Curvas de cor");
   // Ordem da janela Lighting: Environment (céu), Environment Lighting e
-  // Reflections, Other Settings (neblina); o resto da aparência do céu depois.
-  const auto rank=[](std::string_view group){
-    return group=="Geral"?0:group=="Céu"?1:group=="Atmosfera física"?2:group=="Sol e lua"?3:
-           group=="Luz ambiente"?4:group=="Neblina"?5:group=="Nuvens"?6:7;};
+  // Reflections, Other Settings (neblina); depois os overrides na ordem do
+  // registro (a do menu Adicionar override).
+  const auto rank=[](std::string_view group)->u32{
+    if(group=="Geral") return 0;
+    if(group=="Volume") return 1;
+    if(group=="Céu") return 2;
+    if(group=="Atmosfera física") return 3;
+    if(group=="Sol e lua") return 4;
+    if(group=="Luz ambiente") return 5;
+    if(group=="Neblina") return 6;
+    const auto volumeGroup=renderer::volumeGroupForPresentation(group);
+    return volumeGroup==renderer::VolumeGroup::Count?100:10+static_cast<u32>(volumeGroup);};
   std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   if(lightingWindow)
-    std::erase_if(groups,[&](std::string_view group){return group=="Geral"||rank(group)>5;});
+    std::erase_if(groups,[&](std::string_view group){return group=="Geral"||group=="Volume"||rank(group)>6;});
   return groups;
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "renderer/scene_environment.h"
+#include "renderer/volume_parameters.h"
 #include "scene/components.h"
 #include <array>
 
@@ -19,18 +20,59 @@ inline bool environmentNumberSinceV18(std::string_view id) {
          id.starts_with("ambient_color")||id=="fog_end";
 }
 
+// PK-5: números do pós completo (Vinheta, Lens Dirt, Depth of Field, Motion
+// Blur, Chromatic Aberration, Lens Distortion), a partir da v19.
+inline bool environmentNumberSinceV19(std::string_view id) {
+  return id.starts_with("vignette_color.")||id.starts_with("vignette_center.")||id=="vignette_smoothness"||
+         id=="bloom_dirt_intensity"||id.starts_with("dof_")||id.starts_with("motion_blur_")||
+         id=="chromatic_aberration"||id.starts_with("lens_distortion");
+}
+
+// G4c/G4d: espessura da camada e Volumetric Clouds, a partir da v20.
+inline bool environmentNumberSinceV20(std::string_view id) {
+  return id=="cloud_thickness"||id=="cloud_shape_factor"||id=="cloud_erosion"||id=="cloud_steps";
+}
+
 class Environment final : public ComponentValue {
 public:
-  Environment() { values.active = true; }
-  static constexpr u32 CurrentVersion = 19;
+  Environment() { values.active = true; values.syncEffectSwitches(); }
+  static constexpr u32 CurrentVersion = 20;
   renderer::SceneEnvironment values{};
   renderer::EnvironmentVolumeShape shape=renderer::EnvironmentVolumeShape::Global;
 
 #include "scene/generated/environment_Environment_fields0.inc"
 
   float weight=1.0f,blendDistance=0.0f,boxSize[3]{10,10,10},sphereRadius=5.0f;
-  u32 layer=0;
+  // PK-4 (V-01): com perfil, os valores e os overrides vêm do recurso (editar
+  // aqui edita o perfil e todos os volumes que o usam); `values`/`overrides`
+  // ficam como a cópia gravada que vale se o recurso sumir. Sem perfil, são os
+  // do próprio volume.
   resources::AssetGuid profile{};
+  // PK-4 (V-02): caixa por parâmetro e interruptor do cabeçalho de cada
+  // override. Os "adicionados" (Add Override) são os booleanos override_*
+  // gerados acima; volumeOverrides() os junta numa coisa só.
+  renderer::VolumeOverrides overrides=renderer::VolumeOverrides::everything();
+
+  renderer::VolumeOverrides volumeOverrides() const {
+    auto result=overrides;result.added=0;
+    const bool *flags[]{&overrideSky,&overrideCelestial,&overridePhysicalAtmosphere,&overrideIndirect,&overrideFog,
+                        &overrideClouds,&overrideExposure,&overridePost,&overrideBloom,&overrideVignette,
+                        &overrideColorAdjustments,&overrideColorGrading,&overrideColorCurves,&overrideFilmGrain,
+                        &overrideAmbientOcclusion,&overrideDepthOfField,&overrideMotionBlur,
+                        &overrideChromaticAberration,&overrideLensDistortion};
+    static_assert(sizeof(flags)/sizeof(flags[0])==renderer::VolumeGroupCount);
+    for(u32 group=0;group<renderer::VolumeGroupCount;++group) if(*flags[group]) result.added|=1u<<group;
+    return result;
+  }
+  void setVolumeOverrides(const renderer::VolumeOverrides &next) {
+    overrides=next;
+    bool *flags[]{&overrideSky,&overrideCelestial,&overridePhysicalAtmosphere,&overrideIndirect,&overrideFog,
+                  &overrideClouds,&overrideExposure,&overridePost,&overrideBloom,&overrideVignette,
+                  &overrideColorAdjustments,&overrideColorGrading,&overrideColorCurves,&overrideFilmGrain,
+                  &overrideAmbientOcclusion,&overrideDepthOfField,&overrideMotionBlur,
+                  &overrideChromaticAberration,&overrideLensDistortion};
+    for(u32 group=0;group<renderer::VolumeGroupCount;++group) *flags[group]=(next.added>>group)&1u;
+  }
 
   static const ComponentType descriptor;
   const ComponentType &type() const override { return descriptor; }
@@ -38,37 +80,94 @@ public:
     return std::make_unique<Environment>(*this);
   }
   bool valid() const override {
-    if(!values.valid()||static_cast<u32>(shape)>2||layer>7||!std::isfinite(weight)||weight<0||weight>1||
+    if(!values.valid()||!overrides.valid()||static_cast<u32>(shape)>2||!std::isfinite(weight)||weight<0||weight>1||
        !std::isfinite(blendDistance)||blendDistance<0||!std::isfinite(sphereRadius)||sphereRadius<=0) return false;
     for(float value:boxSize) if(!std::isfinite(value)||value<=0) return false;
     return true;
   }
+  // v19 (PK-4/PK-5): escolhas discretas, perfil, overrides por parâmetro,
+  // curvas de cor e por fim a tabela de números (que só cresce no fim). A
+  // camada própria "Ambiente 0..7" saiu: vale a camada do objeto.
   void write(std::ostream &out) const override {
-    out << values.active << ' ' << values.fog << ' ' << values.post << ' '
-        << values.bloom << ' ' << values.vignette << ' ' << values.filmGrain << ' '
-        << static_cast<u32>(values.sky) << ' ' << static_cast<u32>(values.toneMapper) << ' '
-        << values.ambientOcclusion << ' '
-        << static_cast<u32>(shape) << ' ' << overrideSky << ' ' << overrideFog << ' '
-        << overridePost << ' ' << layer << ' ' << (profile.valid()?profile.text():"-") << ' ' << overrideIndirect
-        << ' ' << values.physicalAtmosphereHighQuality
-        << ' ' << (values.environmentMap.valid()?values.environmentMap.text():"-")
-        << ' ' << static_cast<u32>(values.exposureMode) << ' ' << static_cast<u32>(values.exposureMetering)
-        << ' ' << static_cast<u32>(values.exposureAdaptation)
-        << ' ' << overrideExposure << ' ' << overrideBloom << ' ' << overrideVignette
-        << ' ' << overrideColorAdjustments << ' ' << overrideColorGrading << ' ' << overrideFilmGrain
-        << ' ' << overrideAmbientOcclusion
-        << ' ' << values.clouds.enabled << ' ' << values.clouds.castShadows << ' ' << overrideClouds
-        << ' ' << static_cast<u32>(values.sunDisk) << ' ' << static_cast<u32>(values.ambientSource)
-        << ' ' << static_cast<u32>(values.fogMode) << ' ' << static_cast<u32>(values.fogColorMode)
-        << ' ' << (values.skybox.valid()?values.skybox.text():"-")
-        << ' ' << values.clouds.type;
+    const auto &v=values;
+    out << v.active << ' ' << v.fog << ' ' << v.post << ' ' << static_cast<u32>(v.sky) << ' '
+        << static_cast<u32>(v.toneMapper) << ' ' << static_cast<u32>(shape) << ' '
+        << (profile.valid()?profile.text():"-") << ' ' << v.physicalAtmosphereHighQuality << ' '
+        << (v.environmentMap.valid()?v.environmentMap.text():"-") << ' '
+        << static_cast<u32>(v.exposureMode) << ' ' << static_cast<u32>(v.exposureMetering) << ' '
+        << static_cast<u32>(v.exposureAdaptation) << ' ' << v.clouds.enabled << ' ' << v.clouds.castShadows << ' '
+        << static_cast<u32>(v.sunDisk) << ' ' << static_cast<u32>(v.ambientSource) << ' '
+        << static_cast<u32>(v.fogMode) << ' ' << static_cast<u32>(v.fogColorMode) << ' '
+        << (v.skybox.valid()?v.skybox.text():"-") << ' ' << v.vignetteRounded << ' ' << v.bloomHighQualityFiltering << ' '
+        << (v.bloomDirt.valid()?v.bloomDirt.text():"-") << ' ' << static_cast<u32>(v.depthOfField) << ' '
+        << static_cast<u32>(v.depthOfFieldQuality) << ' ' << v.gaussianHighQuality << ' '
+        << static_cast<u32>(v.motionBlurQuality) << ' ' << v.clouds.type;
+    renderer::writeVolumeOverrides(out,volumeOverrides());
+    renderer::writeColorCurves(out,v);
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
   }
   bool read(std::istream &in, u32 version) override {
+    loadedVersion = version;legacyLayer=0;legacyProfileCopy=false;
+    if(version<1||version>CurrentVersion) return false;
+    if(version>=19) return readV19(in,version);
+    return readLegacy(in,version);
+  }
+  // Versão em que esta instância foi lida (não é gravada): a migração de
+  // documento (skyScale, multiplicadores da raiz, camadas, perfis) só toca o
+  // que veio de antes.
+  u32 loadedVersion = CurrentVersion;
+  // Camada própria "Ambiente N" (até a v18). A migração do documento move o
+  // objeto para a camada de objeto equivalente (runtime/environment_migration).
+  u32 legacyLayer = 0;
+  // Até a v18 a instância guardava uma CÓPIA do perfil que podia divergir do
+  // recurso (faltava "Atualizar perfil"). Enquanto o editor não decide (mesmo
+  // perfil ou um clone), a cópia é o que vale; não é gravado.
+  bool legacyProfileCopy = false;
+
+private:
+  static bool readGuid(std::istream &in,resources::AssetGuid &guid) {
+    std::string token;
+    if(!(in>>token)) return false;
+    guid={};
+    return token=="-"||resources::AssetGuid::parse(token,guid);
+  }
+  bool readV19(std::istream &in,u32 version) {
+    auto &v=values;
+    u32 sky=0,tone=0,mode=0,exposure=0,metering=0,adaptation=0,sun=0,ambient=0,fogMode=0,fogColor=0,dof=0,dofQuality=0,blur=0;
+    if(!(in>>v.active>>v.fog>>v.post>>sky>>tone>>mode) || sky>2 || tone>4 || mode>2 || !readGuid(in,profile) ||
+       !(in>>v.physicalAtmosphereHighQuality) || !readGuid(in,v.environmentMap) ||
+       !(in>>exposure>>metering>>adaptation>>v.clouds.enabled>>v.clouds.castShadows>>sun>>ambient>>fogMode>>fogColor) ||
+       exposure>2 || metering>2 || adaptation>1 || sun>2 || ambient>2 || fogMode>2 || fogColor>1 ||
+       !readGuid(in,v.skybox) || !(in>>v.vignetteRounded>>v.bloomHighQualityFiltering) || !readGuid(in,v.bloomDirt) ||
+       !(in>>dof>>dofQuality>>v.gaussianHighQuality>>blur) || dof>2 || dofQuality>2 || blur>2) return false;
+    // v20 (G4d): tipo Volumetric Clouds. Cena v19 continua na camada 2D.
+    v.clouds.type=0;
+    if(version>=20 && (!(in>>v.clouds.type) || v.clouds.type>1)) return false;
+    v.sky=static_cast<renderer::SkyModel>(sky);v.toneMapper=static_cast<renderer::ToneMapper>(tone);
+    shape=static_cast<renderer::EnvironmentVolumeShape>(mode);
+    v.exposureMode=static_cast<renderer::ExposureMode>(exposure);
+    v.exposureMetering=static_cast<renderer::ExposureMetering>(metering);
+    v.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(adaptation);
+    v.sunDisk=static_cast<renderer::SunDiskMode>(sun);v.ambientSource=static_cast<renderer::AmbientSource>(ambient);
+    v.fogMode=static_cast<renderer::FogMode>(fogMode);v.fogColorMode=static_cast<renderer::FogColorMode>(fogColor);
+    v.depthOfField=static_cast<renderer::DepthOfFieldMode>(dof);
+    v.depthOfFieldQuality=static_cast<renderer::EffectQuality>(dofQuality);
+    v.motionBlurQuality=static_cast<renderer::EffectQuality>(blur);
+    renderer::VolumeOverrides next;
+    if(!renderer::readVolumeOverrides(in,next) || !renderer::readColorCurves(in,v)) return false;
+    setVolumeOverrides(next);
+    for (const auto &property : descriptor.numbers) {
+      // v19: sem a espessura nem as Volumetric Clouds; ficam os padrões.
+      if(version<20 && environmentNumberSinceV20(property.id)) continue;
+      if (!(in >> *property.write(*this))) return false;
+    }
+    v.syncEffectSwitches();
+    return valid();
+  }
+  bool readLegacy(std::istream &in, u32 version) {
     u32 sky = 0, tone = 0;
-    loadedVersion = version;
-    if ((version < 1 || version > 19) || !(in >> values.active >> values.fog >> values.post >> values.bloom >>
-                          values.vignette))
+    bool bloom=true,vignette=false,filmGrain=false,ambientOcclusion=false;
+    if (!(in >> values.active >> values.fog >> values.post >> bloom >> vignette))
       return false;
     if(version<7) {
       const renderer::SceneEnvironment defaults{};
@@ -81,32 +180,30 @@ public:
       values.aerosolScaleHeightKm=defaults.aerosolScaleHeightKm;
       values.atmosphereHeightKm=defaults.atmosphereHeightKm;values.groundAlbedo=defaults.groundAlbedo;
     }
-    if(version>=5 && !(in>>values.filmGrain)) return false;
+    if(version>=5 && !(in>>filmGrain)) return false;
     if(!(in>>sky>>tone) || sky>(version>=7?2u:1u) || tone>(version>=17?4u:version>=9?2u:1u)) return false;
     // v17: Reinhard (só legado) vira o Neutral da Unity, a curva mais próxima.
     if(version<17 && tone==static_cast<u32>(renderer::ToneMapper::Reinhard)) tone=static_cast<u32>(renderer::ToneMapper::Neutral);
-    if(version>=3 && !(in>>values.ambientOcclusion)) return false;
+    if(version>=3 && !(in>>ambientOcclusion)) return false;
     values.sky = static_cast<renderer::SkyModel>(sky);
     values.toneMapper = static_cast<renderer::ToneMapper>(tone);
+    // Até a v18 os overrides eram por grupo (uma caixa por seção).
+    bool legacySky=true,legacyFog=true,legacyPost=true,legacyIndirect=true,legacyExposure=true,
+         legacyBloom=true,legacyVignette=true,legacyColorAdjustments=true,legacyColorGrading=true,
+         legacyFilmGrain=true,legacyAmbientOcclusion=true,legacyClouds=true;
     if(version>=2) {
       u32 mode=0;
-      if(!(in>>mode>>overrideSky>>overrideFog>>overridePost>>layer)||mode>2||layer>31) return false;
+      if(!(in>>mode>>legacySky>>legacyFog>>legacyPost>>legacyLayer)||mode>2||legacyLayer>31) return false;
       shape=static_cast<renderer::EnvironmentVolumeShape>(mode);
     }
-    if(version>=4) {
-      std::string token;
-      if(!(in>>token) || (token!="-"&&!resources::AssetGuid::parse(token,profile))) return false;
-    }
+    if(version>=4 && !readGuid(in,profile)) return false;
     // Antes da v6 não havia controle de luz indireta: o volume participa com o
     // valor neutro (1), que é exatamente o que ele fazia.
-    overrideIndirect=true;values.indirectDiffuse=1;values.indirectSpecular=1;
-    if(version>=6 && !(in>>overrideIndirect)) return false;
+    values.indirectDiffuse=1;values.indirectSpecular=1;
+    if(version>=6 && !(in>>legacyIndirect)) return false;
     if(version>=7 && !(in>>values.physicalAtmosphereHighQuality)) return false;
     values.environmentMap={};values.hdriRotationDegrees=0;values.hdriExposureEv=0;
-    if(version>=8) {
-      std::string token;
-      if(!(in>>token)||(token!="-"&&!resources::AssetGuid::parse(token,values.environmentMap))) return false;
-    }
+    if(version>=8 && !readGuid(in,values.environmentMap)) return false;
     // v17: Exposure do HDRP (modo, metering, adaptação) e um override por
     // efeito de pós. Antes, uma chave só (overridePost) valia para todos.
     bool legacyAuto=false,legacyCenter=false;
@@ -123,30 +220,30 @@ public:
     }
     if(version>=17) {
       u32 mode=0,metering=0,adaptation=0;
-      if(!(in>>mode>>metering>>adaptation>>overrideExposure>>overrideBloom>>overrideVignette>>
-           overrideColorAdjustments>>overrideColorGrading>>overrideFilmGrain>>overrideAmbientOcclusion) ||
+      if(!(in>>mode>>metering>>adaptation>>legacyExposure>>legacyBloom>>legacyVignette>>
+           legacyColorAdjustments>>legacyColorGrading>>legacyFilmGrain>>legacyAmbientOcclusion) ||
          mode>2 || metering>2 || adaptation>1) return false;
       values.exposureMode=static_cast<renderer::ExposureMode>(mode);
       values.exposureMetering=static_cast<renderer::ExposureMetering>(metering);
       values.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(adaptation);
     } else {
       if(version>=11 && !(in>>legacyAuto>>legacyCenter)) return false;
-      overrideExposure=overrideBloom=overrideVignette=overrideColorAdjustments=
-          overrideColorGrading=overrideFilmGrain=overrideAmbientOcclusion=overridePost;
+      legacyExposure=legacyBloom=legacyVignette=legacyColorAdjustments=
+          legacyColorGrading=legacyFilmGrain=legacyAmbientOcclusion=legacyPost;
     }
     // v16 (G4b): Cloud Layer. Cena antiga fica sem nuvens: o mesmo céu de antes.
     if(version>=16) {
-      if(!(in>>values.clouds.enabled>>values.clouds.castShadows>>overrideClouds)) return false;
-    } else {values.clouds={};overrideClouds=true;}
+      if(!(in>>values.clouds.enabled>>values.clouds.castShadows>>legacyClouds)) return false;
+    } else {values.clouds={};legacyClouds=true;}
     // v18 (PK-1/PK-2): janela Lighting da Unity. Cena antiga: céu como antes
     // (espessura 1, Exposure equivalente, disco High Quality se havia disco),
     // ambiente do Skybox, neblina exponencial que acompanha o céu -- a mesma
     // imagem. A escala antiga pelo sol (skyScale) é migrada pelo documento,
     // que conhece as luzes (runtime/environment_migration.h).
     if(version>=18) {
-      u32 sun=0,ambient=0,fogMode=0,fogColor=0;std::string token;
-      if(!(in>>sun>>ambient>>fogMode>>fogColor>>token)||sun>2||ambient>2||fogMode>2||fogColor>1||
-         (token!="-"&&!resources::AssetGuid::parse(token,values.skybox))) return false;
+      u32 sun=0,ambient=0,fogMode=0,fogColor=0;
+      if(!(in>>sun>>ambient>>fogMode>>fogColor)||sun>2||ambient>2||fogMode>2||fogColor>1||
+         !readGuid(in,values.skybox)) return false;
       values.sunDisk=static_cast<renderer::SunDiskMode>(sun);
       values.ambientSource=static_cast<renderer::AmbientSource>(ambient);
       values.fogMode=static_cast<renderer::FogMode>(fogMode);
@@ -162,10 +259,6 @@ public:
       std::copy_n(defaults.ambientGroundColor,3,values.ambientGroundColor);
       std::copy_n(defaults.ambientColor,3,values.ambientColor);
     }
-    // v19 (G4d): tipo Volumetric Clouds. Cena antiga continua na camada 2D.
-    if(version>=19) {
-      if(!(in>>values.clouds.type)||values.clouds.type>1) return false;
-    } else values.clouds.type=0;
     if(version<12) values.fogLightEnergy=1.0f;
     // v13 (G2): gradação de cor. Cena antiga fica neutra: sem LUT, mesma imagem.
     if(version<13) values.grading={};
@@ -181,11 +274,8 @@ public:
       values.starIntensity=defaults.starIntensity;
     }
     for (const auto &property : descriptor.numbers) {
+      if(environmentNumberSinceV19(property.id) || environmentNumberSinceV20(property.id)) continue;
       if(version<18 && environmentNumberSinceV18(property.id)) continue;
-      // v19 (G4c/G4d): espessura da camada e Volumetric Clouds; cena antiga fica
-      // com os padrões.
-      if(version<19 && (property.id=="cloud_thickness" || property.id=="cloud_shape_factor" ||
-                        property.id=="cloud_erosion" || property.id=="cloud_steps")) continue;
       if(version<16 && property.id.starts_with("cloud_")) continue;
       if(version<17 && environmentNumberSinceV17(property.id)) continue;
       if(version<14 && (property.id.starts_with("sun_glare") || property.id.starts_with("moon_") ||
@@ -225,12 +315,29 @@ public:
       values.atmosphere=1.0f;
       values.sunDisk=values.sunDiskIntensity>0.0f?renderer::SunDiskMode::HighQuality:renderer::SunDiskMode::None;
     }
+    // v19 (PK-5): o efeito liga pela intensidade, como na Unity. Um efeito
+    // desligado vira intensidade zero (a mesma imagem); o pós novo fica no
+    // padrão, que não muda nada (vinheta sem intensidade, sem DoF...).
+    if(!bloom) values.bloomIntensity=0;
+    if(!vignette) values.vignetteIntensity=0;
+    if(!filmGrain) values.filmGrainIntensity=0;
+    if(!ambientOcclusion) values.ambientOcclusionIntensity=0;
+    // v19 (PK-4): a caixa de cada grupo vira o override com todos os
+    // parâmetros marcados -- a mesma mistura de antes.
+    const u32 legacy=(legacySky?renderer::EnvironmentOverrideSky:0u)|(legacyFog?renderer::EnvironmentOverrideFog:0u)|
+        (legacyPost?renderer::EnvironmentOverridePost:0u)|(legacyIndirect?renderer::EnvironmentOverrideIndirect:0u)|
+        (legacyExposure?renderer::EnvironmentOverrideExposure:0u)|(legacyBloom?renderer::EnvironmentOverrideBloom:0u)|
+        (legacyVignette?renderer::EnvironmentOverrideVignette:0u)|
+        (legacyColorAdjustments?renderer::EnvironmentOverrideColorAdjustments:0u)|
+        (legacyColorGrading?renderer::EnvironmentOverrideColorGrading:0u)|
+        (legacyFilmGrain?renderer::EnvironmentOverrideFilmGrain:0u)|
+        (legacyAmbientOcclusion?renderer::EnvironmentOverrideAmbientOcclusion:0u)|
+        (legacyClouds?renderer::EnvironmentOverrideClouds:0u);
+    setVolumeOverrides(renderer::volumeOverridesFromLegacyGroups(legacy));
+    values.syncEffectSwitches();
+    legacyProfileCopy=profile.valid();
     return valid();
   }
-  // Versão em que esta instância foi lida (não é gravada): a migração de
-  // documento (skyScale, multiplicadores da raiz) só toca o que veio de antes.
-  u32 loadedVersion = CurrentVersion;
-
 };
 
 inline bool environmentIsLocal(const ComponentValue &value) {
@@ -322,21 +429,22 @@ inline bool environmentUsesProgressiveExposure(const ComponentValue &value) {
   const auto &environment=static_cast<const Environment &>(value).values;
   return environmentUsesAutoExposure(value)&&environment.exposureAdaptation==renderer::ExposureAdaptation::Progressive;
 }
-inline bool environmentUsesBloom(const ComponentValue &value) {
-  const auto &environment = static_cast<const Environment &>(value).values;
-  return environment.post && environment.bloom;
+// PK-5: modos do Depth of Field e o Lens Dirt (só com textura escolhida).
+inline bool environmentUsesGaussianDof(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.depthOfField==renderer::DepthOfFieldMode::Gaussian;
 }
-inline bool environmentUsesVignette(const ComponentValue &value) {
-  const auto &environment = static_cast<const Environment &>(value).values;
-  return environment.post && environment.vignette;
+inline bool environmentUsesBokehDof(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.depthOfField==renderer::DepthOfFieldMode::Bokeh;
 }
-inline bool environmentUsesFilmGrain(const ComponentValue &value) {
-  const auto &environment = static_cast<const Environment &>(value).values;
-  return environment.post && environment.filmGrain;
+inline bool environmentUsesDof(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.depthOfField!=renderer::DepthOfFieldMode::Off;
 }
-inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
-  const auto &environment = static_cast<const Environment &>(value).values;
-  return environment.post && environment.ambientOcclusion;
+inline bool environmentUsesBloomDirt(const ComponentValue &value) {
+  const auto &environment=static_cast<const Environment &>(value).values;
+  return environment.post&&environment.bloomDirt.valid();
 }
 
 #include "scene/generated/environment_environmentNumbers.inc"
@@ -358,6 +466,7 @@ inline bool environmentUsesAmbientOcclusion(const ComponentValue &value) {
 #include "scene/generated/environment_environmentCloudNumbers.inc"
 #include "scene/generated/environment_environmentPostExtraNumbers.inc"
 #include "scene/generated/environment_environmentLightingNumbers.inc"
+#include "scene/generated/environment_environmentPostEffectNumbers.inc"
 
 // ComponentType recebe um span contínuo. Juntar as duas partes em um único
 // array constexpr evita uma tabela paralela apenas para a paginação do editor.
@@ -366,7 +475,7 @@ inline constexpr auto environmentAllNumbers = [] {
       environmentAmbientOcclusionNumbers.size()+environmentVolumeNumbers.size()+environmentIndirectNumbers.size()+
       environmentPhysicalAtmosphereNumbers.size()+environmentAutoExposureNumbers.size()+environmentHdriNumbers.size()+
       environmentGradingNumbers.size()+environmentCelestialNumbers.size()+environmentCloudNumbers.size()+
-      environmentPostExtraNumbers.size()+environmentLightingNumbers.size()> out{};
+      environmentPostExtraNumbers.size()+environmentLightingNumbers.size()+environmentPostEffectNumbers.size()> out{};
   for (usize i = 0; i < environmentNumbers.size(); ++i) out[i] = environmentNumbers[i];
   for (usize i = 0; i < environmentTailNumbers.size(); ++i)
     out[environmentNumbers.size() + i] = environmentTailNumbers[i];
@@ -384,8 +493,9 @@ inline constexpr auto environmentAllNumbers = [] {
   // números na ordem da tabela, e cada versão só acrescentou no fim.
   // Nuvens (v16) depois dos corpos celestes (v14).
   // Color Adjustments e Bloom completos (v17) depois das nuvens; janela
-  // Lighting (v18) por último.
-  const usize lighting=environmentLightingNumbers.size();
+  // Lighting (v18) e o pós completo do PK-5 (v19) por último.
+  const usize postEffects=environmentPostEffectNumbers.size();
+  const usize lighting=environmentLightingNumbers.size()+postEffects;
   const usize extra=environmentPostExtraNumbers.size()+lighting;
   const usize clouds=environmentCloudNumbers.size()+extra;
   const usize tail=environmentHdriNumbers.size()+environmentGradingNumbers.size()+environmentCelestialNumbers.size()+clouds;
@@ -399,7 +509,8 @@ inline constexpr auto environmentAllNumbers = [] {
     out[out.size()-clouds-environmentCelestialNumbers.size()+i]=environmentCelestialNumbers[i];
   for(usize i=0;i<environmentCloudNumbers.size();++i) out[out.size()-clouds+i]=environmentCloudNumbers[i];
   for(usize i=0;i<environmentPostExtraNumbers.size();++i) out[out.size()-extra+i]=environmentPostExtraNumbers[i];
-  for(usize i=0;i<lighting;++i) out[out.size()-lighting+i]=environmentLightingNumbers[i];
+  for(usize i=0;i<environmentLightingNumbers.size();++i) out[out.size()-lighting+i]=environmentLightingNumbers[i];
+  for(usize i=0;i<postEffects;++i) out[out.size()-postEffects+i]=environmentPostEffectNumbers[i];
   return out;
 }();
 
@@ -411,10 +522,6 @@ inline constexpr std::array<ComponentEnumOption, 3> skyOptions{{{0,"Panorâmico 
 // Ordem da Unity (None, Neutral, ACES); AgX é extra. Reinhard sai do menu: só legado.
 inline constexpr std::array<ComponentEnumOption, 4> toneOptions{{{3,"Nenhum"},{4,"Neutro"},{1,"ACES"},{2,"AgX"}}};
 inline constexpr std::array<ComponentEnumOption,3> environmentShapeOptions{{{0,"Global"},{1,"Caixa"},{2,"Esfera"}}};
-inline constexpr std::array<ComponentEnumOption,8> environmentLayerOptions{{
-  {0,"Ambiente 0"},{1,"Ambiente 1"},{2,"Ambiente 2"},{3,"Ambiente 3"},
-  {4,"Ambiente 4"},{5,"Ambiente 5"},{6,"Ambiente 6"},{7,"Ambiente 7"}
-}};
 inline constexpr std::array<ComponentEnumOption,3> sunDiskOptions{{{0,"Nenhum"},{1,"Simples"},{2,"Alta qualidade"}}};
 inline constexpr std::array<ComponentEnumOption,3> ambientSourceOptions{{{0,"Céu (Skybox)"},{1,"Gradiente"},{2,"Cor"}}};
 inline constexpr std::array<ComponentEnumOption,3> fogModeOptions{{{0,"Linear"},{1,"Exponencial"},{2,"Exponencial ao quadrado"}}};
@@ -423,8 +530,10 @@ inline constexpr std::array<ComponentEnumOption,3> exposureModeOptions{{{0,"Fixa
 inline constexpr std::array<ComponentEnumOption,3> exposureMeteringOptions{{{0,"Média"},{1,"Pontual"},{2,"Peso no centro"}}};
 inline constexpr std::array<ComponentEnumOption,2> exposureAdaptationOptions{{{0,"Imediata"},{1,"Progressiva"}}};
 inline constexpr std::array<ComponentEnumOption,3> exposureMidGreyOptions{{{0,"Cinza 12,5%"},{1,"Cinza 14%"},{2,"Cinza 18%"}}};
+inline constexpr std::array<ComponentEnumOption,3> dofModeOptions{{{0,"Desligado"},{1,"Gaussiano"},{2,"Bokeh"}}};
+inline constexpr std::array<ComponentEnumOption,3> postQualityOptions{{{0,"Baixa"},{1,"Média"},{2,"Alta"}}};
 inline constexpr std::array<ComponentEnumOption,2> cloudTypeOptions{{{0,"Camada 2D"},{1,"Volumétricas"}}};
-inline constexpr std::array<ComponentEnum, 13> environmentEnums{{
+inline constexpr std::array<ComponentEnum, 15> environmentEnums{{
   {"sky", "Shader do céu", skyOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sky);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sky=static_cast<renderer::SkyModel>(n);}, {"Céu","","Procedural, Panorâmico (HDRI) ou Físico, como o shader do Material do céu",nullptr,environmentSkyIsLocal,"render.environment.atmosphere","rhi/shaders/dirt_road_sky.frag",Invalidate::Draw}},
   {"sun_disk","Sol",sunDiskOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sunDisk);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sunDisk=static_cast<renderer::SunDiskMode>(n);},{"Céu","","Disco do sol no céu procedural: nenhum, simples ou alta qualidade",environmentUsesAtmosphere,environmentSkyIsLocal,"render.environment.atmosphere","rhi/shaders/sky_procedural.glsl",Invalidate::Draw}},
   {"ambient_source","Fonte",ambientSourceOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.ambientSource);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.ambientSource=static_cast<renderer::AmbientSource>(n);},{"Luz ambiente","","De onde vem a luz ambiente: do céu, de um gradiente ou de uma cor",nullptr,nullptr,"render.ambient.hemispheric","renderer/environment_ambient.cpp",Invalidate::Draw}},
@@ -437,10 +546,15 @@ inline constexpr std::array<ComponentEnum, 13> environmentEnums{{
   {"exposure_metering","Medição",exposureMeteringOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureMetering);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureMetering=static_cast<renderer::ExposureMetering>(n);},{"Exposição","","Quais pixels pesam na média: a imagem toda, um círculo no centro ou peso que cai até a borda",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_histogram.comp",Invalidate::Policy}},
   {"exposure_adaptation","Adaptação",exposureAdaptationOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureAdaptation);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureAdaptation=static_cast<renderer::ExposureAdaptation>(n);},{"Exposição","","Imediata salta para a medição; progressiva acompanha como o olho",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_reduce.comp",Invalidate::Policy}},
   {"exposure_target_mid_grey_choice","Cinza médio alvo",exposureMidGreyOptions,[](const ComponentValue &v){const float g=static_cast<const Environment&>(v).values.exposureTargetMidGrey;return g<.1325f?0u:g<.16f?1u:2u;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureTargetMidGrey=n==0?.125f:n==1?.14f:.18f;},{"Exposição","","Tom para o qual a média medida é levada",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_reduce.comp",Invalidate::Policy}},
-  {"volume_layer","Camada",environmentLayerOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).layer;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).layer=n;},{"Volume","","Filtro consultado pela câmera",nullptr,nullptr,"render.environment.volumes","renderer/scene_environment.cpp",Invalidate::Draw}},
+  {"dof_mode","Modo",dofModeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.depthOfField);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.depthOfField=static_cast<renderer::DepthOfFieldMode>(n);},{"Profundidade de campo","","Gaussiano desfoca só o fundo e é o mais barato; Bokeh desfoca perto e longe pela lente",environmentUsesPost,nullptr,"render.post.depth_of_field","platform/android/instanced_depth_of_field.inl",Invalidate::Policy}},
+  {"dof_quality","Qualidade",postQualityOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.depthOfFieldQuality);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.depthOfFieldQuality=static_cast<renderer::EffectQuality>(n);},{"Profundidade de campo","","Amostras do bokeh por pixel (8, 22 ou 43, em meia resolução); custo de GPU no celular",environmentUsesBokehDof,nullptr,"render.post.depth_of_field","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
+  {"motion_blur_quality","Qualidade",postQualityOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.motionBlurQuality);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.motionBlurQuality=static_cast<renderer::EffectQuality>(n);},{"Desfoque de movimento","","Quality: 4, 6 ou 8 leituras ao longo do movimento da câmera",environmentUsesPost,nullptr,"render.post.motion_blur","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
 }};
 
-inline constexpr std::array<ComponentTriple, 18> environmentTriples{{
+inline constexpr std::array<ComponentTriple, 21> environmentTriples{{
+  {"vignette_color","Cor",{"vignette_color.r","vignette_color.g","vignette_color.b"},ComponentTripleKind::LinearColor},
+  {"vignette_center","Centro",{"vignette_center.x","vignette_center.y",""},ComponentTripleKind::Vector2},
+  {"lens_distortion_center","Centro",{"lens_distortion_center.x","lens_distortion_center.y",""},ComponentTripleKind::Vector2},
   {"color_filter","Filtro de cor",{"color_filter.r","color_filter.g","color_filter.b"},ComponentTripleKind::LinearColor},
   {"bloom_tint","Tom do bloom",{"bloom_tint.r","bloom_tint.g","bloom_tint.b"},ComponentTripleKind::LinearColor},
   {"sky_zenith","Tom do céu",{"sky_zenith.r","sky_zenith.g","sky_zenith.b"},ComponentTripleKind::LinearColor},
@@ -462,12 +576,12 @@ inline constexpr std::array<ComponentTriple, 18> environmentTriples{{
   {"ambient_color","Cor ambiente",{"ambient_color.r","ambient_color.g","ambient_color.b"},ComponentTripleKind::SrgbColor},
 }};
 
-inline constexpr std::array<ComponentResourceBinding,3> environmentResources{{
+inline constexpr std::array<ComponentResourceBinding,4> environmentResources{{
   {"profile","Perfil",resources::AssetType::EnvironmentProfile,
    [](const ComponentValue &){return 1u;},
    [](const ComponentValue &v,u32){return static_cast<const Environment&>(v).profile;},
    [](ComponentValue &v,u32,resources::AssetGuid value){static_cast<Environment&>(v).profile=value;return true;},
-   {"Geral","","Aparência compartilhada; forma, peso, prioridade e camada continuam nesta instância",
+   {"Volume","","Volume Profile compartilhado: editar aqui edita o perfil e todos os volumes que o usam; modo, peso, prioridade e mistura continuam nesta instância",
     nullptr,nullptr,"render.environment.volumes","resources/environment_profile.cpp",Invalidate::Draw|Invalidate::Policy},
    true,{}},
   {"environment_map","Mapa HDRI",resources::AssetType::EnvironmentMap,
@@ -485,6 +599,14 @@ inline constexpr std::array<ComponentResourceBinding,3> environmentResources{{
    [](ComponentValue &v,u32,resources::AssetGuid value){static_cast<Environment&>(v).values.skybox=value;return true;},
    {"Céu","","Material de céu do projeto (Procedural, Panorâmico ou Físico); vazio usa o céu deste Ambiente",
     nullptr,nullptr,"render.environment.skybox","resources/environment_profile.cpp",Invalidate::Draw|Invalidate::TextureResidency},
+   true,{}},
+  // PK-5: Bloom › Lens Dirt › Texture. A sujeira acende onde há bloom.
+  {"bloom_dirt","Textura de sujeira",resources::AssetType::Texture,
+   [](const ComponentValue &){return 1u;},
+   [](const ComponentValue &v,u32){return static_cast<const Environment&>(v).values.bloomDirt;},
+   [](ComponentValue &v,u32,resources::AssetGuid value){static_cast<Environment&>(v).values.bloomDirt=value;return true;},
+   {"Bloom","","Lens Dirt: manchas e poeira da lente que aparecem com o brilho; vazio não tem sujeira",
+    environmentUsesPost,nullptr,"render.post.bloom","rhi/shaders/post_process_common.glsl",Invalidate::Policy|Invalidate::TextureResidency},
    true,{}}
 }};
 

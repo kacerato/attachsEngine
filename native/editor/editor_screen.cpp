@@ -32,6 +32,8 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/color_grading.h"
 #include "resources/environment_looks.h"
+#include "editor/editor_particle_inspector.h"
+#include "runtime/scene_particles.h"
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
@@ -2958,6 +2960,23 @@ void buildPhysicsMaterialInspector(ScreenBuilder &builder,UiRect panel) {
   if(content.height>=20) builder.label(takeTop(content,20),fitMiddle(list,state.physicsMaterialPath,content.width,theme.type.caption),theme.color.textDim,theme.type.caption);
 }
 
+// Ícone de cada Volume Override, na ordem de renderer::VolumeGroup.
+UiIcon volumeGroupIcon(u32 group) {
+  static constexpr UiIcon icons[renderer::VolumeGroupCount]{UiIcon::LightingSky,UiIcon::LightingSun,UiIcon::LightingSceneLighting,
+      UiIcon::LightingAmbientSource,UiIcon::LightingFog,UiIcon::LightingClouds,UiIcon::LightingExposure,UiIcon::PostTonemapping,
+      UiIcon::PostBloom,UiIcon::PostVignette,UiIcon::PostColorAdjustments,UiIcon::LightingColorGrading,UiIcon::PostColorCurves,
+      UiIcon::PostFilmGrain,UiIcon::PostAmbientOcclusion,UiIcon::PostDepthOfField,UiIcon::PostMotionBlur,
+      UiIcon::PostChromaticAberration,UiIcon::PostLensDistortion};
+  return group<renderer::VolumeGroupCount?icons[group]:UiIcon::VolumeProfile;
+}
+
+// Perfil de ambiente do projeto em Propriedades (Unity 6000.0 Volume Profile).
+// PK-4 (V-06): uma coluna que rola com um cartão recolhível por override do
+// perfil -- cabeçalho com interruptor, ícone, nome, parâmetros marcados e ⋮;
+// ALL/NONE; cada linha com a caixa de override à esquerda (desmarcada, a linha
+// fica apagada e não recebe toque); Adicionar override no fim. Sem
+// consumidor neste aparelho, a linha fica apagada; toda edição muda os
+// ambientes que usam o perfil.
 void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   const auto &state=builder.state;const auto &theme=builder.theme;auto &list=builder.list;auto &router=builder.router;
   list.addRect(panel,theme.color.surface);
@@ -2968,76 +2987,172 @@ void buildProfileAssetInspector(ScreenBuilder &builder,const UiRect &panel) {
   builder.label(back,"<",theme.color.text,theme.type.body,UiAlign::Center);
   router.addRegion(back,widgetId(EditorWidget::ProfileInspectorClose));
   if(!builder.focusedWindow) builder.iconButton(takeRight(header,32),UiIcon::UiPanelRight,widgetId(EditorWidget::AssetInspectorFocus));
-  list.addImage(centred(takeLeft(header,26),18,18),static_cast<UiImageId>(UiIcon::LightingSceneEffects),theme.color.accent);
+  list.addImage(centred(takeLeft(header,26),20,20),static_cast<UiImageId>(state.profileSkybox?UiIcon::LightingSkyboxMaterial:UiIcon::VolumeProfile),theme.color.accent);
   const u32 objects=static_cast<u32>(state.profileObjects.size());
   const bool many=!builder.focusedWindow && state.multiAsset.kind==EditorScreenState::MultiAssetView::Kind::Profiles;
   const float half=header.height*.5f;
   builder.label({header.x,header.y,header.width,half},many?state.multiAsset.title:state.profileInspectorName,theme.color.text,theme.type.cardName);
-  const std::string sub="Perfil de ambiente · rev. "+std::to_string(state.profileInspectorRevision)+" · "+std::to_string(objects)+
-      (objects==1?" ambiente":" ambientes");
+  const std::string sub=std::string(state.profileSkybox?"Material do céu":"Perfil de Volume")+" · rev. "+
+      std::to_string(state.profileInspectorRevision)+" · "+std::to_string(objects)+(objects==1?" volume":" volumes");
   builder.label({header.x,header.y+half,header.width,half},many?"Ativo: "+state.profileInspectorName:sub,theme.color.textDim,theme.type.caption);
-  // Grupo do esquema num seletor de uma linha (as abas em quebra comiam metade
-  // do Inspector estreito); Localizar ao lado.
-  {
+  if(objects) {
     auto line=takeTop(content,34);takeTop(content,6);
-    if(objects) {
-      const auto ping=takeRight(line,88);
-      list.addRect(deflate(ping,UiInsets{4,2,0,2}),theme.color.raised,theme.radius.control);
-      builder.label(deflate(ping,UiInsets{4,0,0,0}),"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
-      router.addRegion(ping,widgetId(EditorWidget::ProfileInspectorUses));
-    }
-    const u32 groups=static_cast<u32>(state.profileGroups.size());
-    list.addRect(line,theme.color.accent,17);
-    const auto previous=takeLeft(line,34),next=takeRight(line,34);
-    builder.label(previous,"<",state.profileGroup?theme.color.accentInk:withAlpha(theme.color.accentInk,.35f),theme.type.body,UiAlign::Center);
-    builder.label(next,">",state.profileGroup+1<groups?theme.color.accentInk:withAlpha(theme.color.accentInk,.35f),theme.type.body,UiAlign::Center);
-    if(state.profileGroup) router.addRegion(previous,widgetId(EditorWidget::ProfileGroupBase)+state.profileGroup-1);
-    if(state.profileGroup+1<groups) router.addRegion(next,widgetId(EditorWidget::ProfileGroupBase)+state.profileGroup+1);
-    const std::string title=groups?state.profileGroups[state.profileGroup]+"  "+std::to_string(state.profileGroup+1)+"/"+std::to_string(groups):std::string("Sem grupos");
-    builder.label(line,title.c_str(),theme.color.accentInk,theme.type.caption,UiAlign::Center);
+    const auto ping=takeRight(line,96);
+    list.addRect(deflate(ping,UiInsets{4,2,0,2}),theme.color.raised,theme.radius.control);
+    list.addBorder(deflate(ping,UiInsets{4,2,0,2}),theme.color.lineSoft,1,theme.radius.control);
+    builder.label(deflate(ping,UiInsets{4,0,0,0}),"Localizar",theme.color.text,theme.type.caption,UiAlign::Center);
+    router.addRegion(ping,widgetId(EditorWidget::ProfileInspectorUses));
+    builder.label(line,"Editar aqui muda todos os volumes que usam o perfil",theme.color.textMuted,theme.type.caption);
   }
-  // Linhas, paginadas como o resto do Inspector.
-  const float rowHeight=40;
-  const u32 count=static_cast<u32>(state.profileRows.size());
-  const u32 perPage=std::max(1u,static_cast<u32>((content.height-28)/rowHeight));
-  const u32 pages=std::max(1u,(count+perPage-1)/perPage),page=std::min(state.propertyPage,pages-1);
-  auto footer=pages>1?takeBottom(content,26):UiRect{};
+  // Coluna que rola: arrastar em qualquer linha desloca (a sessão trata).
+  const UiRect window=content;
+  router.addRegion(window,widgetId(EditorWidget::ProfileInspectorScroll));
+  list.pushClip(window);router.pushClip(window);
+  UiRect column{window.x,window.y-state.profileInspectorScroll,window.width-5,1.0e6f};
+  const float start=column.y;
   using Kind=EditorScreenState::ProfileRow::Kind;
-  for(u32 i=page*perPage;i<count && i<(page+1)*perPage;++i) {
+  const bool editable=state.workspace!=EditorWorkspace::Play;
+  for(u32 i=0;i<state.profileRows.size();++i) {
     const auto &row=state.profileRows[i];
-    auto rect=takeTop(content,rowHeight);rect.height-=4;
-    const auto ink=row.editable?theme.color.text:theme.color.textFaint;
-    builder.label(takeLeft(rect,rect.width*.46f),row.label.c_str(),row.editable?theme.color.textDim:theme.color.textFaint,theme.type.caption);
-    if(row.kind==Kind::Boolean && !row.mixed && row.editable) {
-      builder.toggle(takeRight(rect,52),row.on,widgetId(EditorWidget::ProfileRowBase)+i);
-      continue;
+    switch(row.kind) {
+    case Kind::Header: {
+      takeTop(column,i?8.0f:0.0f);
+      auto bar=takeTop(column,42);
+      list.addRect(bar,theme.color.raised,theme.radius.card);
+      list.addBorder(bar,row.overridden?theme.color.lineSoft:theme.color.line,1,theme.radius.card);
+      auto inner=deflate(bar,UiInsets::symmetric(6,0));
+      list.addImage(centred(takeLeft(inner,20),12,12),static_cast<UiImageId>(row.overridden?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                    row.overridden?theme.color.accent:theme.color.textDim);
+      if(!state.profileSkybox)
+        builder.checkbox(centred(takeLeft(inner,34),26,26),row.on,widgetId(EditorWidget::ProfileGroupActiveBase)+row.group,editable,false);
+      if(!state.profileSkybox) {
+        const auto more=takeRight(inner,34);
+        list.addImage(centred(more,18,18),static_cast<UiImageId>(UiIcon::UiMoreVertical),theme.color.textDim);
+        if(editable) router.addRegion(more,widgetId(EditorWidget::ProfileGroupMenuBase)+row.group);
+        builder.label(takeRight(inner,44),row.value,theme.color.accent,theme.type.caption,UiAlign::End);
+      }
+      const auto fold=inner;
+      list.addImage(centred(takeLeft(inner,26),18,18),static_cast<UiImageId>(volumeGroupIcon(row.group)),row.on?theme.color.text:theme.color.textFaint);
+      takeLeft(inner,4);
+      builder.label(inner,row.label,row.on?theme.color.text:theme.color.textDim,theme.type.body);
+      router.addRegion(fold,widgetId(EditorWidget::ProfileSectionBase)+row.group);
+      break;
     }
-    list.addRect(rect,theme.color.raised,theme.radius.control);
-    auto inner=deflate(rect,UiInsets{8,0,8,0});
-    if(row.kind==Kind::Triple && row.color && !row.mixed) {
-      const auto swatch=centred(takeLeft(inner,22),18,18);
-      const auto channel=[&](float v){return static_cast<u32>(std::clamp(std::pow(std::max(v,0.f),1/2.2f),0.f,1.f)*255+.5f);};
-      list.addRect(swatch,0xff000000u|(channel(row.rgb[2])<<16)|(channel(row.rgb[1])<<8)|channel(row.rgb[0]),4);
-      takeLeft(inner,6);
+    case Kind::Actions: {
+      auto strip=takeTop(column,42);
+      const auto action=[&](UiRect area,UiIcon icon,const char *text,u32 widget,UiColor ink) {
+        area=deflate(area,UiInsets{3,4,3,4});
+        list.addRect(area,theme.color.raised,theme.radius.control);
+        list.addBorder(area,theme.color.lineSoft,1,theme.radius.control);
+        auto label=area;list.addImage(centred(takeLeft(label,28),16,16),static_cast<UiImageId>(icon),ink);
+        builder.label(label,text,ink,theme.type.caption);
+        router.addRegion(area,widget);
+      };
+      action(takeLeft(strip,strip.width*.5f),UiIcon::EditorAuthorUndo,"Redefinir valores",widgetId(EditorWidget::VolumeGroupReset),theme.color.text);
+      action(strip,UiIcon::UiRemove,"Remover override",widgetId(EditorWidget::VolumeGroupRemove),theme.color.danger);
+      break;
     }
-    if(row.kind==Kind::Enum || row.kind==Kind::EnvironmentMap) {
-      const auto arrow=takeRight(inner,18);
-      builder.label(arrow,">",theme.color.textDim,theme.type.caption,UiAlign::Center);
+    case Kind::AllNone: {
+      auto line=takeTop(column,28);takeLeft(line,8);
+      const auto link=[&](UiRect area,const char *text,u32 widget) {
+        builder.label(area,text,builder.isPressed(widget)?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        if(editable) router.addRegion(area,widget);
+      };
+      link(takeLeft(line,48),"ALL",widgetId(EditorWidget::ProfileGroupAllBase)+row.group);
+      link(takeLeft(line,56),"NONE",widgetId(EditorWidget::ProfileGroupNoneBase)+row.group);
+      if(!row.on) builder.label(line,"Desligado: não entra na mistura",theme.color.textFaint,theme.type.caption,UiAlign::End);
+      break;
     }
-    list.pushClip(inner);
-    builder.label(inner,row.mixed?"—":row.kind==Kind::Boolean?(row.on?"Ligado":"Desligado"):row.value,ink,row.kind==Kind::Number||row.kind==Kind::Triple?theme.type.numeric:theme.type.caption,
-                  row.kind==Kind::Number?UiAlign::Center:UiAlign::Start);
-    list.popClip();
-    if(row.editable) router.addRegion(rect,widgetId(EditorWidget::ProfileRowBase)+i);
+    case Kind::AddOverride: {
+      takeTop(column,10);
+      auto button=deflate(takeTop(column,46),UiInsets{0,2,0,2});
+      list.addRect(button,row.on?withAlpha(theme.color.accent,.18f):theme.color.raised,theme.radius.control);
+      list.addBorder(button,row.on?theme.color.accent:theme.color.lineSoft,1,theme.radius.control);
+      auto inner=button;
+      list.addImage(centred(takeLeft(inner,42),22,22),static_cast<UiImageId>(UiIcon::VolumeAddOverride),theme.color.accent);
+      builder.label(inner,"Adicionar override",theme.color.text,theme.type.body);
+      if(editable) router.addRegion(button,widgetId(EditorWidget::ProfileAddOverride));
+      break;
+    }
+    case Kind::AddChoice: {
+      if(i==0||state.profileRows[i-1].kind!=Kind::AddChoice||state.profileRows[i-1].value!=row.value)
+        builder.label(takeTop(column,24),row.value,theme.color.textMuted,theme.type.caption);
+      auto line=deflate(takeTop(column,38),UiInsets{8,2,0,2});
+      const u32 widget=widgetId(EditorWidget::VolumeAddChoiceBase)+row.group;
+      list.addRect(line,builder.isPressed(widget)?theme.color.line:theme.color.silhouette,theme.radius.control);
+      auto label=line;
+      list.addImage(centred(takeLeft(label,34),18,18),static_cast<UiImageId>(volumeGroupIcon(row.group)),theme.color.text);
+      builder.label(label,row.label,theme.color.text,theme.type.caption);
+      router.addRegion(line,widget);
+      break;
+    }
+    default: {
+      auto rect=takeTop(column,42);rect.height-=4;
+      UiRect veil{};
+      if(row.parameter!=~0u) {
+        const auto check=takeLeft(rect,32);
+        builder.checkbox(centred(check,24,24),row.overridden,widgetId(EditorWidget::ProfileOverrideBase)+i,editable,false);
+        if(!row.overridden) veil=rect;
+      }
+      if(row.kind==Kind::Curve) {
+        auto label=takeLeft(rect,std::min(rect.width*.44f,150.0f));
+        builder.label({label.x,label.y+3,label.width,18},row.label,theme.color.textDim,theme.type.caption);
+        builder.label({label.x,label.y+21,label.width,15},row.value,theme.color.textFaint,theme.type.caption);
+        list.addRect(rect,theme.color.silhouette,6);
+        const auto plot=deflate(rect,UiInsets::symmetric(6,5));
+        const auto *curves=state.profileCurves;
+        const bool diagonal=renderer::colorCurveIsDiagonal(row.curve);
+        if(diagonal) list.addLine({plot.x,plot.bottom()},{plot.right(),plot.y},theme.color.lineSoft,1.0f);
+        else list.addLine({plot.x,plot.y+plot.height*.5f},{plot.right(),plot.y+plot.height*.5f},theme.color.lineSoft,1.0f);
+        if(curves) {
+          UiPoint previous{};
+          for(u32 step=0;step<=24;++step) {
+            const float t=static_cast<float>(step)/24.0f;
+            const float v=std::clamp(renderer::evaluateColorCurve(row.curve,curves[row.curve],t),0.0f,1.0f);
+            const UiPoint point{plot.x+plot.width*t,plot.bottom()-plot.height*v};
+            if(step) list.addLine(previous,point,row.on?theme.color.accent:theme.color.textMuted,row.on?2.0f:1.0f);
+            previous=point;
+          }
+        }
+        if(editable) router.addRegion(rect,widgetId(EditorWidget::ProfileCurveBase)+row.curve);
+      } else {
+        const auto ink=row.editable?theme.color.text:theme.color.textFaint;
+        builder.label(takeLeft(rect,rect.width*.44f),row.label,row.editable?theme.color.textDim:theme.color.textFaint,theme.type.caption);
+        if(row.kind==Kind::Boolean && !row.mixed && row.editable) {
+          builder.toggle(takeRight(rect,52),row.on,widgetId(EditorWidget::ProfileRowBase)+i);
+        } else {
+          list.addRect(rect,theme.color.silhouette,theme.radius.control);
+          auto inner=deflate(rect,UiInsets{8,0,8,0});
+          if(row.kind==Kind::Triple && row.color && !row.mixed) {
+            const auto swatch=centred(takeLeft(inner,22),18,18);
+            const auto channel=[&](float v){return static_cast<u32>(std::clamp(std::pow(std::max(v,0.f),1/2.2f),0.f,1.f)*255+.5f);};
+            list.addRect(swatch,0xff000000u|(channel(row.rgb[2])<<16)|(channel(row.rgb[1])<<8)|channel(row.rgb[0]),4);
+            takeLeft(inner,6);
+          }
+          if(row.kind==Kind::Enum || row.kind==Kind::EnvironmentMap)
+            list.addImage(centred(takeRight(inner,14),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
+          list.pushClip(inner);
+          builder.label(inner,row.mixed?"—":row.kind==Kind::Boolean?(row.on?"Ligado":"Desligado"):row.value,ink,
+                        row.kind==Kind::Number||row.kind==Kind::Triple?theme.type.numeric:theme.type.caption,
+                        row.kind==Kind::Number?UiAlign::Center:UiAlign::Start);
+          list.popClip();
+          if(row.editable) router.addRegion(rect,widgetId(EditorWidget::ProfileRowBase)+i);
+        }
+      }
+      if(!veil.isEmpty()) {list.addRect(veil,withAlpha(theme.color.surface,.62f),6);router.addBlocker(veil);}
+      break;
+    }
+    }
   }
-  if(!count) builder.label(content,"Nada deste grupo no perfil",theme.color.textDim,theme.type.caption,UiAlign::Center);
-  if(pages>1) {
-    const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
-    builder.label(previous,"<",page?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
-    builder.label(next,">",page+1<pages?theme.color.text:theme.color.textFaint,theme.type.caption,UiAlign::Center);
-    if(page) router.addRegion(previous,widgetId(EditorWidget::PropertyPrevious));
-    if(page+1<pages) router.addRegion(next,widgetId(EditorWidget::PropertyNext));
-    builder.label(footer,(std::to_string(page+1)+" / "+std::to_string(pages)).c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+  if(state.profileRows.empty()) builder.label(takeTop(column,40),"Perfil vazio: adicione um override",theme.color.textDim,theme.type.caption,UiAlign::Center);
+  const float height=column.y-start;
+  router.popClip();list.popClip();
+  if(builder.layout) {builder.layout->profileInspectorContent=height;builder.layout->profileInspectorWindow=window.height;}
+  if(height>window.height+1) {
+    const float thumb=std::max(24.0f,window.height*window.height/height);
+    const float travel=window.height-thumb;
+    const float offset=std::clamp(state.profileInspectorScroll/(height-window.height),0.0f,1.0f)*travel;
+    list.addRect({window.right()-3,window.y+offset,3,thumb},theme.color.line,1.5f);
   }
 }
 
@@ -4452,7 +4567,9 @@ bool buildEnvironmentLooks(ScreenBuilder &builder,UiRect &content,const scene::E
 // Marcada, o volume decide o grupo; desmarcada, o grupo herda dos volumes de
 // prioridade menor e, por fim, dos padrões do mundo.
 u32 componentGroupOverride(const scene::ComponentType &type,std::string_view group) {
-  if(group=="Volume") return ~0u;
+  // PK-4: o Ambiente desenha o cabeçalho do Volume Override (interruptor,
+  // ALL/NONE e ⋮); os booleanos override_* são "no perfil", não caixas.
+  if(group=="Volume"||&type==&scene::Environment::descriptor) return ~0u;
   for(u32 i=0;i<type.booleans.size();++i)
     if(type.booleans[i].presentation.group==group&&std::string_view(type.booleans[i].id).starts_with("override_")) return i;
   return ~0u;
@@ -4481,6 +4598,13 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   const auto *component=entity.components.at(index);if(!component || &component->type()!=entry.type) return;
   const auto &state=builder.state;
   const bool stacked=builder.stackHeight>0;
+  // PK-4: o Ambiente é um Volume; cada parâmetro tem a caixa de override.
+  const bool volumeCard=entry.type==&scene::Environment::descriptor;
+  const auto volumeOverrides=volumeCard?static_cast<const scene::Environment&>(*component).volumeOverrides():renderer::VolumeOverrides{};
+  const bool volumeEditable=state.workspace!=EditorWorkspace::Play&&index<256;
+  // A janela Iluminação é a Lighting da Unity: edita o Ambiente da cena sem a
+  // interface de override do Volume (cabeçalhos, caixas, Adicionar override).
+  const bool volumeControls=volumeCard&&state.workspace!=EditorWorkspace::Lighting;
   // Vários cartões abertos dividem uma busca só: ela vale no cartão em foco, e a
   // lupa de cada cartão leva o índice para pôr o foco nele antes de buscar.
   const bool focusedHere=!stacked||state.expandedNative==component->instanceId();
@@ -5124,9 +5248,13 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   std::vector<Field> fields;
   if(!searching && entry.type==&scene::Collider::descriptor && group=="Cozimento") fields.push_back({7,0});
   if(!searching && entry.type==&scene::Environment::descriptor && group=="Volume") fields.push_back({8,0});
+  // PK-5: Color Curves -- uma linha por curva, com a miniatura e o editor.
+  if(!searching && volumeCard && group=="Curvas de cor")
+    for(u32 channel=0;channel<renderer::ColorCurveCount;++channel) fields.push_back({42,channel});
   if(!mesh || builder.state.meshTab!=1 || searching) {
     for(u32 i=0;i<entry.type->booleans.size();++i) if(show(entry.type->booleans[i].presentation)&&
       !(stacked&&!searching&&componentGroupOverride(*entry.type,entry.type->booleans[i].presentation.group)==i)&&
+      !(volumeCard&&std::string_view(entry.type->booleans[i].id).starts_with("override_"))&&
       !((constantForce||tween||audio||entry.type==&scene::PathFollow::descriptor||std::string_view(entry.type->id).starts_with("astra.physics2d."))&&!searching&&entry.type->booleans[i].id=="enabled")) fields.push_back({0,i});
     for(u32 i=0;i<entry.type->enums.size();++i) {
       if(!show(entry.type->enums[i].presentation)) continue;
@@ -5198,6 +5326,68 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       if(!show(property.presentation)) continue;
       for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
+  }
+  // Sistema de partículas: linhas de curva e gradiente logo abaixo do modo que
+  // as liga, a prévia no topo de Principal e a ordem dos módulos da Unity.
+  if(entry.type==&scene::ParticleSystem::descriptor&&!searching) {
+    const auto &system=scene::particleSystem(*component);
+    const auto curves=scene::ParticleSystem::curveSlots();
+    const auto gradients=scene::ParticleSystem::gradientSlots();
+    for(u32 i=0;i<curves.size();++i)
+      if(particleSlotGroup(curves[i].id)==group&&particleCurveRowVisible(system,curves[i])) fields.push_back({30,i});
+    for(u32 i=0;i<gradients.size();++i)
+      if(particleSlotGroup(gradients[i].id)==group&&particleGradientRowVisible(system,gradients[i])) fields.push_back({31,i});
+    if(group=="Principal") fields.push_back({32,0});
+    const auto fieldId=[&](const Field &f)->std::string_view {
+      switch(f.kind) {
+      case 0: return entry.type->booleans[f.index].id;
+      case 1: return entry.type->enums[f.index].id;
+      case 2: return entry.type->numbers[f.index].id;
+      case 5: return entry.type->triples[f.index].id;
+      case 30: return curves[f.index].id;
+      case 31: return gradients[f.index].id;
+      case 32: return kParticlePreviewRow;
+      default: return {};
+      }
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){
+      return particleInspectorRank(fieldId(a))<particleInspectorRank(fieldId(b));});
+    // Min/Max numa linha só (valor ou par + chip do modo), rajada numa linha e,
+    // em coluna, o interruptor do módulo vai para o cabeçalho da seção.
+    const auto numberIndex=[&](const std::string &id)->u32 {
+      for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) return i;
+      return 0xffffu;
+    };
+    const auto hasMode=[&](const std::string &base) {
+      for(const auto &e:entry.type->enums) if(e.id==base+"_mode") return true;
+      return false;
+    };
+    std::vector<Field> compact;
+    for(const auto &f:fields) {
+      if(f.kind==1) {
+        const std::string id(entry.type->enums[f.index].id);
+        // Só modos de Min/Max (há um número com o mesmo nome base); "Modo" de
+        // renderização e "Ordenação" continuam listas comuns.
+        if(id.ends_with("_mode")&&numberIndex(id.substr(0,id.size()-5))!=0xffffu) {
+          const auto base=id.substr(0,id.size()-5);
+          compact.push_back({33,f.index,(numberIndex(base+"_min")&0xffffu)|(numberIndex(base+"_multiplier")<<16),numberIndex(base)});
+          continue;
+        }
+      }
+      if(f.kind==2) {
+        const std::string id(entry.type->numbers[f.index].id);
+        if(hasMode(id)) continue;
+        if(id.ends_with("_min")&&hasMode(id.substr(0,id.size()-4))) continue;
+        if(id.ends_with("_multiplier")&&hasMode(id.substr(0,id.size()-11))) continue;
+        if(id.starts_with("burst_")&&id!="burst_count") {
+          if(id.ends_with("_time")) compact.push_back({34,static_cast<u32>(id[6]-'0')});
+          continue;
+        }
+      }
+      if(stacked&&f.kind==0&&particleModuleToggle(group)==entry.type->booleans[f.index].id) continue;
+      compact.push_back(f);
+    }
+    fields=std::move(compact);
   }
   // Câmera virtual e Cérebro: o interruptor que liga o grupo e a escolha de modo
   // vêm antes dos valores que eles mostram; os alvos fecham a aba Geral.
@@ -5486,13 +5676,34 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   const u32 pages=std::max(1u,(static_cast<u32>(fields.size())+perPage-1)/perPage);
   const u32 page=std::min(builder.state.propertyPage,pages-1);
   auto footer=pages>1?takeBottom(content,30):UiRect{};
+  // Parâmetro sem a caixa marcada: aparece apagado e não recebe toque, como o
+  // campo cinza do Volume da URP; o véu sai depois da linha (fica por cima).
+  UiRect inheritedVeil{};
+  const auto flushVeil=[&] {
+    if(inheritedVeil.isEmpty()) return;
+    builder.list.addRect(inheritedVeil,withAlpha(theme.color.surface,.62f),6);
+    builder.router.addBlocker(inheritedVeil);inheritedVeil={};
+  };
   for(u32 row=page*perPage;row<fields.size() && row<(page+1)*perPage;++row) {
+    flushVeil();
     const auto f=fields[row];auto slot=takeTop(content,std::min(40.0f,content.height));
     const auto reset=resetFields(f);
     if(!reset.empty() && index<256 && f.index<256 && f.slot<256) {
       const auto button=takeRight(slot,30);
       builder.list.addImage(centred(button,18,18),static_cast<UiImageId>(UiIcon::EditorAuthorUndo),theme.color.accent);
       builder.router.addRegion(button,widgetId(EditorWidget::ComponentFieldResetBase)+index+(f.kind<<8)+(f.index<<12)+(f.slot<<20));
+    }
+    if(volumeControls) {
+      const std::string_view id=f.kind==0?entry.type->booleans[f.index].id:f.kind==1?entry.type->enums[f.index].id:
+          f.kind==2?entry.type->numbers[f.index].id:f.kind==5?entry.type->triples[f.index].id:
+          f.kind==6?entry.type->resourceBindings[f.index].id:f.kind==42?renderer::colorCurveParameterId(f.index):std::string_view{};
+      const u32 parameter=id.empty()?~0u:renderer::volumeParameterIndex(id);
+      if(parameter!=~0u&&parameter<256) {
+        auto check=takeLeft(slot,30);
+        const bool on=volumeOverrides.overridden(parameter);
+        builder.checkbox(centred(check,24,24),on,widgetId(EditorWidget::VolumeParameterBase)+index+(parameter<<8),volumeEditable,false);
+        if(!on) inheritedVeil=slot;
+      }
     }
     const auto hit=slot;
     if(f.kind==41) {
@@ -5506,13 +5717,103 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       builder.list.addRect({slot.x+2,slot.bottom()-2,slot.width-4,1},theme.color.line);
       continue;
     }
-    if(f.kind==8) {
+    if(f.kind==30||f.kind==31) {
+      // Curva ou gradiente do componente: miniatura do valor; o toque abre o
+      // editor de curva/gradiente do projeto com bibliotecas e histórico.
+      const auto &system=scene::particleSystem(*component);
+      const bool curve=f.kind==30;
+      const auto slotId=curve?scene::ParticleSystem::curveSlots()[f.index].id:scene::ParticleSystem::gradientSlots()[f.index].id;
+      const char *rowName=curve?particleCurveRowLabel(system,scene::ParticleSystem::curveSlots()[f.index]):
+                                particleGradientRowLabel(system,scene::ParticleSystem::gradientSlots()[f.index]);
+      builder.label(takeLeft(slot,std::min(120.f,slot.width*.42f)),rowName,theme.color.textDim,theme.type.caption);
+      auto box=deflate(slot,UiInsets{2,6,2,6});
+      builder.list.addRect(box,theme.color.silhouette,theme.radius.control);
+      const auto inner=deflate(box,UiInsets::all(4));
+      if(curve) drawCurveThumbnail(builder,inner,*system.curve(slotId),theme.color.accent);
+      else drawGradientBar(builder,inner,*system.gradient(slotId),32);
+      const bool editable=builder.state.workspace!=EditorWorkspace::Play;
+      if(editable) builder.router.addRegion(hit,widgetId(curve?EditorWidget::ParticleCurveRowBase:EditorWidget::ParticleGradientRowBase)+f.index);
+    } else if(f.kind==33||f.kind==34) {
+      // Células numéricas compactas: rótulo pequeno em cima, valor embaixo; o
+      // toque edita pelo mesmo widget do número refletido.
+      const auto cell=[&](UiRect area,u32 field,const char *top) {
+        if(field>=entry.type->numbers.size()) return;
+        const auto &p=entry.type->numbers[field];
+        builder.list.addRect(deflate(area,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+        if(top) builder.label(takeTop(area,15),top,theme.color.textDim,theme.type.caption,UiAlign::Center);
+        char value[32];std::snprintf(value,sizeof value,"%.6g%s%s",static_cast<double>(p.read(*component)),
+                                     p.presentation.unit.empty()||top?"":" ",top?"":std::string(p.presentation.unit).c_str());
+        builder.label(area,builder.mixed(multiKey(component->instanceId(),p.id))?"\xE2\x80\x94":value,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(p.presentation.isEditable(*component)) builder.router.addRegion(area,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));
+      };
+      if(f.kind==33) {
+        const auto &mode=entry.type->enums[f.index];
+        const u32 current=mode.read(*component),minimum=f.slot&0xffffu,multiplier=f.slot>>16;
+        builder.label(takeLeft(slot,slot.width*.36f),f.second<entry.type->numbers.size()?entry.type->numbers[f.second].name:mode.name,
+                      theme.color.textDim,theme.type.caption);
+        auto chip=takeRight(slot,82);
+        auto chipBox=deflate(chip,UiInsets::all(2));
+        builder.list.addRect(chipBox,withAlpha(theme.color.accent,.14f),theme.radius.control);
+        builder.list.addImage(centred(takeRight(chipBox,18),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.accent);
+        builder.label(chipBox,particleModeChip(current),theme.color.accent,theme.type.caption,UiAlign::Center);
+        if(mode.presentation.isEditable(*component)) builder.router.addRegion(chip,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+        if(current==2) {const float w=slot.width*.5f;cell(takeLeft(slot,w),minimum,nullptr);cell(slot,f.second,nullptr);}
+        else if(current==1||current==3) cell(slot,multiplier,nullptr);
+        else cell(slot,f.second,nullptr);
+      } else {
+        char title[16];std::snprintf(title,sizeof title,"Rajada %u",f.index+1);
+        builder.label(takeLeft(slot,58),title,theme.color.textDim,theme.type.caption);
+        static constexpr const char *parts[]{"time","count_min","count_max","cycles","interval","probability"};
+        static constexpr const char *tops[]{"tempo","mín","máx","ciclos","interv.","chance"};
+        const float w=slot.width/6;
+        for(u32 k=0;k<6;++k) {
+          char id[40];std::snprintf(id,sizeof id,"burst_%u_%s",f.index,parts[k]);
+          u32 field=0xffffu;
+          for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) field=i;
+          cell(k<5?takeLeft(slot,w):slot,field,tops[k]);
+        }
+      }
+    } else if(f.kind==32) {
+      // Prévia: o que o sistema está fazendo agora na vista, e reiniciar.
+      runtime::SceneParticles::Status live;
+      const auto *particles=builder.state.particleRuntime;
+      const bool known=particles&&particles->peek(entity.id,component->instanceId(),live);
+      const u32 capacity=particles?particles->capacityOf(entity.id,component->instanceId()):0;
+      const auto &system=scene::particleSystem(*component);
+      const bool limited=known&&capacity<static_cast<u32>(system.maxParticles);
+      auto card=deflate(slot,UiInsets::all(2));
+      builder.list.addRect(card,withAlpha(theme.color.accent,.10f),8);
+      auto inside=deflate(card,UiInsets{6,8,6,4});
+      const bool editing=builder.state.workspace!=EditorWorkspace::Play;
+      if(editing) {
+        auto restart=takeRight(inside,40);
+        builder.list.addRect(deflate(restart,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+        builder.list.addImage(centred(restart,18,18),static_cast<UiImageId>(UiIcon::RuntimePlay),theme.color.accent);
+        builder.router.addRegion(restart,widgetId(EditorWidget::ParticlePreviewRestart));
+      }
+      builder.list.addImage(centred(takeLeft(inside,24),18,18),static_cast<UiImageId>(UiIcon::ComponentParticleSystem),theme.color.accent);
+      char text[128];
+      if(!known) std::snprintf(text,sizeof text,"%s",editing?"Prévia parada":"Sem simulação");
+      else std::snprintf(text,sizeof text,"%s · %u vivas%s · %.2f ms",live.paused?"Pausado":live.playing?(live.emitting?"Emitindo":"Terminando"):"Parado",
+                         live.alive,limited?" · teto do aparelho":"",static_cast<double>(builder.state.particleSimulationMs));
+      builder.label(inside,text,limited?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==8) {
       std::string summary="Influência indisponível";bool warning=true;
       std::vector<renderer::SceneEnvironmentVolume> volumes;
       if(builder.state.view && runtime::collectSceneEnvironmentVolumes(*builder.state.document,volumes))
         for(const auto &volume:volumes) if(volume.stableId==entity.id) {
           const float amount=renderer::sceneEnvironmentVolumeInfluence(volume,builder.state.view->frustum.cameraPosition);
-          summary="Na vista · "+std::to_string(static_cast<u32>(std::round(amount*100)))+"% · camada "+std::to_string(volume.layer);
+          const auto layerName=builder.state.document->layers().name(volume.layer);
+          summary="Na vista · "+std::to_string(static_cast<u32>(std::round(amount*100)))+"% · "+
+              (layerName.empty()?"camada "+std::to_string(volume.layer):std::string(layerName));
+          const auto &environment=static_cast<const scene::Environment&>(*component);
+          if(environment.profile.valid()) {
+            u32 users=0;std::vector<EditorEntityId> ids;builder.state.document->collectSubtree(builder.state.document->root(),ids);
+            for(const auto other:ids) if(const auto *object=builder.state.document->find(other))
+              if(const auto *shared=static_cast<const scene::Environment*>(object->components.find(scene::Environment::descriptor));
+                 shared&&shared->profile==environment.profile) ++users;
+            summary+=" · perfil em "+std::to_string(users)+(users==1?" volume":" volumes");
+          }
           warning=amount<=0;break;
         }
       const auto card=deflate(slot,UiInsets::all(2));builder.list.addRect(card,warning?withAlpha(theme.color.warning,.14f):withAlpha(theme.color.accent,.12f),8);
@@ -5654,6 +5955,32 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         builder.label(slot,mixed?"—":value,editable?theme.color.text:theme.color.textMuted,theme.type.caption);
         if(editable) builder.router.addRegion(hit,widget);
       }
+    } else if(f.kind==42) {
+      // Curva de cor: nome (e o da Unity), a miniatura da curva sobre o eixo e
+      // o toque abre o editor de curvas.
+      const u32 channel=f.index;
+      const auto &curve=static_cast<const scene::Environment&>(*component).values.curves[channel];
+      auto label=takeLeft(slot,std::min(slot.width*.44f,150.0f));
+      builder.label({label.x,label.y+3,label.width,18},renderer::colorCurveName(channel),theme.color.textDim,theme.type.caption);
+      builder.label({label.x,label.y+21,label.width,15},renderer::colorCurveUnityName(channel),theme.color.textFaint,theme.type.caption);
+      const auto box=deflate(slot,UiInsets::all(3));
+      builder.list.addRect(box,theme.color.silhouette,6);
+      const auto plot=deflate(box,UiInsets::symmetric(6,5));
+      const bool neutral=renderer::colorCurveNeutral(channel,curve);
+      const UiColor tones[]{theme.color.text,theme.color.axisX,theme.color.axisY,theme.color.axisZ,
+                            theme.color.accent,theme.color.accent,theme.color.accent,theme.color.accent};
+      const float baseline=renderer::colorCurveIsDiagonal(channel)?-1.0f:.5f;
+      if(baseline>=0) builder.list.addLine({plot.x,plot.y+plot.height*.5f},{plot.right(),plot.y+plot.height*.5f},theme.color.lineSoft,1.0f);
+      else builder.list.addLine({plot.x,plot.bottom()},{plot.right(),plot.y},theme.color.lineSoft,1.0f);
+      UiPoint previous{};
+      for(u32 i=0;i<=24;++i) {
+        const float t=static_cast<float>(i)/24.0f;
+        const float v=std::clamp(renderer::evaluateColorCurve(channel,curve,t),0.0f,1.0f);
+        const UiPoint point{plot.x+plot.width*t,plot.bottom()-plot.height*v};
+        if(i) builder.list.addLine(previous,point,neutral?theme.color.textMuted:tones[channel],neutral?1.0f:2.0f);
+        previous=point;
+      }
+      if(volumeEditable) builder.router.addRegion(box,widgetId(EditorWidget::VolumeCurveBase)+index+(channel<<8));
     } else if(f.kind==0) {
       const auto &property=entry.type->booleans[f.index];auto toggle=takeRight(slot,44);
       builder.label(slot,property.name,theme.color.textDim,theme.type.caption);
@@ -5881,6 +6208,19 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         if(f.slot+1<binding.slotCount(*component)) builder.router.addRegion(down,widgetId(EditorWidget::ComponentClipMoveDownBase)+encoded);
         builder.router.addRegion(remove,widgetId(EditorWidget::ComponentClipRemoveBase)+encoded);
       }
+      if(binding.kind==resources::AssetType::EnvironmentProfile&&volumeEditable) {
+        const bool linked=asset.valid();
+        auto actions=takeRight(slot,linked?128.0f:64.0f);pickerHit.width=std::max(0.0f,pickerHit.width-actions.width);
+        const auto button=[&](UiRect area,const char *text,u32 widget) {
+          area=deflate(area,UiInsets{3,4,0,4});
+          builder.list.addRect(area,builder.isPressed(widget)?theme.color.line:theme.color.raised,theme.radius.control);
+          builder.list.addBorder(area,theme.color.lineSoft,1,theme.radius.control);
+          builder.label(area,text,theme.color.text,theme.type.caption,UiAlign::Center);
+          builder.router.addRegion(area,widget);
+        };
+        if(linked) button(takeRight(actions,64),"Clonar",widgetId(EditorWidget::VolumeProfileCloneBase)+index);
+        button(actions,"Novo",widgetId(EditorWidget::VolumeProfileNewBase)+index);
+      }
       std::string name=binding.name;
       if(f.kind==12) name="Receber lightmap indireto";
       if(binding.slotCount(*component)>1) name+=" · "+std::to_string(f.slot+1);
@@ -6000,6 +6340,7 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       builder.router.addRegion(hit,f.index);
     }
   }
+  flushVeil();
   if(pages>1) {
     const auto previous=takeLeft(footer,36),next=takeRight(footer,36);
     builder.label(previous,"<",theme.color.textDim,theme.type.caption,UiAlign::Center);
@@ -6010,7 +6351,107 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     builder.label(footer,label.c_str(),theme.color.textMuted,theme.type.caption,UiAlign::Center);
   }
   };
-  if(!stacked || groups.size()<2 || searching) {body(group);return;}
+  // PK-4: cabeçalho de um Volume Override, como no Inspector do Volume da URP:
+  // dobra, interruptor (VolumeComponent.active), ícone, nome, quantos
+  // parâmetros estão marcados e o ⋮ (Redefinir, Remover). Aberto, a linha
+  // ALL / NONE e, com o ⋮ tocado, as duas ações.
+  const auto volumeHeader=[&](renderer::VolumeGroup volumeGroup,bool foldable,bool open,u32 foldWidget) {
+    if(!volumeControls) return;
+    const u32 vg=static_cast<u32>(volumeGroup);
+    const bool active=volumeOverrides.groupActive(volumeGroup);
+    auto row=takeTop(content,40);
+    builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
+    if(foldable) builder.list.addImage(centred(takeLeft(row,22),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
+                                      open?theme.color.accent:theme.color.textDim);
+    builder.checkbox(centred(takeLeft(row,34),26,26),active,widgetId(EditorWidget::VolumeGroupActiveBase)+index+(vg<<8),volumeEditable,false);
+    const auto more=takeRight(row,36);
+    builder.list.addImage(centred(more,18,18),static_cast<UiImageId>(UiIcon::UiMoreVertical),theme.color.textDim);
+    if(volumeEditable) builder.router.addRegion(more,widgetId(EditorWidget::VolumeGroupMenuBase)+index+(vg<<8));
+    const u32 marked=volumeOverrides.overriddenInGroup(volumeGroup),total=volumeOverrides.parametersInGroup(volumeGroup);
+    builder.label(takeRight(row,48),std::to_string(marked)+"/"+std::to_string(total),marked?theme.color.accent:theme.color.textFaint,
+                  theme.type.caption,UiAlign::End);
+    static constexpr UiIcon icons[renderer::VolumeGroupCount]{UiIcon::LightingSky,UiIcon::LightingSun,UiIcon::LightingSceneLighting,
+        UiIcon::LightingAmbientSource,UiIcon::LightingFog,UiIcon::LightingClouds,UiIcon::LightingExposure,UiIcon::PostTonemapping,
+        UiIcon::PostBloom,UiIcon::PostVignette,UiIcon::PostColorAdjustments,UiIcon::LightingColorGrading,UiIcon::PostColorCurves,
+        UiIcon::PostFilmGrain,UiIcon::PostAmbientOcclusion,UiIcon::PostDepthOfField,UiIcon::PostMotionBlur,
+        UiIcon::PostChromaticAberration,UiIcon::PostLensDistortion};
+    const auto hit=row;
+    builder.list.addImage(centred(takeLeft(row,26),18,18),static_cast<UiImageId>(icons[vg]),active?theme.color.text:theme.color.textFaint);
+    takeLeft(row,4);
+    builder.label(row,renderer::volumeGroupInfo(volumeGroup).name,active?theme.color.text:theme.color.textDim,theme.type.body);
+    if(foldWidget) builder.router.addRegion(hit,foldWidget);
+    const u32 menuKey=((index+1)<<8)|vg;
+    if(state.volumeMenu==menuKey) {
+      auto strip=takeTop(content,40);
+      const auto action=[&](UiRect area,UiIcon icon,const char *text,u32 widget,UiColor ink) {
+        area=deflate(area,UiInsets{3,4,3,4});
+        builder.list.addRect(area,theme.color.raised,theme.radius.control);
+        builder.list.addBorder(area,theme.color.lineSoft,1,theme.radius.control);
+        auto inner=area;builder.list.addImage(centred(takeLeft(inner,28),16,16),static_cast<UiImageId>(icon),ink);
+        builder.label(inner,text,ink,theme.type.caption);
+        builder.router.addRegion(area,widget);
+      };
+      action(takeLeft(strip,strip.width*.5f),UiIcon::EditorAuthorUndo,"Redefinir valores",widgetId(EditorWidget::VolumeGroupReset),theme.color.text);
+      action(strip,UiIcon::UiRemove,"Remover override",widgetId(EditorWidget::VolumeGroupRemove),theme.color.danger);
+    }
+    if(!open) return;
+    auto line=takeTop(content,26);takeLeft(line,foldable?22.0f:0.0f);
+    const auto link=[&](UiRect area,const char *text,u32 widget) {
+      builder.label(area,text,builder.isPressed(widget)?theme.color.accent:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+      if(volumeEditable) builder.router.addRegion(area,widget);
+    };
+    link(takeLeft(line,48),"ALL",widgetId(EditorWidget::VolumeGroupAllBase)+index+(vg<<8));
+    link(takeLeft(line,56),"NONE",widgetId(EditorWidget::VolumeGroupNoneBase)+index+(vg<<8));
+    if(!active) builder.label(line,"Desligado: não entra na mistura",theme.color.textFaint,theme.type.caption,UiAlign::End);
+  };
+  // "Adicionar override": a lista, por categoria, dos efeitos que este perfil
+  // ainda não tem (o botão Add Override da Unity).
+  const auto addOverride=[&] {
+    if(!volumeControls||searching) return;
+    if(volumeOverrides.added==renderer::VolumeGroupsAll) return;
+    takeTop(content,6);
+    auto button=deflate(takeTop(content,44),UiInsets{0,2,0,2});
+    const u32 widget=widgetId(EditorWidget::VolumeAddOverrideBase)+index;
+    const bool open=state.volumeAddMenu==index+1;
+    builder.list.addRect(button,open?withAlpha(theme.color.accent,.18f):theme.color.raised,theme.radius.control);
+    builder.list.addBorder(button,open?theme.color.accent:theme.color.lineSoft,1,theme.radius.control);
+    auto inner=button;
+    builder.list.addImage(centred(takeLeft(inner,40),22,22),static_cast<UiImageId>(UiIcon::VolumeAddOverride),theme.color.accent);
+    builder.label(inner,"Adicionar override",theme.color.text,theme.type.body);
+    if(volumeEditable) builder.router.addRegion(button,widget);
+    if(!open) return;
+    std::string_view category;
+    for(u32 vg=0;vg<renderer::VolumeGroupCount;++vg) {
+      const auto group=static_cast<renderer::VolumeGroup>(vg);
+      if(volumeOverrides.hasGroup(group)) continue;
+      const auto &info=renderer::volumeGroupInfo(group);
+      if(info.category!=category) {
+        category=info.category;
+        builder.label(takeTop(content,24),category,theme.color.textMuted,theme.type.caption);
+      }
+      auto row=deflate(takeTop(content,38),UiInsets{8,2,0,2});
+      const u32 choice=widgetId(EditorWidget::VolumeAddChoiceBase)+vg;
+      builder.list.addRect(row,builder.isPressed(choice)?theme.color.line:theme.color.silhouette,theme.radius.control);
+      auto label=row;
+      static constexpr UiIcon icons[renderer::VolumeGroupCount]{UiIcon::LightingSky,UiIcon::LightingSun,UiIcon::LightingSceneLighting,
+          UiIcon::LightingAmbientSource,UiIcon::LightingFog,UiIcon::LightingClouds,UiIcon::LightingExposure,UiIcon::PostTonemapping,
+          UiIcon::PostBloom,UiIcon::PostVignette,UiIcon::PostColorAdjustments,UiIcon::LightingColorGrading,UiIcon::PostColorCurves,
+          UiIcon::PostFilmGrain,UiIcon::PostAmbientOcclusion,UiIcon::PostDepthOfField,UiIcon::PostMotionBlur,
+          UiIcon::PostChromaticAberration,UiIcon::PostLensDistortion};
+      builder.list.addImage(centred(takeLeft(label,34),18,18),static_cast<UiImageId>(icons[vg]),theme.color.text);
+      builder.label(label,info.name,theme.color.text,theme.type.caption);
+      builder.router.addRegion(row,choice);
+    }
+  };
+  if(volumeControls&&!searching&&!stacked) {
+    // Abas (painel estreito): o cabeçalho do override da aba aberta no topo.
+    const auto volumeGroup=renderer::volumeGroupForPresentation(group);
+    if(volumeGroup!=renderer::VolumeGroup::Count) volumeHeader(volumeGroup,false,true,0);
+    body(group);
+    if(group=="Volume") addOverride();
+    return;
+  }
+  if(!stacked || groups.size()<2 || searching) {body(group);addOverride();return;}
   // Subseções recolhíveis no lugar das abas (ITsMagic: "Physics material" dentro
   // do cartão; Unity: foldouts de grupo): uma linha fina com seta, todas abertas
   // até o autor fechar. O estado é por tipo, então vale para todo objeto.
@@ -6018,6 +6459,14 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
   for(u32 g=0;g<groups.size();++g) {
     const auto key=typeKey+"/"+std::string(groups[g]);
     const bool open=!EditorScreenState::listed(state.inspectorSections,key);
+    if(volumeControls) {
+      const auto volumeGroup=renderer::volumeGroupForPresentation(groups[g]);
+      if(volumeGroup!=renderer::VolumeGroup::Count) {
+        volumeHeader(volumeGroup,true,open,index<256&&g<256?widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g:0u);
+        if(open) {takeTop(content,2);body(groups[g]);takeTop(content,6);}
+        continue;
+      }
+    }
     auto row=takeTop(content,36);
     builder.list.addRect({row.x,row.bottom()-1,row.width,1},theme.color.lineSoft);
     const u32 overrideField=componentGroupOverride(*entry.type,groups[g]);
@@ -6036,10 +6485,22 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
                           open?theme.color.accent:theme.color.textDim);
     const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
+    // Partículas: o interruptor do módulo no cabeçalho, registrado depois do
+    // dobrar para ganhar o toque dentro do próprio retângulo.
+    u32 moduleToggle=~u32{0};UiRect toggleArea{};
+    if(entry.type==&scene::ParticleSystem::descriptor)
+      for(u32 b=0;b<entry.type->booleans.size();++b)
+        if(entry.type->booleans[b].id==particleModuleToggle(groups[g])) {moduleToggle=b;toggleArea=takeRight(row,44);}
     builder.label(row,spring?std::string_view{"Mola"}:groups[g],open&&overridden?theme.color.text:theme.color.textDim,theme.type.body);
     if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
+    if(moduleToggle!=~u32{0}) {
+      const auto &property=entry.type->booleans[moduleToggle];
+      builder.checkbox(centred(toggleArea,28,28),property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(moduleToggle<<8),
+                       property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+    }
     if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
   }
+  addOverride();
 }
 
 void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &entity) {
@@ -6106,13 +6567,24 @@ void buildMeshPicker(ScreenBuilder &builder,UiRect content,const EditorEntity &e
         builder.router.addRegion(edit,widgetId(EditorWidget::LightingEditSkybox));
       }
     }
-    if(resourceBinding->kind==resources::AssetType::EnvironmentProfile) {
-      const auto action=deflate(takeTop(content,40),UiInsets::all(2));
-      builder.list.addRect(action,theme.color.accent,theme.radius.control);
-      builder.label(action,selectedResource.valid()?"Atualizar perfil com estes valores":"Criar perfil com estes valores",
-                    theme.color.accentInk,theme.type.caption,UiAlign::Center);
-      builder.router.addRegion(action,widgetId(selectedResource.valid()?EditorWidget::EnvironmentProfileUpdate:
-                                                 EditorWidget::EnvironmentProfileCreate));
+    if(resourceBinding->kind==resources::AssetType::EnvironmentProfile&&state.workspace!=EditorWorkspace::Play) {
+      // PK-4: os botões New e Clone do Volume da Unity. Sem perfil, Novo guarda
+      // o que este Volume tem; com perfil, Novo é um perfil vazio e Clonar uma
+      // cópia independente. Não existe mais "atualizar": editar já edita o perfil.
+      auto row=deflate(takeTop(content,44),UiInsets::all(2));
+      const auto button=[&](UiRect area,UiIcon icon,const char *text,u32 widget,bool primary) {
+        builder.list.addRect(area,primary?theme.color.accent:theme.color.raised,theme.radius.control);
+        if(!primary) builder.list.addBorder(area,theme.color.lineSoft,1,theme.radius.control);
+        auto label=area;
+        builder.list.addImage(centred(takeLeft(label,34),20,20),static_cast<UiImageId>(icon),primary?theme.color.accentInk:theme.color.text);
+        builder.label(label,text,primary?theme.color.accentInk:theme.color.text,theme.type.caption);
+        builder.router.addRegion(area,widget);
+      };
+      if(selectedResource.valid()) {
+        auto clone=takeRight(row,row.width*.5f);clone=deflate(clone,UiInsets{4,0,0,0});
+        button(row,UiIcon::VolumeProfile,"Novo perfil vazio",widgetId(EditorWidget::EnvironmentProfileCreate),false);
+        button(clone,UiIcon::VolumeAddOverride,"Clonar este perfil",widgetId(EditorWidget::EnvironmentProfileUpdate),true);
+      } else button(row,UiIcon::VolumeProfile,"Novo perfil com estes valores",widgetId(EditorWidget::EnvironmentProfileCreate),true);
     }
     std::vector<u32> matches;const auto query=editorSearchKey(state.meshQuery);u32 resourceCount=0;
     if(state.assetRegistry) for(u32 i=0;i<state.assetRegistry->records().size();++i) {

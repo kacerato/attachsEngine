@@ -1,0 +1,40 @@
+{
+  "title": "V-3 · Receber sombra, projetar sombra e sem sol por objeto: Unity (vídeos) × POCO (Vila Astra em Play)",
+  "rows": [
+    {
+      "unity": "referencia-unity/unity5-QjO2546RnUo-04m08s-recebe-sombra.jpg",
+      "device": "poco-pk9-1423/00-base.jpg",
+      "unity_caption": "Unity 5 · youtu.be/QjO2546RnUo 4:08 · Receive ligado: a caixa recebe a sombra do cubo",
+      "device_caption": "POCO · tudo ligado: a Casa C projeta a sombra grande no calçamento",
+      "verdict": "Controle. Mesma câmera do Play em todas as linhas."
+    },
+    {
+      "unity": "",
+      "device": "poco-pk9-1423/02-chao-sem-receber.jpg",
+      "unity_caption": "Unity 6000.0 · Mesh Renderer › Receive Shadows desligado (manual; sem vídeo com o estado desligado)",
+      "device_caption": "POCO · calçamento (Vila) com Receber sombras desligado",
+      "verdict": "VALE. Some toda sombra do chão (casa, poste, bancos); o chão continua com sol. Casas, poste e bancos seguem projetando sobre o resto."
+    },
+    {
+      "unity": "referencia-unity/unity62-meCiuRR_0lM-01m58s-cubo-cast-on.jpg",
+      "device": "poco-pk9-1423/03-casa-C-sem-projetar.jpg",
+      "unity_caption": "Unity 6.2 · youtu.be/meCiuRR_0lM 1:58 · Cast Shadows On (vídeo não mostra o Off)",
+      "device_caption": "POCO · Casa C com Projetar sombras desligado",
+      "verdict": "VALE. A sombra da Casa C some; a do poste continua. (Cast Off nunca dependeu da flag do shader: sai do passe de sombra.)"
+    },
+    {
+      "unity": "referencia-unity/unity2019-1cjKPU_3A4A-01m57s-paredes-fora-da-mascara.jpg",
+      "device": "poco-pk9-1423/01-ident-sem-sol-ACE.jpg",
+      "unity_caption": "Unity 2019.4 · youtu.be/1cjKPU_3A4A 1:57 · paredes fora do Culling Mask: ficam pretas",
+      "device_caption": "POCO · Casas A e E na camada 9, Máscara de culling do sol sem a 9",
+      "verdict": "VALE. As duas casas ficam só com o ambiente, como as paredes da Unity; as outras seguem com sol."
+    },
+    {
+      "unity": "",
+      "device": "poco-clima-2324/05-casa-C-sem-sol.jpg",
+      "unity_caption": "URP 6000.0 · issuetracker 9149: fora do Culling Mask, o cubo continua projetando",
+      "device_caption": "POCO (APK clima-2324) · Casa C fora do sol: fica só com ambiente e ainda projeta",
+      "verdict": "IGUAL À URP 6. O Culling Mask tira a luz, não a sombra: na Unity 6 o 'esperado' do caso 9149 é a sombra continuar. Para tirar a sombra, Projetar sombras desligado."
+    }
+  ]
+}

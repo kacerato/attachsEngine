@@ -15,6 +15,10 @@ layout(set=0,binding=9) uniform sampler2D halfAmbientOcclusion;
 // G2: LUT 32³ da gradação de cor (renderer/color_grading.cpp), RGBA16F linear,
 // indexada por sqrt(cor do monitor). Só é lida com o bit 65536.
 layout(set=0,binding=10) uniform highp sampler3D gradingLut;
+// PK-5: resultado da profundidade de campo em 1/2 (rgb e alfa do bokeh) e a
+// textura de sujeira da lente (Bloom › Lens Dirt).
+layout(set=0,binding=11) uniform sampler2D depthOfFieldResult;
+layout(set=0,binding=12) uniform sampler2D bloomDirt;
 layout(set=0,binding=4,std430) readonly buffer ExposureState {
   float ev; float targetEv; float meteredEv; uint valid;
 } automaticExposure;
@@ -44,7 +48,18 @@ layout(set=0,binding=3,std140) uniform EnvironmentLightingBlock {
   // espalhamento; brilho máximo). Ver DirtRoadFrameUniform.
   layout(offset=4112) vec4 postColorAdjust;
   layout(offset=4128) vec4 postBloomTint;
-  layout(offset=4144) vec4 postBloomDetail;
+  layout(offset=4144) vec4 postBloomDetail; // clamp, sujeira, filtro bicúbico, reservado
+  // PK-5 (depois do V-2, 4256): o resto do pós da URP. Ver DirtRoadFrameUniform.
+  layout(offset=4256) vec4 postLensAxis;    // centro xy (URP: center*2-1), multiplicadores xy
+  layout(offset=4272) vec4 postLensShape;   // theta, sigma, 1/escala, intensidade*100
+  layout(offset=4288) vec4 postChroma;      // intensidade*0,05, liga distorção, reservados
+  layout(offset=4304) vec4 postVignette;    // cor rgb, arredondada (proporção ou 1)
+  layout(offset=4320) vec4 postVignetteShape; // centro xy, intensidade*3, suavidade*5
+  layout(offset=4336) vec4 postMotion;      // intensidade, limite, iterações, reservado
+  layout(offset=4352) vec4 postDof;         // modo (1 gauss, 2 bokeh), a, b, raio máximo
+  layout(offset=4368) vec4 postDofDetail;   // amostras do bokeh, 1/aspecto, alta qualidade, reservado
+  layout(offset=4384) vec4 postBloomDirt;   // escala xy, deslocamento xy da sujeira
+  layout(offset=4400) vec4 postBokeh[22];   // até 43 amostras do bokeh (xy, zw)
 } environment;
 layout(push_constant) uniform PostPushConstants {
   // z bits: 1 bloom, 2 bicúbica, 4 FSR 1, 8 vetor, 16 cobertura estática,
@@ -87,6 +102,32 @@ float viewDistance(vec2 uv) {
 
 bool postFlag(float bit) { return mod(floor(post.texelFlags.z/bit),2.0)>0.5; }
 vec2 temporalInputUv(vec2 uv) { return uv*environment.temporalParameters.zw; }
+
+// PK-5: a coordenada local da câmera (0..1 dentro do Viewport Rect) que a
+// distorção da lente, a vinheta e a sujeira usam, como o uv do UberPost.
+vec2 gLocalUv=vec2(0.5);
+vec2 gResolveUv=vec2(0.5);
+vec2 localFromOutput(vec2 uv) { return (uv-environment.postViewport.xy)/max(environment.postViewport.zw,vec2(1.0e-6)); }
+vec2 outputFromLocal(vec2 uv) { return environment.postViewport.xy+uv*environment.postViewport.zw; }
+// Lens Distortion da URP (PostProcessing/Common.hlsl, DistortUV).
+vec2 distortUv(vec2 uv) {
+  if(environment.postChroma.y<0.5) return uv;
+  uv=(uv-0.5)*environment.postLensShape.z+0.5;
+  vec2 ruv=environment.postLensAxis.zw*(uv-0.5-environment.postLensAxis.xy);
+  float ru=max(length(ruv),1.0e-5);
+  if(environment.postLensShape.w>0.0) {
+    float wu=ru*environment.postLensShape.x;
+    ru=tan(wu)/(ru*environment.postLensShape.y);
+  } else {
+    ru=environment.postLensShape.x*atan(ru*environment.postLensShape.y)/ru;
+  }
+  return uv+ruv*(ru-1.0);
+}
+// Profundidade lida pelos efeitos de lente: na entrada já ampliada (128) a
+// profundidade é a da resolução interna.
+float effectRawDepth(vec2 sourceUv) {
+  return texture(sceneDepth,postFlag(128.0)?temporalInputUv(sourceUv):clampSourceUv(sourceUv)).r;
+}
 
 vec3 applySceneFog(vec2 sourceUv, vec3 color) {
   // Depois do ampliador temporal a névoa já está na cor: aplicá-la de novo
@@ -340,12 +381,31 @@ vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
 }
 
 const float kBloomLevels=5.0;
+// Bloom › High Quality Filtering: B-spline cúbica em 4 leituras bilineares
+// (Sigg e Hadwiger, GPU Gems 2 cap. 20), como o SampleTexture2DBicubic da URP.
+vec4 sampleBicubic(sampler2D source,vec2 uv) {
+  vec2 size=vec2(textureSize(source,0));
+  vec2 pixel=uv*size-0.5;
+  vec2 f=fract(pixel);
+  vec2 base=floor(pixel);
+  vec2 w0=(1.0/6.0)*(1.0-f)*(1.0-f)*(1.0-f);
+  vec2 w1=(1.0/6.0)*(4.0-6.0*f*f+3.0*f*f*f);
+  vec2 w2=(1.0/6.0)*(1.0+3.0*f+3.0*f*f-3.0*f*f*f);
+  vec2 w3=(1.0/6.0)*f*f*f;
+  vec2 g0=w0+w1,g1=w2+w3;
+  vec2 h0=(w1/g0-1.0+base+0.5)/size,h1=(w3/g1+1.0+base+0.5)/size;
+  return g0.y*(g0.x*texture(source,vec2(h0.x,h0.y))+g1.x*texture(source,vec2(h1.x,h0.y)))+
+         g1.y*(g0.x*texture(source,vec2(h0.x,h1.y))+g1.x*texture(source,vec2(h1.x,h1.y)));
+}
+vec3 sampleBloomChain(vec2 uv) {
+  return environment.postBloomDetail.z<0.5?texture(bloomChain,uv).rgb:sampleBicubic(bloomChain,uv).rgb;
+}
 vec3 bloomNeighborhood(vec2 uv) {
   if (mod(post.texelFlags.z,2.0) < 0.5 || post.bloom.y <= 0.0) return vec3(0.0);
   // 1024: a cadeia já espalhou o brilho por cinco oitavas; cada nível somou
   // a subida do seguinte, por isso a média divide pelo número de níveis.
   if (postFlag(1024.0))
-    return texture(bloomChain,uv).rgb*environment.postBloomTint.rgb*(post.bloom.y/kBloomLevels);
+    return sampleBloomChain(uv)*environment.postBloomTint.rgb*(post.bloom.y/kBloomLevels);
   // Scatter: o anel de 8 amostras abre de 2 texels (0, o bloom de antes) a 8.
   vec2 px = post.texelFlags.xy * 2.0 * exp2(2.0*clamp(environment.postBloomTint.w,0.0,1.0));
   vec3 sum = vec3(0.0);
@@ -390,11 +450,15 @@ vec3 toneMap(vec3 color) {
   return astraToneMap(color,environment.scenePost.y);
 }
 
+// Vignette da URP (UberPost, ApplyVignette): distância ao centro vezes
+// intensidade*3, eixo x pela proporção quando arredondada, queda pela
+// suavidade*5 e a cor nas bordas. Lê o uv local distorcido pela lente.
 vec3 applyVignette(vec3 color) {
   if(post.bloom.w>0.0) {
-    vec2 centered=(vUv-environment.postViewport.xy)/environment.postViewport.zw*2.0-1.0;
-    float vignette=1.0-smoothstep(0.25,1.25,dot(centered,centered));
-    color*=mix(1.0,vignette,post.bloom.w);
+    vec2 distance=abs(gLocalUv-environment.postVignetteShape.xy)*environment.postVignetteShape.z;
+    distance.x*=environment.postVignette.w;
+    float factor=pow(clamp(1.0-dot(distance,distance),0.0,1.0),environment.postVignetteShape.w);
+    color*=mix(environment.postVignette.rgb,vec3(1.0),factor);
   }
   return max(color,vec3(0));
 }
@@ -471,7 +535,10 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
 
   int packed = int(floor(post.grade.w));
   vec4 surface = unpackSurfaceTransform(packed);
-  vec2 physicalNdc = (vUv-environment.postViewport.xy)/environment.postViewport.zw *
+  // PK-5: com distorção de lente o pixel mostra o ponto de gResolveUv; a
+  // reprojeção parte dele e o deslocamento volta para este pixel no fim.
+  vec2 baseUv = gResolveUv;
+  vec2 physicalNdc = (baseUv-environment.postViewport.xy)/environment.postViewport.zw *
       2.0 - 1.0 - post.currentCamera.zw;
   vec2 cameraNdc = vec2(dot(surface.xz, physicalNdc),
                         dot(surface.yw, physicalNdc));
@@ -509,12 +576,13 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
   // objeto em movimento, cuja profundidade anterior a câmera não descreve.
   bool objectMotion=false;
   if(postFlag(8.0)) {
-    vec2 velocityUv=vUv+texture(temporalVelocity,sourceUv).xy;
+    vec2 velocityUv=baseUv+texture(temporalVelocity,sourceUv).xy;
     objectMotion=length((velocityUv-previousUv)/max(post.texelFlags.xy,vec2(1.0e-6)))>0.5;
     if(any(lessThan(velocityUv,environment.postViewport.xy))||
        any(greaterThan(velocityUv,environment.postViewport.xy+environment.postViewport.zw))) return current;
     previousUv=velocityUv;
   }
+  previousUv+=vUv-baseUv;
   motionUv=previousUv-vUv;
 
   // FSR runs this resolve at the current internal extent, in the top-left of
@@ -574,6 +642,102 @@ vec3 temporalResolve(vec2 sourceUv, vec3 current, float ao, vec3 bloomColor,
   return mix(current, history, historyContribution);
 }
 #endif
+
+// --- PK-5: Motion Blur, Chromatic Aberration e Depth of Field -------------
+mat3 cameraBasis(float yaw, float pitch, float roll) {
+  float cy=cos(yaw), sy=sin(yaw), cp=cos(pitch), sp=sin(pitch);
+  float cr=cos(roll), sr=sin(roll);
+  return mat3(cy,0,-sy, 0,1,0, sy,0,cy) *
+         mat3(1,0,0, 0,cp,sp, 0,-sp,cp) *
+         mat3(cr,sr,0, -sr,cr,0, 0,0,1);
+}
+// GetCameraVelocity do CameraMotionBlur da URP: reprojeta o ponto da
+// profundidade pela câmera anterior e devolve o deslocamento em NDC local
+// (anterior - atual), limitado ao Clamp. Só a câmera (Camera Only).
+vec2 cameraMotionNdc(vec2 localUv,vec2 sourceUv) {
+  float focal=post.sourceTransform.z;
+  if(focal<=0.0) return vec2(0.0);
+  float rawDepth=effectRawDepth(sourceUv);
+  float viewZ=viewDistanceFromDepth(rawDepth);
+  int packed=int(floor(post.grade.w));
+  vec4 surface=vec4(float((packed>>0)&3)-1.0,float((packed>>2)&3)-1.0,
+                    float((packed>>4)&3)-1.0,float((packed>>6)&3)-1.0);
+  vec2 physicalNdc=localUv*2.0-1.0-post.currentCamera.zw;
+  vec2 cameraNdc=vec2(dot(surface.xz,physicalNdc),dot(surface.yw,physicalNdc));
+  vec3 viewPosition=vec3(cameraNdc.x*post.sourceTransform.w*viewZ/focal,-cameraNdc.y*viewZ/focal,viewZ);
+  mat3 current=cameraBasis(post.currentCamera.x,post.currentCamera.y,post.previousCamera.z);
+  mat3 previousBasis=cameraBasis(post.previousCamera.x,post.previousCamera.y,post.previousCamera.w);
+  vec3 previousView;
+  if(rawDepth>=0.999999) previousView=transpose(previousBasis)*(current*viewPosition);
+  else previousView=transpose(previousBasis)*(post.currentPositionNear.xyz+current*viewPosition-post.previousPositionFar.xyz);
+  if(previousView.z<=post.currentPositionNear.w) return vec2(0.0);
+  vec2 previousCameraNdc=vec2(previousView.x*focal/(post.sourceTransform.w*previousView.z),-previousView.y*focal/previousView.z);
+  vec2 previousPhysicalNdc=vec2(dot(surface.xy,previousCameraNdc),dot(surface.zw,previousCameraNdc))+post.currentCamera.zw;
+  vec2 velocity=(previousPhysicalNdc-(physicalNdc+post.currentCamera.zw))*environment.postMotion.x;
+  float len=length(velocity);
+  return len>0.0?velocity*(min(len,environment.postMotion.y)/len):vec2(0.0);
+}
+float interleavedGradientNoise(vec2 pixel) {
+  return fract(52.9829189*fract(dot(pixel,vec2(0.06711056,0.00583715))));
+}
+// DoMotionBlur da URP: 2 leituras por iteração, com o deslocamento sorteado
+// por pixel; Low/Medium/High = 2/3/4 iterações.
+vec3 applyMotionBlur(vec3 center,vec2 localUv,vec2 sourceUv) {
+  if(environment.postMotion.x<=0.0) return center;
+  vec2 velocity=cameraMotionNdc(localUv,sourceUv);
+  if(dot(velocity,velocity)<1.0e-10) return center;
+  // Mesmo uso da URP: o deslocamento em NDC soma direto ao uv.
+  vec2 step=velocity*environment.postViewport.zw*post.sourceTransform.xy;
+  float randomValue=interleavedGradientNoise(gl_FragCoord.xy);
+  int iterations=int(environment.postMotion.z+0.5);
+  float inverseCount=1.0/float(iterations*2);
+  vec3 sum=vec3(0.0);
+  for(int i=0;i<4;++i) {
+    if(i>=iterations) break;
+    float offsetNegative=(float(i)+0.5)-(randomValue-0.5);
+    float offsetPositive=(float(i)+0.5)+(randomValue-0.5);
+    sum+=sampleScene(sourceUv-offsetNegative*inverseCount*step);
+    sum+=sampleScene(sourceUv+offsetPositive*inverseCount*step);
+  }
+  return sum*inverseCount;
+}
+// Chromatic Aberration da URP (as 3 leituras do UberPost): verde e azul
+// deslocados para as bordas proporcionalmente ao quadrado da distância.
+vec3 applyChromaticAberration(vec3 center,vec2 localUv) {
+  float amount=environment.postChroma.x;
+  if(amount<=0.0) return center;
+  vec2 coords=2.0*localUv-1.0;
+  vec2 delta=(-coords*dot(coords,coords)*amount)/3.0;
+  vec2 green=outputFromLocal(distortUv(localUv+delta))*post.sourceTransform.xy;
+  vec2 blue=outputFromLocal(distortUv(localUv+2.0*delta))*post.sourceTransform.xy;
+  return vec3(center.r,sampleScene(clampSourceUv(green)).g,sampleScene(clampSourceUv(blue)).b);
+}
+// CoC em fração da altura da tela. Gaussiano (URP): só o fundo, 0 a 1 entre
+// Início e Fim. Bokeh (PPv2/URP): (d - foco) * coeficiente / d, sinal negativo
+// na frente do foco.
+float circleOfConfusion(float viewZ) {
+  if(environment.postDof.x<1.5) return clamp((viewZ-environment.postDof.y)/max(environment.postDof.z-environment.postDof.y,1.0e-4),0.0,1.0);
+  // URP BokehDepthOfField (FragCoC): (1 - foco/d) * maxCoC, limitado a ±1 e
+  // escalado pelo raio máximo do bokeh.
+  float coc=(viewZ-environment.postDof.y)*environment.postDof.z/max(viewZ,1.0e-4);
+  return clamp(coc,-1.0,1.0)*environment.postDof.w;
+}
+// Composição do DoF sobre a cena (FragComposition do PPv2 no Bokeh; mistura
+// pelo CoC no Gaussiano, com leitura bicúbica opcional).
+vec3 applyDepthOfField(vec3 color,vec2 sourceUv,vec2 halfUv) {
+  if(!postFlag(2097152.0)) return color;
+  float coc=circleOfConfusion(viewDistanceFromDepth(effectRawDepth(sourceUv)));
+  if(environment.postDof.x<1.5) {
+    // High Quality Sampling: a leitura bicúbica tira o serrilhado da meia resolução.
+    vec3 blurred=environment.postDofDetail.z>0.5?sampleBicubic(depthOfFieldResult,halfUv).rgb:
+                                                 texture(depthOfFieldResult,halfUv).rgb;
+    return mix(color,blurred,coc);
+  }
+  vec4 dof=texture(depthOfFieldResult,halfUv);
+  float texel=1.0/max(float(textureSize(sceneColor,0).y),1.0);
+  float farAlpha=smoothstep(texel*2.0,texel*4.0,coc);
+  return mix(color,dof.rgb,farAlpha+dof.a-farAlpha*dof.a);
+}
 
 float filmGrainNoise(vec2 pixel) {
   // A câmera e o jitter variam a semente sem exigir outro campo no ABI de
@@ -663,6 +827,80 @@ void main() {
     outColor=vec4(sum/12.0,1.0);
     return;
   }
+  if(postFlag(131072.0)) {
+    // DoF, pré-filtro em 1/2 (FragPrefilter do PPv2): quatro leituras da cena
+    // com o CoC de cada uma, pesadas para não vazar o foco nem cintilar.
+    vec2 uv=clampSourceUv(vUv*post.sourceTransform.xy);
+    vec2 texel=post.texelFlags.xy*0.5;
+    vec2 offsets[4]=vec2[4](vec2(-1,-1),vec2(1,-1),vec2(-1,1),vec2(1,1));
+    vec3 sum=vec3(0.0);float total=0.0;float cocMin=1.0e9,cocMax=-1.0e9;
+    for(int index=0;index<4;++index) {
+      vec2 tap=clampSourceUv(uv+offsets[index]*texel);
+      vec3 value=sampleScene(tap);
+      float coc=circleOfConfusion(viewDistanceFromDepth(texture(sceneDepth,tap).r));
+      float weight=(environment.postDof.x<1.5?1.0:abs(coc))/(max(value.r,max(value.g,value.b))+1.0);
+      sum+=value*weight;total+=weight;
+      cocMin=min(cocMin,coc);cocMax=max(cocMax,coc);
+    }
+    vec3 average=sum/max(total,1.0e-4);
+    float coc=-cocMin>cocMax?cocMin:cocMax;
+    if(environment.postDof.x>1.5) average*=smoothstep(0.0,post.texelFlags.y*2.0,abs(coc));
+    outColor=vec4(average,coc);
+    return;
+  }
+  if(postFlag(262144.0)) {
+    // DoF Gaussiano (URP GaussianDepthOfField, Blur): 9 pesos em 5 leituras
+    // bilineares na direção do passe, raio = CoC do centro * raio máximo.
+    vec2 uv=vUv*post.sourceTransform.xy;
+    vec4 center=texture(sceneColor,uv);
+    vec2 offset=post.texelFlags.xy*post.bloom.xy*center.a*environment.postDof.w;
+    const float offsets[5]=float[5](-3.23076923,-1.38461538,0.0,1.38461538,3.23076923);
+    const float weights[5]=float[5](0.07027027,0.31621622,0.22702703,0.31621622,0.07027027);
+    vec4 sum=vec4(0.0);
+    for(int index=0;index<5;++index) {
+      vec4 tap=texture(sceneColor,uv+offsets[index]*offset);
+      float weight=weights[index]*clamp(1.0-(center.a-tap.a),0.0,1.0);
+      sum+=vec4(tap.rgb,1.0)*weight;
+    }
+    outColor=vec4(sum.rgb/max(sum.a,1.0e-4),center.a);
+    return;
+  }
+  if(postFlag(524288.0)) {
+    // DoF Bokeh (FragBlur do PPv2 com o kernel de lâminas da URP): fundo pelo
+    // menor CoC (centro ou amostra), frente pelo CoC da amostra; alfa = frente.
+    vec2 uv=vUv*post.sourceTransform.xy;
+    vec4 center=texture(sceneColor,uv);
+    vec4 background=vec4(0.0),foreground=vec4(0.0);
+    float margin=post.texelFlags.y*2.0;
+    int count=int(environment.postDofDetail.x+0.5);
+    for(int index=0;index<44;++index) {
+      if(index>=count) break;
+      vec4 pair=environment.postBokeh[index>>1];
+      vec2 kernel=(index&1)==0?pair.xy:pair.zw;
+      vec2 displacement=kernel*environment.postDof.w;
+      float distance=length(displacement);
+      vec4 tap=texture(sceneColor,uv+vec2(displacement.x*environment.postDofDetail.y,displacement.y)*post.sourceTransform.xy);
+      float backgroundCoc=max(min(center.a,tap.a),0.0);
+      float backgroundWeight=clamp((backgroundCoc-distance+margin)/margin,0.0,1.0);
+      float foregroundWeight=clamp((-tap.a-distance+margin)/margin,0.0,1.0);
+      foregroundWeight*=step(post.texelFlags.y,-tap.a);
+      background+=vec4(tap.rgb,1.0)*backgroundWeight;
+      foreground+=vec4(tap.rgb,1.0)*foregroundWeight;
+    }
+    background.rgb/=background.a+(background.a==0.0?1.0:0.0);
+    foreground.rgb/=foreground.a+(foreground.a==0.0?1.0:0.0);
+    float alpha=clamp(foreground.a*3.14159265/max(float(count),1.0),0.0,1.0);
+    outColor=vec4(mix(background.rgb,foreground.rgb,alpha),alpha);
+    return;
+  }
+  if(postFlag(1048576.0)) {
+    // DoF Bokeh, pós-filtro: tenda de 9 pesos em 4 leituras bilineares.
+    vec2 uv=vUv*post.sourceTransform.xy;
+    vec4 duv=vec4(post.texelFlags.xy,-post.texelFlags.x,0.0)*0.5;
+    outColor=(texture(sceneColor,uv-duv.xy)+texture(sceneColor,uv-duv.zy)+
+              texture(sceneColor,uv+duv.zy)+texture(sceneColor,uv+duv.xy))*0.25;
+    return;
+  }
   if(postFlag(256.0)) {
     // Pré-passe de névoa: avaliada uma vez por texel na resolução interna.
     // Sem ele, FXAA, bloom e reconstrução repetem profundidade + log/exp em
@@ -690,7 +928,10 @@ void main() {
 #endif
     return;
   }
-  vec2 sourceUv = clampSourceUv(vUv * post.sourceTransform.xy);
+  // PK-5: a lente distorce o uv de toda leitura da cena (URP uvDistorted).
+  gLocalUv=distortUv(localFromOutput(vUv));
+  gResolveUv=outputFromLocal(gLocalUv);
+  vec2 sourceUv = clampSourceUv(gResolveUv * post.sourceTransform.xy);
   vec3 unfiltered;
   vec3 crossAverage;
   vec3 center = sampleFxaa(sourceUv, unfiltered, crossAverage);
@@ -699,9 +940,16 @@ void main() {
     // rather than multiplying every FXAA/bloom neighbourhood by nine taps.
     center=max(vec3(0),center+reconstructScene(sourceUv)-unfiltered);
   }
+  center=applyChromaticAberration(center,localFromOutput(vUv));
+  center=applyDepthOfField(center,sourceUv,gResolveUv*post.sourceTransform.xy);
+  center=applyMotionBlur(center,gLocalUv,sourceUv);
   float ao=postFlag(4096.0)?upsampledAmbientOcclusion(sourceUv):screenSpaceAmbientOcclusion(sourceUv);
   center *= ao;
   vec3 bloomColor=bloomNeighborhood(sourceUv);
+  // Lens Dirt: a sujeira acende onde o bloom passa, como na URP.
+  if(environment.postBloomDetail.y>0.0)
+    bloomColor+=texture(bloomDirt,gLocalUv*environment.postBloomDirt.xy+environment.postBloomDirt.zw).rgb*
+                environment.postBloomDetail.y*bloomColor;
   vec3 color = center + bloomColor;
   color=displayLinearColor(color);
 #if AETHER_TEMPORAL

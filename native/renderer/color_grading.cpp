@@ -52,7 +52,40 @@ struct Prepared final {
   float shadowsStart = 0, shadowsEnd = 0, highlightsStart = 0, highlightsEnd = 0;
   float lift[3]{}, inverseGamma[3]{1, 1, 1}, gain[3]{1, 1, 1};
   float vibrance = 0, saturation = 1, contrast = 1;
+  // Curvas amostradas uma vez (como a TextureCurve da URP, 128 amostras).
+  bool hueCurves = false, channelCurves = false;
+  static constexpr u32 Samples = 128;
+  float curve[ColorCurveCount][Samples]{};
 };
+
+float sampleCurve(const float table[Prepared::Samples], float t, bool loop) {
+  constexpr float last = static_cast<float>(Prepared::Samples - 1);
+  if (loop) t -= std::floor(t);
+  const float position = std::clamp(t, 0.0f, 1.0f) * last;
+  const u32 base = std::min(static_cast<u32>(position), Prepared::Samples - 2);
+  const float f = position - static_cast<float>(base);
+  return table[base] + (table[base + 1] - table[base]) * f;
+}
+
+// HSV como o RgbToHsv/HsvToRgb do Color.hlsl do SRP Core.
+void rgbToHsv(const float c[3], float out[3]) {
+  const float high = std::max({c[0], c[1], c[2]}), low = std::min({c[0], c[1], c[2]}), d = high - low;
+  float h = 0.0f;
+  if (d > 1.0e-6f) {
+    if (high == c[0]) h = std::fmod((c[1] - c[2]) / d, 6.0f);
+    else if (high == c[1]) h = (c[2] - c[0]) / d + 2.0f;
+    else h = (c[0] - c[1]) / d + 4.0f;
+    h /= 6.0f;if (h < 0.0f) h += 1.0f;
+  }
+  out[0] = h;out[1] = high > 1.0e-6f ? d / high : 0.0f;out[2] = high;
+}
+void hsvToRgb(const float hsv[3], float out[3]) {
+  for (u32 i = 0; i < 3; ++i) {
+    const float k = std::fmod(5.0f - 2.0f * static_cast<float>(i) + hsv[0] * 6.0f, 6.0f);
+    const float f = std::clamp(std::min(k, 4.0f - k), 0.0f, 1.0f);
+    out[i] = hsv[2] - hsv[2] * hsv[1] * f;
+  }
+}
 
 Prepared prepare(const ColorGradingLook &look) {
   const auto &g = look.grading;
@@ -94,6 +127,16 @@ Prepared prepare(const ColorGradingLook &look) {
   p.vibrance = g.vibrance;
   p.saturation = look.saturation;
   p.contrast = look.contrast;
+  for (u32 channel = 0; channel < ColorCurveCount; ++channel) {
+    if (colorCurveNeutral(channel, look.curves[channel])) {
+      for (u32 i = 0; i < Prepared::Samples; ++i)
+        p.curve[channel][i] = colorCurveIsDiagonal(channel) ? static_cast<float>(i) / (Prepared::Samples - 1) : 0.5f;
+      continue;
+    }
+    (channel < 4 ? p.channelCurves : p.hueCurves) = true;
+    for (u32 i = 0; i < Prepared::Samples; ++i)
+      p.curve[channel][i] = evaluateColorCurve(channel, look.curves[channel], static_cast<float>(i) / (Prepared::Samples - 1));
+  }
   return p;
 }
 
@@ -127,11 +170,35 @@ void grade(const Prepared &p, const float in[3], float out[3]) {
     const float gray = luma(c);
     for (float &value : c) value = std::max(gray + (value - gray) * scale, 0.0f);
   }
+  // PK-5: Hue vs Hue, Hue vs Sat, Sat vs Sat e Lum vs Sat, na ordem do
+  // LutBuilder da URP (antes da saturação global). 0,5 é neutro em todas.
+  if (p.hueCurves) {
+    float hsv[3];rgbToHsv(c, hsv);
+    const float lum = std::clamp(luma(c), 0.0f, 1.0f);
+    float satMult = sampleCurve(p.curve[5], hsv[0], true) * 2.0f;
+    satMult *= sampleCurve(p.curve[6], hsv[1], false) * 2.0f;
+    satMult *= sampleCurve(p.curve[7], lum, false) * 2.0f;
+    hsv[0] += sampleCurve(p.curve[4], hsv[0], true) - 0.5f;
+    hsv[0] -= std::floor(hsv[0]);
+    hsvToRgb(hsv, c);
+    const float gray = luma(c);
+    for (float &value : c) value = std::max(gray + (value - gray) * satMult, 0.0f);
+  }
   // Mesma ordem e mesma fórmula do caminho sem LUT em post_process_common.glsl.
   const float gray = luma(c);
   for (u32 i = 0; i < 3; ++i) {
     const float saturated = gray + (c[i] - gray) * p.saturation;
     out[i] = (saturated - 0.5f) * p.contrast + 0.5f;
+  }
+  // Curvas Master e R/G/B: no espaço gama (como o editor de curvas as mostra),
+  // primeiro a mestra nos três canais, depois a de cada canal.
+  if (p.channelCurves) {
+    for (u32 i = 0; i < 3; ++i) {
+      float gamma = std::pow(std::clamp(out[i], 0.0f, 1.0f), 1.0f / 2.2f);
+      gamma = sampleCurve(p.curve[0], gamma, false);
+      gamma = sampleCurve(p.curve[1 + i], gamma, false);
+      out[i] = std::pow(std::max(gamma, 0.0f), 2.2f);
+    }
   }
 }
 
@@ -158,7 +225,9 @@ bool build(const ColorGradingLook &look, Store &&store) {
 } // namespace
 
 ColorGradingLook colorGradingLook(const SceneEnvironment &environment) noexcept {
-  return {environment.grading, environment.contrast, environment.saturation};
+  ColorGradingLook look{environment.grading, environment.contrast, environment.saturation};
+  for (u32 i = 0; i < ColorCurveCount; ++i) look.curves[i] = environment.curves[i];
+  return look;
 }
 
 void gradeDisplayColor(const ColorGradingLook &look, const float in[3], float out[3]) noexcept {

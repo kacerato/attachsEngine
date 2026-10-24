@@ -41,7 +41,7 @@ namespace ae::ui { class UiDrawList; }
 #include "editor/editor_rig_screen.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;class SceneParticles;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -288,6 +288,9 @@ struct EditorScreenState final {
   const runtime::ScenePhysics *characterRuntime=nullptr;
   const runtime::GameWorld *characterWorld=nullptr;
   const runtime::SceneTweens *tweenRuntime=nullptr;
+  // Partículas da vista (prévia na edição, mundo no Play): estado e teto por sistema.
+  const runtime::SceneParticles *particleRuntime=nullptr;
+  float particleSimulationMs=0;
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const EditorNavigationView *navigationView=nullptr;
@@ -440,6 +443,11 @@ struct EditorScreenState final {
   // cartões e subseções abrem por padrão (o cartão Objeto não).
   float inspectorScroll=0,focusedInspectorScroll=0;
   std::vector<std::string> inspectorFolded,inspectorSections;
+  // PK-4: menu ⋮ aberto de um Volume Override ((componente+1)<<8 | grupo) e a
+  // lista "Adicionar override" aberta (componente+1). No Inspector do recurso
+  // Perfil: grupo+1 do ⋮ e a lista aberta.
+  u32 volumeMenu=0,volumeAddMenu=0,profileVolumeMenu=0;
+  bool profileAddMenu=false;
   static bool listed(const std::vector<std::string> &list,std::string_view key) {
     for(const auto &item:list) if(item==key) return true;
     return false;
@@ -815,6 +823,9 @@ struct EditorScreenState final {
   u64 curveInstance=0;
   std::string curveProperty;
   u32 curveElement=0,curveSelected=0;
+  // PK-5: curva de Color Curves em edição (canal+1); do Perfil aberto ou do
+  // Ambiente (curveEntity/curveInstance).
+  u32 curveVolumeChannel=0;bool curveVolumeProfile=false;
   float curveView[4]{0,0,1,1};
   u32 curvePresetMenu=0;
   bool curveLibraryMenu=false;
@@ -1043,12 +1054,17 @@ struct EditorScreenState final {
   // Perfil de ambiente do projeto em Propriedades (Unity: Volume Profile). As
   // linhas são as propriedades do componente Ambiente que o perfil guarda,
   // descobertas pelo esquema; a sessão as prepara para o grupo escolhido.
+  // PK-4 (V-06): seções recolhíveis no lugar das abas paginadas. Cabeçalho
+  // (um por override do perfil, com o interruptor), a linha ALL/NONE, as
+  // propriedades (com a caixa de override: `parameter`), as curvas e o botão
+  // Adicionar override.
   struct ProfileRow {
-    enum class Kind : u8 { Boolean, Enum, Number, Triple, EnvironmentMap } kind=Kind::Boolean;
+    enum class Kind : u8 { Boolean, Enum, Number, Triple, EnvironmentMap, Header, AllNone, Curve, AddOverride, AddChoice, Actions } kind=Kind::Boolean;
     std::string_view id;
     std::string label,value;
-    bool on=false,editable=true,color=false,mixed=false;
+    bool on=false,editable=true,color=false,mixed=false,overridden=true;
     float rgb[3]{};
+    u32 group=0,parameter=~0u,curve=0;
   };
   resources::AssetGuid profileInspector{};
   std::string profileInspectorName,profileInspectorPath;
@@ -1059,6 +1075,8 @@ struct EditorScreenState final {
   u32 profileInspectorRevision=0,profileGroup=0,profileUse=0;
   std::vector<std::string> profileGroups;
   std::vector<ProfileRow> profileRows;
+  u32 profileSectionsCollapsed=0;float profileInspectorScroll=0;bool profileSkybox=false;
+  renderer::ColorCurve profileCurves[renderer::ColorCurveCount]{};
   std::vector<EditorEntityId> profileObjects;
   // Contexto do Inspector de recurso (material, HDRI, perfil). A janela focada
   // guarda o seu neste instantâneo, trocado com o principal (swapAssetInspector)
@@ -1077,6 +1095,8 @@ struct EditorScreenState final {
     resources::AssetGuid profileInspector{};std::string profileInspectorName,profileInspectorPath;
     u32 profileInspectorRevision=0,profileGroup=0,profileUse=0;
     std::vector<std::string> profileGroups;std::vector<ProfileRow> profileRows;std::vector<EditorEntityId> profileObjects;
+    u32 profileSectionsCollapsed=0;float profileInspectorScroll=0;bool profileSkybox=false;
+    renderer::ColorCurve profileCurves[renderer::ColorCurveCount]{};
     u32 propertyPage=0;
   };
   AssetInspectorSnapshot focusedAsset;
@@ -1096,6 +1116,8 @@ struct EditorScreenState final {
     swap(profileInspector,o.profileInspector);swap(profileInspectorName,o.profileInspectorName);swap(profileInspectorPath,o.profileInspectorPath);
     swap(profileInspectorRevision,o.profileInspectorRevision);swap(profileGroup,o.profileGroup);swap(profileUse,o.profileUse);
     swap(profileGroups,o.profileGroups);swap(profileRows,o.profileRows);swap(profileObjects,o.profileObjects);
+    swap(profileSectionsCollapsed,o.profileSectionsCollapsed);swap(profileInspectorScroll,o.profileInspectorScroll);
+    swap(profileSkybox,o.profileSkybox);swap(profileCurves,o.profileCurves);
     swap(propertyPage,o.propertyPage);
   }
   std::vector<std::string> projectMaterials;

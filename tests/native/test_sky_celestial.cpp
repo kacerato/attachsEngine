@@ -89,7 +89,7 @@ AE_TEST(sky_celestial_volumes_blend_with_the_sky_group_only) {
   const renderer::SceneEnvironmentVolume volumes[]{base, night};
   const auto mixed = renderer::resolveSceneEnvironment(volumes, camera);
   AE_EXPECT_TRUE(mixed.starIntensity > 1.0f && mixed.starIntensity < 4.0f, "meio peso mistura as estrelas");
-  night.overrides = renderer::EnvironmentOverridePost;
+  night.overrides = renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverridePost);
   const renderer::SceneEnvironmentVolume postOnly[]{base, night};
   AE_EXPECT_TRUE(renderer::resolveSceneEnvironment(postOnly, camera).starIntensity == 1.0f, "corpos celestes são do grupo Céu");
 }

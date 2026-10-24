@@ -49,6 +49,9 @@ enum class EditorWidget : u32 {
   MotorBakeRegenerate=0xDB000300u,MotorBakeConfirmMapping,MotorBakeMappingBase=0xDB000320u,
   MotorBakeSettingsOpen=0xDB000360u,MotorBakeSettingsDone,MotorBakeSettingsPrevious,MotorBakeSettingsNext,
   MotorBakePoseRest,MotorBakePoseAuthored,MotorBakePoseAnimation,MotorBakeSettingsNumberBase=0xDB000370u,
+  // Inspetor do Sistema de partículas: linha de curva (+slot), de gradiente
+  // (+slot) e reiniciar a prévia da cena.
+  ParticleCurveRowBase=0xDB000500u,ParticleGradientRowBase=0xDB000520u,ParticlePreviewRestart=0xDB000530u,
   GuiHierarchyRowBase = 0xDD000000u,
   GuiHierarchyCollapseBase = 0xDE000000u,
   CreationCategoryBase=0x63000000,
@@ -491,6 +494,19 @@ enum class EditorWidget : u32 {
   HierarchyEyeBase = 0x2000'0000u,
   // Seleção pela vista por objeto (Unity: Scene picking), a mão da linha.
   HierarchyPickBase = 0xCE00'0000u,
+  // PK-4: Volume no Inspector como o da URP. Caixa de override por parâmetro
+  // (+ componente + parâmetro<<8); interruptor, ALL, NONE e menu ⋮ de cada
+  // override (+ componente + grupo<<8); Adicionar override (+ componente) e a
+  // escolha (+ grupo); Novo/Clonar do perfil (+ componente); curva de cor
+  // (+ componente + curva<<8). O Inspector do recurso Perfil usa as faixas
+  // Profile* (+ linha ou + grupo) e a rolagem.
+  VolumeParameterBase = 0xEA00'0000u, VolumeGroupActiveBase = 0xEA01'0000u, VolumeGroupAllBase = 0xEA02'0000u,
+  VolumeGroupNoneBase = 0xEA03'0000u, VolumeGroupMenuBase = 0xEA04'0000u, VolumeAddOverrideBase = 0xEA05'0000u,
+  VolumeAddChoiceBase = 0xEA06'0000u, VolumeMenuClose = 0xEA07'0000u, VolumeGroupRemove, VolumeGroupReset,
+  VolumeProfileNewBase = 0xEA08'0000u, VolumeProfileCloneBase = 0xEA09'0000u, VolumeCurveBase = 0xEA0A'0000u,
+  ProfileOverrideBase = 0xEA0B'0000u, ProfileGroupActiveBase = 0xEA0C'0000u, ProfileGroupAllBase = 0xEA0D'0000u,
+  ProfileGroupNoneBase = 0xEA0E'0000u, ProfileGroupMenuBase = 0xEA0F'0000u, ProfileAddOverride = 0xEA10'0000u,
+  ProfileInspectorScroll = 0xEA11'0000u, ProfileCurveBase = 0xEA12'0000u, ProfileSectionBase = 0xEA13'0000u,
   // Vários recursos em Arquivos (Unity: Ctrl/Shift+clique no Project) e o
   // Inspector deles: estreitar por tipo, campos comuns, a lista escolhida.
   TexturePickerScroll = 0xCEFF'0000u,

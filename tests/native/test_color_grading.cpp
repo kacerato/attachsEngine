@@ -201,7 +201,7 @@ AE_TEST(environment_looks_apply_only_the_post_group) {
   AE_EXPECT_TRUE(!renderer::colorGradingUsesLut(renderer::colorGradingLook(defaults)), "Neutro sem LUT");
   for (const auto &preset : presets) {
     renderer::SceneEnvironment scene{};
-    scene.fog = true;scene.fogDensity = 0.03f;scene.exposureCompensation = 1.5f;scene.ambientOcclusion = true;
+    scene.fog = true;scene.fogDensity = 0.03f;scene.exposureCompensation = 1.5f;scene.ambientOcclusion = true;scene.ambientOcclusionIntensity = 0.5f;
     scene.sky = renderer::SkyModel::PhysicalAtmosphere;scene.post = false;
     const auto before = scene;
     resources::applyEnvironmentLook(scene, preset.look);
@@ -255,7 +255,7 @@ AE_TEST(environment_volume_blend_reaches_the_exact_target_grading) {
   const auto half = renderer::resolveSceneEnvironment(halfVolumes, camera);
   AE_EXPECT_TRUE(half.grading.temperature > 0.0f && half.grading.temperature < look.environment.grading.temperature,
                  "meio peso mistura a gradação");
-  renderer::SceneEnvironmentVolume fogOnly = look;fogOnly.overrides = renderer::EnvironmentOverrideFog;
+  renderer::SceneEnvironmentVolume fogOnly = look;fogOnly.overrides = renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideFog);
   const renderer::SceneEnvironmentVolume fogVolumes[]{base, fogOnly};
   AE_EXPECT_TRUE(renderer::resolveSceneEnvironment(fogVolumes, camera).grading.neutral(), "gradação é do grupo Pós");
 }

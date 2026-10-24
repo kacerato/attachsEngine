@@ -6,7 +6,11 @@
 // continue produzindo uma linha antiga legítima.
 
 #include "scene/environment.h"
+#include "resources/environment_profile.h"
 
+#include <iomanip>
+#include <limits>
+#include <locale>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -29,30 +33,59 @@ inline std::string join(const std::vector<std::string> &tokens) {
 // viram as duas chaves antigas (exposição automática e peso central,
 // desligadas) e sai o exposure_fixed. Na v15 saem também as nuvens (os 3
 // interruptores e os números cloud_*).
-// Cena v18 → v17: saem os 5 campos da janela Lighting (PK-1/PK-2) depois das
-// nuvens e os números novos dela, que são os últimos da tabela.
-// Cena v19 → v18: sai o tipo das nuvens (depois do Skybox) e os números novos
-// delas (espessura, forma, erosão, passos).
+// Números que a linha v18 já não tem: os do pós novo (v19) e os das nuvens
+// volumétricas (v20). Os laços abaixo andam o índice só pelos demais.
 inline bool componentNumberSinceV19(std::string_view id) {
-  return id=="cloud_thickness"||id=="cloud_shape_factor"||id=="cloud_erosion"||id=="cloud_steps";
+  return ae::scene::environmentNumberSinceV19(id)||ae::scene::environmentNumberSinceV20(id);
 }
-inline std::string componentAsV18(const std::string &line) {
+// Cena v20 → v19 (G4d): sai o tipo das nuvens (o 27º campo do cabeçalho) e os
+// números novos delas; os números são os últimos tokens da linha.
+inline std::string componentAsV19(const std::string &line) {
   auto tokens=words(line);
-  constexpr size_t typeAt=18+10+3+5;
-  tokens.erase(tokens.begin()+typeAt);
-  std::vector<std::string> out(tokens.begin(),tokens.begin()+typeAt);
+  tokens.erase(tokens.begin()+26);
   const auto &numbers=ae::scene::Environment::descriptor.numbers;
-  for(size_t i=0;i<numbers.size()&&typeAt+i<tokens.size();++i)
-    if(!componentNumberSinceV19(numbers[i].id)) out.push_back(tokens[typeAt+i]);
+  const size_t numbersAt=tokens.size()-numbers.size();
+  std::vector<std::string> out(tokens.begin(),tokens.begin()+numbersAt);
+  for(size_t i=0;i<numbers.size();++i)
+    if(!ae::scene::environmentNumberSinceV20(numbers[i].id)) out.push_back(tokens[numbersAt+i]);
   return join(out);
 }
+// Cena v19 → v18 (PK-4/PK-5): a linha nova é relida e escrita no formato de
+// antes -- caixas por grupo (a de cada override que estava no perfil),
+// camada própria 0 e os bools de efeito; os números do pós novo saem.
+inline std::string componentAsV18(const std::string &line) {
+  ae::scene::Environment e;
+  std::istringstream in(line);in.imbue(std::locale::classic());
+  if(!e.read(in,ae::scene::Environment::CurrentVersion)) return line;
+  std::ostringstream out;out.imbue(std::locale::classic());
+  out<<std::setprecision(std::numeric_limits<float>::max_digits10);
+  const auto &v=e.values;const auto o=e.volumeOverrides();
+  using G=ae::renderer::VolumeGroup;
+  const auto added=[&](G group){return o.hasGroup(group)?1:0;};
+  const auto guid=[](const ae::resources::AssetGuid &g){return g.valid()?g.text():std::string("-");};
+  out<<v.active<<' '<<v.fog<<' '<<v.post<<' '<<v.bloom<<' '<<v.vignette<<' '<<v.filmGrain<<' '
+     <<static_cast<ae::u32>(v.sky)<<' '<<static_cast<ae::u32>(v.toneMapper)<<' '<<v.ambientOcclusion<<' '
+     <<static_cast<ae::u32>(e.shape)<<' '<<added(G::Sky)<<' '<<added(G::Fog)<<' '<<added(G::Tonemapping)<<' '<<0<<' '
+     <<guid(e.profile)<<' '<<added(G::Ambient)<<' '<<v.physicalAtmosphereHighQuality<<' '<<guid(v.environmentMap)<<' '
+     <<static_cast<ae::u32>(v.exposureMode)<<' '<<static_cast<ae::u32>(v.exposureMetering)<<' '
+     <<static_cast<ae::u32>(v.exposureAdaptation)<<' '<<added(G::Exposure)<<' '<<added(G::Bloom)<<' '
+     <<added(G::Vignette)<<' '<<added(G::ColorAdjustments)<<' '<<added(G::ColorGrading)<<' '<<added(G::FilmGrain)<<' '
+     <<added(G::AmbientOcclusion)<<' '<<v.clouds.enabled<<' '<<v.clouds.castShadows<<' '<<added(G::Clouds)<<' '
+     <<static_cast<ae::u32>(v.sunDisk)<<' '<<static_cast<ae::u32>(v.ambientSource)<<' '<<static_cast<ae::u32>(v.fogMode)<<' '
+     <<static_cast<ae::u32>(v.fogColorMode)<<' '<<guid(v.skybox);
+  for(const auto &property:ae::scene::Environment::descriptor.numbers)
+    if(!componentNumberSinceV19(property.id)) out<<' '<<property.read(e);
+  return out.str();
+}
+// Cena v18 → v17: saem os 5 campos da janela Lighting (PK-1/PK-2) depois das
+// nuvens e os números novos dela, que são os últimos da tabela.
 inline std::string componentAsV17(const std::string &line) {
   auto tokens=words(componentAsV18(line));
   constexpr size_t lightingAt=18+10+3,lightingTokens=5;
   tokens.erase(tokens.begin()+lightingAt,tokens.begin()+lightingAt+lightingTokens);
   std::vector<std::string> out(tokens.begin(),tokens.begin()+lightingAt);
   const auto &numbers=ae::scene::Environment::descriptor.numbers;
-  // O texto v18 já não tem os números da v19: o índice só anda pelos demais.
+  // O texto v18 já não tem os números da v19 nem da v20: o índice só anda pelos demais.
   for(size_t i=0,at=lightingAt;i<numbers.size()&&at<tokens.size();++i) {
     if(componentNumberSinceV19(numbers[i].id)) continue;
     if(!ae::scene::environmentNumberSinceV18(numbers[i].id)) out.push_back(tokens[at]);
@@ -85,19 +118,33 @@ inline std::string componentAsV15(const std::string &line) {return componentBefo
 // Perfil v12 → v11: os 11 números da Exposure (antes de energia da neblina,
 // 31 de gradação, 5 corpos celestes e 16 das nuvens) voltam aos 9 antigos.
 // v10 é a v11 sem as 16 palavras das nuvens.
-// Perfil v13 → v12: saem as 21 palavras da janela Lighting do fim.
-// Perfil v14 → v13: saem as 5 palavras das nuvens (espessura e Volumetric Clouds).
-inline std::string profileAsV13(std::string text) {
+// Perfil v15 → v14 (G4c/G4d): saem as 5 palavras das nuvens (espessura e Volumetric Clouds).
+inline std::string profileAsV14(std::string text) {
   const bool newline=!text.empty()&&text.back()=='\n';
   if(newline) text.pop_back();
   size_t at=text.size();for(size_t i=0;i<5;++i) at=text.rfind(' ',at-1);
   text=text.substr(0,at);
-  const std::string magic="ASTRA_ENVIRONMENT_PROFILE 14 ";
-  if(text.rfind(magic,0)==0) text.replace(0,magic.size(),"ASTRA_ENVIRONMENT_PROFILE 13 ");
-  const std::string skybox="ASTRA_SKYBOX_MATERIAL 14 ";
-  if(text.rfind(skybox,0)==0) text.replace(0,skybox.size(),"ASTRA_SKYBOX_MATERIAL 13 ");
+  const std::string magic="ASTRA_ENVIRONMENT_PROFILE 15 ";
+  if(text.rfind(magic,0)==0) text.replace(0,magic.size(),"ASTRA_ENVIRONMENT_PROFILE 14 ");
+  const std::string skybox="ASTRA_SKYBOX_MATERIAL 15 ";
+  if(text.rfind(skybox,0)==0) text.replace(0,skybox.size(),"ASTRA_SKYBOX_MATERIAL 14 ");
   return newline?text+"\n":text;
 }
+// Perfil v14 → v13 (PK-4/PK-5): sai o fim novo -- os 32 do pós completo, as
+// curvas de cor (1 + 7 por chave, em cada uma das 8) e os overrides (11).
+inline std::string profileAsV13(std::string text) {
+  text=profileAsV14(text);
+  ae::resources::EnvironmentProfile parsed;
+  if(text.rfind("ASTRA_ENVIRONMENT_PROFILE 14 ",0)!=0||!ae::resources::EnvironmentProfile::deserialize(text,parsed)) return text;
+  const bool newline=!text.empty()&&text.back()=='\n';
+  if(newline) text.pop_back();
+  size_t tail=32+11;
+  for(const auto &curve:parsed.values.curves) tail+=1+7*curve.count;
+  size_t at=text.size();for(size_t i=0;i<tail;++i) at=text.rfind(' ',at-1);
+  text="ASTRA_ENVIRONMENT_PROFILE 13 "+text.substr(29,at-29);
+  return newline?text+"\n":text;
+}
+// Perfil v13 → v12: saem as 21 palavras da janela Lighting do fim.
 inline std::string profileAsV12(std::string text) {
   text=profileAsV13(text);
   const bool newline=!text.empty()&&text.back()=='\n';

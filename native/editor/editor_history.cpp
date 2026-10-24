@@ -452,6 +452,15 @@ bool EditorHistory::mergeLast(u32 count, std::string_view label) {
   return true;
 }
 
+bool EditorHistory::lastIsValuesOf(EditorEntityId id) const {
+  if (open_ || undoStack_.empty()) return false;
+  const auto &step = undoStack_.back();
+  if (step.resourceReplay || step.commands.empty()) return false;
+  for (const auto &command : step.commands)
+    if (command.kind != EditorCommandKind::ApplyValues || command.id != id) return false;
+  return true;
+}
+
 std::string EditorHistory::describe(u32 index) const {
   if (index >= entryCount()) return {};
   const Transaction &step = index < undoStack_.size()

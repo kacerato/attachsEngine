@@ -1,0 +1,26 @@
+{
+  "title": "PK-5 · Aberração cromática, distorção de lente e vinheta",
+  "rows": [
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-06m07s-aberracao-cromatica.jpg",
+      "device": "poco/08-aberracao-q1.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 06:07",
+      "device_caption": "POCO · pos-0949 · Chromatic Aberration 1",
+      "verdict": "Franjas R/G/B crescem com o quadrado da distância ao centro (3 leituras da URP); o arco-íris nas texturas finas também aparece no vídeo."
+    },
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-06m48s-lens-barril.jpg",
+      "device": "poco/09-lente-barril-q1.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 06:48",
+      "device_caption": "POCO · pos-0949 · Lens Distortion −0,5",
+      "verdict": "Barril com linhas retas curvando para fora nas bordas, com a mesma intensidade relativa. O centro e a escala seguem os da URP."
+    },
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-07m58s-vinheta.jpg",
+      "device": "poco/10-vinheta-q1.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 07:58",
+      "device_caption": "POCO · pos-0949 · Vignette 0,45, suavidade 0,35",
+      "verdict": "Bordas escurecem na proporção do vídeo, com a forma ajustada à tela (Arredondada desligada)."
+    }
+  ]
+}

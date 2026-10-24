@@ -159,7 +159,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     allocate.descriptorPool=previewPool_;allocate.descriptorSetCount=1;allocate.pSetLayouts=&environmentSetLayout_;
     if(vkAllocateDescriptorSets(device_,&allocate,&previewSet_)!=VK_SUCCESS) {destroyCameraPreview();return false;}
 
-    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,9},
+    VkDescriptorPoolSize postSizes[]{{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,11},
                                      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},
                                      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1}};
     pool.maxSets=1;pool.poolSizeCount=3;pool.pPoolSizes=postSizes;
@@ -200,6 +200,11 @@ bool InstancedRenderer::prepareCameraPreview() {
     // A prévia tem a própria LUT: a câmera pode estar em outro volume de ambiente.
     const VkDescriptorImageInfo gradingLut{postSampler_.handle(),colorGradingView(1),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
     postWrites[10]=postWrites[5];postWrites[10].dstBinding=10;postWrites[10].pImageInfo=&gradingLut;
+    // PK-5: a prévia não roda a profundidade de campo (o descritor só precisa
+    // ser válido); a sujeira da lente é a mesma imagem da vista principal.
+    const VkDescriptorImageInfo lensDirt{postSampler_.handle(),lensDirtView(),VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+    postWrites[11]=postWrites[5];postWrites[11].dstBinding=11;
+    postWrites[12]=postWrites[5];postWrites[12].dstBinding=12;postWrites[12].pImageInfo=&lensDirt;
     vkUpdateDescriptorSets(device_,kPostBindingCount,postWrites,0,nullptr);
     bindAutoExposureSource(1,previewSceneColor_.view());
     uiRenderer_.setCameraPreview(previewColor_.view());
@@ -287,6 +292,12 @@ bool InstancedRenderer::prepareCameraPreview() {
   // As nuvens volumétricas integradas são da vista principal; a prévia usa a
   // camada 2D com os mesmos parâmetros.
   frame.cloudShadow[2]=0.0f;
+  {
+    const auto look=effectiveSceneLook(previewSceneEnvironment_);
+    applyScenePostEffects(frame,look,editorPost,
+        static_cast<float>(pendingPreview_.width)/static_cast<float>(std::max(1u,pendingPreview_.height)),
+        static_cast<float>(pendingPreview_.height),false,look.bloomDirt==lensDirtActive_?lensDirtAspect_:0.0f);
+  }
   if(previewSkyReflection()) {
     frame.environment.parameters[2]=static_cast<float>(renderer::ReflectionProbeAtlasMips-1);
     frame.environment.parameters[3]=frame.environment.parameters[3]>1.5f?3.0f:1.0f;

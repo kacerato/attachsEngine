@@ -5,6 +5,7 @@
 #include "renderer/water_ripples.h"
 #include "renderer/map_draw_update.h"
 #include "renderer/punctual_lights.h"
+#include "renderer/lens_dirt.h"
 #include "renderer/light_probes.h"
 #include "renderer/reflection_probes.h"
 #include "renderer/scene_environment.h"
@@ -12,6 +13,7 @@
 #include "renderer/color_grading.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
+#include "renderer/particles/particle_gpu.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -245,6 +247,10 @@ public:
   void setSceneEnvironment(const renderer::SceneEnvironment &environment) {
     if (environment.valid()) sceneEnvironment_ = environment;
   }
+  // PK-5: texturas de sujeira (Bloom › Lens Dirt) que a cena referencia.
+  void setLensDirtTextures(std::span<const std::pair<resources::AssetGuid,renderer::SharedLensDirt>> textures) {
+    lensDirtTextures_.assign(textures.begin(),textures.end());
+  }
   void setEnvironmentMaps(std::span<const std::pair<resources::AssetGuid,renderer::SharedEnvironmentMap>> maps) {
     editorSceneCacheValid_=false;
     environmentMaps_.assign(maps.begin(),maps.end());
@@ -343,6 +349,17 @@ public:
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
+
+  // Partículas (G5, platform/android/instanced_particles.inl): o quadro da
+  // simulação, já ordenado, trocado por valor a cada quadro; o que o passe
+  // desenhou e quanto custou na GPU volta em `particleStats`.
+  void queueParticles(renderer::particles::ParticleFrame &frame);
+  // G4c: superfícies do clima deste quadro (0..1 cada), lidas pelo shader de superfície.
+  void setWeatherSurface(float wetness, float puddles, float snow, float sunScale = 1, float ambientScale = 1) {
+    weatherSurface_[0]=wetness;weatherSurface_[1]=puddles;weatherSurface_[2]=snow;
+    weatherSunScale_=sunScale;weatherAmbientScale_=ambientScale;
+  }
+  const renderer::particles::ParticleRenderStats &particleStats() const;
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
   const ui::UiFont &uiFont() const { return uiFont_; }
@@ -447,6 +464,9 @@ public:
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
+  // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
+  void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
+  bool shadowGatherEnabled() const { return shadowGatherEnabled_; }
   bool pointLightingSpecializationLastFrame() const { return pointLightingSpecializationLastFrame_; }
   // Chave diagnóstica de A/B, no mesmo espírito de GpuCostIsolation: força o
   // anexo de profundidade a ser alocado como render target comum, mesmo quando
@@ -774,6 +794,12 @@ private:
   bool volumetricCloudsReady() const;
   void recordVolumetricClouds(const platform::FreeCameraState &camera, float timeSeconds);
   bool createEditorGridPipeline();
+  struct ParticleResources;
+  ParticleResources *particles_ = nullptr;
+  bool createParticleResources();
+  void destroyParticleResources();
+  void recordParticlePass(u32 imageIndex, float timeSeconds);
+  bool particlesBlockSceneReuse() const;
   bool createRuntimeHudPipeline();
   bool createUiRenderPass();
   void recordRuntimeHud(u32 imageIndex, const renderer::RuntimeHudState &hud);
@@ -859,6 +885,18 @@ private:
                            u32 width, u32 height, const PostPushConstants &push);
   bool recordHalfAmbientOcclusion(const platform::FreeCameraState &camera);
   bool recordBloomChain(const platform::FreeCameraState &camera, float threshold);
+  // PK-5: profundidade de campo em meia resolução e a sujeira da lente
+  // (instanced_depth_of_field.inl).
+  bool createDepthOfFieldResources();
+  bool createDepthOfFieldSets();
+  void destroyDepthOfFieldResources();
+  bool recordDepthOfField(const platform::FreeCameraState &camera);
+  VkImageView depthOfFieldView() const;
+  VkImageView lensDirtView() const;
+  // Sobe a textura de sujeira do look (se mudou) e devolve a proporção dela;
+  // zero quando não há sujeira utilizável.
+  float prepareLensDirt(const renderer::SceneEnvironment &look);
+  void recordDepthOfFieldUploads();
   VkImageView postBloomView() const;
   VkImageView postAmbientOcclusionView() const;
   // G2: LUT 32³ de gradação (instanced_color_grading.inl). Vaga 0 = vista
@@ -1127,6 +1165,7 @@ private:
   VkPipeline pointLightingMaterialPipelines_[renderer::MaterialFeatureVariantCount]{};
   bool pointLightingSpecializationEnabled_ = true;
   bool punctualLightMaskEnabled_ = false;
+  bool shadowGatherEnabled_ = true;
   bool pointLightingSpecializationLastFrame_ = false;
   VkPipeline coverageDistantPipeline_ = VK_NULL_HANDLE;
   VkPipeline transparentDistantPipeline_ = VK_NULL_HANDLE;
@@ -1210,7 +1249,7 @@ private:
   bool fogResolvedThisFrame_ = false;
   bool fogResolveReported_ = false;
   // Bloom em cadeia de mips e AO em 1/2 (instanced_post_chain.inl); 10 é a LUT 3D.
-  static constexpr u32 kPostBindingCount = 11;
+  static constexpr u32 kPostBindingCount = 13;
   struct ColorGradingSlot {
     rhi::VulkanImage image{};
     rhi::VulkanBuffer staging{};
@@ -1241,6 +1280,30 @@ private:
   VkPipeline halfAmbientOcclusionPipeline_ = VK_NULL_HANDLE;
   bool bloomChainEnabled_ = false;
   bool halfAmbientOcclusionEnabled_ = false;
+  // PK-5: dois alvos RGBA16F em 1/2 (o resultado termina sempre no 0), o
+  // passe e os conjuntos (cena, cena com névoa, cada alvo).
+  std::array<rhi::VulkanImage, 2> depthOfFieldTargets_{};
+  std::array<VkFramebuffer, 2> depthOfFieldFramebuffers_{};
+  std::array<VkDescriptorSet, 2> depthOfFieldSets_{};
+  VkDescriptorSet depthOfFieldSceneSet_ = VK_NULL_HANDLE;
+  VkDescriptorSet depthOfFieldFogSet_ = VK_NULL_HANDLE;
+  VkRenderPass depthOfFieldRenderPass_ = VK_NULL_HANDLE;
+  VkPipeline depthOfFieldPipeline_ = VK_NULL_HANDLE;
+  VkExtent2D depthOfFieldExtent_{};
+  bool depthOfFieldThisFrame_ = false;
+  bool depthOfFieldLayoutsReady_ = false;
+  bool depthOfFieldReported_ = false;
+  // Sujeira da lente: imagem fixa 512² sRGB, enchida pela textura escolhida.
+  rhi::VulkanImage lensDirtImage_{};
+  rhi::VulkanBuffer lensDirtStaging_{};
+  resources::AssetGuid lensDirtActive_{};
+  float lensDirtAspect_ = 0.0f;
+  bool lensDirtLayoutReady_ = false;
+  bool lensDirtPending_ = false;
+  std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> lensDirtTextures_;
+  // Câmera do quadro anterior para o Motion Blur sem TAA.
+  platform::FreeCameraState motionPreviousCamera_{};
+  bool motionPreviousValid_ = false;
   bool bloomChainThisFrame_ = false;
   bool halfAmbientOcclusionThisFrame_ = false;
   bool aoActiveThisFrame_ = false;
@@ -1397,6 +1460,10 @@ private:
   bool cloudNoiseUploaded_ = false;
   bool cloudHistoryValid_ = false;
   bool cloudImagesInitialized_ = false;
+  // G4c: molhado, poças e neve acumulada do clima, copiados para o quadro, e
+  // os multiplicadores da luz direta e da ambiente do clima.
+  float weatherSurface_[4]{};
+  float weatherSunScale_ = 1, weatherAmbientScale_ = 1;
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;

@@ -2,6 +2,7 @@
 
 #include "core/base.h"
 #include "resources/asset_registry.h"
+#include "renderer/volume_overrides.h"
 #include <algorithm>
 #include <cmath>
 #include <span>
@@ -32,7 +33,65 @@ enum class ExposureMode : u32 { Fixed = 0, Automatic = 1, AutomaticHistogram = 2
 enum class ExposureMetering : u32 { Average = 0, Spot = 1, CenterWeighted = 2 };
 // Adaptation Mode: Fixed salta para o alvo; Progressive aproxima exponencialmente.
 enum class ExposureAdaptation : u32 { Fixed = 0, Progressive = 1 };
+// PK-5: Depth of Field da URP 17 (DepthOfField.cs): Off, Gaussian, Bokeh.
+enum class DepthOfFieldMode : u32 { Off = 0, Gaussian = 1, Bokeh = 2 };
+// Quality do Motion Blur da URP (Low, Medium, High) e, para o celular, a mesma
+// escolha no Depth of Field: quantas amostras cada pixel paga.
+enum class EffectQuality : u32 { Low = 0, Medium = 1, High = 2 };
 
+// PK-5: uma curva de Color Curves (URP 17 ColorCurves.cs, TextureCurve). As
+// chaves seguem o Keyframe da Unity (tempo, valor, tangentes e o modo de cada
+// lado), o mesmo formato do editor de curvas do Astra; o domínio vai de 0 a 1.
+// As curvas de matiz repetem (loop); sem chave, a curva vale o neutro dela
+// (0,5 nas de matiz/saturação, a diagonal nas de canal).
+struct ColorCurveKey final {
+  float time = 0.0f, value = 0.0f, in = 0.0f, out = 0.0f;
+  u32 left = 4, right = 4; // CurveTangentMode: Free, Auto, Linear, Constant, ClampedAuto
+  bool broken = false;
+  bool operator==(const ColorCurveKey &) const = default;
+};
+struct ColorCurve final {
+  static constexpr u32 MaximumKeys = 16;
+  u32 count = 0;
+  ColorCurveKey keys[MaximumKeys]{};
+  bool operator==(const ColorCurve &other) const {
+    if (count != other.count) return false;
+    for (u32 i = 0; i < count; ++i) if (!(keys[i] == other.keys[i])) return false;
+    return true;
+  }
+  bool valid() const noexcept {
+    if (count > MaximumKeys) return false;
+    for (u32 i = 0; i < count; ++i) {
+      const auto &k = keys[i];
+      if (!std::isfinite(k.time) || !std::isfinite(k.value) || !std::isfinite(k.in) || !std::isfinite(k.out) ||
+          k.left > 4 || k.right > 4 || k.time < 0.0f || k.time > 1.0f || k.value < -4.0f || k.value > 4.0f) return false;
+      if (i && keys[i - 1].time >= k.time) return false;
+    }
+    return true;
+  }
+};
+// Master, Red, Green, Blue, Hue vs Hue, Hue vs Sat, Sat vs Sat, Lum vs Sat.
+enum class ColorCurveChannel : u32 { Master = 0, Red, Green, Blue, HueVsHue, HueVsSat, SatVsSat, LumVsSat, Count };
+inline constexpr u32 ColorCurveCount = static_cast<u32>(ColorCurveChannel::Count);
+inline bool colorCurveLoops(u32 channel) noexcept { return channel == 4 || channel == 5; }
+// Valor da curva sem chaves: diagonal (canal) ou 0,5 (matiz/saturação).
+inline bool colorCurveIsDiagonal(u32 channel) noexcept { return channel < 4; }
+// A curva padrão da URP para os canais: (0,0) e (1,1) com tangente 1.
+inline ColorCurve colorCurveDiagonal() noexcept {
+  ColorCurve curve;curve.count = 2;
+  curve.keys[0] = {0.0f, 0.0f, 1.0f, 1.0f, 0, 0, false};
+  curve.keys[1] = {1.0f, 1.0f, 1.0f, 1.0f, 0, 0, false};
+  return curve;
+}
+bool colorCurveNeutral(u32 channel, const ColorCurve &curve) noexcept;
+// AnimationCurve.Evaluate no domínio 0..1 (com repetição nas de matiz).
+float evaluateColorCurve(u32 channel, const ColorCurve &curve, float time) noexcept;
+// Recalcula as tangentes automáticas (Auto, ClampedAuto, Linear), como o editor.
+void updateColorCurveTangents(ColorCurve &curve) noexcept;
+
+// Caixas por grupo do Ambiente até a v18 (e do perfil até a v13). Desde o
+// PK-4 o override é por parâmetro (renderer/volume_parameters.h); estes bits só
+// servem à migração (volumeOverridesFromLegacyGroups).
 enum EnvironmentOverride : u32 {
   EnvironmentOverrideSky = 1u << 0,
   EnvironmentOverrideFog = 1u << 1,
@@ -301,10 +360,13 @@ struct SceneEnvironment final {
   float bloomScatter = 0.7f;
   float bloomTint[3]{1.0f, 1.0f, 1.0f};
   float bloomClamp = 65472.0f;
-  float vignetteIntensity = 0.18f;
-  float filmGrainIntensity = 0.05f;
+  // PK-5: na Unity o efeito liga pela intensidade (zero desliga); os bools
+  // `bloom`, `vignette`, `filmGrain` e `ambientOcclusion` acima passaram a ser
+  // derivados dela (syncEffectSwitches), não mais escolhas do autor.
+  float vignetteIntensity = 0.0f;
+  float filmGrainIntensity = 0.0f;
   float ambientOcclusionRadius = 1.0f;
-  float ambientOcclusionIntensity = 1.0f;
+  float ambientOcclusionIntensity = 0.0f;
   float ambientOcclusionPower = 1.5f;
   float ambientOcclusionBias = 0.02f;
   // Multiplicadores de luz indireta, como Indirect Diffuse Lighting Multiplier e
@@ -325,7 +387,86 @@ struct SceneEnvironment final {
   // PK-2: Material do céu (recurso Skybox). Vazio = céu desta instância.
   resources::AssetGuid skybox{};
 
+  // PK-5: o resto do pós da URP 17, cada um um override de Volume.
+  // Vignette: Color, Center, Intensity (acima), Smoothness, Rounded.
+  float vignetteColor[3]{0.0f, 0.0f, 0.0f};
+  float vignetteCenter[2]{0.5f, 0.5f};
+  float vignetteSmoothness = 0.2f;
+  bool vignetteRounded = false;
+  // Bloom: High Quality Filtering e Lens Dirt (Texture + Intensity).
+  bool bloomHighQualityFiltering = false;
+  resources::AssetGuid bloomDirt{};
+  float bloomDirtIntensity = 0.0f;
+  // Depth of Field: Gaussian (Start, End, Max Radius, High Quality Sampling)
+  // e Bokeh (Focus Distance, Focal Length, Aperture, lâminas). Quality é a
+  // escolha de amostras para o celular (Baixa 8, Média 22, Alta 43 no Bokeh).
+  DepthOfFieldMode depthOfField = DepthOfFieldMode::Off;
+  EffectQuality depthOfFieldQuality = EffectQuality::Medium;
+  float gaussianStart = 10.0f;
+  float gaussianEnd = 30.0f;
+  float gaussianMaxRadius = 1.0f;
+  bool gaussianHighQuality = false;
+  float focusDistance = 10.0f;
+  float focalLength = 50.0f;   // mm
+  float aperture = 5.6f;       // f-stop
+  float bladeCount = 5.0f;
+  float bladeCurvature = 1.0f;
+  float bladeRotation = 0.0f;  // graus
+  // Motion Blur (Camera Only): Quality, Intensity, Clamp.
+  EffectQuality motionBlurQuality = EffectQuality::Low;
+  float motionBlurIntensity = 0.0f;
+  float motionBlurClamp = 0.05f;
+  // Chromatic Aberration: Intensity.
+  float chromaticAberration = 0.0f;
+  // Lens Distortion: Intensity, X/Y Multiplier, Center, Scale.
+  float lensDistortion = 0.0f;
+  float lensDistortionXMultiplier = 1.0f;
+  float lensDistortionYMultiplier = 1.0f;
+  float lensDistortionCenter[2]{0.5f, 0.5f};
+  float lensDistortionScale = 1.0f;
+  // Color Curves: as oito curvas da URP, na ordem de ColorCurveChannel.
+  ColorCurve curves[ColorCurveCount]{colorCurveDiagonal(), colorCurveDiagonal(), colorCurveDiagonal(),
+                                      colorCurveDiagonal(), {}, {}, {}, {}};
+
+  // Bools de efeito que a Unity não tem: derivados da intensidade.
+  void syncEffectSwitches() noexcept {
+    bloom = bloomIntensity > 0.0f;
+    vignette = vignetteIntensity > 0.0f;
+    filmGrain = filmGrainIntensity > 0.0f;
+    ambientOcclusion = ambientOcclusionIntensity > 0.0f;
+  }
+  bool curvesNeutral() const noexcept {
+    for (u32 channel = 0; channel < ColorCurveCount; ++channel)
+      if (!colorCurveNeutral(channel, curves[channel])) return false;
+    return true;
+  }
+
   bool valid() const noexcept {
+    for (const auto &curve : curves) if (!curve.valid()) return false;
+    if (static_cast<u32>(depthOfField) > 2 || static_cast<u32>(depthOfFieldQuality) > 2 ||
+        static_cast<u32>(motionBlurQuality) > 2) return false;
+    {
+      const float post[]{vignetteSmoothness, bloomDirtIntensity, gaussianStart, gaussianEnd, gaussianMaxRadius,
+                         focusDistance, focalLength, aperture, bladeCount, bladeCurvature, bladeRotation,
+                         motionBlurIntensity, motionBlurClamp, chromaticAberration, lensDistortion,
+                         lensDistortionXMultiplier, lensDistortionYMultiplier, lensDistortionScale,
+                         vignetteCenter[0], vignetteCenter[1], lensDistortionCenter[0], lensDistortionCenter[1]};
+      for (float value : post) if (!std::isfinite(value)) return false;
+      for (float channel : vignetteColor) if (!std::isfinite(channel) || channel < 0.0f || channel > 1.0f) return false;
+      if (vignetteSmoothness < 0.01f || vignetteSmoothness > 1.0f || bloomDirtIntensity < 0.0f || bloomDirtIntensity > 100.0f ||
+          gaussianStart < 0.0f || gaussianEnd < 0.0f || gaussianMaxRadius < 0.5f || gaussianMaxRadius > 1.5f ||
+          focusDistance < 0.1f || focusDistance > 10000.0f || focalLength < 1.0f || focalLength > 300.0f ||
+          aperture < 1.0f || aperture > 32.0f || bladeCount < 3.0f || bladeCount > 9.0f ||
+          bladeCurvature < 0.0f || bladeCurvature > 1.0f || bladeRotation < -180.0f || bladeRotation > 180.0f ||
+          motionBlurIntensity < 0.0f || motionBlurIntensity > 1.0f || motionBlurClamp < 0.0f || motionBlurClamp > 0.2f ||
+          chromaticAberration < 0.0f || chromaticAberration > 1.0f || lensDistortion < -1.0f || lensDistortion > 1.0f ||
+          lensDistortionXMultiplier < 0.0f || lensDistortionXMultiplier > 1.0f ||
+          lensDistortionYMultiplier < 0.0f || lensDistortionYMultiplier > 1.0f ||
+          lensDistortionScale < 0.01f || lensDistortionScale > 5.0f ||
+          vignetteCenter[0] < -1.0f || vignetteCenter[0] > 2.0f || vignetteCenter[1] < -1.0f || vignetteCenter[1] > 2.0f ||
+          lensDistortionCenter[0] < 0.0f || lensDistortionCenter[0] > 1.0f ||
+          lensDistortionCenter[1] < 0.0f || lensDistortionCenter[1] > 1.0f) return false;
+    }
     if (static_cast<u32>(sky) > 2 || static_cast<u32>(toneMapper) > 4 || !grading.valid() || !clouds.valid() ||
         static_cast<u32>(exposureMode) > 2 || static_cast<u32>(exposureMetering) > 2 ||
         static_cast<u32>(exposureAdaptation) > 1 ||
@@ -447,7 +588,10 @@ SceneEnvironment defaultSceneEnvironment();
 struct SceneEnvironmentVolume final {
   SceneEnvironment environment{};
   EnvironmentVolumeShape shape = EnvironmentVolumeShape::Global;
-  u32 overrides = EnvironmentOverrideAll;
+  // PK-4: overrides por parâmetro do perfil (ou da instância sem perfil).
+  VolumeOverrides overrides = VolumeOverrides::everything();
+  // PK-4 (V-04): a camada de OBJETO do Volume (o `layer` do objeto, como o
+  // GameObject.layer da Unity), filtrada pela Volume Mask da câmera.
   u32 layer = 0;
   u64 stableId = 0;
   float weight = 1.0f;
@@ -458,7 +602,7 @@ struct SceneEnvironmentVolume final {
   float localToWorld[16]{1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1};
 
   bool valid() const noexcept {
-    if (!environment.valid() || static_cast<u32>(shape) > 2 || overrides > EnvironmentOverrideAll ||
+    if (!environment.valid() || static_cast<u32>(shape) > 2 || !overrides.valid() ||
         layer > 31 || !std::isfinite(weight) || weight < 0 || weight > 1 ||
         !std::isfinite(blendDistance) || blendDistance < 0 ||
         !std::isfinite(sphereRadius) || sphereRadius <= 0) return false;
