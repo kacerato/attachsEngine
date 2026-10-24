@@ -387,7 +387,7 @@ inline const CreationValue sparkValues[]{{particleSystem,"shape_rotation_x",-90.
   {particleSystem,"material_texture",u32{1}},{particleSystem,"material_emission",3.f},
   {particleSystem,"trails_enabled",true},{particleSystem,"trail_lifetime",.35f},{particleSystem,"trail_min_vertex_distance",.05f},
   {particleSystem,"trail_width",.8f},{particleSystem,"lights_enabled",true},{particleSystem,"light_ratio",.15f},
-  {particleSystem,"light_max",6.f},{particleSystem,"light_range_multiplier",1.f}};
+  {particleSystem,"light_max",8.f},{particleSystem,"light_range_multiplier",1.5f},{particleSystem,"light_intensity_multiplier",3.f}};
 inline const CreationComponent sparks[]{{particleSystem,sparkValues}};
 inline const CreationValue sparkLightValues[]{{light,"range",3.f}};
 inline const CreationComponent sparkLight[]{{light,sparkLightValues}};

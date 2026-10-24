@@ -256,7 +256,7 @@
             "cpp": ".001f"
           },
           "default": {
-            "cpp": "0.03f"
+            "cpp": "0.045f"
           },
           "presentation": {
             "group": "Atmosfera",

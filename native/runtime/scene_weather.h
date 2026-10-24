@@ -33,6 +33,10 @@ struct WeatherLook {
   float fogColor[3]{0.74f, 0.8f, 0.9f};
   float colorFilter[3]{1, 1, 1};
   float saturation = 1, contrast = 1, postExposure = 0;
+  // A neblina cobre o céu (Acompanhar o céu) na chuva e na tempestade, que
+  // engolem o fundo; nos tipos de céu aberto ela fica só no chão (Cor), e o
+  // céu azul aparece.
+  bool fogCoversSky = false;
 };
 // Alvos de cada tipo na intensidade dada. Os pontos fixos seguem a ideia dos
 // presets Sparse/Cloudy/Overcast/Stormy das Volumetric Clouds do HDRP 17.

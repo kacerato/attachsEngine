@@ -3794,7 +3794,7 @@ AE_TEST(particle_sparks_recipe_links_an_inactive_template_light_and_lights_up) {
   AE_EXPECT_TRUE(system.trailsEnabled&&system.lightsEnabled,"Trilhas e Luzes ligadas");
   const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
   for(u32 i=0;i<40;++i) f.session.updateParticles(1.f/30,camera,frame);
-  AE_EXPECT_TRUE(frame.batches.size()==2&&!frame.lights.empty()&&frame.lights.size()<=6,"partículas, trilhas e até 6 luzes");
+  AE_EXPECT_TRUE(frame.batches.size()==2&&!frame.lights.empty()&&frame.lights.size()<=8,"partículas, trilhas e até 8 luzes");
   std::vector<renderer::SceneLight> lights;
   AE_EXPECT_TRUE(f.session.extractLights(lights)&&lights.empty(),"a luz modelo não ilumina sozinha");
   AE_EXPECT_TRUE(f.session.history().undo(doc)&&!doc.exists(id),"um desfazer remove faíscas e luz");

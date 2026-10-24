@@ -104,7 +104,7 @@ AE_TEST(weather_writes_clouds_fog_emission_and_follows_the_camera_in_edit) {
   const auto &env = environmentOf(s.graph, s.weather);
   AE_EXPECT_TRUE(env.values.clouds.enabled && env.overrideClouds && env.values.clouds.coverage == look.coverage,
                  "nuvens do Ambiente com a cobertura da chuva");
-  AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.03f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
+  AE_EXPECT_TRUE(std::abs(env.values.fogDensity - 0.045f * look.fog) < 1e-6f && env.values.fog, "neblina dosada");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.rain).emissionRate.constantMax == 3500.0f, "7000/s × 0,5");
   AE_EXPECT_TRUE(particlesOf(s.graph, s.snow).emissionRate.constantMax == 0.0f, "neve parada na chuva");
   // Vento padrão das nuvens (20 km/h para +X) × 0,35 inclina a gota pela
@@ -296,6 +296,8 @@ AE_TEST(weather_types_bring_their_own_fog_colour_and_grade) {
                  rain.saturation < 0.7f && rain.postExposure < 0.0f, "chuva azul-acinzentada, dessaturada e escura");
   AE_EXPECT_TRUE(snow.coverage < 0.6f && snow.sunScale == 1.0f && snow.postExposure > 0.0f && snow.contrast > 1.0f,
                  "neve com sol e contraste");
+  AE_EXPECT_TRUE(rain.fogCoversSky && !snow.fogCoversSky && snow.coverage <= 0.3f && rain.colorFilter[1] > rain.colorFilter[0],
+                 "chuva azul-petróleo engole o céu; neve deixa o céu aberto");
   auto s = makeWeatherScene(scene::WeatherKind::Rain, 1.0f);
   runtime::SceneWeather weather;
   weather.advance(s.graph, 0, 0, false, nullptr,

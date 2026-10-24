@@ -9,7 +9,7 @@
   float snowRate = 3000.0f;
   float heightAboveCamera = 10.0f;
   float windInfluence = 0.35f;
-  float fogDensity = 0.03f;
+  float fogDensity = 0.045f;
   float lightningInterval = 9.0f;
   float lightningBrightness = 3.0f;
   bool followCamera = true;
