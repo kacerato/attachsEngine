@@ -330,8 +330,12 @@ void main() {
       // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
       // cor de base e de topo interpoladas pela altura): topo com o céu, base
       // cinza-azulada (sombra do próprio cúmulo).
-      vec3 ambientTop=skyAmbient*0.85;
-      vec3 ambientBottom=skyAmbient*vec3(0.48,0.52,0.6);
+      // A base fica cinza-azulada mesmo na hora dourada (UniStorm 5.3.1:
+      // CloudBaseColor fria enquanto CloudLightColor esquenta; HDRP 0:52): o
+      // lado escuro não herda o amarelo do céu, só o lado iluminado esquenta.
+      float ambientLuminance=dot(skyAmbient,vec3(0.2126,0.7152,0.0722));
+      vec3 ambientTop=mix(vec3(ambientLuminance),skyAmbient,0.7)*0.85;
+      vec3 ambientBottom=ambientLuminance*vec3(0.46,0.53,0.64);
       vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
                  environment.cloudTint.rgb;
       color=color*(1.0-volume.a*fade)+cloud*fade;
