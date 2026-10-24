@@ -306,6 +306,11 @@ AE_TEST(volumetric_clouds_noise_tiles_and_v18_scenes_keep_the_2d_layer) {
   renderer::CloudLayer clouds;clouds.enabled = true;clouds.type = 1;clouds.steps = 32.0f;clouds.shapeFactor = 0.7f;
   const auto rows = renderer::packCloudLayer(clouds, true, 0.0);
   AE_EXPECT_TRUE(rows.shadow[2] == 1.0f && rows.shadow[3] == 32.0f && rows.volume[0] == 0.7f, "tipo, passos e forma no bloco");
+  // O ambiente escurece pela fração de céu realmente coberta pelos cúmulos.
+  clouds.coverage = 0.5f;
+  AE_EXPECT_TRUE(renderer::cloudSkyOcclusion(clouds) < 0.25f, "0,5 volumétrico cobre pouco céu");
+  clouds.coverage = 0.95f;
+  AE_EXPECT_TRUE(renderer::cloudSkyOcclusion(clouds) > 0.95f, "0,95 volumétrico fecha o céu");
   clouds.type = 2;AE_EXPECT_TRUE(!clouds.valid(), "tipo desconhecido recusado");
   scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.type = 1;
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
