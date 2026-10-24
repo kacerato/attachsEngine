@@ -3259,7 +3259,11 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   const bool initializeAtlas = !shadowCacheInitialized_;
   // Split estático/dinâmico só com projetores dinâmicos e o atlas estático
   // disponível; sem eles, o atlas único de antes (movimento suja direto).
+  // Só com cascatas de até 1024: a cópia do estático custa banda por texel.
+  // Na Vila S (4 @4096, D32) os 15 dinâmicos sujam as 4 cascatas e copiar
+  // ~256 MB por quadro levou a sombra de 2,8 para 5,7 ms (A/B de 24/10).
   const bool split = shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ &&
+                     renderingPolicy_.shadows.cascadeResolution <= 1024u &&
                      shadowOpaquePipeline_ != VK_NULL_HANDLE && ensureStaticShadowAtlas();
   const u32 staticMask = split ? (!shadowStaticInitialized_ ? activeMask : (shadowCascadeDirtyMask_ & activeMask)) : 0u;
   const u32 dirtyMask = initializeAtlas ? activeMask
