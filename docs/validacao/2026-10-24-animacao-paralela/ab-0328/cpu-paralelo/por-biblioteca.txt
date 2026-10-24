@@ -1,0 +1,47 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 23159
+Event count: 11579500000
+
+Overhead  Shared Object
+55.86%    /data/app/~~ksLA1Ou0V0Wa_08ABu3JMQ==/dev.aether.editor.u07-dqKs3mojkrLV_GT8pAvG3Q==/lib/arm64/libaether_android.so
+24.82%    /apex/com.android.runtime/lib64/bionic/libc.so
+7.82%     /vendor/lib64/hw/vulkan.adreno.so
+2.48%     /data/data/dev.aether.editor.u07/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libcoreclr.so
+2.31%     /apex/com.android.runtime/lib64/bionic/libm.so
+1.80%     unknown
+1.20%     /system/lib64/libgui.so
+0.63%     /data/app/~~ksLA1Ou0V0Wa_08ABu3JMQ==/dev.aether.editor.u07-dqKs3mojkrLV_GT8pAvG3Q==/lib/arm64/libc++_shared.so
+0.54%     /system/lib64/libutils.so
+0.52%     /system/lib64/libbinder.so
+0.35%     /apex/com.android.art/lib64/libart.so
+0.26%     [vdso]
+0.21%     /system/lib64/libvulkan.so
+0.20%     /data/misc/apexdata/com.android.art/dalvik-cache/arm64/boot.oat
+0.16%     /system/lib64/libui.so
+0.15%     /vendor/lib64/libgsl.so
+0.11%     /system/lib64/libc++.so
+0.06%     /system/lib64/libandroid_runtime.so
+0.06%     /system/lib64/libcutils.so
+0.05%     /vendor/lib64/libgrallocutils.so
+0.04%     /system/lib64/libbinder_ndk.so
+0.04%     /system/lib64/libandroid.so
+0.03%     /apex/com.android.runtime/lib64/bionic/libdl.so
+0.03%     /vendor/lib64/vendor.qti.hardware.display.snapalloc-impl.so
+0.03%     /system/lib64/libpowermanager.so
+0.03%     /system_ext/lib64/libmigui.so
+0.03%     /system/lib64/libnativedisplay.so
+0.03%     /system_ext/lib64/libpenguin_impl.so
+0.02%     /apex/com.android.runtime/bin/linker64
+0.02%     /system/lib64/android.hardware.power-V6-ndk.so
+0.02%     /system/lib64/libsync.so
+0.02%     /vendor/lib64/hw/mapper.qti.so
+0.01%     /system_ext/lib64/libboost.so
+0.01%     /system_ext/lib64/libpenguin.so
+0.01%     /system/lib64/libartpalette-system.so
+0.00%     /apex/com.android.art/lib64/libartpalette.so
+0.00%     /apex/com.android.art/lib64/libopenjdk.so
+0.00%     /apex/com.android.art/lib64/libopenjdkjvm.so
+0.00%     /system/lib64/liblog.so
+0.00%     /vendor/lib64/libc++.so

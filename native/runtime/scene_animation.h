@@ -120,8 +120,8 @@ public:
   std::string_view compositionDiagnostic() const noexcept {return compositionDiagnostic_;}
   // Liga ao grafo do Play e à biblioteca. `reset` esquece tudo: o próximo Play
   // parte do zero.
-  // Composição das propriedades em paralelo no pool de animação (padrão). O
-  // resultado é o mesmo com ou sem: desligar serve ao A/B de bancada.
+  // Composição das propriedades em paralelo no pool de animação (desligada por
+  // padrão; ver scene_animation.cpp). O resultado é o mesmo com ou sem.
   static void setParallelEvaluation(bool enabled) noexcept;
   void begin(SceneGraph &graph, const AnimationLibrary &library);
   void reset();

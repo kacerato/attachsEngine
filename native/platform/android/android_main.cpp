@@ -2407,9 +2407,9 @@ void android_main(android_app *app) {
   shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_grading_force"));
   {
-    // Composição de animação em paralelo (padrão); false volta à thread do jogo para o A/B.
+    // Composição de animação em paralelo: desligada por padrão (A/B de 24/10); true liga para medir.
     ae::runtime::SceneAnimator::setParallelEvaluation(ae::platform::android::readBooleanLaunchOption(
-        app->activity,"aether.animation_parallel",true));
+        app->activity,"aether.animation_parallel",false));
     // Bancada do Culling Mode do Animator: força o modo em todos (0 sempre, 1 só o tempo, 2 parado).
     ae::u32 culling=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.animator_culling",culling)) {

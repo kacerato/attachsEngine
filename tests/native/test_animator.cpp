@@ -504,7 +504,7 @@ AE_TEST(animator_parallel_composition_matches_serial_pose) {
     return pose;
   };
   const auto serial=run(false),parallel=run(true);
-  SceneAnimator::setParallelEvaluation(true);
+  SceneAnimator::setParallelEvaluation(false);
   AE_EXPECT_TRUE(!serial.empty()&&serial==parallel,"mesma pose com e sem paralelismo");
   bool moved=false;for(float v:serial) moved=moved||v!=0;
   AE_EXPECT_TRUE(moved,"os personagens foram de fato animados");

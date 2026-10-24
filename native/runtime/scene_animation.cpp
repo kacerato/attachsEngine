@@ -175,7 +175,10 @@ struct AnimatorPose {
 namespace {
 // Pool da composição de animação. Próprio, e não o da física: waitIdle espera
 // a fila inteira do pool. Até 4 workers além da thread do jogo.
-std::atomic<bool> parallelAnimationEnabled{true};
+// Desligado por padrão: no POCO (24/10) as fases paralelas eram só ~6% da
+// thread do jogo; a thread caiu 0,47 ms e o processo subiu 1,3 ms. Volta a
+// ligar quando a amostragem por personagem também for paralela.
+std::atomic<bool> parallelAnimationEnabled{false};
 JobSystem &animationJobs() {
   static JobSystem jobs(std::clamp(std::thread::hardware_concurrency(), 2u, 5u) - 1u);
   return jobs;
