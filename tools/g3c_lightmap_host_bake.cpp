@@ -123,6 +123,27 @@ int main(int argc, char **argv) {
     // Diagnóstico: visibilidade do céu em triângulos reais (amostra de cada
     // objeto pedido), com o que os raios acertam.
     renderer::LightmapTracer tracer(scene);
+    // Pontos fixos do pátio (chão no centro, a 1 m e a 2 m de altura, olhando para cima).
+    for (const float y : {0.02f, 1.0f, 2.0f, 8.0f}) {
+      const float origin[3]{0.5f, y, 0.0f};
+      u32 sky = 0;
+      std::map<std::string, u32> hits;
+      for (u32 r = 0; r < 512; ++r) {
+        const float u = (r + .5f) / 512, v = std::fmod(r * 0.618034f, 1.0f);
+        const float radius = std::sqrt(u), phi = 6.2831853f * v, z = std::sqrt(1 - u);
+        const float d[3]{radius * std::cos(phi), z, radius * std::sin(phi)};
+        const auto result = tracer.trace(origin, d, 1e30f);
+        if (!result.hit) { ++sky; continue; }
+        const auto *he = doc.find(static_cast<EditorEntityId>(scene.instances[result.instance].objectId));
+        ++hits[(he ? std::string(he->name) : "?") + (result.back ? " (verso)" : "")];
+      }
+      std::cout << "  pátio y=" << y << ": céu " << sky / 5.12f << "%";
+      std::vector<std::pair<u32, std::string>> top;
+      for (const auto &[k, c] : hits) top.push_back({c, k});
+      std::sort(top.rbegin(), top.rend());
+      for (usize k = 0; k < top.size() && k < 4; ++k) std::cout << " | " << top[k].second << " " << top[k].first;
+      std::cout << '\n';
+    }
     const char *wanted[]{"columns_1stfloor_01", "stonewalls_2ndfloor_02", "arch_stones_04", "floor", "exterior"};
     for (const char *name : wanted) {
       for (u32 i = 0; i < scene.instances.size(); ++i) {

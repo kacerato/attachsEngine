@@ -731,6 +731,9 @@ bool EditorMapScene::collectLightmapScene(const runtime::SceneGraph &document,u3
       const auto record=renderer::applyMaterialOverride(
           source.materialIndex<materials_.size()?materials_[source.materialIndex]:renderer::MapMaterialRecord{},
           slotMaterial(*render,slot),textureBase);
+      // Transparente (decalque, vidro, véu): não bloqueia nem recebe. Um plano de
+      // decalque colado na parede tapava o céu de cada texel atrás dele.
+      if(record.flags&renderer::MapMaterialBlend) continue;
       renderer::LightmapBakeMaterial material;
       std::copy(record.baseColorFactor,record.baseColorFactor+4,material.baseColor);
       for(u32 k=0;k<3;++k) material.emission[k]=record.emissiveFactorAndStrength[k]*record.emissiveFactorAndStrength[3];
