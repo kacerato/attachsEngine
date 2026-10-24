@@ -348,6 +348,53 @@ AE_TEST(g3c_winding_against_vertex_normals_still_faces_the_sky) {
   AE_EXPECT_TRUE(sampleEntry(data, 100, .5f, .5f, rgb, v) && v > .9f, "chão com enrolamento invertido vê o céu");
 }
 
+AE_TEST(g3c_double_sided_closed_mesh_with_inward_normals_receives_from_outside) {
+  // A copa das árvores da Vila: caixa fechada com enrolamento e normais para
+  // dentro, material double-sided. O texel recebe pelo lado de fora.
+  renderer::LightmapBakeMesh box;
+  const float h = 1;
+  const float corners[6][4][3] = {
+    {{-h, h, -h}, {h, h, -h}, {h, h, h}, {-h, h, h}},     // topo
+    {{-h, -h, -h}, {-h, -h, h}, {h, -h, h}, {h, -h, -h}}, // base
+    {{-h, -h, h}, {-h, h, h}, {h, h, h}, {h, -h, h}},     // +Z
+    {{-h, -h, -h}, {h, -h, -h}, {h, h, -h}, {-h, h, -h}}, // -Z
+    {{h, -h, -h}, {h, -h, h}, {h, h, h}, {h, h, -h}},     // +X
+    {{-h, -h, -h}, {-h, h, -h}, {-h, h, h}, {-h, -h, h}}, // -X
+  };
+  for (u32 f = 0; f < 6; ++f) {
+    const u32 base = static_cast<u32>(box.positions.size() / 3);
+    float center[3]{};
+    for (u32 k = 0; k < 4; ++k) for (u32 a = 0; a < 3; ++a) center[a] += corners[f][k][a] * .25f;
+    const float tileU = (f % 3) / 3.0f, tileV = (f / 3) / 2.0f;
+    const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    for (u32 k = 0; k < 4; ++k) {
+      for (u32 a = 0; a < 3; ++a) { box.positions.push_back(corners[f][k][a]); box.normals.push_back(-center[a] / h); }
+      box.uv0.push_back(uv[k][0]); box.uv0.push_back(uv[k][1]);
+      box.uv1.push_back(tileU + (.05f + uv[k][0] * .9f) / 3); box.uv1.push_back(tileV + (.05f + uv[k][1] * .9f) / 2);
+    }
+    // Enrolamento para dentro, como as normais (0,2,1 seria visto de fora).
+    for (u32 k : {0u, 1u, 2u, 0u, 2u, 3u}) box.indices.push_back(base + k);
+  }
+  box.uv1Valid = true;
+  const auto topSky = [&](bool doubleSided) {
+    renderer::LightmapBakeScene scene;
+    scene.meshes.push_back(box);
+    scene.materials.resize(1);
+    scene.materials[0].doubleSided = doubleSided;
+    scene.instances.push_back(placed(0, 0, 3, 0, true));
+    renderer::LightmapBakeProgress progress;
+    renderer::LightmapData data;
+    std::string error;
+    float rgb[3], v = -1;
+    if (!renderer::bakeLightmaps(scene, quickSettings(), {2, false}, progress, data, error) ||
+        !sampleEntry(data, 100, (.05f + .5f * .9f) / 3, (.05f + .5f * .9f) / 2, rgb, v)) return -1.0f;
+    return v;
+  };
+  const float twoSided = topSky(true);
+  AE_EXPECT_TRUE(twoSided > .5f, "copa double-sided com normais para dentro vê o céu por fora");
+  AE_EXPECT_TRUE(topSky(false) < .05f, "single-sided continua recebendo pelo lado da normal");
+}
+
 AE_TEST(g3c_emissive_surface_lights_neighbours_and_cancel_stops_the_bake) {
   renderer::LightmapBakeScene scene;
   scene.meshes.push_back(quad(2));

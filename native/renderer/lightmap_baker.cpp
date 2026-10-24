@@ -705,10 +705,48 @@ bool bakeLightmaps(const LightmapBakeScene &scene, const LightmapBakeSettings &s
     for (u32 i = 0; i < pages[p].record.size(); ++i)
       if (pages[p].record[i] >= 0) { texelPage[pages[p].record[i]] = p; texelAt[pages[p].record[i]] = i; }
 
+  std::atomic<u64> rays{0};
+  // --- Lado de superfície de dois lados ------------------------------------
+  // Material double-sided (Double Sided GI da Unity) é visto pelos dois lados,
+  // mas o texel guarda um valor só. Malha fechada com normais para dentro (a
+  // copa de árvore da Vila) integraria o próprio interior e sairia preta: se
+  // o lado da normal está fechado pelo próprio objeto e o outro lado vê
+  // claramente mais céu, o texel passa a receber pelo outro lado.
+  {
+    constexpr u32 probe = 16;
+    if (!workers.parallelFor(texels.size(), 256, progress.cancel, [&](u64 begin, u64 end) {
+          u64 traced = 0;
+          for (u64 i = begin; i < end; ++i) {
+            auto &texel = texels[i];
+            const auto &instance = scene.instances[texel.instance];
+            if (instance.material >= scene.materials.size() || !scene.materials[instance.material].doubleSided) continue;
+            u32 self[2]{}, open[2]{};
+            for (u32 side = 0; side < 2; ++side) {
+              const float sign = side ? -1.0f : 1.0f;
+              const V3 normal = texel.normal * sign, geometric = texel.geometric * sign;
+              const V3 origin = texel.position + geometric * bias;
+              for (u32 s = 0; s < probe; ++s) {
+                const V3 direction = cosineSample(normal, s, probe, hashFloat(static_cast<u32>(i) * 747796405u + side), .5f);
+                if (dot(direction, geometric) <= 0) continue;
+                ++traced;
+                Hit hit;
+                if (!world.trace(origin, direction, 1e30f, false, hit)) ++open[side];
+                else if (world.triangles[hit.triangle].instance == texel.instance) ++self[side];
+              }
+            }
+            if (self[0] * 4 >= probe * 3 && open[1] * 4 >= open[0] * 4 + probe) {
+              texel.normal = texel.normal * -1.0f;
+              texel.geometric = texel.geometric * -1.0f;
+            }
+          }
+          rays.fetch_add(traced);
+        }, [](u64) {}))
+      return cancelled(), false;
+  }
+
   // --- Luz direta ----------------------------------------------------------
   setStage(LightmapBakeStage::Direct, .08f);
   std::vector<V3> directBaked(texels.size()), directAll(texels.size());
-  std::atomic<u64> rays{0};
   const float directWeight = .12f;
   const auto directAt = [&](V3 position, V3 normal, V3 geometric, u32 seed, bool onlyBaked, V3 &baked, V3 &all, u64 &traced) {
     baked = all = {};
