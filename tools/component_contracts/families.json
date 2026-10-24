@@ -11,6 +11,7 @@
     "audio",
     "path",
     "path_follow",
-    "navigation"
+    "navigation",
+    "effects"
   ]
 }

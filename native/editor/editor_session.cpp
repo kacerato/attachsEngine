@@ -20,6 +20,7 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/primitive_geometry.h"
 #include "runtime/scene_time_of_day.h"
+#include "runtime/scene_weather.h"
 #include "scene/time_of_day.h"
 #include "runtime/primitive_object.h"
 #include "editor/editor_session.h"
@@ -3352,6 +3353,7 @@ void EditorSession::saveGradientLibraries() {
 }
 
 bool EditorSession::commitGradientEditor() {
+  if(state_.gradientType==kParticleGradientType) return commitParticleValue(false);
   const auto *entity=document_.find(state_.gradientEntity);
   bool hdr=false;scene::scriptGradientType(scene::scriptArrayElementType(state_.gradientType).empty()?
       std::string_view(state_.gradientType):scene::scriptArrayElementType(state_.gradientType),&hdr);
@@ -3540,9 +3542,39 @@ void EditorSession::saveCurveLibraries() {
   if(!files_.rootPath().empty() && !curveLibraries_.save(error)) state_.status=error;
 }
 
+// Curva/gradiente de um Sistema de partículas: o valor inteiro volta ao
+// componente num passo de histórico, como qualquer edição do inspetor.
+bool EditorSession::commitParticleValue(bool curve) {
+  const auto entityId=curve?state_.curveEntity:state_.gradientEntity;
+  const auto instance=curve?state_.curveInstance:state_.gradientInstance;
+  const auto &slot=curve?state_.curveProperty:state_.gradientProperty;
+  auto &field=curve?state_.curveField:state_.gradientField;
+  const auto *entity=document_.find(entityId);
+  if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
+    field=0;state_.status=curve?"Curva cancelada: a cena mudou":"Gradiente cancelado: a cena mudou";return true;
+  }
+  auto value=*entity;
+  auto *component=value.components.editInstance(instance);
+  if(!component||&component->type()!=&scene::ParticleSystem::descriptor) {field=0;return false;}
+  auto &system=scene::particleSystem(*component);
+  if(curve) {
+    auto *target=system.curve(slot);
+    if(!target) {field=0;return false;}
+    *target=curveEdit_;
+  } else {
+    auto *target=system.gradient(slot);
+    if(!target) {field=0;return false;}
+    *target=gradientEdit_;
+  }
+  if(!system.valid()) {state_.status=curve?"Curva recusada pelo componente":"Gradiente recusado pelo componente";return false;}
+  if(!history_.applyValues(document_,entity->id,value)) {state_.status="Edição recusada";return false;}
+  field=0;return true;
+}
+
 bool EditorSession::commitCurveEditor() {
   // PK-5: curva de Color Curves (Ambiente ou Perfil), não campo de script.
   if(state_.curveVolumeChannel) return commitVolumeCurve(curveEdit_);
+  if(state_.curveType==kParticleCurveType) return commitParticleValue(true);
   const auto *entity=document_.find(state_.curveEntity);
   if(!entity||document_.revision()!=state_.colorRevision||isPlaying()||history_.isOpen()) {
     state_.curveField=0;state_.status="Curva cancelada: a cena mudou";return true;
@@ -6165,6 +6197,50 @@ EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
       history_.cancel(document_);return refuse("Não foi possível criar o filho visual");
     }
   }
+  // Filhos da receita (G4c: Chuva e Neve do Clima), na mesma transação; a
+  // referência do pai recebe cada filho criado.
+  if(!recipe.children.empty()) {
+    auto parentValues=*document_.find(id);
+    std::vector<std::pair<std::string_view,EditorEntityId>> createdChildren;
+    for(const auto &child:recipe.children) {
+      EditorEntity entity;
+      for(const auto &part:child.components) {
+        auto plan=scene::planComponentAddition(entity.components,part.type);
+        if(!plan.ready) {history_.cancel(document_);return refuse(std::string(child.name)+": "+(plan.error?plan.error:"composição inválida"));}
+        entity.components=std::move(plan.candidate);
+      }
+      for(const auto &part:child.components) for(const auto &initial:part.values)
+        if(scene::setComponentProperty(entity.components,initial.component,initial.property,initial.value)!=scene::ComponentPropertyStatus::Applied) {
+          history_.cancel(document_);return refuse(std::string(child.name)+": valor inicial recusado ("+std::string(initial.property)+")");
+        }
+      assignEntityName(entity,child.name);
+      entity.active=child.active;
+      const auto created=history_.createEntity(document_,id,runtime::ObjectKind::Folder,child.name);
+      if(!created||!history_.applyValues(document_,created,entity)) {history_.cancel(document_);return refuse("Não foi possível criar "+std::string(child.name));}
+      createdChildren.emplace_back(child.name,created);
+      if(!child.component.empty() && child.sibling.empty() &&
+         scene::setComponentProperty(parentValues.components,child.component,child.property,scene::ObjectReference{created})!=scene::ComponentPropertyStatus::Applied) {
+        history_.cancel(document_);return refuse(std::string(recipe.name)+": referência a "+child.name+" recusada");
+      }
+    }
+    // Referências entre irmãos (o plano e os respingos da Chuva).
+    for(const auto &child:recipe.children) {
+      if(child.sibling.empty()||child.component.empty()) continue;
+      EditorEntityId from=0,to=0;
+      for(const auto &[name,created]:createdChildren) {
+        if(name==child.sibling) from=created;
+        if(name==std::string_view{child.name}) to=created;
+      }
+      const auto *source=from?document_.find(from):nullptr;
+      if(!source||!to) {history_.cancel(document_);return refuse(std::string(recipe.name)+": "+child.name+" sem o irmão "+std::string(child.sibling));}
+      auto siblingValues=*source;
+      if(scene::setComponentProperty(siblingValues.components,child.component,child.property,scene::ObjectReference{to})!=scene::ComponentPropertyStatus::Applied||
+         !history_.applyValues(document_,from,siblingValues)) {
+        history_.cancel(document_);return refuse(std::string(recipe.name)+": referência de "+std::string(child.sibling)+" a "+child.name+" recusada");
+      }
+    }
+    if(!history_.applyValues(document_,id,parentValues)) {history_.cancel(document_);return refuse("Não foi possível ligar os filhos");}
+  }
   // V-2: "Sol com dia e noite" traz a Lua (o par Sun/Moon do ciclo do HDRP):
   // uma direcional irmã, girada pela Hora do dia do sol. Desfazer leva os dois.
   std::string moonNote;
@@ -6396,6 +6472,14 @@ void EditorSession::update() {
   // [ExecuteAlways] na Unity: mudar a hora move o gizmo e o céu reage.
   if(!isPlaying())
     runtime::applyTimeOfDay(document_,0.0,[&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
+  // G4c: o clima também roda na edição, instantâneo e sem relâmpago: mudar o
+  // tipo muda as nuvens do Ambiente e a emissão das partículas na hora.
+  if(!isPlaying()) {
+    const auto camera=resolveSceneCamera(document_);
+    runtime::WeatherCamera pose{{camera.position[0],camera.position[1],camera.position[2]},camera.yaw};
+    previewWeatherReport_=previewWeather_.advance(document_,0.0,0.0f,false,camera.entity?&pose:nullptr,
+      [&](runtime::ObjectId id,const runtime::Transform &t){return document_.setTransform(id,t);});
+  }
   refreshAnimationClip();
   if(studio_->bake) {std::string summary,error;EditorStudio::bakeStep(*this,12,summary,error);
     if(!summary.empty())state_.clipDiagnostic=summary;else if(!error.empty())state_.clipDiagnostic=error;}
@@ -6407,6 +6491,8 @@ void EditorSession::update() {
   state_.characterRuntime=playInspecting()&&playScene_.active()?&playScene_.physics():nullptr;
   state_.characterWorld=playInspecting()&&playScene_.active()?&playScene_.world():nullptr;
   state_.tweenRuntime=playInspecting()&&playScene_.active()?&playScene_.tweens():nullptr;
+  state_.particleRuntime=isPlaying()&&playScene_.active()?&playScene_.particles():&previewParticles_;
+  state_.particleSimulationMs=state_.particleRuntime->lastSimulationMs();
   state_.tweenSequenceRuntime=playInspecting()&&playScene_.active()?&playScene_.tweenSequences():nullptr;
   state_.physicsQueryRuntime=playInspecting()&&playScene_.active()?&playScene_.physicsQueries():nullptr;
   state_.virtualCameraRuntime=playInspecting()&&playScene_.active()?&playScene_.virtualCameras():nullptr;

@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 65> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 76> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -154,9 +154,9 @@ inline constexpr std::array<EngineCapability, 65> engineCapabilities{{
   {"render.environment.clouds", "Nuvens (Cloud Layer)", CapabilityState::Implemented,
    "renderer/cloud_layer.cpp + rhi/shaders/cloud_layer.glsl",
    "Uma camada 2D com mapa procedural, vento, autossombra em 3 passos e sombra no chão pela luz direcional principal; sem mapa de nuvens importado, sem segunda camada nem nuvens volumétricas"},
-  {"render.environment.weather", "Clima (chuva, neve, relâmpago)", CapabilityState::Planned,
-   "renderer/particles (G5)",
-   "Depende do sistema de partículas do G5, ainda fora desta base; hoje o clima é só a cobertura de nuvens"},
+  {"render.environment.weather", "Clima (chuva, neve, relâmpago)", CapabilityState::Implemented,
+   "runtime/scene_weather.cpp + runtime/scene_particles.cpp",
+   "Componente Clima escreve as nuvens e a neblina do próprio Ambiente e a emissão de partículas de Chuva e Neve sobre a câmera; relâmpago é clarão nas nuvens e na neblina, sem raio desenhado, trovão nem respingo no chão (colisão de partícula é o P4)"},
   {"render.environment.celestial", "Sol, lua e estrelas no céu", CapabilityState::Implemented,
    "rhi/shaders/dirt_road_sky.frag",
    "Disco solar com limbo e auréola, lua com fase iluminada pelo sol e estrelas noturnas; lua e estrelas ainda sem órbita astronômica nem cintilação por turbulência real"},
@@ -228,6 +228,34 @@ inline constexpr std::array<EngineCapability, 65> engineCapabilities{{
   {"render.upscale.temporal", "Ampliação temporal Arm ASR / AMD FSR 2", CapabilityState::DeviceLimited,
    "rhi/temporal_upscaler.cpp + platform/android/instanced_temporal_upscaler.inl",
    "Exige float16/int16, formatos de storage e subgrupos no aparelho; recusa com motivo quando falta"},
+
+  // --- Partículas (G5) -----------------------------------------------------
+  {"render.particles.simulation", "Simulação de partículas em CPU", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
+   "Main, Emission (taxa e rajadas), Shape (6 formas), Velocity/Limit Velocity/Force over Lifetime, Noise (ruído de valor) e Cor/Tamanho/Rotação ao longo da vida; jobs por sistema, SoA, semente determinística"},
+  {"render.particles.billboard", "Partículas billboard e esticadas", CapabilityState::Implemented,
+   "platform/android/instanced_particles.inl + rhi/shaders/particle_billboard.vert", "Ordenação por sistema e dentro do sistema; desenhadas depois dos transparentes da malha"},
+  {"render.particles.material", "Material de partícula mistura/aditivo", CapabilityState::Implemented,
+   "rhi/shaders/particle_material.frag + renderer/particles/particle_textures.cpp",
+   "Texturas próprias da engine (8 formas, 3 ruídos, 3 máscaras) ou, com descritores bindless, a imagem e a cor base de um Material do projeto com shader Partícula (PK-10a); sem bindless fica a textura própria"},
+  {"render.particles.lights", "Luzes das partículas (Lights)", CapabilityState::Implemented,
+   "runtime/scene_particles.cpp + platform/android/android_main.cpp",
+   "Luz modelo (ponto ou spot) copiada para a Proporção das partículas até o Máximo por sistema; cor da partícula, tamanho no alcance e alfa na intensidade. Sem sombra e sem Random Distribution: o sorteio é fixo por partícula"},
+  {"render.particles.texture_sheet", "Folha de textura (Texture Sheet Animation)", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + rhi/shaders/particle_billboard.vert",
+   "Modo Grid da Unity: Colunas x Linhas, Folha inteira ou Uma linha (escolhida ou sorteada), Quadro no tempo (curva), Quadro inicial e Ciclos; sem modo Sprites nem mistura entre quadros"},
+  {"render.particles.soft", "Partícula suave por profundidade", CapabilityState::DeviceLimited,
+   "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
+  {"render.particles.mesh", "Partícula de malha", CapabilityState::Planned, "renderer/particles/", "Pacote P2"},
+  {"render.particles.trails", "Trilhas das partículas (Trails)", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
+   "Modo Particles da Unity: até 12 pontos por partícula, Proporção, Vida da trilha, Distância mínima, largura do início ao fim, cor herdada e esmaecer; segmentos como billboards esticados no passe das partículas, com o material do sistema. Sem modo Ribbon, sem Trail Material próprio; componentes TrailRenderer e LineRenderer ainda não"},
+  {"render.particles.collision", "Colisão de partículas com planos", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp",
+   "Modo Planes da Unity: até dois objetos-plano com quique, amortecimento, perda de vida e velocidade mínima; sem colisão com a física da cena (modo World)"},
+  {"render.particles.sub_emitters", "Sub-emissores", CapabilityState::Implemented, "runtime/scene_particles.cpp",
+   "Ao nascer, ao colidir e ao morrer, com quantidade por evento; o sub-sistema usa a própria forma e visual. Sem herdar cor, tamanho ou velocidade"},
+  {"render.particles.compute", "Simulação de partículas em compute (níveis A/S)", CapabilityState::Planned, "renderer/particles/", "Pacote P5"},
 
   // --- Animação ------------------------------------------------------------
   {"animation.clip", "Clipe de animação por nós", CapabilityState::Implemented,

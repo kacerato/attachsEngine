@@ -1,0 +1,1 @@
+10-21 13:50:57.677 28984 31473 I Aether.Android: [Particles] passe pronto: atlas 512x512, suave=sim, timestamps=sim.

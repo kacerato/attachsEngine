@@ -1,0 +1,627 @@
+{
+  "format": 1,
+  "source": "native/scene/weather.h",
+  "tables": [
+    {
+      "name": "weatherNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "intensity",
+          "label": "Intensidade",
+          "member": "intensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "default": {
+            "cpp": "0.7f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Quanto chove ou neva e quão fechado fica o céu",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "Weather"
+        },
+        {
+          "id": "transition_seconds",
+          "label": "Transição",
+          "member": "transitionSeconds",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "8.0f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "s",
+            "help": "Em Play, tempo para chegar ao clima novo quando tipo ou intensidade mudam",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "variation",
+          "label": "Variação natural",
+          "member": "variation",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "default": {
+            "cpp": "0.35f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Em Play a chuva e a neve engrossam e afinam sozinhas; 0 deixa a intensidade fixa",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "variation_period",
+          "label": "Ritmo da variação",
+          "member": "variationPeriod",
+          "min": {
+            "cpp": "5"
+          },
+          "max": {
+            "cpp": "600"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "default": {
+            "cpp": "45.0f"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "s",
+            "help": "Tempo médio entre uma pancada e uma calmaria",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "rain_rate",
+          "label": "Gotas por segundo",
+          "member": "rainRate",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "20000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "default": {
+            "cpp": "7000.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "/s",
+            "help": "Emissão da Chuva na intensidade máxima",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasRain"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "snow_rate",
+          "label": "Flocos por segundo",
+          "member": "snowRate",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "20000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "default": {
+            "cpp": "3000.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "/s",
+            "help": "Emissão da Neve na intensidade máxima",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasSnow"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "height_above_camera",
+          "label": "Altura sobre a câmera",
+          "member": "heightAboveCamera",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "100"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "10.0f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "m",
+            "help": "Onde ficam os emissores, acima da câmera da cena",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherFollowsCamera"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "wind_influence",
+          "label": "Vento na precipitação",
+          "member": "windInfluence",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "2"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "0.35f"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "×",
+            "help": "Quanto o vento das nuvens deste Ambiente inclina a chuva e arrasta a neve",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "fog_density",
+          "label": "Neblina máxima",
+          "member": "fogDensity",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "0.2"
+          },
+          "step": {
+            "cpp": ".001f"
+          },
+          "default": {
+            "cpp": "0.045f"
+          },
+          "presentation": {
+            "group": "Atmosfera",
+            "unit": "1/m",
+            "help": "Densidade da neblina do Ambiente com chuva ou neve no máximo; vale com Sobrescrever neblina",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning_interval",
+          "label": "Intervalo médio",
+          "member": "lightningInterval",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "120"
+          },
+          "step": {
+            "cpp": ".5f"
+          },
+          "default": {
+            "cpp": "9.0f"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "s",
+            "help": "Tempo médio entre relâmpagos em Play",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasLightning"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning_brightness",
+          "label": "Clarão",
+          "member": "lightningBrightness",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "8"
+          },
+          "step": {
+            "cpp": ".1f"
+          },
+          "default": {
+            "cpp": "3.0f"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "EV",
+            "help": "Quanto o clarão acende as nuvens e a neblina",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherHasLightning"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_wetness",
+          "label": "Molhado",
+          "member": "surfaceWetness",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Quanto a chuva escurece o chão e as paredes e deixa tudo liso e refletindo",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_puddles",
+          "label": "Poças",
+          "member": "surfacePuddles",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "0.6f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Poças nos pisos planos: espelho d'água escuro que reflete o céu",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "surface_snow",
+          "label": "Neve acumulada",
+          "member": "surfaceSnow",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "",
+            "help": "Cobertura branca em telhados, chão e no topo dos objetos",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "wet_seconds",
+          "label": "Tempo para molhar",
+          "member": "wetSeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "600"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "20.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos de chuva até o molhado completo (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "dry_seconds",
+          "label": "Tempo para secar",
+          "member": "drySeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "1200"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "90.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos sem chuva até secar (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "snow_seconds",
+          "label": "Tempo para acumular",
+          "member": "snowSeconds",
+          "min": {
+            "cpp": "1"
+          },
+          "max": {
+            "cpp": "1200"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "60.0f"
+          },
+          "presentation": {
+            "group": "Superfícies",
+            "unit": "s",
+            "help": "Segundos de neve até a cobertura completa; derrete no dobro (Play)",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp → rhi/shaders/dirt_road_shading.glsl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        }
+      ]
+    },
+    {
+      "name": "weatherBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Desligado, o clima não escreve mais nada; os valores ficam como estão",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "follow_camera",
+          "label": "Seguir a câmera",
+          "member": "followCamera",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Precipitação",
+            "unit": "",
+            "help": "Leva Chuva e Neve para cima da câmera da cena, como filhos da Main Camera",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Weather"
+        },
+        {
+          "id": "lightning",
+          "label": "Relâmpagos",
+          "member": "lightning",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Relâmpago",
+            "unit": "",
+            "help": "Clarões aleatórios nas nuvens durante a Tempestade",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "weatherIsStorm"
+            }
+          },
+          "type": "Weather"
+        }
+      ]
+    },
+    {
+      "name": "weatherEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "kind",
+          "label": "Tipo",
+          "type": "Weather",
+          "member": "kind",
+          "options": "weatherKinds",
+          "presentation": {
+            "group": "Clima",
+            "unit": "",
+            "help": "Limpo, nublado, chuva, tempestade ou neve: muda nuvens, neblina e precipitação",
+            "capability": "render.environment.weather",
+            "consumer": "runtime/scene_weather.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "weather_Weather_fields0",
+      "type": "Weather",
+      "properties": [
+        "weatherBooleans/enabled",
+        "weatherNumbers/intensity",
+        "weatherNumbers/transition_seconds",
+        "weatherNumbers/variation",
+        "weatherNumbers/variation_period",
+        "weatherNumbers/rain_rate",
+        "weatherNumbers/snow_rate",
+        "weatherNumbers/height_above_camera",
+        "weatherNumbers/wind_influence",
+        "weatherNumbers/fog_density",
+        "weatherNumbers/lightning_interval",
+        "weatherNumbers/lightning_brightness",
+        "weatherBooleans/follow_camera",
+        "weatherBooleans/lightning",
+        "weatherNumbers/surface_wetness",
+        "weatherNumbers/surface_puddles",
+        "weatherNumbers/surface_snow",
+        "weatherNumbers/wet_seconds",
+        "weatherNumbers/dry_seconds",
+        "weatherNumbers/snow_seconds"
+      ]
+    }
+  ]
+}
