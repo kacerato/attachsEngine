@@ -739,6 +739,8 @@ void main() {
   // G3c: draw mode Baked Lightmap da Unity -- a luz que o lightmap devolve
   // (luzes locais assadas e o céu da hora pela visibilidade) sobre albedo branco.
   if((astraProbes.header.x&8u)!=0u) {
+    // Decalques e vidros não estão no lightmap: some, como no Scene view.
+    if((flags&1u)!=0u) discard;
     aetherWriteSurface(astraLightmapShown,vec3(0.0),base.a,flags,blendOutput,shadingBits);
     return;
   }

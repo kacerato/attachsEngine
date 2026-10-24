@@ -6691,7 +6691,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       !textureStreamingDebugView_;
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
-      (textureStreamingDebugView_?32u:0u);
+      (textureStreamingDebugView_?32u:0u)|(lightmapView_?64u:0u);
   const bool sceneUniformMatches=sceneCacheEligible && editorSceneCachedUniform_.size()==sizeof(DirtRoadFrameUniform) &&
       std::memcmp(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform))==0;
   editorSceneReusedLastFrame_=sceneCacheEligible && editorSceneCacheValid_ &&

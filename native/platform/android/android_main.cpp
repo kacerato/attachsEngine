@@ -25,6 +25,7 @@
 #include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_telemetry.h"
+#include "renderer/lightmap_data.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/rendering_settings_file.h"
 #include "renderer/water_fft.h"
@@ -73,6 +74,18 @@
 namespace {
 
 constexpr const char *LogTag = "Aether.Android";
+
+// G3c: como o Light Mode Baked da Unity, uma luz Assada com lightmap em vigor
+// não existe em tempo real -- nem luz por pixel nem mapa de sombra. Os objetos
+// com lightmap já a têm no RGB; os móveis a recebem pelas sondas de luz.
+// Sem lightmap (nunca gerado ou Limpar) ela volta a iluminar em tempo real.
+std::vector<ae::renderer::SceneLight> &withoutBakedLights(std::vector<ae::renderer::SceneLight> &lights,
+                                                          const ae::renderer::LightmapData *lightmap) {
+  if(lightmap && !lightmap->pages.empty())
+    lights.erase(std::remove_if(lights.begin(),lights.end(),
+        [](const ae::renderer::SceneLight &light){return light.lightmapMode==2;}),lights.end());
+  return lights;
+}
 constexpr ae::u64 ValidationFrameMilestone = 1000;
 // PoC-A (item 0.2 do plano): 5.000 objetos é o número que o critério de
 // sucesso pede ("5.000 objetos renderizados a 60 fps com < 3 ms de CPU").
@@ -3880,7 +3893,7 @@ void android_main(android_app *app) {
             // barato (são poucas) e evita um segundo conceito de "sujo" para um
             // estado que muda por script no meio do Play.
             if(shell.editorSession.extractLights(shell.authoredLights))
-              shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+              shell.instancedRenderer.queueSceneLights(withoutBakedLights(shell.authoredLights,shell.editorSession.lightmapData().get()));
             if(shell.editorSession.extractEnvironmentVolumes(shell.authoredEnvironmentVolumes))
               shell.instancedRenderer.queueSceneEnvironmentVolumes(shell.authoredEnvironmentVolumes);
             // PK-6: as sondas saem do mesmo grafo e no mesmo quadro que as luzes.
@@ -3911,6 +3924,9 @@ void android_main(android_app *app) {
         if(shell.editorSession.lightmapDataRevision()!=shell.publishedLightmapRevision) {
           shell.publishedLightmapRevision=shell.editorSession.lightmapDataRevision();
           shell.instancedRenderer.setLightmapData(shell.editorSession.lightmapData());
+          // Com o lightmap no lugar, a luz Assada sai do tempo real (e da sombra).
+          if(shell.editorSession.extractLights(shell.authoredLights))
+            shell.instancedRenderer.queueSceneLights(withoutBakedLights(shell.authoredLights,shell.editorSession.lightmapData().get()));
         }
         shell.editorSession.setLightmapRendererStats(shell.instancedRenderer.lightmapStats().drawsLightmapped);
         if(shell.editorSession.reflectionProbeTexturesRevision()!=shell.publishedProbeTextures) {
