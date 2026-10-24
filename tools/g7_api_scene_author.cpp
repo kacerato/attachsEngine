@@ -151,16 +151,19 @@ public:
   // Volume global com o perfil Exterior e a câmera.
   void base(const Assets &assets, float hour, float dayLength) {
     const float grass[3]{.33f, .42f, .27f}, wall[3]{.82f, .74f, .62f}, roof[3]{.55f, .22f, .16f}, stone[3]{.62f, .63f, .66f};
-    const auto ground = primitive(0, "Chão", "cube", grass, 0, .95f);
-    place(ground, 0, -.1f, 6, 60, .2f, 60);
-    physics(ground, scene::BodyMotion::Static, false, .5f, .5f, .5f);
+    // O cubo embutido tem identidade do pacote interno (editor_map_scene.cpp);
+    // plano, cilindro e esfera têm identidade fixa e servem a uma cena gerada.
+    const auto ground = primitive(0, "Chão", "plane", grass, 0, .95f);
+    place(ground, 0, 0, 6, 6, 1, 6);
+    physics(ground, scene::BodyMotion::Static, false, 5, .05f, 5);
     const auto houses = folder(0, "Casas");
     const float spots[][3]{{-7, 1.5f, 9}, {7, 1.5f, 11}, {0, 2, 17}, {-12, 1.5f, 16}, {12, 1.5f, 3}};
     for (u32 i = 0; i < std::size(spots); ++i) {
-      const auto house = primitive(houses, ("Casa " + std::to_string(i + 1)).c_str(), "cube", i % 2 ? stone : wall);
-      place(house, spots[i][0], spots[i][1], spots[i][2], 3.5f, spots[i][1] * 2, 3.5f);
-      const auto top = primitive(houses, ("Telhado " + std::to_string(i + 1)).c_str(), "cube", roof);
-      place(top, spots[i][0], spots[i][1] * 2 + .3f, spots[i][2], 3.9f, .6f, 3.9f);
+      // Torre (cilindro de 2 m na escala 1) com cúpula de telhado.
+      const auto house = primitive(houses, ("Casa " + std::to_string(i + 1)).c_str(), "cylinder", i % 2 ? stone : wall);
+      place(house, spots[i][0], spots[i][1], spots[i][2], 3.5f, spots[i][1], 3.5f);
+      const auto top = primitive(houses, ("Telhado " + std::to_string(i + 1)).c_str(), "sphere", roof);
+      place(top, spots[i][0], spots[i][1] * 2, spots[i][2], 3.9f, 2.0f, 3.9f);
     }
     const float chrome[3]{.95f, .95f, .95f};
     statue = primitive(0, "Estátua cromada", "sphere", chrome, 1, .05f);
@@ -347,7 +350,7 @@ int main(int argc, char **argv) {
         auto values = *b.doc.find(aim);
         auto *environment = static_cast<scene::Environment *>(values.components.add(scene::Environment::descriptor));
         environment->values.depthOfField = renderer::DepthOfFieldMode::Bokeh;
-        environment->values.focusDistance = 15;environment->values.focalLength = 85;environment->values.aperture = 1.8f;
+        environment->values.focusDistance = 4;environment->values.focalLength = 85;environment->values.aperture = 1.8f;
         environment->values.priority = 10;
         auto overrides = renderer::VolumeOverrides::empty();
         overrides.addGroup(renderer::VolumeGroup::DepthOfField);
@@ -417,8 +420,13 @@ int main(int argc, char **argv) {
       Builder b;b.base(assets, 15, 0);
       EditorEntityId probe = 0;b.chromeProbe(probe, 2u);
       const float red[3]{1, .1f, .05f};
-      const auto panel = b.primitive(0, "Painel", "cube", red, 0, .5f, red, 3);
-      b.place(panel, csharp ? 2.4f : -3, 1.6f, 4.5f, .3f, 2.2f, 2.2f);
+      // Painel redondo (cilindro achatado) virado para a esfera.
+      const auto panel = b.primitive(0, "Painel", "cylinder", red, 0, .5f, red, 3);
+      b.place(panel, csharp ? 2.4f : -3, 1.6f, 4.5f, 2.2f, .08f, 2.2f, 0, 0);
+      {
+        auto values = *b.doc.find(panel);values.transform.rotationDegrees[2] = 90;
+        if (!b.doc.applyEntityValues(panel, values)) fail("painel recusado");
+      }
       if (csharp) b.script(probe, "g7.sonda_por_script", "SondaPorScript.cs", {{"painel", "object", std::to_string(panel)}, {"intervalo", "float", "2"}});
       else {
         // O painel anda de um lado ao outro; a sonda só o vê quando o Timer manda.

@@ -17,6 +17,7 @@ public sealed class MiraComDesfoque : Behavior
 
     private Volume? volume;
     private DepthOfField? desfoque;
+    private bool mirandoAntes;
 
     public override void Start()
     {
@@ -26,11 +27,14 @@ public sealed class MiraComDesfoque : Behavior
         desfoque = perfil.TryGet<DepthOfField>(out var existente) ? existente : perfil.Add<DepthOfField>(overrides: true);
         desfoque!.Mode.Override(DepthOfFieldMode.Bokeh);
         volume.Weight = 0;
+        Scene.Log(ObjectId, "Mira pronta");
     }
 
     public override void Update(float deltaTime)
     {
         var mirando = Input.Pressed("Mirar");
+        if (mirando != mirandoAntes) Scene.Log(ObjectId, mirando ? "Mirando" : "Mira solta");
+        mirandoAntes = mirando;
         var camera = Object.GetComponent<Camera>()!.Value;
         var alvo = mirando ? 1f : 0f;
         volume!.Weight = Mathf.MoveTowards(volume.Weight, alvo, Velocidade * deltaTime);
