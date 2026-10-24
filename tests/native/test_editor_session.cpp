@@ -6603,6 +6603,8 @@ AE_TEST(g7_touch_button_drives_player_input_connection_to_volume_weight) {
     c->event=event;c->action=scene::kEventConnectionCallMethod;c->method=36;c->receiver=volume;c->argument=event==43?1.f:0.f;c->inputAction=index;
   }
   AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,values),"entrada e conexões");
+  // Como no Android: o campo de texto da plataforma está ligado.
+  session.usePlatformTextInput(true);
   AE_EXPECT_TRUE(session.startPlay(),"Play");session.update();
   std::vector<renderer::MapDrawState> draws;session.advanceClock(1);session.extractPlayMap(draws);
   const auto weight=[&]{

@@ -19,6 +19,7 @@
 #include "scene/timer.h"
 
 #include <cmath>
+#include <cstdlib>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -255,4 +256,17 @@ AE_TEST(g7_player_input_turns_actions_into_events_filtered_by_action) {
   play.stop();
   const auto api=scene::componentCSharpApi();
   AE_EXPECT_TRUE(api.find("public ComponentSubscription OnPerformed(Behavior owner")!=std::string::npos,"script assina ação executada");
+}
+
+// G7: cena gerada pelo g7_api_scene_author rodando no Play com física real
+// (G7_SCENE aponta para scenes/editor.aescene; sem a variável o teste só passa).
+AE_TEST(g7_generated_scene_plays_with_physics_and_connections) {
+  const char *path=std::getenv("G7_SCENE");
+  if(!path) return;
+  EditorDocument doc;AE_EXPECT_TRUE(loadEditorDocument(path,0,doc),"cena gerada carrega");
+  EditorMapScene resources;EditorPlayScene play;
+  AE_EXPECT_TRUE(play.start(doc,resources),("Play: "+play.physicsError()+" | "+play.frameError()).c_str());
+  for(u32 frame=0;frame<360;++frame) if(!play.advance(1.0/60)) {AE_EXPECT_TRUE(false,play.frameError().c_str());break;}
+  AE_EXPECT_TRUE(play.eventConnections().deliveries()>0,play.eventConnections().diagnostic().c_str());
+  play.stop();
 }
