@@ -22,6 +22,7 @@
 #include "scene/environment.h"
 #include "scene/event_connection.h"
 #include "scene/light.h"
+#include "scene/light_defaults.h"
 #include "scene/lighting_settings.h"
 #include "scene/mesh_renderer.h"
 #include "scene/player_input.h"
@@ -172,13 +173,15 @@ public:
     moon = folder(0, "Lua");
     {
       auto values = *doc.find(moon);
+      // A Lua de Criar › Luzes › Sol com dia e noite (V-2): 0,5 lux, 12 000 K.
       auto *light = static_cast<scene::Light *>(values.components.add(scene::Light::descriptor));
       scene::applyLightDefault(*light, scene::LightKind::Directional);
-      light->shadowMode = 2;
-      if (!doc.applyEntityValues(moon, values)) fail("lua recusada");
-      set(values, scene::Light::descriptor, "intensity", Value{.25f});
-      triple(values, scene::Light::descriptor, "color", .62f, .72f, 1.0f);
-      if (!doc.applyEntityValues(moon, values)) fail("lua recusada");
+      light->unit = scene::kMoonLightDefault.unit;
+      light->intensity = scene::kMoonLightDefault.intensity;
+      light->useColorTemperature = true;
+      light->colorTemperature = scene::kMoonColorTemperature;
+      light->shadowMode = scene::kMoonLightDefault.shadowMode;
+      if (!light->valid() || !doc.applyEntityValues(moon, values)) fail("lua recusada");
     }
     sun = folder(0, "Sol");
     {

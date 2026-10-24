@@ -18,6 +18,8 @@
 #include "editor/editor_import_transaction.h"
 #include "core/sha256.h"
 #include "scene/environment.h"
+#include "scene/event_connection.h"
+#include "scene/player_input.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
 #include "editor/editor_material_fields.h"
@@ -6581,4 +6583,48 @@ AE_TEST(physics_material_file_opens_in_properties_and_edits_the_shared_resource)
   tapWidget(f,widgetId(EditorWidget::PhysicsMaterialStepBase)+9);
   AE_EXPECT_EQ(f.session.findPhysicsMaterial(guid)->surface,1u,"superfície avança pelas opções");
   AE_EXPECT_TRUE(f.session.history().undo(doc)&&f.session.findPhysicsMaterial(guid)->surface==0,"desfazer volta a superfície");
+}
+
+// G7: a mira do exemplo 3 em Flow pelo caminho real da sessão — botão de toque
+// secundário do Play → ação "Mirar" → Entrada do jogador (ação executada /
+// cancelada) → Conexão de evento → Volume: definir peso.
+AE_TEST(g7_touch_button_drives_player_input_connection_to_volume_weight) {
+  Fixture f;auto &session=f.session;auto &doc=session.document();
+  auto map=doc.inputActions();runtime::InputAction aim;aim.id="Mirar";
+  aim.bindings={{runtime::InputSource::TouchButton,1,0,0,1,false}};
+  AE_EXPECT_TRUE(map.add(aim)&&doc.setInputActions(map),"ação Mirar no botão secundário");
+  const u32 index=static_cast<u32>(doc.inputActions().actions().size());
+  const auto volume=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Volume de mira");
+  auto values=*doc.find(volume);auto *environment=static_cast<scene::Environment*>(values.components.add(scene::Environment::descriptor));
+  environment->weight=0;doc.applyEntityValues(volume,values);
+  values=*doc.find(f.cube);values.components.add(scene::PlayerInput::descriptor);
+  for(const u32 event:{43u,44u}) {
+    auto *c=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
+    c->event=event;c->action=scene::kEventConnectionCallMethod;c->method=36;c->receiver=volume;c->argument=event==43?1.f:0.f;c->inputAction=index;
+  }
+  AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,values),"entrada e conexões");
+  AE_EXPECT_TRUE(session.startPlay(),"Play");session.update();
+  std::vector<renderer::MapDrawState> draws;session.advanceClock(1);session.extractPlayMap(draws);
+  const auto weight=[&]{
+    const auto *object=session.playScene().world().graph().find(volume);
+    const auto *v=object?static_cast<const scene::Environment*>(object->components.find(scene::Environment::descriptor)):nullptr;
+    return v?v->weight:-1.f;
+  };
+  // O toque vai ao CENTRO VISUAL do botão (editor_screen.cpp: 92×56 a 108/76
+  // do canto do viewport), não à margem que locateWidget acharia primeiro.
+  EditorScreenLayout layout;AE_EXPECT_TRUE(scanWidget(session,widgetId(EditorWidget::PlaySecondaryAction),layout).x>=0,"botão Mirar no HUD do Play");
+  const UiPoint button{layout.viewport.x+layout.viewport.width-108+46,layout.viewport.y+layout.viewport.height-76+28};
+  {
+    UiInputRouter router;UiDrawList list;list.begin(session.screen().surface,font().metrics(UiFontWeight::Regular));
+    buildEditorScreen(session.screen(),defaultTheme(),list,router);
+    AE_EXPECT_EQ(router.hitTest(button).widgetId,widgetId(EditorWidget::PlaySecondaryAction),"o centro do botão roteia para ele");
+  }
+  // Como o "input swipe" do adb: DOWN e depois MOVE parado no mesmo ponto.
+  session.handlePointer({21,UiPointerPhase::Down,button,1.0});session.advanceClock(1.05f);session.extractPlayMap(draws);
+  session.handlePointer({21,UiPointerPhase::Move,button,1.07});session.advanceClock(1.1f);session.extractPlayMap(draws);
+  session.handlePointer({21,UiPointerPhase::Move,button,1.09});session.advanceClock(1.12f);session.extractPlayMap(draws);
+  AE_EXPECT_TRUE(weight()==1.f,"segurar Mirar liga o Volume de mira");
+  session.handlePointer({21,UiPointerPhase::Up,button,1.15});session.advanceClock(1.2f);session.extractPlayMap(draws);
+  session.advanceClock(1.25f);session.extractPlayMap(draws);
+  AE_EXPECT_TRUE(weight()==0.f,"soltar desliga");
 }
