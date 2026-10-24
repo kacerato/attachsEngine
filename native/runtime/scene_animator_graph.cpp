@@ -339,7 +339,25 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
   std::erase_if(instances_,[&](const Instance &i){return std::find(live.begin(),live.end(),std::pair(i.owner,i.instance))==live.end();});
   // Ancestrais dos objetos visíveis: um Animator está na vista quando algum
   // renderer da sua hierarquia esteve no quadro anterior.
-  culledAnimators_=0;
+  culledAnimators_=0;reducedRateAnimators_=0;++rateFrame_;
+  bool sizesReady=false;
+  // Maior altura na tela entre os renderers da hierarquia; zero fora da vista.
+  const auto screenSize=[&](ObjectId root) {
+    if(!sizesReady) {
+      sizesReady=true;sizeAncestry_.clear();
+      for(const auto &[object,size]:screenSizes_) {
+        ObjectId id=object;
+        for(u32 depth=0;id!=kInvalidObject&&depth<256;++depth) {
+          sizeAncestry_.push_back({id,size});
+          const auto *entry=graph.find(id);if(!entry||id==graph.root()) break;id=entry->parent;
+        }
+      }
+      std::sort(sizeAncestry_.begin(),sizeAncestry_.end(),[](const auto &a,const auto &b){return a.first<b.first||(a.first==b.first&&a.second>b.second);});
+      sizeAncestry_.erase(std::unique(sizeAncestry_.begin(),sizeAncestry_.end(),[](const auto &a,const auto &b){return a.first==b.first;}),sizeAncestry_.end());
+    }
+    const auto found=std::lower_bound(sizeAncestry_.begin(),sizeAncestry_.end(),root,[](const auto &entry,ObjectId id){return entry.first<id;});
+    return found!=sizeAncestry_.end()&&found->first==root?found->second:0.f;
+  };
   bool ancestryReady=false;
   const auto inView=[&](ObjectId root) {
     if(!visibilityKnown_) return true;
@@ -368,10 +386,22 @@ bool SceneAnimatorGraphs::advance(GameWorld &world,const AnimationLibrary &libra
     if(outOfView&&culling==scene::AnimatorCullingMode::CullCompletely) continue;
     // Cull Update Transforms: a máquina segue; as amostras deste Animator saem
     // antes do misturador, e os ossos guardam a última pose escrita.
+    // Taxa por tamanho: fora do quadro de avaliação as amostras também saem e o
+    // SceneAnimator segue interpolando até a última pose avaliada.
+    u8 stride=1;
+    if(updateRateEnabled_&&!outOfView) {
+      const float size=screenSize(a->target&&graph.exists(static_cast<ObjectId>(a->target))?static_cast<ObjectId>(a->target):owner);
+      stride=size>=.25f?1:size>=.10f?2:4;
+      if(stride>1) ++reducedRateAnimators_;
+    }
+    const bool skipped=stride>1&&(rateFrame_+owner)%stride!=0;
     struct SampleTrim {
-      std::vector<SceneAnimator::ExternalSample> &list;usize from;bool active;
-      ~SampleTrim(){if(active&&list.size()>from) list.erase(list.begin()+static_cast<std::ptrdiff_t>(from),list.end());}
-    } trim{samples,samples.size(),outOfView};
+      std::vector<SceneAnimator::ExternalSample> &list;usize from;bool active;u8 stride;
+      ~SampleTrim(){
+        if(active) {if(list.size()>from) list.erase(list.begin()+static_cast<std::ptrdiff_t>(from),list.end());}
+        else for(usize i=from;i<list.size();++i) list[i].updateStride=stride;
+      }
+    } trim{samples,samples.size(),outOfView||skipped,stride};
     const ObjectId motionOwner=a->motionSource?static_cast<ObjectId>(a->motionSource):owner;
     bool bound=false;for(const auto &p:a->parameters) bound=bound||p.source!=scene::AnimatorParameterSource::Manual;
     if(bound) {

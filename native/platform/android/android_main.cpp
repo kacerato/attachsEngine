@@ -2410,6 +2410,9 @@ void android_main(android_app *app) {
     // Composição de animação em paralelo: desligada por padrão (A/B de 24/10); true liga para medir.
     ae::runtime::SceneAnimator::setParallelEvaluation(ae::platform::android::readBooleanLaunchOption(
         app->activity,"aether.animation_parallel",false));
+    // Taxa da animação por tamanho na tela: desligada até o A/B; true liga.
+    shell.editorSession.setAnimationUpdateRate(ae::platform::android::readBooleanLaunchOption(
+        app->activity,"aether.animation_rate",false));
     // Bancada do Culling Mode do Animator: força o modo em todos (0 sempre, 1 só o tempo, 2 parado).
     ae::u32 culling=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.animator_culling",culling)) {

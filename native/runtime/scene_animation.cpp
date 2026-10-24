@@ -376,6 +376,9 @@ struct SceneAnimator::AdvanceScratch {
   std::vector<CharacterWork> characters;
   std::vector<PreparedSample> prepared;
   FlatIndex targetCharacter;
+  // Alvo → intervalo do Animator no quadro (taxa por tamanho na tela) e
+  // osso → interpolação ativa.
+  FlatIndex strideTargets, interpolationIndex;
   const void *restOwner = nullptr;
   u64 restGeneration = 0;
 };
@@ -451,6 +454,7 @@ void SceneAnimator::reset() {
   players_.clear();
   rest_.clear();
   ++restGeneration_;
+  interpolations_.clear();
   external_.clear();
   compositionDiagnostic_.clear();
   externalTargets_.clear();
@@ -727,6 +731,53 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   layerPoses_.clear();
   if (!scratch_) scratch_ = std::make_shared<AdvanceScratch>();
   auto &scratch = *scratch_;
+  ++frame_;
+  // Escrita de pose. Intervalo 1 escreve direto; maior guarda a pose mostrada e
+  // a avaliada e anda 1/intervalo por quadro até a próxima avaliação.
+  scratch.interpolationIndex.clear(interpolations_.size());
+  for (usize index = 0; index < interpolations_.size(); ++index) {
+    bool inserted = false;
+    scratch.interpolationIndex.insert(interpolations_[index].object, static_cast<u32>(index), inserted);
+  }
+  const auto blendWrite = [&](RateInterpolation &rate) {
+    const float alpha = static_cast<float>(rate.step) / static_cast<float>(rate.steps);
+    float t[3], q[4], s[3], dot = 0;
+    for (u32 i = 0; i < 4; ++i) dot += rate.from[3 + i] * rate.to[3 + i];
+    const float sign = dot < 0 ? -1.0f : 1.0f;
+    for (u32 i = 0; i < 3; ++i) {
+      t[i] = rate.from[i] + (rate.to[i] - rate.from[i]) * alpha;
+      s[i] = rate.from[7 + i] + (rate.to[7 + i] - rate.from[7 + i]) * alpha;
+    }
+    float length = 0;
+    for (u32 i = 0; i < 4; ++i) {q[i] = rate.from[3 + i] * (1 - alpha) + sign * rate.to[3 + i] * alpha;length += q[i] * q[i];}
+    length = std::sqrt(length);
+    if (!(length > 1e-12f)) return;
+    for (auto &v : q) v /= length;
+    float local[16];
+    resources::composeTransform(t, q, s, local);
+    const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    Transform transform;
+    if (localTransformForWorld(local, identity, transform) && graph.setTransform(rate.object, transform)) ++posed_;
+  };
+  const auto writePose = [&](ObjectId object, const Transform &transform, u8 stride) {
+    const u32 existing = scratch.interpolationIndex.find(object);
+    if (stride <= 1) {
+      if (existing != FlatIndex::Missing) interpolations_[existing].steps = 0;  // aposentada no fim do quadro
+      if (graph.setTransform(object, transform)) ++posed_;
+      return;
+    }
+    RateInterpolation rate;
+    rate.object = object;rate.steps = stride;rate.step = 1;rate.frame = frame_;
+    decompose(graph.find(object)->transform, rate.from, rate.from + 3, rate.from + 7);
+    decompose(transform, rate.to, rate.to + 3, rate.to + 7);
+    if (existing != FlatIndex::Missing) interpolations_[existing] = rate;
+    else {
+      bool inserted = false;
+      scratch.interpolationIndex.insert(object, static_cast<u32>(interpolations_.size()), inserted);
+      interpolations_.push_back(rate);
+    }
+    blendWrite(existing != FlatIndex::Missing ? interpolations_[existing] : interpolations_.back());
+  };
 
   // Componentes vivos; um jogador cujo componente sumiu sai junto.
   auto &live = scratch.live;
@@ -1204,11 +1255,13 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
         }
         if (changed) ++posed_;
       }
+      const u8 stride = external_[work.firstSample].updateStride;
       for (usize index = 0; index < work.poses.size(); ++index) {
         const auto object = work.poses[index].first;
         const auto &out = work.writes[index];
         if (out.state == 2) compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);
-        else if (out.state == 1 && graph.setTransform(object, out.transform)) ++posed_;
+        else if (out.state == 1 || (stride > 1 && out.state == 0 && work.poses[index].second.changed))
+          writePose(object, out.state == 1 ? out.transform : graph.find(object)->transform, stride);
       }
     }
     return true;
@@ -1310,6 +1363,22 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     if(binding.path==AnimationPath::Weights||!writable||writable(binding.target))
       contribute(binding.target,binding.path,binding.layer,0,AnimationValue(binding.width,0.f));
   }
+  }
+  bool anyStride = false;
+  for (const auto &sample : external_) anyStride = anyStride || sample.updateStride > 1;
+  if (anyStride) {
+    scratch.strideTargets.clear(256);
+    for (const auto &sample : external_) {
+      if (sample.updateStride <= 1) continue;
+      const auto found = std::find_if(externalTargets_.begin(), externalTargets_.end(), [&](const ExternalTargets &e) {
+        return e.owner == sample.owner && e.clip == sample.clip;
+      });
+      if (found == externalTargets_.end()) continue;
+      for (const auto target : found->targets) if (target != kInvalidObject) {
+        bool inserted = false;
+        scratch.strideTargets.insert(target, sample.updateStride, inserted);
+      }
+    }
   }
   external_.clear();
   // Troca de buffers: os dois vetores mantêm a capacidade entre quadros.
@@ -1445,9 +1514,16 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   for (usize index = 0; index < poses.size(); ++index) {
     const auto object = poses[index].first;
     const auto &out = transforms[index];
+    const u32 found = anyStride ? scratch.strideTargets.find(object) : FlatIndex::Missing;
+    const u8 stride = found == FlatIndex::Missing ? 1 : static_cast<u8>(found);
     if (out.state == 2) compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);
-    else if (out.state == 1 && graph.setTransform(object, out.transform)) ++posed_;
+    else if (out.state == 1 || (stride > 1 && out.state == 0 && poses[index].second.changed))
+      writePose(object, out.state == 1 ? out.transform : graph.find(object)->transform, stride);
   }
+  // Quadros sem avaliação: cada osso anda mais um passo até a pose avaliada.
+  for (auto &rate : interpolations_)
+    if (rate.steps > 1 && rate.frame != frame_ && rate.step < rate.steps) {++rate.step;rate.frame = frame_;blendWrite(rate);}
+  std::erase_if(interpolations_, [](const RateInterpolation &rate) {return rate.steps <= 1 || rate.step >= rate.steps;});
   return true;
 }
 

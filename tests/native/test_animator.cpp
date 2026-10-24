@@ -510,6 +510,28 @@ AE_TEST(animator_parallel_composition_matches_serial_pose) {
   AE_EXPECT_TRUE(moved,"os personagens foram de fato animados");
 }
 
+// Taxa por tamanho na tela: pequeno na tela avalia a cada 4 quadros e os
+// quadros pulados interpolam até a pose avaliada, sem salto.
+AE_TEST(animator_update_rate_by_screen_size_interpolates_between_evaluations) {
+  Rig r;auto &a=r.animator();
+  a.layers[0].states[0].motions={{r.run}};
+  Play p(r);
+  p.graphs.setUpdateRateEnabled(true);
+  p.graphs.setScreenSizes({{r.hips,.02f}});
+  p.graphs.setVisibleObjects({r.hips});
+  std::vector<float> xs;
+  for(u32 frame=0;frame<8;++frame) {p.step(.1f);xs.push_back(p.x(r.hips));}
+  AE_EXPECT_EQ(p.graphs.reducedRateAnimators(),1u,"personagem pequeno na tela entra na taxa reduzida");
+  bool monotonic=true;for(usize i=1;i<xs.size();++i) monotonic=monotonic&&xs[i]>=xs[i-1]-1e-5f;
+  AE_EXPECT_TRUE(monotonic,"a pose anda sem voltar entre as avaliações");
+  bool intermediate=false;for(float v:xs) intermediate=intermediate||(v>1e-3f&&v<2-1e-3f);
+  AE_EXPECT_TRUE(intermediate,"há quadros intermediários interpolados");
+  for(u32 frame=0;frame<8;++frame) p.step(.1f);
+  AE_EXPECT_TRUE(near(p.x(r.hips),2),"a interpolação chega à pose do clipe");
+  p.graphs.setScreenSizes({{r.hips,.5f}});p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.reducedRateAnimators(),0u,"grande na tela volta a avaliar todo quadro");
+}
+
 // Culling Mode da Unity: fora da vista, Cull Update Transforms segue o tempo
 // sem escrever a pose; Cull Completely para; Always Animate ignora a vista.
 AE_TEST(animator_culling_mode_follows_visibility_like_unity) {

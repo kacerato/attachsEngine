@@ -110,6 +110,9 @@ public:
     ObjectId controllerOwner=kInvalidObject;u64 instance=0;
     float layerWeight=1;
     std::shared_ptr<const LayerPose> frozen{};
+    // Taxa por tamanho na tela: o Animator foi avaliado a cada `updateStride`
+    // quadros e a pose nova é alcançada por interpolação nesse intervalo.
+    u8 updateStride=1;
   };
   // Valem para o próximo advance e são consumidas por ele.
   void setExternalSamples(std::vector<ExternalSample> samples) { external_ = std::move(samples); }
@@ -198,6 +201,11 @@ private:
   std::unordered_map<ObjectId, Rest> rest_;
   // Muda quando rest_ é limpo: invalida os ponteiros guardados no rascunho.
   u64 restGeneration_ = 0;
+  // Ossos de Animators com taxa reduzida: da pose mostrada até a última pose
+  // avaliada em `steps` quadros (TRS: translação, quaternion, escala).
+  struct RateInterpolation {ObjectId object=kInvalidObject;float from[10]{},to[10]{};u8 step=0,steps=1;u64 frame=0;};
+  std::vector<RateInterpolation> interpolations_;
+  u64 frame_ = 0;
   std::vector<ExternalSample> external_;
   std::string compositionDiagnostic_;
   AnimationPropertyMixer propertyMixer_;

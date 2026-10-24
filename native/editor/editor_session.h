@@ -1078,6 +1078,8 @@ public:
   bool playStackView(renderer::RenderViewSnapshot &out);
   void setPlayStackImage(bool ready) {state_.playStackReady=ready&&!state_.playStackRect.isEmpty();}
   void setAnimatorCullingOverride(int mode) noexcept {animatorCullingOverride_=mode;}
+  // Taxa de atualização da animação por tamanho na tela (ver SceneAnimatorGraphs).
+  void setAnimationUpdateRate(bool enabled) noexcept {animationUpdateRate_=enabled;}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
@@ -1558,6 +1560,7 @@ private:
   u64 lensDirtScanKey_[4]{};bool lensDirtScanned_=false;
   // Bancada (aether.animator_culling): -1 respeita o Culling Mode de cada Animator.
   int animatorCullingOverride_=-1;
+  bool animationUpdateRate_=false;
   usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela

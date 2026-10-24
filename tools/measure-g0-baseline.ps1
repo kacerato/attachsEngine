@@ -48,6 +48,8 @@ param(
     [switch]$SerialAnimation,
     # Liga a composição paralela (desligada por padrão desde 24/10).
     [switch]$ParallelAnimation,
+    # Taxa da animação por tamanho na tela com interpolação (aether.animation_rate).
+    [switch]$AnimationRate,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -123,6 +125,7 @@ try {
             if($NoQualityCeiling) { $launch+=@('--ez','aether.quality_ceiling','false') }
             if($SerialAnimation) { $launch+=@('--ez','aether.animation_parallel','false') }
             if($ParallelAnimation) { $launch+=@('--ez','aether.animation_parallel','true') }
+            if($AnimationRate) { $launch+=@('--ez','aether.animation_rate','true') }
             if($AnimatorCulling -ge 0) { $launch+=@('--ei','aether.animator_culling',[string]$AnimatorCulling) }
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
