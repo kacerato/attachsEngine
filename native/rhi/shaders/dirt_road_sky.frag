@@ -109,6 +109,11 @@ vec2 opticalDepthToAtmosphere(vec3 origin,vec3 direction,float planetRadius,
   return depth;
 }
 
+// Ozônio (Hillaire 2020, padrão do Physically Based Sky do HDRP): só absorve,
+// (0,650; 1,881; 0,085)e-3/km. A camada segue aqui a densidade do ar com a
+// coluna equivalente da camada de 25 km (fator 1,9). Sem ele o zênite fica
+// verde-acinzentado e o poente amarelo; com ele o zênite segue azul.
+const vec3 PhysicalSkyOzoneExtinction=vec3(0.000650,0.001881,0.000085)*1.9;
 vec3 integrateSingleScattering(vec3 origin,vec3 direction,float distance,
                                int viewSteps,int lightSteps,float planetRadius,
                                float atmosphereRadius,vec2 scaleHeights,
@@ -139,7 +144,7 @@ vec3 integrateSingleScattering(vec3 origin,vec3 direction,float distance,
     if(groundShadow.x<=0.0) {
       vec2 sunDepth=opticalDepthToAtmosphere(samplePosition,sunDirection,planetRadius,
                                              atmosphereRadius,scaleHeights,lightSteps);
-      vec3 extinction=betaRayleigh*(viewDepth.x+sunDepth.x)+
+      vec3 extinction=(betaRayleigh+PhysicalSkyOzoneExtinction)*(viewDepth.x+sunDepth.x)+
                       betaAerosolExtinction*(viewDepth.y+sunDepth.y);
       scattered+=exp(-extinction)*(betaRayleigh*density.x*rayleighPhase+
                                    betaAerosol*density.y*aerosolPhase)*segmentLength;
@@ -197,7 +202,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
     if(illumination>0.0) {
       vec2 groundSunDepth=opticalDepthToAtmosphere(groundOrigin,sunDirection,planetRadius,
                                                    atmosphereRadius,scaleHeights,lightSteps);
-      vec3 groundSunTransmittance=exp(-(betaRayleigh*groundSunDepth.x+
+      vec3 groundSunTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*groundSunDepth.x+
                                        betaAerosolExtinction*groundSunDepth.y));
       directIrradiance=sunColor*sunIntensity*groundSunTransmittance*illumination;
     }
@@ -206,7 +211,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
     // Lambertiano. A integral do céu é pré-calculada e cacheada na CPU para
     // não executar três integrações atmosféricas extras por pixel inferior.
     vec3 skyIrradiance=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0));
-    vec3 viewTransmittance=exp(-(betaRayleigh*viewDepth.x+
+    vec3 viewTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*viewDepth.x+
                                 betaAerosolExtinction*viewDepth.y));
     color+=vec3(groundAlbedo)*(directIrradiance+skyIrradiance)/PI*
            viewTransmittance*intensity;
@@ -222,7 +227,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
               vec3(celestialSunGlare(angularDistance,cosine,radius));
     vec2 sunDepth=opticalDepthToAtmosphere(origin,sunDirection,planetRadius,
                                            atmosphereRadius,scaleHeights,lightSteps);
-    vec3 sunTransmittance=exp(-(betaRayleigh*sunDepth.x+
+    vec3 sunTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*sunDepth.x+
                                betaAerosolExtinction*sunDepth.y));
     color+=sunColor*sunIntensity*sunTransmittance*disc*environment.sceneSky.z;
   }
