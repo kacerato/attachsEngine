@@ -1,0 +1,81 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 32457
+Error Callchains: 1498, 4.615337%
+Event count: 16228500000
+
+Children  Self    Symbol
+95.08%    0.00%   __pthread_start(void*)
+95.08%    0.00%   __start_thread
+52.10%    0.00%   libaether_android.so[+fd90f6]
+52.01%    0.12%   android_main
+39.99%    0.00%   libaether_android.so[+10b77c2]
+38.16%    0.47%   ae::JobSystem::workerLoop(unsigned int)
+30.49%    0.02%   ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+26.01%    0.00%   ae::editor::EditorPlayScene::advanceFrame(double, bool)
+25.78%    0.22%   std::__ndk1::condition_variable::__do_timed_wait(std::__ndk1::unique_lock<std::__ndk1::mutex>&, std::__ndk1::chrono::time_point<std::__ndk1::chrono::system_clock, std::__ndk1::chrono::duration<long long, std::__ndk1::ratio<1l, 1000000000l>>>)
+25.07%    25.07%  syscall
+25.03%    0.15%   pthread_cond_timedwait
+19.13%    0.01%   ae::editor::EditorPlayScene::animate(float, float)
+17.52%    6.68%   ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+13.94%    0.16%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+4.11%     4.11%   __ioctl
+3.58%     3.58%   @plt
+3.32%     0.00%   libaether_android.so[+10b64de]
+3.20%     0.51%   ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+3.09%     3.09%   __kernel_clock_gettime
+2.99%     0.00%   ae::rhi::VulkanSwapchain::present(unsigned int)
+2.97%     0.02%   vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+2.91%     0.01%   ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+2.80%     0.05%   ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+2.70%     0.04%   android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+2.66%     1.49%   ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+2.60%     0.00%   android::AndroidRuntime::javaThreadShell(void*)
+2.60%     0.00%   android::PoolThread::threadLoop()
+2.60%     0.00%   android::Thread::_threadLoop(void*)
+2.60%     0.00%   libutil_thread_trampoline(void*) (.__uniq.226528677032898775202282855395389835431)
+2.59%     0.00%   android::IPCThreadState::joinThreadPool(bool)
+2.51%     0.02%   qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+2.42%     0.19%   !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+2.38%     0.02%   android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+2.34%     0.24%   std::__ndk1::chrono::steady_clock::now()
+2.32%     0.00%   android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+2.31%     0.06%   android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+2.25%     2.01%   ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+2.18%     0.00%   android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+2.16%     0.00%   android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+2.16%     0.00%   android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+2.14%     0.03%   android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+2.10%     1.54%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+1.92%     1.24%   ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+1.87%     0.06%   ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+1.82%     0.59%   __futex_wait_ex(void volatile*, bool, int, bool, timespec const*)
+1.74%     0.00%   libaether_android.so[+c070ae]
+1.64%     0.02%   ae::editor::EditorSession::update()
+1.61%     0.02%   android::SurfaceComposerClient::Transaction::apply(bool, bool)
+1.53%     0.01%   android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+1.51%     0.09%   std::__ndk1::mutex::lock()
+1.41%     0.02%   android::IPCThreadState::executeCommand(int)
+1.40%     0.00%   std::__ndk1::condition_variable::notify_one()
+1.39%     0.00%   ae::rhi::VulkanSwapchain::acquireNextImage(unsigned int*)
+1.33%     0.01%   android::BnTransactionCompletedListener::onTransact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+1.26%     0.69%   !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+1.16%     0.01%   ae::editor::EditorPlayScene::fixedStep(void*, float)
+1.16%     1.16%   __aarch64_cas2_acq
+1.16%     0.02%   android::IPCThreadState::talkWithDriver(bool)
+1.15%     0.00%   ALooper_pollOnce
+1.14%     0.08%   android::Looper::pollOnce(int, int*, int*, void**)
+1.13%     0.01%   ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+1.12%     1.12%   ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.08%     0.09%   ae::JobSystem::trySteal(unsigned int, std::__ndk1::function<void ()>&)
+1.07%     0.01%   ae::physics::CharacterMotor::update(float, float, float, float)
+1.06%     1.06%   libaether_android.so[+10afb3c]
+1.04%     0.02%   AetherPhysics_UpdateCharacterEx
+1.04%     0.00%   !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+1.03%     1.03%   __close
+1.03%     0.32%   atan2
+1.03%     0.01%   android::DisplayEventDispatcher::handleEvent(int, int, void*)
+1.02%     0.45%   ae::JobSystem::tryPop(unsigned int, std::__ndk1::function<void ()>&)
+1.02%     0.02%   android::TransactionCompletedListener::onTransactionCompleted(android::ListenerStats)
+1.01%     0.02%   JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)

@@ -44,6 +44,8 @@ param(
     [switch]$DynamicResolution,
     # Culling Mode forçado em todos os Animators (-1 respeita a cena; 1 só o tempo, 2 parado).
     [ValidateRange(-1,2)][int]$AnimatorCulling=-1,
+    # Composição de animação na thread do jogo (aether.animation_parallel=false) para o A/B do pool.
+    [switch]$SerialAnimation,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -117,6 +119,7 @@ try {
                 $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
             }
             if($NoQualityCeiling) { $launch+=@('--ez','aether.quality_ceiling','false') }
+            if($SerialAnimation) { $launch+=@('--ez','aether.animation_parallel','false') }
             if($AnimatorCulling -ge 0) { $launch+=@('--ei','aether.animator_culling',[string]$AnimatorCulling) }
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }

@@ -1,0 +1,33 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 32457
+Event count: 16228500000
+
+Overhead  Command         Symbol
+24.36%    AstraGame       syscall
+6.68%     AstraGame       ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+3.44%     AstraGame       @plt
+3.08%     AstraGame       __kernel_clock_gettime
+2.85%     AstraGame       __ioctl
+2.01%     AstraGame       ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+1.54%     AstraGame       ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+1.49%     AstraGame       ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+1.24%     AstraGame       ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+1.15%     AstraGame       __aarch64_cas2_acq
+1.12%     AstraGame       ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.06%     AstraGame       libaether_android.so[+10afb3c]
+0.93%     AstraGame       libaether_android.so[+10aea64]
+0.82%     AstraGame       __close
+0.81%     binder:22972_1  __ioctl
+0.79%     AstraGame       __memmove_aarch64_simd
+0.79%     AstraGame       pthread_mutex_lock
+0.78%     AstraGame       atan
+0.69%     AstraGame       !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+0.65%     AstraGame       libaether_android.so[+11223a0]
+0.63%     AstraGame       ae::renderer::buildNormalMatrix(float const*, float*)
+0.59%     AstraGame       __set_errno_internal
+0.57%     AstraGame       ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+0.56%     AstraGame       __futex_wait_ex(void volatile*, bool, int, bool, timespec const*)
+0.55%     AstraGame       __aarch64_cas4_acq
+0.51%     AstraGame       ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const

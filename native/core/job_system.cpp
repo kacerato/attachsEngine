@@ -20,7 +20,12 @@ JobSystem::JobSystem(u32 threadCount) {
 }
 
 JobSystem::~JobSystem() {
-  stop_.store(true, std::memory_order_release);
+  {
+    // Sob o mutex do sono: sem ele, um worker que acabou de ver o predicado
+    // falso perde o aviso, dorme para sempre e o join trava.
+    std::lock_guard<std::mutex> lock(wakeMutex_);
+    stop_.store(true, std::memory_order_release);
+  }
   wakeCv_.notify_all();
   for (auto &t : workers_) {
     if (t.joinable()) t.join();
@@ -30,11 +35,17 @@ JobSystem::~JobSystem() {
 void JobSystem::submit(JobFn job) {
   u32 idx = nextQueue_.fetch_add(1, std::memory_order_relaxed) %
             static_cast<u32>(queues_.size());
+  // Pendente antes de visível: um worker não pode concluir (e decrementar) um
+  // job que ainda não foi contado.
+  pendingJobs_.fetch_add(1, std::memory_order_acq_rel);
   {
     std::lock_guard<std::mutex> lock(queues_[idx]->mutex);
     queues_[idx]->queue.push_back(std::move(job));
   }
-  pendingJobs_.fetch_add(1, std::memory_order_acq_rel);
+  {
+    std::lock_guard<std::mutex> lock(wakeMutex_);
+    queuedJobs_.fetch_add(1, std::memory_order_acq_rel);
+  }
   wakeCv_.notify_one();
 }
 
@@ -46,6 +57,7 @@ bool JobSystem::tryPop(u32 index, JobFn &out) {
   // cache, mas FIFO local mantém ordem previsível — suficiente aqui).
   out = std::move(state.queue.front());
   state.queue.pop_front();
+  queuedJobs_.fetch_sub(1, std::memory_order_acq_rel);
   return true;
 }
 
@@ -59,6 +71,7 @@ bool JobSystem::trySteal(u32 thiefIndex, JobFn &out) {
       // Rouba do fim: minimiza colisão com o dono, que consome do início.
       out = std::move(state.queue.back());
       state.queue.pop_back();
+      queuedJobs_.fetch_sub(1, std::memory_order_acq_rel);
       return true;
     }
   }
@@ -83,8 +96,8 @@ void JobSystem::workerLoop(u32 index) {
     }
 
     std::unique_lock<std::mutex> lock(wakeMutex_);
-    wakeCv_.wait_for(lock, std::chrono::milliseconds(1), [this] {
-      return stop_.load(std::memory_order_acquire);
+    wakeCv_.wait(lock, [this] {
+      return stop_.load(std::memory_order_acquire) || queuedJobs_.load(std::memory_order_acquire) > 0;
     });
   }
 }
