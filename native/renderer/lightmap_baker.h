@@ -27,6 +27,7 @@
 #include "renderer/lightmap_data.h"
 
 #include <atomic>
+#include <memory>
 
 namespace ae::renderer {
 
@@ -112,5 +113,17 @@ struct LightmapBakeRay { float origin[3], direction[3], maximum; };
 // Interseção mais próxima contra a BVH de uma cena (montada a cada chamada;
 // só para teste e diagnóstico).
 bool lightmapDebugTrace(const LightmapBakeScene &scene, const LightmapBakeRay &ray, float &distance, u32 &instance);
+// A BVH do bake montada uma vez, para diagnóstico (visibilidade num ponto,
+// o que um raio acerta e se acerta o verso). Mesma interseção do bake.
+class LightmapTracer {
+public:
+  explicit LightmapTracer(const LightmapBakeScene &scene);
+  ~LightmapTracer();
+  struct Result { bool hit = false, back = false; float distance = 0; u32 instance = 0; };
+  Result trace(const float origin[3], const float direction[3], float maximum) const;
+private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
 
 } // namespace ae::renderer

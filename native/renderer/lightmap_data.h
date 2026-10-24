@@ -88,6 +88,9 @@ struct LightmapStats {
   u64 texels = 0, rays = 0;
   u32 rejectedReceivers = 0; // sem UV2 válida
   float occupancy = 0;       // fração das páginas coberta por objetos
+  // Só do bake em memória (não vai ao arquivo): texels descartados por mais
+  // da metade dos raios bater no verso de uma face.
+  u32 invalidTexels = 0;
 };
 
 // O recurso .aelightmap.

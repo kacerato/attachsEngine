@@ -62,7 +62,10 @@ EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *n
 int main(int argc, char **argv) {
   if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia]\n"; return 1; }
   const std::filesystem::path root = std::filesystem::absolute(argv[1]), output = std::filesystem::absolute(argv[2]);
-  const float hour = argc >= 4 ? std::stof(argv[3]) : 10.0f;
+  // "generico": qualquer projeto (a Vila) -- só Static + GI, as Configurações
+  // e a UV2 no perfil; as luzes locais existentes passam a Misto (rebote assado).
+  const bool generic = argc >= 4 && std::string(argv[3]) == "generico";
+  const float hour = argc >= 4 && !generic ? std::stof(argv[3]) : 10.0f;
   const float dayMinutes = argc == 5 ? std::stof(argv[4]) : 0.0f;
   EditorDocument doc;
   if (!loadEditorDocument((root / "scenes/editor.aescene").string().c_str(), 0, doc)) fail("cena recusada");
@@ -81,6 +84,16 @@ int main(int argc, char **argv) {
     if (!doc.applyEntityValues(id, values)) fail("Static recusado");
     ++statics;
   }
+  if (generic) {
+    for (auto id : ids) {
+      const auto *object = doc.find(id);
+      const auto *light = object ? static_cast<const scene::Light *>(object->components.find(scene::Light::descriptor)) : nullptr;
+      if (!light || light->kind == scene::LightKind::Directional) continue;
+      auto values = *object;
+      static_cast<scene::Light *>(values.components.edit(scene::Light::descriptor))->lightmapMode = 1;
+      if (!doc.applyEntityValues(id, values)) fail("luz recusada");
+    }
+  } else {
   // Sol e Lua da Hora do dia, em tempo real (o lightmap nunca guarda o sol).
   EditorEntityId sunId = 0;
   for (auto id : ids) {
@@ -122,6 +135,7 @@ int main(int argc, char **argv) {
   lantern(doc, lights, "Lanterna assada centro", 0.5f, 2.3f, 4.9f, 2);
   lantern(doc, lights, "Lanterna assada leste", 7.5f, 2.3f, 4.9f, 2);
   lantern(doc, lights, "Lanterna mista sul", 0.5f, 2.3f, -4.9f, 1);
+  }
   // Configurações de iluminação na raiz (o Lighting Settings da cena).
   {
     auto rootValues = *doc.find(doc.root());
@@ -137,6 +151,7 @@ int main(int argc, char **argv) {
     settings->bounces = 2;
     if (!settings->valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("Configurações recusadas");
   }
+  if (!generic) {
   // Sondas de luz do PK-6 e uma esfera móvel na arcada.
   const auto groupId = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Sondas de luz do pátio");
   {
@@ -173,6 +188,7 @@ int main(int argc, char **argv) {
     camera.transform.position[0] = -7.5f; camera.transform.position[1] = 1.7f; camera.transform.position[2] = 4.6f;
     camera.transform.rotationDegrees[0] = 4; camera.transform.rotationDegrees[1] = 95;
     if (!doc.applyEntityValues(cameraId, camera)) fail("câmera recusada");
+  }
   }
   std::filesystem::create_directories(output / "scenes");
   std::filesystem::create_directories(output / ".astra/imports");

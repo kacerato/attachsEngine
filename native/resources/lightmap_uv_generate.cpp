@@ -5,6 +5,8 @@
 #include "xatlas.h"
 
 #include <algorithm>
+#include <atomic>
+#include <thread>
 #include <cmath>
 #include <cstring>
 #include <map>
@@ -174,6 +176,7 @@ bool generateLightmapUvs(std::vector<u8> &vertices, std::vector<u32> &indices,
   report.verticesBefore = vertices.size() / renderer::MapVertexStride;
   std::map<Range, Unwrapped> ranges;
   std::map<Range, bool> keep; // faixas que não mudam (deformadas ou sem área)
+  std::vector<Range> pending;
   for (usize d = 0; d < draws.size(); ++d) {
     const auto &draw = draws[d];
     const Range range{draw.firstIndex, draw.indexCount, draw.vertexOffset};
@@ -183,12 +186,31 @@ bool generateLightmapUvs(std::vector<u8> &vertices, std::vector<u32> &indices,
     }
     if (d < deformed.size() && deformed[d]) { keep[range] = true; ++report.drawsDeformed; continue; }
     if (ranges.count(range) || keep.count(range)) continue;
-    Unwrapped item;
-    if (!unwrap(vertices, indices, range, settings, item, diagnostic)) return false;
-    if (!item.done) { keep[range] = true; ++report.drawsDegenerate; continue; }
-    report.charts += item.charts;
-    ++report.drawsUnwrapped;
-    ranges.emplace(range, std::move(item));
+    ranges[range];
+    pending.push_back(range);
+  }
+  // Cada desenho é um atlas independente: os desenhos se desembrulham em
+  // paralelo (o Sponza tem ~400; um de cada vez levava quase 20 min no aparelho).
+  {
+    std::vector<Unwrapped> results(pending.size());
+    std::vector<std::string> errors(pending.size());
+    std::atomic<usize> next{0};
+    const u32 workers = std::max(1u, std::min<u32>(std::thread::hardware_concurrency() > 1 ? std::thread::hardware_concurrency() - 1 : 1, 8));
+    auto body = [&]() {
+      for (usize i = next.fetch_add(1); i < pending.size(); i = next.fetch_add(1))
+        if (!unwrap(vertices, indices, pending[i], settings, results[i], errors[i]) && errors[i].empty()) errors[i] = "falha no desembrulho";
+    };
+    std::vector<std::thread> threads;
+    for (u32 t = 1; t < workers; ++t) threads.emplace_back(body);
+    body();
+    for (auto &thread : threads) thread.join();
+    for (usize i = 0; i < pending.size(); ++i) {
+      if (!errors[i].empty()) { diagnostic = errors[i]; return false; }
+      if (!results[i].done) { keep[pending[i]] = true; ++report.drawsDegenerate; continue; }
+      report.charts += results[i].charts;
+      ++report.drawsUnwrapped;
+      ranges[pending[i]] = std::move(results[i]);
+    }
   }
   for (const auto &[range, value] : keep) ranges.erase(range);
   if (ranges.empty()) {

@@ -506,6 +506,27 @@ bool lightmapDebugTrace(const LightmapBakeScene &scene, const LightmapBakeRay &r
   return true;
 }
 
+struct LightmapTracer::Impl {
+  BakeWorld world;
+  explicit Impl(const LightmapBakeScene &scene) : world(scene) {
+    world.prepareInstances();
+    world.gatherTriangles();
+    world.build();
+  }
+};
+LightmapTracer::LightmapTracer(const LightmapBakeScene &scene) : impl_(std::make_unique<Impl>(scene)) {}
+LightmapTracer::~LightmapTracer() = default;
+LightmapTracer::Result LightmapTracer::trace(const float origin[3], const float direction[3], float maximum) const {
+  Result result;
+  Hit hit;
+  if (!impl_->world.trace(V3(origin), normalize(V3(direction)), maximum, false, hit)) return result;
+  result.hit = true;
+  result.back = hit.back;
+  result.distance = hit.t;
+  result.instance = impl_->world.triangles[hit.triangle].instance;
+  return result;
+}
+
 bool bakeLightmaps(const LightmapBakeScene &scene, const LightmapBakeSettings &settings, const LightmapBakeOptions &options,
                    LightmapBakeProgress &progress, LightmapData &out, std::string &error) {
   const auto start = std::chrono::steady_clock::now();
@@ -886,7 +907,7 @@ bool bakeLightmaps(const LightmapBakeScene &scene, const LightmapBakeSettings &s
     // Dentro de parede: mais da metade dos raios bateu no verso de uma face.
     if (pass == 0)
       for (u32 i = 0; i < texels.size(); ++i)
-        if (cast[i] && backHits[i] * 2 > cast[i]) texels[i].valid = false;
+        if (cast[i] && backHits[i] * 2 > cast[i]) { texels[i].valid = false; ++stats.invalidTexels; }
     indirect = passLocal;
     skyIrradiance = passSky;
     if (pass + 1 < passes) {

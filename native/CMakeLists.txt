@@ -554,6 +554,9 @@ target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc aether_
 # para que geometria importada no aparelho e geometria cozida no computador
 # percorram o MESMO caminho depois daqui.
 target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
+# G3c: desembrulho UV2 e baker de lightmap otimizados também no Debug do host:
+# em -O0 o Sponza leva dezenas de minutos e o teste do baker não cabe na rodada.
+set_source_files_properties(resources/lightmap_uv_generate.cpp renderer/lightmap_baker.cpp PROPERTIES COMPILE_OPTIONS "-O2")
 target_link_libraries(aether_assets PUBLIC aether_convex_bake)
 
 if(NOT ANDROID)
@@ -1323,6 +1326,11 @@ if(NOT ANDROID)
   target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)
     target_compile_options(v2_night_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(g3c_lightmap_host_bake EXCLUDE_FROM_ALL ../tools/g3c_lightmap_host_bake.cpp)
+  target_link_libraries(g3c_lightmap_host_bake PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(g3c_lightmap_host_bake PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(g3c_lightmap_scene_author EXCLUDE_FROM_ALL ../tools/g3c_lightmap_scene_author.cpp)
   target_link_libraries(g3c_lightmap_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
