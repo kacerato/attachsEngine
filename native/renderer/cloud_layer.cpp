@@ -155,10 +155,10 @@ float cloudShellDistance(float heightMeters, float viewSine) noexcept {
 float cloudSkyOcclusion(const CloudLayer &clouds) noexcept {
   if (!clouds.enabled || clouds.opacity <= 0.0f) return 0.0f;
   // Volumetric Clouds: o ruído 3D recorta a mancha, e a fração de céu coberta
-  // cresce bem mais devagar que a cobertura (0,5 cobre ~20%; 0,9 fecha o céu),
-  // medida no emulador do cloud_volume.frag.
+  // cresce bem mais devagar que a cobertura (0,5 cobre ~25%; 0,68 ~70%; 0,9
+  // fecha o céu), medida no emulador do cloud_volume.frag.
   if (clouds.type == 1) {
-    const float t = saturate((clouds.coverage - 0.38f) / 0.47f);
+    const float t = saturate((clouds.coverage - 0.35f) / 0.45f);
     return t * t * (3.0f - 2.0f * t) * clouds.opacity;
   }
   // Área média coberta pela regra de cobertura acima, aproximada pela própria

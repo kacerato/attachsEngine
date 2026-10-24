@@ -2091,9 +2091,14 @@ bool applySceneEnvironmentLook(
   std::copy_n(clouds.volume,4,frame.cloudVolume);
   const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
   if(occlusion>0.0f) {
+    // Céu nublado é cinza-azulado (~7000 K), não cinza neutro: com o cinza puro
+    // o albedo quente da cena dominava e tudo virava bege (Vila sépia na chuva
+    // e sob as nuvens do G4). Luminância de cada tom: 1.
+    constexpr float overcastTint[3]{0.9f,0.97f,1.12f};
     const auto grey=[&](float color[3]) {
       const float luminance=0.2126f*color[0]+0.7152f*color[1]+0.0722f*color[2];
-      for(u32 channel=0;channel<3;++channel) color[channel]+=(luminance*0.92f-color[channel])*occlusion*0.75f;
+      for(u32 channel=0;channel<3;++channel)
+        color[channel]+=(luminance*0.92f*overcastTint[channel]-color[channel])*occlusion*0.75f;
     };
     grey(frame.environment.ambientColorStrength);
     grey(frame.atmosphereGroundIrradiance);

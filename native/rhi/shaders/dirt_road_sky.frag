@@ -325,8 +325,8 @@ void main() {
       // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
       // cor de base e de topo interpoladas pela altura): topo com o céu, base
       // cinza-azulada (sombra do próprio cúmulo).
-      vec3 ambientTop=skyAmbient*1.1;
-      vec3 ambientBottom=skyAmbient*vec3(0.62,0.68,0.78);
+      vec3 ambientTop=skyAmbient*0.85;
+      vec3 ambientBottom=skyAmbient*vec3(0.48,0.52,0.6);
       vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
                  environment.cloudTint.rgb;
       color=color*(1.0-volume.a*fade)+cloud*fade;

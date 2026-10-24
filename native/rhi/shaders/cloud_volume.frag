@@ -70,37 +70,35 @@ float cloudVolumePatch(vec2 weatherUv,float lod) {
 // Densidade (0..1) num ponto a `p` km do observador, com altura relativa
 // `height` na camada. `noiseLod` é o mip dos ruídos 3D pela área do pixel (sem
 // mip, o ruído longe vira moiré). `cheap` pula a erosão (marcha de luz).
-// Modelo de Schneider (Horizon Zero Dawn), base das Volumetric Clouds do HDRP.
-// Perfil de altura e ambiente topo/base portados do UniStorm 5.3.1 (Black
-// Horizon Studios, licença company do dono do projeto), arquivo
-// Assets/UniStorm Weather System/Resources/Clouds/cloudsInclude.cginc,
-// funções cloudMapBase, cloudGradient e o ambiente de renderCloudsInternal;
-// adaptado ao ruído 3D e à casca esférica da Astra.
+// Modelo de Schneider (Horizon Zero Dawn), base das Volumetric Clouds do HDRP:
+// mapa de clima 2D de baixa frequência dá a cobertura, ruído 3D achatado
+// (escala horizontal bem maior que a vertical) dá cúmulos largos, perfil de
+// cúmulo com base plana e topo arredondado, e erosão de alta frequência só na
+// borda (recortes e fiapos), sem borrar o miolo.
 float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap) {
-  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0),lod);
+  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0)*0.5,lod);
   if(patchValue<=0.0) return 0.0;
-  // Cobertura local: o ruído 3D recorta cúmulos separados dentro da mancha.
-  float coverage=patchValue*(0.12+0.45*environment.cloudParameters.y);
-  // UniStorm cloudGradient: sobe de 0 a 5% da camada e cai de 80% a 120%.
-  float profile=clamp(height/0.05,0.0,1.0)-clamp((height-0.8)/0.4,0.0,1.0);
+  float coverage=patchValue*(0.2+0.45*environment.cloudParameters.y);
+  // Cúmulo do HZD: sobe de 0 a 8% da camada (base plana) e cai de 55% a 100%.
+  float profile=smoothstep(0.0,0.08,height)*smoothstep(1.0,0.55,height);
   if(profile<=0.0) return 0.0;
   vec3 world=vec3(p.x*1000.0-environment.cloudShape.z,p.y*1000.0,p.z*1000.0-environment.cloudShape.w);
-  vec3 q=world*environment.cloudShape.x*2.0;
+  vec3 q=world*environment.cloudShape.x*vec3(0.7,2.5,0.7);
   vec4 n=textureLod(cloudShapeNoise,q,noiseLod);
   float fbm=n.g*0.625+n.b*0.25+n.a*0.125;
   float shape=clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0);
-  // UniStorm cloudMapBase: corta h² + (1-h)^36 da forma — cúpula arredondada no
-  // alto, base plana embaixo — e reestica o que sobra.
-  float cut=(height*height+pow(1.0-height,36.0))*0.9;
+  // Topo arredondado: quanto mais alto, mais forte a forma precisa ser.
+  float cut=height*height*0.5;
   shape=clamp(remapValue(shape-cut,0.0,1.0-cut,0.0,1.0),0.0,1.0);
   float base=mix(1.0,shape,environment.cloudVolume.x)*profile;
   float cloud=clamp(remapValue(base,1.0-coverage,1.0,0.0,1.0),0.0,1.0)*coverage;
   if(cloud<=0.0 || cheap) return cloud;
-  // Erosão por Worley 6x mais fino: couve-flor no topo, fiapos na base.
-  vec3 e3=textureLod(cloudErosionNoise,q*6.0,noiseLod+3.585).rgb;
+  // Erosão por Worley 10x mais fino só na borda: o recorte cai a zero no miolo.
+  vec3 e3=textureLod(cloudErosionNoise,q*10.0,noiseLod+4.32).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
   erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
-  return clamp(remapValue(cloud,erosion*environment.cloudVolume.y*0.5,1.0,0.0,1.0),0.0,1.0);
+  float threshold=erosion*environment.cloudVolume.y*1.5*(1.0-clamp(cloud*3.0,0.0,1.0));
+  return clamp(remapValue(cloud,threshold,1.0,0.0,1.0),0.0,1.0);
 }
 
 void main() {
@@ -109,15 +107,12 @@ void main() {
   // (transmitância rumo ao sol x fase), g = altura (topo 1, base 0), b =
   // distância (km), a = cobertura. O céu converte em cor com as mesmas
   // radiâncias da camada 2D.
-  // Alvo em meia resolução; cada quadro marcha 1 pixel de cada bloco 2x2 (os
-  // outros três vêm do histórico): o custo de 1/16 dos pixels da tela com a
-  // nitidez de meia resolução, como o modo de desempenho do HDRP.
+  // Alvo de 1/4 da resolução em cada eixo (1/16 dos pixels), todos marchando:
+  // um padrão de pixels alternados dentro do mesmo quad faz a GPU pagar a
+  // marcha no quad inteiro. A nitidez vem do acúmulo temporal.
   float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
-  ivec2 cell=ivec2(gl_FragCoord.xy)&1;
-  int phaseIndex=int(mod(frameIndex,4.0));
-  bool march=environment.cloudVolume.z<0.5 || (cell.x+2*cell.y)==phaseIndex;
   vec4 result=vec4(0.0);
-  if(march && viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
+  if(viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
     float y=max(viewDirection.y,0.0);
     float baseKm=environment.cloudShape.y*0.001;
     float thicknessKm=max(environment.cloudShadow.y,200.0)*0.001;
@@ -138,7 +133,7 @@ void main() {
     float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
     float pixelAngle=2.0/(focal*float(textureSize(cloudHistory,0).y));
     float texelKm=1.0/(environment.cloudShape.x*1000.0*256.0);
-    float noiseTexelKm=1.0/(environment.cloudShape.x*1000.0*2.0*64.0);
+    float noiseTexelKm=1.0/(environment.cloudShape.x*1000.0*0.7*64.0);
     float transmittance=1.0;
     vec3 sums=vec3(0.0);
     for(int i=0;i<64;++i) {
@@ -161,7 +156,7 @@ void main() {
         optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.14;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
-      float od=optical*extinction;
+      float od=optical*extinction*2.0;
       float beer=exp(-od)+0.5*exp(-od*0.25)+0.25*exp(-od*0.0625);
       float powder=1.0-exp(-density*extinction*0.08-0.05);
       float sunLight=beer*(0.6+0.4*powder)*(0.5+0.5*phase);
@@ -192,8 +187,7 @@ void main() {
     vec2 previousUv=uv+(previousNdc-currentNdc)*0.5;
     if(previous.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       vec4 history=textureLod(cloudHistory,previousUv,0.0);
-      // Pixel marchado neste quadro pesa mais; os outros só reprojetam.
-      result=march?mix(result,history,0.6):history;
+      result=mix(result,history,0.85);
     }
   }
   outCloud=result;

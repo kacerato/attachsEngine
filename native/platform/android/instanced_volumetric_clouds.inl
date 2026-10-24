@@ -1,7 +1,6 @@
 // G4d: Volumetric Clouds (HDRP 17). O raymarch (rhi/shaders/cloud_volume.frag)
-// roda num alvo de meia resolução em cada eixo e marcha 1 pixel de cada bloco
-// 2x2 por quadro — 1/16 dos pixels da tela, como o modo de desempenho do HDRP —
-// antes do passe da cena. O próprio
+// roda num alvo de 1/4 da resolução em cada eixo — 1/16 dos pixels da tela,
+// como o modo de desempenho do HDRP — antes do passe da cena. O próprio
 // fragmento mistura a amostra nova com o histórico reprojetado; o resultado é
 // copiado para o histórico e o céu o lê (binding 19) já integrado.
 //
@@ -11,7 +10,7 @@
 
 bool InstancedRenderer::createVolumetricCloudResources() {
   if (cloudVolumeTarget_.isReady()) return true;
-  const u32 width = std::max(1u, renderWidth() / 2u), height = std::max(1u, renderHeight() / 2u);
+  const u32 width = std::max(1u, renderWidth() / 4u), height = std::max(1u, renderHeight() / 4u);
   rhi::ImageDesc target{};
   target.width = width; target.height = height;
   target.format = VK_FORMAT_R16G16B16A16_SFLOAT;
@@ -103,7 +102,7 @@ bool InstancedRenderer::createVolumetricCloudResources() {
   framebuffer.attachmentCount = 1; framebuffer.pAttachments = &view;
   framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
   if (vkCreateFramebuffer(device_, &framebuffer, nullptr, &cloudVolumeFramebuffer_) != VK_SUCCESS) return false;
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "[Clouds] volumétricas: alvo %ux%u (meia resolução, 2x2 por quadro), ruído %u³ + %u³ com mips.",
+  __android_log_print(ANDROID_LOG_INFO, LogTag, "[Clouds] volumétricas: alvo %ux%u (1/16 dos pixels), ruído %u³ + %u³ com mips.",
                       width, height, renderer::CloudShapeNoiseSize, renderer::CloudErosionNoiseSize);
   return true;
 }
