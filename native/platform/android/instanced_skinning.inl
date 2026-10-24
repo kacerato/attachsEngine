@@ -218,7 +218,7 @@ bool InstancedRenderer::recordSkinning() {
   auto *palettes=static_cast<float *>(skinPalettes_.mappedData());
   auto *weights=static_cast<float *>(morphWeights_.mappedData());
   if(!palettes || !weights) return false;
-  bool changed=false,uncovered=false;
+  bool uncovered=false;
   for(auto &slot:skinnedDraws_) {
     const PendingSkin *pending=pendingSkinsValid_ && slot.drawIndex<pendingSkins_.size()?&pendingSkins_[slot.drawIndex]:nullptr;
     if(pending) {slot.influences=pending->influences;slot.motion=pending->motion;}
@@ -251,8 +251,24 @@ bool InstancedRenderer::recordSkinning() {
       slot.previousWeights.assign(current,current+slot.morphTargets);
     }
     slot.hasPrevious=true;
+    // Limites de agora e do último quadro: só as cascatas onde o corpo estava
+    // ou está regravam (antes, qualquer osso sujava as 4 cascatas).
+    std::array<float,4> bounds{};
+    if(slot.drawIndex<dirtRoadResources_.draws().size()) {
+      const auto &draw=dirtRoadResources_.draws()[slot.drawIndex];
+      bounds={draw.boundsCenter[0],draw.boundsCenter[1],draw.boundsCenter[2],draw.boundsRadius};
+    }
+    if(moved&&shadowDirtyAll_) shadowCascadeDirtyMask_=0xffffffffu;
+    if(moved) {
+      for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
+        const auto &region=shadowCascades_[cascade];
+        if(renderer::isShadowCasterVisible(region,bounds.data(),bounds[3])||
+           (slot.hasShadowBounds&&renderer::isShadowCasterVisible(region,slot.shadowBounds.data(),slot.shadowBounds[3])))
+          shadowCascadeDirtyMask_|=1u<<cascade;
+      }
+    }
+    slot.shadowBounds=bounds;slot.hasShadowBounds=true;
     if(!moved) continue;
-    changed=true;
     // Deformação com vetor: entra no passe de movimento com a pose anterior.
     // Sem vetor da deformação (autor desligou) o histórico fica, como na Unity;
     // sem passe de movimento no aparelho, o histórico não pode reprojetar o corpo.
@@ -267,7 +283,6 @@ bool InstancedRenderer::recordSkinning() {
   }
   pendingSkinsValid_=false;
   if(!memoryAllocator_->flushBuffer(skinPalettes_) || !memoryAllocator_->flushBuffer(morphWeights_)) return false;
-  if(changed) shadowCascadeDirtyMask_=0xffffffffu;
   if(uncovered) temporalHistoryInitialized_=false;
   vkCmdBindPipeline(commandBuffer_,VK_PIPELINE_BIND_POINT_COMPUTE,skinningPipeline_);
   vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_COMPUTE,skinningLayout_,0,1,&skinningSet_,0,nullptr);

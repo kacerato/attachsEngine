@@ -461,6 +461,7 @@ public:
   void setPointLightingSpecializationEnabled(bool enabled) { pointLightingSpecializationEnabled_ = enabled; }
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
+  void setShadowDirtyAll(bool enabled) { shadowDirtyAll_ = enabled; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
   // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
   void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
@@ -814,6 +815,10 @@ private:
     u32 sourceDrawIndex = 0;
     bool motion = true, hasPrevious = false;
     std::vector<float> previous, previousWeights;
+    // Limites do desenho no último quadro com pose: a sombra suja só as
+    // cascatas onde o corpo estava ou está.
+    std::array<float, 4> shadowBounds{};
+    bool hasShadowBounds = false;
   };
   struct PendingSkin {
     std::shared_ptr<const std::vector<float>> palette, weights;
@@ -1377,6 +1382,16 @@ private:
   renderer::ShadowCascade shadowCascades_[renderer::MaximumShadowCascades]{};
   u32 shadowCascadeCount_ = 0;
   u32 shadowCascadeDirtyMask_ = 0xffffffffu;
+  // Limites (centro xyz, raio) de projetores que se moveram neste quadro, antes
+  // e depois: viram cascatas sujas quando as cascatas do quadro existem. Antes
+  // qualquer pose em Play sujava as 4 cascatas e regravava todos os estáticos.
+  std::vector<std::array<float, 4>> shadowMovedBounds_;
+  // Material e push constant da sombra por desenho, uma vez por quadro (não por cascata).
+  struct ShadowDrawPrep {u64 stamp = 0;bool skip = false;std::array<u8, 128> push{};};
+  std::vector<ShadowDrawPrep> shadowDrawPrep_;
+  u64 shadowPrepStamp_ = 0;
+  // Bancada (aether.shadow_dirty_all): movimento volta a sujar todas as cascatas.
+  bool shadowDirtyAll_ = false;
   bool shadowCacheInitialized_ = false;
   u32 shadowCandidateDraws_ = 0;
   u32 shadowSubmittedDraws_ = 0;

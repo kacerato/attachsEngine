@@ -2440,6 +2440,9 @@ void android_main(android_app *app) {
       app->activity, "aether.punctual_light_mask", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[PunctualLightMask] %s",
                       shell.instancedRenderer.punctualLightMaskEnabled() ? "por desenho" : "desligada");
+  // Bancada: true volta a sujar as 4 cascatas a cada movimento (antes de 24/10).
+  shell.instancedRenderer.setShadowDirtyAll(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.shadow_dirty_all"));
   shell.instancedRenderer.setShadowGatherEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.shadow_gather", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[ShadowGather] %s",

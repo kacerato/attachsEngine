@@ -3240,22 +3240,48 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
       vkCmdClearAttachments(commandBuffer_, 1, &depthClear, 1, &rect);
     }
   }
+  // Material efetivo e push constant de cada desenho: uma vez por quadro, e
+  // não uma vez por cascata (com 4 cascatas era 4× applyMaterialOverride).
+  ++shadowPrepStamp_;
+  if (shadowDrawPrep_.size() < dirtRoadResources_.draws().size()) shadowDrawPrep_.resize(dirtRoadResources_.draws().size());
   auto pushAndDraw = [&](u32 cascade, u32 drawIndex, bool masked) {
     // Só o modo de Projetar sombras decide aqui: "Só sombra" some da câmera
     // (authoredVisibility_) e continua no mapa.
     if (!authoredShadows_.empty() && !authoredShadows_[drawIndex]) return;
     const auto &draw=dirtRoadResources_.draws()[drawIndex];
-    // R4: a sombra recorta pelo material EFETIVO do desenho (textura, corte,
-    // conjunto de UV e transformação trocados na instância ou no material do projeto).
-    auto material=dirtRoadResources_.materials()[draw.materialIndex];
-    const bool authored=drawIndex<authoredMaterials_.size();
-    if(authored)
-      material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
-                                               static_cast<u32>(dirtRoadResources_.packageTextureCount()));
-    // The animated receiver must not enter the static-caster cache. Ocean
-    // self-shadowing is represented by its analytic normal; terrain and props
-    // can still cast onto the water through the same cascade atlas.
-    if ((material.flags & renderer::MapMaterialWater) != 0) return;
+    auto &prep=shadowDrawPrep_[drawIndex];
+    if(prep.stamp!=shadowPrepStamp_) {
+      prep.stamp=shadowPrepStamp_;
+      // R4: a sombra recorta pelo material EFETIVO do desenho (textura, corte,
+      // conjunto de UV e transformação trocados na instância ou no material do projeto).
+      auto material=dirtRoadResources_.materials()[draw.materialIndex];
+      const bool authored=drawIndex<authoredMaterials_.size();
+      if(authored)
+        material=renderer::applyMaterialOverride(material,authoredMaterials_[drawIndex],
+                                                 static_cast<u32>(dirtRoadResources_.packageTextureCount()));
+      // The animated receiver must not enter the static-caster cache. Ocean
+      // self-shadowing is represented by its analytic normal; terrain and props
+      // can still cast onto the water through the same cascade atlas.
+      prep.skip=(material.flags & renderer::MapMaterialWater) != 0;
+      ShadowPushConstants push{};
+      push.alphaCutoffUvSlot[0]=material.alphaCutoff;
+      push.alphaCutoffUvSlot[1]=static_cast<float>(material.textureCoordinates&3u);
+      if(authored) {
+        const auto &value=authoredMaterials_[drawIndex];
+        if(value.channels.alphaSource!=scene::MaterialAlphaSourceKeep)
+          push.alphaCutoffUvSlot[2]=static_cast<float>(value.channels.alphaSource-1u);
+        if(value.uvTransformMask&1u) {
+          const auto *rows=value.uvTransforms[0];
+          push.uvRow0[0]=rows[0];push.uvRow0[1]=rows[1];push.uvRow0[2]=rows[2];
+          push.uvRow1[0]=rows[3];push.uvRow1[1]=rows[4];push.uvRow1[2]=rows[5];
+        }
+      }
+      const u32 texture=material.textureIndices[0];
+      push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture && texture<dirtTextureSlots_.size()
+                                   ? dirtTextureSlots_[texture] : baseTextureIndex_;
+      std::memcpy(prep.push.data(),&push,sizeof(push));
+    }
+    if (prep.skip) return;
     ++shadowCandidateDraws_;
     if (!renderer::isShadowCasterVisible(shadowCascades_[cascade], draw.boundsCenter,
                                          draw.boundsRadius)) return;
@@ -3264,24 +3290,10 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
       vkCmdBindDescriptorSets(commandBuffer_,VK_PIPELINE_BIND_POINT_GRAPHICS,
                               shadowPipelineLayout_,0,1,&set,0,nullptr);
     }
-    ShadowPushConstants push{};
+    ShadowPushConstants push;
+    std::memcpy(&push,prep.push.data(),sizeof(push));
     std::memcpy(push.lightViewProjection,shadowCascades_[cascade].viewProjection,
                 sizeof(push.lightViewProjection));
-    push.alphaCutoffUvSlot[0]=material.alphaCutoff;
-    push.alphaCutoffUvSlot[1]=static_cast<float>(material.textureCoordinates&3u);
-    if(authored) {
-      const auto &value=authoredMaterials_[drawIndex];
-      if(value.channels.alphaSource!=scene::MaterialAlphaSourceKeep)
-        push.alphaCutoffUvSlot[2]=static_cast<float>(value.channels.alphaSource-1u);
-      if(value.uvTransformMask&1u) {
-        const auto *rows=value.uvTransforms[0];
-        push.uvRow0[0]=rows[0];push.uvRow0[1]=rows[1];push.uvRow0[2]=rows[2];
-        push.uvRow1[0]=rows[3];push.uvRow1[1]=rows[4];push.uvRow1[2]=rows[5];
-      }
-    }
-    const u32 texture=material.textureIndices[0];
-    push.baseTextureIndex[0]=useBindless_ && texture!=renderer::InvalidMapTexture && texture<dirtTextureSlots_.size()
-                                 ? dirtTextureSlots_[texture] : baseTextureIndex_;
     vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
                        0,sizeof(push),&push);
@@ -6310,11 +6322,21 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if (instances == nullptr) return rhi::SwapchainStatus::FatalError;
     for (u32 i = 0; i < pendingMapPoseCount_; ++i) {
       const auto &update = pendingMapPoses_[i];
+      std::array<float, 4> before{};
+      if (update.drawIndex < dirtRoadResources_.draws().size()) {
+        const auto &old = dirtRoadResources_.draws()[update.drawIndex];
+        before = {old.boundsCenter[0], old.boundsCenter[1], old.boundsCenter[2], old.boundsRadius};
+      }
       if (!dirtRoadResources_.updateDrawPose(update.drawIndex, update.draw))
         return rhi::SwapchainStatus::FatalError;
       auto prepared=update.instance;
       const bool moved=std::memcmp(instances[update.drawIndex].model,prepared.model,
                                    sizeof(prepared.model))!=0;
+      if (moved) {
+        const auto &now = dirtRoadResources_.draws()[update.drawIndex];
+        shadowMovedBounds_.push_back(before);
+        shadowMovedBounds_.push_back({now.boundsCenter[0], now.boundsCenter[1], now.boundsCenter[2], now.boundsRadius});
+      }
       std::copy(std::begin(instances[update.drawIndex].model),
                 std::end(instances[update.drawIndex].model),prepared.previousModel);
       if(moved) {
@@ -6339,7 +6361,6 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if (!memoryAllocator_->flushBuffer(instanceBuffer_)) return rhi::SwapchainStatus::FatalError;
     pendingMapPoseCount_ = 0;
     pendingMapTransformChanged_ = false;
-    shadowCascadeDirtyMask_ = 0xffffffffu;
   }
   if (mapPosesChanged || authoredAppearanceChanged) {
     // A moved/removed occluder can expose other objects, not only itself.
@@ -6816,6 +6837,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         }
       }
       shadowCascadeCount_ = desiredCascadeCount;
+      // Só as cascatas onde um projetor movido estava ou está precisam regravar.
+      if (shadowDirtyAll_ && !shadowMovedBounds_.empty()) shadowCascadeDirtyMask_ = 0xffffffffu;
+      for (const auto &bounds : shadowMovedBounds_)
+        for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade)
+          if (renderer::isShadowCasterVisible(shadowCascades_[cascade], bounds.data(), bounds[3]))
+            shadowCascadeDirtyMask_ |= 1u << cascade;
       for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
         std::memcpy(frame->shadowViewProjection[cascade], shadowCascades_[cascade].viewProjection,
                     sizeof(shadowCascades_[cascade].viewProjection));
@@ -6827,6 +6854,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     if (!memoryAllocator_->flushBuffer(environmentUniform_))
       return rhi::SwapchainStatus::FatalError;
   }
+  shadowMovedBounds_.clear();
 
   // A exposição automática não impede o reaproveitamento: ele exige o mesmo
   // tempo, e com dt zero o estado adaptado da câmera não muda.
