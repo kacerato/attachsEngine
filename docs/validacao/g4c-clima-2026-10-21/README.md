@@ -145,6 +145,30 @@ Lacunas desta rodada:
   sobre a neve clara não aparecem na captura (`27-faiscas-emitindo-0058.png`). Luzes e Folha de
   textura ainda não foram vistas.
 
+### Atmosfera por tipo, poças e respingos (24/10, `0.3.0-dev.261024999-clima-0215`)
+
+- Chuva: cada tipo traz cor e densidade da neblina, filtro de cor, saturação, contraste e exposição
+  (presets por Weather Type do Enviro 3). A chuva fica azul-acinzentada, dessaturada e escura, com
+  névoa que apaga o fundo. O céu nublado deixou de ser cinza neutro e passou a ser cinza-azulado:
+  era a causa comum do bege, também sob as nuvens do G4. As poças apareceram (máscara pela normal da
+  geometria) e refletem o céu. As gotas são finas e translúcidas, de tamanho e velocidade
+  sorteados, e respingam ao bater no "Chão da chuva"
+  (`28-play-chuva-pocas-0215.png`, `29-edicao-chuva-pocas-0215.png`,
+  `prancha-chuva-pixagon-1m38-x-poco-0215.png`).
+- Neve: flocos bem visíveis; telhados, chão, copas e muro cobertos com borda
+  (`30-play-neve-0215.png`, `prancha-neve-synty-3m51-x-poco-0215.png`).
+- PK-10 na Tempestade: Faíscas com trilhas visíveis, arcos laranja pontilhados
+  (`31-faiscas-trilhas-tempestade-0215.png`, `32-faiscas-trilhas-detalhe-0215.png`). Log do passe:
+  3 sistemas, 4 lotes (chuva, respingos, faíscas e trilhas), 0,078 ms de GPU.
+
+Lacunas:
+- A neve não ficou ensolarada como na Synty: o céu continua cinza escuro. A cobertura de nuvens mais
+  baixa não bastou; o céu base da Vila é nublado.
+- A tempestade da Pixagon é mais azulada e tem névoa mais clara.
+- Luzes das faíscas não se notam no chão.
+- Folha de textura e Material de projeto ainda não foram vistos no aparelho.
+- A linha em arco no chão é a face vertical da borda da praça, que não recebe neve.
+
 ## Custo de GPU (POCO F7, nível S nativo 2772×1280, Play, APK 410)
 
 `tools/measure-g0-baseline.ps1 -Order S -Seconds 40`, 4 rodadas intercaladas, bateria ≤ 37,9 °C no
