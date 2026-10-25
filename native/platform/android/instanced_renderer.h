@@ -593,7 +593,6 @@ public:
   void invalidateStaticShadowCache() {
     editorSceneCacheValid_=false;
     shadowCacheInitialized_ = false;
-    shadowStaticInitialized_ = false;
     shadowCascadeDirtyMask_ = 0xffffffffu;
   }
   // HZB (Hi-Z) conservative occlusion culling -- see native/renderer/
@@ -1393,22 +1392,31 @@ private:
   u64 shadowPrepStamp_ = 0;
   // Bancada (aether.shadow_dirty_all): movimento volta a sujar todas as cascatas.
   bool shadowDirtyAll_ = false;
-  // Cached Shadows (split estático/dinâmico, como o HDRP): projetores que nunca
-  // se moveram ficam num atlas estático, regravado só quando a cascata, a
-  // aparência ou a cena mudam (shadowCascadeDirtyMask_). Cascatas tocadas por
-  // dinâmicos (shadowDynamicDirtyMask_) copiam o estático para o atlas ativo e
-  // recebem por cima só os dinâmicos. Criado no primeiro projetor dinâmico.
-  rhi::VulkanImage shadowStaticAtlas_{};
-  VkRenderPass shadowStaticRenderPass_ = VK_NULL_HANDLE, shadowStaticCachedRenderPass_ = VK_NULL_HANDLE;
-  VkFramebuffer shadowStaticFramebuffer_ = VK_NULL_HANDLE, shadowStaticCachedFramebuffer_ = VK_NULL_HANDLE;
-  bool shadowStaticInitialized_ = false, shadowStaticFailed_ = false;
+  // Cached Shadows em dois mapas (como o HDRP e o split das engines mobile):
+  // o atlas das cascatas guarda só projetores que nunca se moveram e é
+  // regravado só por câmera, aparência, cena ou projetor que virou dinâmico
+  // (shadowCascadeDirtyMask_). Um atlas dinâmico pequeno (até 1024 por cascata)
+  // recebe só os dinâmicos das 2 cascatas perto, redesenhado quando um deles
+  // se move (shadowDynamicDirtyMask_); o shader usa o mínimo das duas leituras.
+  // Nas cascatas longe os dinâmicos não projetam (Shadow Casting Distance da
+  // URP), e elas ficam inteiras em cache. Sem cópia entre mapas.
+  static constexpr u32 DynamicShadowCascades = 2;
+  rhi::VulkanImage shadowDynamicAtlas_{};
+  VkRenderPass shadowDynamicRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer shadowDynamicFramebuffer_ = VK_NULL_HANDLE;
+  u32 shadowDynamicResolution_ = 0;
+  bool shadowDynamicValid_ = false;
   u32 shadowDynamicDirtyMask_ = 0;
   std::vector<u8> shadowDynamic_;      // 1: pele ou já se moveu no Play
   u32 shadowDynamicCount_ = 0;
   // Limites de projetores que viraram dinâmicos: saem do atlas estático.
   std::vector<std::array<float, 4>> shadowStaticStaleBounds_;
   u32 shadowDynamicDrawsWindow_ = 0;
-  bool ensureStaticShadowAtlas();
+  // Os dois mapas valem quando há dinâmicos e o atlas pequeno existe; o
+  // shader só lê o dinâmico então (cloudShadow.y do bloco de ambiente).
+  bool dualShadowActive() const noexcept {
+    return shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ && shadowDynamicAtlas_.isReady();
+  }
   void markShadowDynamic(u32 drawIndex, const std::array<float, 4> &oldBounds, bool knownBounds);
   // Telemetria do cache de sombra: cascatas sujas por motivo (0 câmera/ajuste,
   // 1 poses, 2 ossos, 3 aparência) e cascatas regravadas, por janela de 120 quadros.

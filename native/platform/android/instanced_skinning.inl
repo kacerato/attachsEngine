@@ -262,7 +262,7 @@ bool InstancedRenderer::recordSkinning() {
     // Pele é projetor dinâmico desde o primeiro quadro: sai do atlas estático.
     markShadowDynamic(slot.drawIndex,bounds,true);
     if(moved) {
-      for(u32 cascade=0;cascade<shadowCascadeCount_;++cascade) {
+      for(u32 cascade=0;cascade<std::min(shadowCascadeCount_,DynamicShadowCascades);++cascade) {
         const auto &region=shadowCascades_[cascade];
         if(renderer::isShadowCasterVisible(region,bounds.data(),bounds[3])||
            (slot.hasShadowBounds&&renderer::isShadowCasterVisible(region,slot.shadowBounds.data(),slot.shadowBounds[3]))) {
