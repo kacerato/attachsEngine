@@ -9516,6 +9516,18 @@ public readonly struct Animator : IComponentFacade<Animator>
         get => Component.GetBool("unscaled_time");
         set => Component.SetBool("unscaled_time", value);
     }
+    public enum CullingModeOption : uint
+    {
+        SempreAnimar = 0,
+        ForaDaVistaSoOTempo = 1,
+        ForaDaVistaParado = 2,
+    }
+    /// <summary>Culling. Com os renderers fora da câmera: seguir animando, só avançar estados e tempo sem escrever a pose, ou parar</summary>
+    public CullingModeOption CullingMode
+    {
+        get => (CullingModeOption)Component.GetEnum("culling_mode");
+        set => Component.SetEnum("culling_mode", (uint)value);
+    }
     /// <summary>Raiz animada. Objeto cuja hierarquia os clipes animam (o modelo importado)</summary>
     public ObjectReference Target
     {
