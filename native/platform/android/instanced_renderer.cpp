@@ -216,13 +216,13 @@ struct DirtRoadFrameUniform {
   float postDofDetail[4]{};            // amostras do bokeh, 1/aspecto, alta qualidade
   float postBloomDirt[4]{1,1,0,0};     // escala xy e deslocamento xy da sujeira
   float postBokeh[22][4]{};            // kernel de lâminas (até 43 pontos xy)
-  // Cached Shadows: retângulo do mapa dinâmico em cada cascata perto, no uv
-  // local da cascata (escala xy, deslocamento zw; escala zero = sem dinâmicos)
-  // e o texel do atlas dinâmico (x).
-  float shadowDynamicRect[2][4]{};
+  // Cached Shadows: retângulo do mapa dinâmico em cada cascata, no uv local
+  // da cascata (escala xy, deslocamento zw; escala zero = sem dinâmicos) e o
+  // texel do atlas dinâmico (x).
+  float shadowDynamicRect[4][4]{};
   float shadowDynamicParameters[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4800);
+static_assert(sizeof(DirtRoadFrameUniform) == 4832);
 static_assert(offsetof(DirtRoadFrameUniform, shadowDynamicRect) == 4752);
 static_assert(offsetof(DirtRoadFrameUniform, postLensAxis) == 4256);
 static_assert(offsetof(DirtRoadFrameUniform, postBloomDirt) == 4384);
@@ -1213,7 +1213,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={17,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // G4b: mapa do Cloud Layer, lido pelo céu (conjunto 0) e pela sombra do sol (conjunto 1).
   bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
-  // Cached Shadows: atlas dinâmico das cascatas perto, com o sampler de compare.
+  // Cached Shadows: atlas dinâmico das cascatas, com o sampler de compare.
   bindings[bindingCount++]={19,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
   bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
@@ -3087,7 +3087,7 @@ void InstancedRenderer::markShadowDynamic(u32 drawIndex, const std::array<float,
   else shadowCascadeDirtyMask_ = 0xffffffffu;
 }
 
-// Retângulo justo dos projetores dinâmicos em cada cascata perto, em espaço
+// Retângulo justo dos projetores dinâmicos em cada cascata, em espaço
 // de luz: a matriz do mapa dinâmico é este remapeamento sobre a da cascata
 // (mesma profundidade), e seus texels cobrem só a área dos moradores. A
 // sombra de um projetor cai na mesma posição xy de luz, então o retângulo
@@ -3344,13 +3344,13 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
   if (!dirtRoadPreview_ || shadowRenderPass_ == VK_NULL_HANDLE) return;
   const u32 activeMask = shadowCascadeCount_ == 0 ? 0u : (1u << shadowCascadeCount_) - 1u;
   const bool initializeAtlas = !shadowCacheInitialized_;
-  // Dois mapas: dinâmicos só no atlas pequeno das cascatas perto. Sem
+  // Dois mapas: dinâmicos só no atlas dinâmico, com retângulo justo. Sem
   // dinâmicos (ou na bancada shadow_dirty_all), o atlas único de antes.
   const bool dual = dualShadowActive() && shadowOpaquePipeline_ != VK_NULL_HANDLE;
   const u32 nearMask = activeMask & ((1u << DynamicShadowCascades) - 1u);
   const u32 dirtyMask = initializeAtlas ? activeMask
                       : ((shadowCascadeDirtyMask_ | (dual ? 0u : shadowDynamicDirtyMask_)) & activeMask);
-  const bool dynamicPass = dual && ((shadowDynamicDirtyMask_ & nearMask) != 0 || !shadowDynamicValid_ ||
+  const bool dynamicPass = dual && (shadowDynamicForce_ || (shadowDynamicDirtyMask_ & nearMask) != 0 || !shadowDynamicValid_ ||
                                     (dirtyMask & nearMask) != 0);
   if (!initializeAtlas && dirtyMask == 0 && !dynamicPass) {
     ++shadowCacheHitFrames_;
@@ -3502,13 +3502,18 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     vkCmdEndRenderPass(commandBuffer_);
   }
   if (dynamicPass) {
-    // Atlas dinâmico inteiro limpo e só os dinâmicos das cascatas perto. O
-    // texel é maior que o das cascatas: o desvio de profundidade cresce junto.
+    // Só os dinâmicos, cada cascata no retângulo justo deles.
+    u32 fittedMask = 0;
+    for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade)
+      if (shadowDynamicRect_[cascade][0] > 0.0f) fittedMask |= 1u << cascade;
     VkRenderPassBeginInfo dynamicBegin = begin;
     dynamicBegin.renderPass = shadowDynamicRenderPass_;
     dynamicBegin.framebuffer = shadowDynamicFramebuffer_;
-    // Só a faixa das cascatas 0 e 1 (linha de cima da grade) é limpa e gravada.
-    dynamicBegin.renderArea.extent = {shadowDynamicAtlas_.width(), std::min(shadowDynamicAtlas_.height(), shadowDynamicResolution_)};
+    // A linha de baixo da grade (cascatas 2 e 3) só é limpa e gravada quando
+    // há morador nelas; o shader só a lê com retângulo não nulo.
+    const u32 rows = (fittedMask & 0xcu) != 0 ? 2u : 1u;
+    dynamicBegin.renderArea.extent = {shadowDynamicAtlas_.width(),
+                                      std::min(shadowDynamicAtlas_.height(), shadowDynamicResolution_ * rows)};
     dynamicBegin.clearValueCount = 1;dynamicBegin.pClearValues = &clear;
     vkCmdBeginRenderPass(commandBuffer_, &dynamicBegin, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);
@@ -3517,9 +3522,6 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     boundGeometry = mesh;
     casterFilter = 2;
     // Mesma faixa de profundidade da cascata: o desvio é o da cascata.
-    u32 fittedMask = 0;
-    for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade)
-      if (shadowDynamicRect_[cascade][0] > 0.0f) fittedMask |= 1u << cascade;
     recordCascades(nearMask & fittedMask, shadowDynamicResolution_, 1.0f);
     vkCmdEndRenderPass(commandBuffer_);
     shadowDynamicValid_ = true;
@@ -7071,8 +7073,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
           if (renderer::isShadowCasterVisible(shadowCascades_[cascade], bounds.data(), bounds[3]))
             shadowCascadeDirtyMask_ |= 1u << cascade;
       fitDynamicShadowRects();
-      for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade)
-        std::memcpy(frame->shadowDynamicRect[cascade], shadowDynamicRect_[cascade], sizeof(shadowDynamicRect_[cascade]));
+      for (u32 cascade = 0; cascade < 4; ++cascade)
+        for (u32 i = 0; i < 4; ++i)
+          frame->shadowDynamicRect[cascade][i] = cascade < DynamicShadowCascades ? shadowDynamicRect_[cascade][i] : 0.0f;
       frame->shadowDynamicParameters[0] = shadowDynamicAtlas_.width() > 0
                                               ? 1.0f / static_cast<float>(shadowDynamicAtlas_.width()) : 1.0f;
       for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
@@ -7082,8 +7085,9 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         frame->shadowWorldUnitsPerTexel[cascade] = shadowCascades_[cascade].worldUnitsPerTexel;
       }
       frame->shadowParameters[1] = static_cast<float>(shadowCascadeCount_);
-      // Cached Shadows: o shader soma a leitura do atlas dinâmico nas cascatas perto.
+      // Cached Shadows: o shader soma a leitura do atlas dinâmico.
       frame->cloudShadow[1] = dualShadowActive() && shadowDynamicValid_ ? 1.0f : 0.0f;
+      shadowDynamicFlagWritten_ = frame->cloudShadow[1];
     }
     if (!memoryAllocator_->flushBuffer(environmentUniform_))
       return rhi::SwapchainStatus::FatalError;
@@ -7154,12 +7158,20 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   beginGpuRegion(GpuPassClass::Shadow);
   recordShadowPass(camera);
   if (++shadowWindowFrames_ >= 120) {
+    const auto dynamicRect = [&](u32 cascade, u32 i) {
+      return cascade < DynamicShadowCascades ? shadowDynamicRect_[cascade][i] : 0.0f;
+    };
     __android_log_print(ANDROID_LOG_INFO, LogTag,
         "[ShadowCache] cascatas regravadas=%u em %u quadros (%u cascatas); sujas por camera=%u poses=%u ossos=%u aparencia=%u; "
-        "dois_mapas=%s dinamicos=%u desenhos dinamicos=%u",
+        "dois_mapas=%s dinamicos=%u desenhos dinamicos=%u flag=%.0f valido=%d forca=%d "
+        "ret0=%.3f,%.3f,%.3f,%.3f ret1=%.3f,%.3f,%.3f,%.3f ret2=%.3f,%.3f ret3=%.3f,%.3f lado=%u",
         shadowRenderedWindow_, shadowWindowFrames_, shadowCascadeCount_, shadowDirtyReasons_[0], shadowDirtyReasons_[1],
         shadowDirtyReasons_[2], shadowDirtyReasons_[3], dualShadowActive() ? "on" : "off", shadowDynamicCount_,
-        shadowDynamicDrawsWindow_);
+        shadowDynamicDrawsWindow_, shadowDynamicFlagWritten_, shadowDynamicValid_ ? 1 : 0, shadowDynamicForce_ ? 1 : 0,
+        shadowDynamicRect_[0][0], shadowDynamicRect_[0][1], shadowDynamicRect_[0][2], shadowDynamicRect_[0][3],
+        shadowDynamicRect_[1][0], shadowDynamicRect_[1][1], shadowDynamicRect_[1][2], shadowDynamicRect_[1][3],
+        dynamicRect(2, 0), dynamicRect(2, 1), dynamicRect(3, 0), dynamicRect(3, 1),
+        shadowDynamicResolution_);
     shadowRenderedWindow_ = shadowWindowFrames_ = shadowDynamicDrawsWindow_ = 0;
     for (auto &count : shadowDirtyReasons_) count = 0;
   }

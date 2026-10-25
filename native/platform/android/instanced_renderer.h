@@ -480,6 +480,8 @@ public:
   // Lado de cada cascata no mapa dinâmico; 0 = automático (2048 com cascata de
   // 4096, senão até 1024). Vale na próxima criação dos recursos de sombra.
   void setShadowDynamicResolution(u32 side) { shadowDynamicRequested_ = side; }
+  // Bancada (debug.astra.shadow_dynamic_force): redesenha o mapa dinâmico a cada quadro.
+  void setShadowDynamicForce(bool enabled) { shadowDynamicForce_ = enabled; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
   // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
   void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
@@ -1419,12 +1421,13 @@ private:
   // Cached Shadows em dois mapas (como o HDRP e o split das engines mobile):
   // o atlas das cascatas guarda só projetores que nunca se moveram e é
   // regravado só por câmera, aparência, cena ou projetor que virou dinâmico
-  // (shadowCascadeDirtyMask_). Um atlas dinâmico pequeno (até 1024 por cascata)
-  // recebe só os dinâmicos das 2 cascatas perto, redesenhado quando um deles
-  // se move (shadowDynamicDirtyMask_); o shader usa o mínimo das duas leituras.
-  // Nas cascatas longe os dinâmicos não projetam (Shadow Casting Distance da
-  // URP), e elas ficam inteiras em cache. Sem cópia entre mapas.
-  static constexpr u32 DynamicShadowCascades = 2;
+  // (shadowCascadeDirtyMask_). Um atlas dinâmico recebe só os dinâmicos, em
+  // cada cascata no retângulo justo deles, redesenhado quando um deles se move
+  // (shadowDynamicDirtyMask_); o shader usa o mínimo das duas leituras. Sem
+  // cópia entre mapas. Todas as cascatas: com só as 2 perto, o morador a
+  // 15-30 m saía do atlas estático e não entrava no dinâmico (par congelado de
+  // 25/10, Vila S).
+  static constexpr u32 DynamicShadowCascades = 4;
   rhi::VulkanImage shadowDynamicAtlas_{};
   VkRenderPass shadowDynamicRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer shadowDynamicFramebuffer_ = VK_NULL_HANDLE;
@@ -1435,6 +1438,8 @@ private:
   float shadowDynamicViewProjection_[DynamicShadowCascades][16]{};
   void fitDynamicShadowRects();
   bool shadowDynamicValid_ = false;
+  bool shadowDynamicForce_ = false;
+  float shadowDynamicFlagWritten_ = 0.0f;
   u32 shadowDynamicDirtyMask_ = 0;
   std::vector<u8> shadowDynamic_;      // 1: pele ou já se moveu no Play
   u32 shadowDynamicCount_ = 0;

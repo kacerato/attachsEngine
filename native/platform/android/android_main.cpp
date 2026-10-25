@@ -2941,6 +2941,8 @@ void android_main(android_app *app) {
             shell.editorSession.setPlayPaused(value[0] == '1');
           if (__system_property_get("debug.astra.shadow_dirty_all", value) > 0)
             shell.instancedRenderer.setShadowDirtyAll(value[0] == '1');
+          if (__system_property_get("debug.astra.shadow_dynamic_force", value) > 0)
+            shell.instancedRenderer.setShadowDynamicForce(value[0] == '1');
         }
         shell.editorSession.update();
         updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
