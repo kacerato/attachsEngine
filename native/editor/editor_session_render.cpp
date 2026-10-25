@@ -108,6 +108,7 @@ bool EditorSession::loadAssets(std::string_view text) {
   loadAnimatorControllers();
   loadNavMeshes();
   loadProbeAssets();
+  loadLightmapAssets();
   loadAnimationClipAssets();
   refreshLibraryRows();
   return true;

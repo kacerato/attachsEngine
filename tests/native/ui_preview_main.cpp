@@ -1224,7 +1224,7 @@ int main(int argc, char **argv) {
     const auto byName=[](const runtime::SceneGraph &g,std::string_view name){std::vector<runtime::ObjectId> ids;g.collectSubtree(g.root(),ids);for(const auto id:ids)if(const auto *o=g.find(id);o&&name==o->name)return id;return runtime::ObjectId{};};
     const auto character=byName(graph,argv[6]);
     if(!character) {std::fprintf(stderr,"personagem '%s' ausente\n",argv[6]);return 1;}
-    if(argc>7) {
+    if(argc>7 && std::string(argv[7])!="-") {
       const auto *record=session->assets().findByPath(std::string("Clipes/")+argv[7]+".aeclip");
       if(!record) {std::fprintf(stderr,"clipe '%s' ausente no registro\n",argv[7]);return 1;}
       auto values=*graph.find(character);
@@ -1243,6 +1243,16 @@ int main(int argc, char **argv) {
         drop("aim",scene::AimIk::descriptor);drop("two_bone",scene::TwoBoneIk::descriptor);drop("look_at",scene::LookAtIk::descriptor);
         drop("foot",scene::FootGrounding::descriptor);drop("interaction",scene::InteractionSystem::descriptor);
         if(changed)graph.applyEntityValues(id,values);
+      }
+      // "scripts": o host não tem runtime C#; tira os comportamentos da cena
+      // inteira para exercitar o resto do início do Play (física, água, câmera).
+      if(strip.find("scripts")!=std::string::npos) {
+        std::vector<editor::EditorEntityId> all;graph.collectSubtree(graph.root(),all);
+        for(const auto id:all) {
+          auto values=*graph.find(id);bool changed=false;
+          while(values.components.remove(scene::ScriptBehavior::descriptor)) {changed=true;++removed;}
+          if(changed)graph.applyEntityValues(id,values);
+        }
       }
       std::fprintf(stderr,"componentes retirados: %u (%s)\n",removed,strip.c_str());
     }

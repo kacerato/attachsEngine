@@ -65,9 +65,19 @@ struct ProbeTetrahedron {
   std::array<u32, 4> vertex{};
   std::array<i32, 4> neighbor{-1, -1, -1, -1};
 };
+// G3c: visibilidade do céu de uma sonda assada junto com o lightmap, em SH L1
+// escalar (coeficientes de irradiância divididos por π, mesma base e ordem do
+// ShL2): V(n) = 1 para uma sonda em campo aberto. Com ela o SH guarda só a luz
+// local assada e o fragmento soma o céu DA HORA × V(n), como no lightmap.
+using ProbeSkyVisibility = std::array<float, 4>;
+float evaluateProbeSky(const ProbeSkyVisibility &sky, const float direction[3]) noexcept;
+
 struct LightProbeSet {
   std::vector<std::array<float, 3>> positions;
   std::vector<ShL2> sh;
+  // Vazio: SH absoluto (captura da GPU, escalado pela força do ambiente).
+  std::vector<ProbeSkyVisibility> skyVisibility;
+  bool skySeparated() const noexcept { return !skyVisibility.empty() && skyVisibility.size() == positions.size(); }
   std::vector<ProbeTetrahedron> tetrahedra;
   bool empty() const noexcept { return positions.empty(); }
   // Monta os tetraedros. Menos de 4 sondas, ou todas coplanares, não formam
@@ -88,6 +98,7 @@ struct ProbeInterpolation {
 // tetraedro de borda alcançado com pesos presos e renormalizados.
 ProbeInterpolation locateProbes(const LightProbeSet &set, const float point[3], i32 hint = -1) noexcept;
 ShL2 interpolateProbes(const LightProbeSet &set, const ProbeInterpolation &where) noexcept;
+ProbeSkyVisibility interpolateProbeSky(const LightProbeSet &set, const ProbeInterpolation &where) noexcept;
 
 // Limite de sondas por cena no aparelho: a tetraedralização roda no carregamento
 // e a caminhada por objeto é O(arestas atravessadas).
@@ -98,7 +109,9 @@ inline constexpr u32 MaximumLightProbes = 2048;
 // identificador do ponto e o SH L2 de irradiância. Mover o grupo depois deixa
 // o recurso desatualizado (o Inspector avisa) até assar de novo.
 struct LightProbeBakeData {
-  static constexpr u32 Version = 1;
+  // v2 (G3c): visibilidade do céu por ponto, presente quando o Gerar
+  // iluminação assou as sondas com as luzes do lightmap. v1 continua legível.
+  static constexpr u32 Version = 2;
   static constexpr usize MaximumBytes = 2u << 20;
   u64 guidHigh = 0, guidLow = 0;
   // Hash das posições de mundo e dos parâmetros do bake: compara com a cena.
@@ -107,6 +120,7 @@ struct LightProbeBakeData {
   std::vector<u64> pointIds;
   std::vector<std::array<float, 3>> positions;
   std::vector<ShL2> sh;
+  std::vector<ProbeSkyVisibility> skyVisibility; // vazio ou um por ponto
   bool valid() const noexcept;
   std::vector<u8> serialize() const;
   static bool deserialize(std::span<const u8> bytes, LightProbeBakeData &out, std::string *error = nullptr);

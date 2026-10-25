@@ -39,6 +39,7 @@ struct EditorSession::ProbeBakeJob {
     std::vector<u64> ids;
     std::vector<std::array<float, 3>> positions;
     std::vector<renderer::ShL2> sh;
+    std::vector<renderer::ProbeSkyVisibility> sky; // G3c: vazio na captura da GPU
     u64 sourceHash = 0;
   };
   std::vector<Group> groups;
@@ -346,6 +347,33 @@ bool EditorSession::commitReflectionBake(ProbeBakeJob &job, renderer::Reflection
   return true;
 }
 
+// G3c: as sondas assadas no Gerar iluminação (CPU, mesmas luzes do lightmap)
+// vão para o mesmo recurso de cada grupo que o bake por captura usaria.
+bool EditorSession::commitLightProbesFromLightmap(const std::vector<runtime::SceneLightProbeGroup> &groups,
+                                                  const renderer::LightmapData &data) {
+  ProbeBakeJob job;
+  job.kind = 1;
+  job.start = std::chrono::steady_clock::now() - std::chrono::milliseconds(static_cast<i64>(data.bakeSeconds * 1000));
+  usize at = 0;
+  for (const auto &source : groups) {
+    ProbeBakeJob::Group group;
+    group.entity = static_cast<EditorEntityId>(source.objectId);
+    group.instance = source.instance;
+    const auto *entity = document_.find(group.entity);
+    group.name = entity ? std::string(entity->name) : std::string("Sondas de luz");
+    group.ids = source.pointIds;
+    group.positions = source.positions;
+    group.sourceHash = source.positionsHash();
+    for (usize p = 0; p < source.positions.size(); ++p, ++at) {
+      if (at >= data.probeSh.size() || at >= data.probeSky.size()) return false;
+      group.sh.push_back(data.probeSh[at]);
+      group.sky.push_back(data.probeSky[at]);
+    }
+    job.groups.push_back(std::move(group));
+  }
+  return commitLightProbeBake(job);
+}
+
 bool EditorSession::commitLightProbeBake(ProbeBakeJob &job) {
   if (isPlaying() || playMirrorOpen_ || history_.isOpen() || files_.rootPath().empty()) {
     state_.status = "Bake concluído com o editor ocupado; asse de novo";
@@ -368,6 +396,7 @@ bool EditorSession::commitLightProbeBake(ProbeBakeJob &job) {
     data.pointIds = group.ids;
     data.positions = group.positions;
     data.sh = group.sh;
+    data.skyVisibility = group.sky;
     const auto bytes = data.serialize();
     if (!commitProbeFile(resources::AssetType::LightProbes, guid, path, bytes, renderer::LightProbeBakeData::MaximumBytes)) return false;
     const auto found = std::find_if(lightProbeBakes_.begin(), lightProbeBakes_.end(),

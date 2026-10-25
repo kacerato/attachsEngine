@@ -4,6 +4,8 @@
 #include "renderer/water_authoring_geometry.h"
 #include "renderer/primitive_geometry.h"
 #include "physics/collision_cooking.h"
+#include "renderer/mesh_report.h"
+#include "scene/mesh_renderer.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -76,9 +78,14 @@ bool EditorMapScene::preparePickGeometry(std::span<const renderer::MapDrawRecord
   const usize vertexCount=vertices.size()/renderer::MapVertexStride;
   auto prepared=std::make_shared<PickGeometry>();
   prepared->positions.resize(vertexCount*3);
+  prepared->normals.resize(vertexCount*3);prepared->uv0.resize(vertexCount*2);prepared->uv1.resize(vertexCount*2);
   for(usize v=0;v<vertexCount;++v) {
     std::memcpy(prepared->positions.data()+v*3,vertices.data()+v*renderer::MapVertexStride,3*sizeof(float));
     for(u32 k=0;k<3;++k) if(!std::isfinite(prepared->positions[v*3+k])) return false;
+    const auto view=renderer::readMapVertex(vertices,v);
+    std::copy(view.normal,view.normal+3,prepared->normals.data()+v*3);
+    std::copy(view.uv0,view.uv0+2,prepared->uv0.data()+v*2);
+    std::copy(view.uv1,view.uv1+2,prepared->uv1.data()+v*2);
   }
   prepared->indices.assign(indices.begin(),indices.end());
   usize triangleCount=0;
@@ -99,7 +106,7 @@ bool EditorMapScene::preparePickGeometry(std::span<const renderer::MapDrawRecord
     // Cache the bounded audit once per shared draw at resource publication.
     // Large or pathological layouts are explicitly unverified, never silently
     // called usable. UV chart padding still belongs to the external baker.
-    if(draw.indexCount/3>65536) slot.lightmapUvStatus=scene::LightmapUvStatus::AnalysisLimit;
+    if(draw.indexCount/3>(1u<<20)) slot.lightmapUvStatus=scene::LightmapUvStatus::AnalysisLimit;
     else {
       std::vector<scene::LightmapUvTriangle> uv(draw.indexCount/3);
       for(u32 i=0;i<draw.indexCount;++i) {
@@ -642,6 +649,13 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
       update.lighting.lightProbes=static_cast<u8>(render->lightProbes);
       update.lighting.reflectionProbes=static_cast<u8>(render->reflectionProbes);
       update.lighting.isStatic=entity->isStatic;
+      // G3c: lightmap assado do slot. A Unity guarda lightmapIndex no renderer;
+      // aqui a entrada vem do recurso, por (objeto, slot).
+      if(lightmapLookup_ && entity->isStatic && render->receivesLightmaps())
+        if(const auto *entry=lightmapLookup_->find(id,slot)) {
+          update.lighting.lightmapPage=static_cast<u16>(entry->page+1);
+          std::copy(entry->scaleOffset,entry->scaleOffset+4,update.lighting.lightmapScaleOffset);
+        }
       if(const auto *skinned=static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor));
          skinned && deformation(index)) {
         DeformedPose pose;
@@ -669,6 +683,87 @@ bool EditorMapScene::extract(const runtime::SceneGraph &document, std::vector<Ed
     }
   }
   out=std::move(prepared);
+  return true;
+}
+
+bool EditorMapScene::collectLightmapScene(const runtime::SceneGraph &document,u32 textureBase,renderer::LightmapBakeScene &out,
+                                          std::vector<u32> &textureSources,std::string &error) const {
+  out={};textureSources.clear();
+  if(!pickGeometry_) {error="Nenhuma malha publicada";return false;}
+  const auto &geometry=*pickGeometry_;
+  std::map<u32,u32> meshOf;     // desenho canônico -> malha do bake
+  std::map<u32,i32> textureOf;  // textura publicada -> textura do bake
+  std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
+  for(auto id:ids) {
+    const auto *entity=document.find(id);
+    if(!entity || !entity->isStatic || !meshAsset(*entity) || deformation(meshAsset(*entity)-1)) continue;
+    const auto *render=meshRenderer(*entity);
+    if(!render || !render->enabled || !render->contributeGlobalIllumination || !inheritedVisible(document,id)) continue;
+    float world[16];
+    if(!editorWorldMatrix(document,id,world)) continue;
+    for(u32 slot=0;slot<render->slotCount();++slot) {
+      const u32 meshSlot=render->slotMesh(slot);
+      if(!meshSlot || meshSlot-1>=source_.size() || meshSlot-1>=pickSlots_.size()) continue;
+      const u32 index=meshSlot-1;
+      if(deformation(index)) continue;
+      const auto &source=source_[index];
+      const u32 canonical=pickSlots_[index].canonical;
+      const auto &pick=pickSlots_[canonical];
+      if(!pick.indexCount) continue;
+      auto found=meshOf.find(canonical);
+      if(found==meshOf.end()) {
+        renderer::LightmapBakeMesh mesh;
+        std::map<u32,u32> local;
+        for(u32 i=0;i<pick.indexCount;++i) {
+          const u64 vertex=static_cast<u64>(static_cast<i64>(pick.vertexOffset)+geometry.indices[pick.firstIndex+i]);
+          auto [it,inserted]=local.emplace(static_cast<u32>(vertex),static_cast<u32>(local.size()));
+          if(inserted) {
+            for(u32 k=0;k<3;++k) {mesh.positions.push_back(geometry.positions[vertex*3+k]);mesh.normals.push_back(geometry.normals[vertex*3+k]);}
+            for(u32 k=0;k<2;++k) {mesh.uv0.push_back(geometry.uv0[vertex*2+k]);mesh.uv1.push_back(geometry.uv1[vertex*2+k]);}
+          }
+          mesh.indices.push_back(it->second);
+        }
+        mesh.uv1Valid=pick.lightmapUvStatus==scene::LightmapUvStatus::Valid;
+        found=meshOf.emplace(canonical,static_cast<u32>(out.meshes.size())).first;
+        out.meshes.push_back(std::move(mesh));
+      }
+      // Material efetivo do slot (instância, compartilhado, fonte), como o desenho.
+      const auto record=renderer::applyMaterialOverride(
+          source.materialIndex<materials_.size()?materials_[source.materialIndex]:renderer::MapMaterialRecord{},
+          slotMaterial(*render,slot),textureBase);
+      // Transparente (decalque, vidro, véu): recebe o lightmap como a superfície
+      // embaixo, mas não bloqueia nem rebate -- um plano de decalque colado na
+      // parede tapava o céu de cada texel atrás dele. Sem lightmap, o decalque
+      // ficava com o céu inteiro sobre uma parede escura: mancha branca.
+      const bool transparent=(record.flags&renderer::MapMaterialBlend)!=0;
+      renderer::LightmapBakeMaterial material;
+      std::copy(record.baseColorFactor,record.baseColorFactor+4,material.baseColor);
+      for(u32 k=0;k<3;++k) material.emission[k]=record.emissiveFactorAndStrength[k]*record.emissiveFactorAndStrength[3];
+      material.alphaTest=(record.flags&renderer::MapMaterialAlphaMask)!=0;
+      material.alphaCutoff=record.alphaCutoff;
+      material.doubleSided=(record.flags&renderer::MapMaterialDoubleSided)!=0;
+      const u32 texture=record.textureIndices[0];
+      // Só a cor base da UV0 entra; a da UV2/mundo fica no fator.
+      if(texture!=renderer::InvalidMapTexture && (record.textureCoordinates&3u)==0) {
+        auto [it,inserted]=textureOf.emplace(texture,static_cast<i32>(textureSources.size()));
+        if(inserted) textureSources.push_back(texture);
+        material.baseTexture=it->second;
+      }
+      renderer::LightmapBakeInstance instance;
+      instance.objectId=id;instance.slot=slot;instance.mesh=found->second;
+      instance.material=static_cast<u32>(out.materials.size());
+      out.materials.push_back(material);
+      float relative[16],pivot[3];
+      pivotOf(index,pivot);
+      std::copy(source.model,source.model+16,relative);
+      for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
+      multiply(world,relative,instance.model);
+      instance.contributes=!transparent;
+      instance.receives=render->receivesLightmaps();
+      instance.castsShadows=render->castShadows!=0;
+      out.instances.push_back(instance);
+    }
+  }
   return true;
 }
 } // namespace ae::editor

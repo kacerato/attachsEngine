@@ -4210,6 +4210,16 @@ bool EditorSession::publishAndAdopt(const ImportedLibrary &library, std::string 
   }
   publishedTextures_=std::move(publishedResidency);
   mapScene_.setTextureLibrary(std::move(bindings));
+  // G3c: o bake de lightmap lê a cor base destas texturas. O renderer põe as
+  // texturas publicadas depois das do próprio pacote (primitivas): a base é a
+  // diferença entre o índice publicado e o da biblioteca num material com textura.
+  bakeTextures_=textures;bakeTextureBase_=0;
+  for(usize i=0;i<library.draws.size() && primitives+i<published.draws.size();++i) {
+    const auto lib=library.draws[i].materialIndex,pub=published.draws[primitives+i].materialIndex;
+    if(lib>=library.materials.size() || pub>=published.materials.size()) continue;
+    const u32 a=library.materials[lib].textureIndices[0],b=published.materials[pub].textureIndices[0];
+    if(a!=renderer::InvalidMapTexture && b!=renderer::InvalidMapTexture && b>=a) {bakeTextureBase_=b-a;break;}
+  }
   std::vector<std::shared_ptr<const EditorMapScene::DrawDeformation>> deformations(primitives);
   deformations.insert(deformations.end(),library.deformations.begin(),library.deformations.end());
   mapScene_.setDeformation(std::move(deformations),library.animations);
@@ -6503,6 +6513,8 @@ void EditorSession::update() {
   state_.navigationView=&navigationView_;
   refreshProbeView();
   state_.probeView=&probeView_;
+  refreshLightmaps();
+  state_.lightmapView=&lightmapView_;
   state_.navigationRuntime=playInspecting()&&playScene_.active()?&playScene_.navigation():nullptr;
   state_.animatorControllerDiagnostic.clear();state_.animatorResolved=nullptr;
   if(state_.animatorOpen) {
@@ -6625,6 +6637,12 @@ void EditorSession::update() {
   if(state_.profileInspector.valid()) refreshProfileInspector();
   state_.backgroundTasks=shellTasks_;
   if(state_.codeBuildBusy) state_.backgroundTasks.push_back({EditorBackgroundTask::Kind::CodeBuild,"Compilando scripts","C# do projeto",-1,false});
+  // G3c: Gerar iluminação, com etapa e progresso (a barra do canto da Unity).
+  if(lightmapView_.baking) {
+    std::string detail=lightmapView_.stage;
+    if(lightmapView_.passes>1&&lightmapView_.pass) detail+=" · rebote "+std::to_string(lightmapView_.pass)+"/"+std::to_string(lightmapView_.passes);
+    state_.backgroundTasks.push_back({EditorBackgroundTask::Kind::Other,"Gerando iluminação",detail,lightmapView_.progress,false});
+  }
   if(state_.globalSearch) {
     state_.globalResults=editorGlobalSearch(document_,searchFiles_,state_.globalQuery,state_.globalProvider,
         [&](u32 i){return creationAvailable(state_,i) && !isPlaying();},state_.globalCounts);
@@ -8497,6 +8515,9 @@ void EditorSession::beginImportPreparation(std::string_view path,bool batch) {
   state_.importFbxReduceWeights=state_.importPreparedFbxReduceWeights=profile.fbxReduceWeights;
   state_.importFbxApproximateSteps=state_.importPreparedFbxApproximateSteps=profile.fbxApproximateSteps;
   state_.importFbxBakeRate=state_.importPreparedFbxBakeRate=profile.fbxBakeRate;
+  state_.importLightmapUvs=state_.importPreparedLightmapUvs=profile.generateLightmapUvs;
+  state_.importLightmapHardAngle=state_.importPreparedLightmapHardAngle=profile.lightmapHardAngle;
+  state_.importLightmapPackMargin=state_.importPreparedLightmapPackMargin=profile.lightmapPackMargin;
   state_.importRetryable=state_.importPublishedView=false;state_.importTakes.clear();state_.importTakeSource={};
   state_.importOptimizeOrder=state_.importPreparedOptimizeOrder=profile.optimizePolygonOrder;
   state_.importTextureStreaming=profile.textureStreaming;

@@ -697,9 +697,37 @@ void main() {
   // difuso vem do SH interpolado no tetraedro do objeto (E/π), no lugar do céu.
   // A mesma força do ambiente que escala o céu escala a sonda: uma sonda em
   // campo aberto devolve exatamente o ambiente do céu que ela substitui.
-  mediump vec3 diffuseIrradiance=(astraLightProbesActive()?
-      astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
-      environmentAmbientDiffuse(n))*occlusion;
+  mediump vec3 diffuseIrradiance;
+  if(astraLightProbesActive() && astraProbes.draws[vDrawIndex].sh[5].w>0.5) {
+    // G3c: sondas assadas com o lightmap -- SH da luz local (E/π) mais o céu
+    // DA HORA vezes a visibilidade L1 da sonda, a mesma regra do lightmap.
+    mediump vec4 sky=vec4(astraProbes.draws[vDrawIndex].sh[1].w,astraProbes.draws[vDrawIndex].sh[2].w,
+                          astraProbes.draws[vDrawIndex].sh[3].w,astraProbes.draws[vDrawIndex].sh[4].w);
+    mediump float skyVisibility=max(sky.x*0.2820947918+0.4886025119*dot(sky.yzw,vec3(n.y,n.z,n.x)),0.0);
+    diffuseIrradiance=(astraLightProbeIrradiance(n)*0.31830988618+environmentAmbientDiffuse(n)*skyVisibility)*occlusion;
+  } else {
+    diffuseIrradiance=(astraLightProbesActive()?
+        astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
+        environmentAmbientDiffuse(n))*occlusion;
+  }
+  // G3c: lightmap assado (Receive GI = Lightmaps). O RGB é a irradiância das
+  // luzes locais assadas (direta das Assadas, rebote das Assadas e Mistas,
+  // emissivos); o alfa é a visibilidade do céu, que escala o ambiente do céu
+  // DA HORA ATUAL -- o sol não está no lightmap e o meio-dia não congela.
+  // A visibilidade também oclui o reflexo do céu: debaixo do beiral e dentro
+  // da arcada o céu não chega (G3a item 1, "visibilidade do céu").
+  // Modo de visão Lightmap assado: sem lightmap, a luz indireta que o objeto
+  // recebe de fato (sondas de luz ou céu). Um cinza fixo saía mais claro que o
+  // próprio lightmap e estourava na exposição automática.
+  mediump vec3 astraLightmapShown=diffuseIrradiance;
+  if(astraLightmapActive()) {
+    highp vec4 baked=astraLightmapTexel(vUv1);
+    mediump float skyVisibility=clamp(baked.a,0.0,4.0);
+    diffuseIrradiance=(vec3(min(baked.rgb*0.31830988618,vec3(AETHER_MEDIUMP_MAX)))+
+        environmentAmbientDiffuse(n)*skyVisibility)*occlusion;
+    astraSkySpecularOcclusion=clamp(skyVisibility*2.0,0.0,1.0);
+    astraLightmapShown=vec3(min(baked.rgb*0.31830988618,vec3(AETHER_MEDIUMP_MAX)))+environmentAmbientDiffuse(n)*skyVisibility;
+  }
 #ifdef OCCLUSION_MAP
   // External lightmaps contain linear indirect irradiance E, not reflected color.
   // Replace ambient diffuse to avoid counting indirect lighting twice; retain
@@ -811,6 +839,14 @@ void main() {
       outColor=vec4(shown,1.0);
       return;
     }
+  }
+  // G3c: draw mode Baked Lightmap da Unity -- a luz que o lightmap devolve
+  // (luzes locais assadas e o céu da hora pela visibilidade) sobre albedo branco.
+  if((astraProbes.header.x&8u)!=0u) {
+    // Decalques e vidros não estão no lightmap: some, como no Scene view.
+    if((flags&1u)!=0u) discard;
+    aetherWriteSurface(astraLightmapShown,vec3(0.0),base.a,flags,blendOutput,shadingBits);
+    return;
   }
   aetherWriteSurface(color,aetherSpecularSum,base.a,flags,blendOutput,shadingBits);
 }

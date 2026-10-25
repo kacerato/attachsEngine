@@ -13,12 +13,17 @@
 struct AstraDrawProbe {
   // Irradiância E (cosseno já convoluído) em SH L2 RGB; sh[0].w=1 quando vale.
   vec4 sh[9];
-  // x: palavra das sondas de reflexo (encodeReflectionProbeBlend); yzw reservados.
+  // x: palavra das sondas de reflexo (encodeReflectionProbeBlend).
+  // G3c: y página do lightmap + 1 (0 sem lightmap); z bits float da faixa da
+  // página comprimida (0: meia precisão); w reservado.
   // highp: o arquivo que inclui declara mediump int, e a palavra usa 24 bits.
   highp uvec4 reflection;
+  // G3c: lightmapScaleOffset da Unity (uv = uv2 * xy + zw), em highp: num
+  // lightmap de 1024 px o fp16 erraria meio texel perto da borda direita.
+  highp vec4 lightmap;
 };
 layout(std430,set=1,binding=24) readonly buffer AstraProbeBlock {
-  // x: bit 0 sondas de reflexo, bit 1 sondas de luz; y: sondas do quadro.
+  // x: bit 0 sondas de reflexo, bit 1 sondas de luz, bit 2 lightmaps; y: sondas do quadro.
   highp uvec4 header;
   vec4 boxMin[8];     // xyz mínimo da caixa, w intensidade
   vec4 boxMax[8];     // xyz máximo, w>0.5 com box projection
@@ -27,7 +32,29 @@ layout(std430,set=1,binding=24) readonly buffer AstraProbeBlock {
   AstraDrawProbe draws[];
 } astraProbes;
 layout(set=1,binding=25) uniform mediump sampler2DArray reflectionProbeAtlas;
+// G3c: páginas de lightmap (RGB irradiância das luzes locais assadas, A
+// visibilidade do céu), uma camada por página.
+layout(set=1,binding=26) uniform highp sampler2DArray lightmapAtlas;
 layout(location=12) flat in highp uint vDrawIndex;
+
+// G3c: reflexo do céu ocluído pela visibilidade assada. Só a parte que vem do
+// céu (o resto da mistura é das sondas de reflexo, que já viram o interior).
+mediump float astraSkySpecularOcclusion=1.0;
+bool astraLightmapActive() {
+  return (astraProbes.header.x&4u)!=0u && astraProbes.draws[vDrawIndex].reflection.y!=0u;
+}
+// rgb: irradiância E das luzes locais assadas; a: visibilidade do céu.
+highp vec4 astraLightmapTexel(highp vec2 uv2) {
+  highp uvec4 word=astraProbes.draws[vDrawIndex].reflection;
+  highp vec4 scaleOffset=astraProbes.draws[vDrawIndex].lightmap;
+  highp vec4 t=texture(lightmapAtlas,vec3(uv2*scaleOffset.xy+scaleOffset.zw,float(word.y-1u)));
+  if(word.z!=0u) {
+    // Comprimido: rgb = sqrt(E/faixa), a = sqrt(V).
+    highp float range=uintBitsToFloat(word.z);
+    t=vec4(t.rgb*t.rgb*range,t.a*t.a);
+  }
+  return max(t,vec4(0.0));
+}
 
 bool astraLightProbesActive() {
   return (astraProbes.header.x&2u)!=0u && astraProbes.draws[vDrawIndex].sh[0].w>0.5;
@@ -74,13 +101,13 @@ mediump vec3 astraReflectionProbeSample(uint layer,highp vec3 position,highp vec
 // Reflexo especular do ambiente com as sondas do desenho. Sem sonda (ou com o
 // desenho em "Desligado"), é exatamente o environmentRadiance de antes.
 mediump vec3 astraSpecularRadiance(highp vec3 position,highp vec3 direction,mediump float lod,mediump float roughness) {
-  if((astraProbes.header.x&1u)==0u) return environmentRadiance(direction,lod);
+  if((astraProbes.header.x&1u)==0u) return environmentRadiance(direction,lod)*astraSkySpecularOcclusion;
   highp uint word=astraProbes.draws[vDrawIndex].reflection.x;
   mediump float w0=float((word>>8u)&255u)/255.0,w1=float((word>>16u)&255u)/255.0;
-  if(w0+w1<=0.0) return environmentRadiance(direction,lod);
+  if(w0+w1<=0.0) return environmentRadiance(direction,lod)*astraSkySpecularOcclusion;
   mediump vec3 c=astraReflectionProbeSample(word&15u,position,direction,roughness)*w0;
   if(w1>0.0) c+=astraReflectionProbeSample((word>>4u)&15u,position,direction,roughness)*w1;
   mediump float sky=1.0-w0-w1;
-  if(sky>0.004) c+=environmentRadiance(direction,lod)*sky;
+  if(sky>0.004) c+=environmentRadiance(direction,lod)*(sky*astraSkySpecularOcclusion);
   return c;
 }
