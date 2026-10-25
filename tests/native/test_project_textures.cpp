@@ -1421,7 +1421,7 @@ AE_TEST(lightmap_uv_audit_distinguishes_shared_edges_overlap_invalid_data_and_bu
   AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::InvalidCoordinates,"nonfinite input");
   quad[1]={0,0,1,1,-.1f,.5f};
   AE_EXPECT_TRUE(scene::auditLightmapUv(quad)==LightmapUvStatus::InvalidCoordinates,"outside atlas");
-  const std::vector<LightmapUvTriangle> large(65537,quad[0]);
+  const std::vector<LightmapUvTriangle> large((1u<<20)+1,quad[0]); // G3c: teto de 1 M triângulos (UV2 gerada no Sponza)
   AE_EXPECT_TRUE(scene::auditLightmapUv(large)==LightmapUvStatus::AnalysisLimit,"bounded import analysis explicit, not success");
 }
 

@@ -1,0 +1,17 @@
+10-25 06:11:41.539 12211 20897 I Aether.Android: [GpuMedia] gpu=18.71 ms quadro=21.47 ms desenhos=200 lightmap=0
+10-25 06:11:44.160 12211 20897 I Aether.Android: [GpuMedia] gpu=18.73 ms quadro=21.84 ms desenhos=200 lightmap=0
+10-25 06:11:46.735 12211 20897 I Aether.Android: [GpuMedia] gpu=18.69 ms quadro=21.46 ms desenhos=200 lightmap=0
+10-25 06:11:49.331 12211 20897 I Aether.Android: [GpuMedia] gpu=18.61 ms quadro=21.63 ms desenhos=200 lightmap=0
+10-25 06:11:51.919 12211 20897 I Aether.Android: [GpuMedia] gpu=18.58 ms quadro=21.57 ms desenhos=200 lightmap=0
+10-25 06:11:54.471 12211 20897 I Aether.Android: [GpuMedia] gpu=18.59 ms quadro=21.26 ms desenhos=200 lightmap=0
+10-25 06:11:57.073 12211 20897 I Aether.Android: [GpuMedia] gpu=18.61 ms quadro=21.68 ms desenhos=200 lightmap=0
+10-25 06:11:59.673 12211 20897 I Aether.Android: [GpuMedia] gpu=18.59 ms quadro=21.67 ms desenhos=200 lightmap=0
+10-25 06:12:02.232 12211 20897 I Aether.Android: [GpuMedia] gpu=18.61 ms quadro=21.33 ms desenhos=200 lightmap=0
+10-25 06:12:04.742 12211 20897 I Aether.Android: [GpuMedia] gpu=18.56 ms quadro=20.91 ms desenhos=200 lightmap=0
+10-25 06:12:07.263 12211 20897 I Aether.Android: [GpuMedia] gpu=18.63 ms quadro=21.01 ms desenhos=200 lightmap=0
+10-25 06:12:09.770 12211 20897 I Aether.Android: [GpuMedia] gpu=18.54 ms quadro=20.89 ms desenhos=200 lightmap=0
+10-25 06:12:12.288 12211 20897 I Aether.Android: [GpuMedia] gpu=18.62 ms quadro=20.99 ms desenhos=200 lightmap=0
+10-25 06:12:14.790 12211 20897 I Aether.Android: [GpuMedia] gpu=18.56 ms quadro=20.85 ms desenhos=200 lightmap=0
+10-25 06:12:17.306 12211 20897 I Aether.Android: [GpuMedia] gpu=18.60 ms quadro=20.97 ms desenhos=200 lightmap=0
+10-25 06:12:19.826 12211 20897 I Aether.Android: [GpuMedia] gpu=18.63 ms quadro=21.00 ms desenhos=200 lightmap=0
+10-25 06:12:22.338 12211 20897 I Aether.Android: [GpuMedia] gpu=18.51 ms quadro=20.93 ms desenhos=200 lightmap=0

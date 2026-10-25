@@ -9,6 +9,8 @@
 #include "runtime/scene_animation.h"
 #include "scene/skinned_mesh.h"
 #include "scene/lightmap_uv.h"
+#include "renderer/lightmap_baker.h"
+#include "renderer/lightmap_data.h"
 
 namespace ae::editor {
 // Immutable package geometry plus authored transforms. No Vulkan or Android.
@@ -311,6 +313,16 @@ public:
     return result;
   }
   void hydrateMaterials(EditorDocument &document) const;
+  // G3c: lightmap assado em vigor; o extract escreve página e escala/desl.
+  // dos slots Static com Receive GI = Lightmaps que têm entrada no recurso.
+  void setLightmapLookup(std::shared_ptr<const renderer::LightmapLookup> lookup) {lightmapLookup_=std::move(lookup);}
+  const renderer::LightmapLookup *lightmapLookup() const noexcept {return lightmapLookup_.get();}
+  // G3c: a cena do Generate Lighting. Instâncias de todo slot de Mesh Renderer
+  // Static com Contribute GI; `textureOf` diz qual textura publicada (índice do
+  // renderer) vira a cor base de cada material; -1 sem textura.
+  // `textureSources` recebe o índice publicado de cada textura da cena.
+  bool collectLightmapScene(const runtime::SceneGraph &document, u32 textureBase, renderer::LightmapBakeScene &out,
+                            std::vector<u32> &textureSources, std::string &error) const;
   renderer::MaterialOverride materialForAsset(u32 index) const;
   u32 materialFlagsForAsset(u32 index) const {
     return index<source_.size() && source_[index].materialIndex<materials_.size()
@@ -340,7 +352,9 @@ private:
   // no primeiro uso — toque, prévia de colisor — e compartilhada entre desenhos
   // com a mesma geometria. Construir as 3,7 M faces do Sponza na adoção prendia
   // a thread do editor por ~20 s a cada superfície nova (ANR no aparelho).
-  struct PickGeometry {std::vector<float> positions;std::vector<u32> indices;};
+  // G3c: normais, UV0 e UV2 (UV1 do vértice) ficam junto das posições para o
+  // bake de lightmap montar a cena na CPU sem voltar ao pacote.
+  struct PickGeometry {std::vector<float> positions,normals,uv0,uv1;std::vector<u32> indices;};
   struct PickSlot {u32 firstIndex=0,indexCount=0;i32 vertexOffset=0;u32 canonical=0;scene::LightmapUvStatus lightmapUvStatus=scene::LightmapUvStatus::MissingGeometry;};
   std::shared_ptr<const PickGeometry> pickGeometry_;
   std::vector<PickSlot> pickSlots_;
@@ -351,6 +365,7 @@ private:
                                   std::vector<PickSlot> &slots);
   std::vector<renderer::MapMaterialRecord> materials_;
   std::vector<renderer::MapDrawRecord> source_;
+  std::shared_ptr<const renderer::LightmapLookup> lightmapLookup_;
   struct CollisionHullCacheEntry {
     std::vector<u32> slots;
     float tolerance=0;

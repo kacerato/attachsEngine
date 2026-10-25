@@ -125,6 +125,10 @@ struct GltfImportLimits {
   // static recipe still refuses deformers instead of silently discarding them.
   bool fbxDeformation=false,fbxReduceWeights=false,fbxApproximateSteps=false;
   u8 fbxBakeRate=30;
+  // G3c: Generate Lightmap UVs (resources/lightmap_uv_generate.h). Desligado
+  // reproduz a saída anterior byte a byte.
+  bool generateLightmapUvs = false;
+  u8 lightmapHardAngle = 88, lightmapPackMargin = 4;
   ImageDecodeLimits image{};
 };
 
@@ -296,6 +300,8 @@ struct GltfImport {
   u32 lodDraws = 0, lodLevels = 0, lodSkippedSmall = 0, lodSkippedDeformed = 0;
   u64 lodSourceTriangles = 0, lodTriangles = 0;
   bool lodBudgetReached = false;
+  // G3c: o que o Generate Lightmap UVs fez (desenhos, ilhas, vértices).
+  u32 lightmapUvDraws = 0, lightmapUvCharts = 0, lightmapUvSkipped = 0;
   float acmrBefore = 0, acmrAfter = 0;
   // Nós cuja transformação de mundo tem reflexão (escala negativa). A pose local
   // sai com escala positiva e a geometria desses nós sai espelhada — o resultado

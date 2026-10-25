@@ -2515,6 +2515,24 @@
       "name": "sparks",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "lighting/lightmap-baked": {
+      "category": "lighting",
+      "name": "lightmap-baked",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/generate-lighting": {
+      "category": "lighting",
+      "name": "generate-lighting",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/lightmap-uv": {
+      "category": "lighting",
+      "name": "lightmap-uv",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

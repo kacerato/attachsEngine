@@ -97,6 +97,11 @@ public:
   u32 lightProbes=1;
   u32 reflectionProbes=1;
   u32 renderingLayerMask=kDefaultRenderingLayers;
+  // v12 (G3c): Receive Global Illumination da Unity 6 -- 0 Lightmaps, 1 Light
+  // Probes. Só vale com Contribute Global Illumination ligado e o objeto Static;
+  // sem contribuir, o renderer recebe das sondas, como na Unity.
+  u32 receiveGlobalIllumination=0;
+  bool receivesLightmaps() const noexcept {return contributeGlobalIllumination && receiveGlobalIllumination==0;}
   // Transitório, nunca gravado: o arquivo era anterior à v11 e a sombra ainda
   // mora nos interruptores do objeto. Quem lê o objeto inteiro adota.
   bool legacyObjectShadows=false;
@@ -250,6 +255,8 @@ public:
     for(u32 slot=0;slot<slotCount();++slot) out<<' '<<static_cast<unsigned>(slotChannels(slot).roughnessSource);
     // v11 (PK-8): iluminação e sondas do renderer.
     out<<' '<<castShadows<<' '<<receiveShadows<<' '<<lightProbes<<' '<<reflectionProbes<<' '<<renderingLayerMask;
+    // v12 (G3c): Contribute GI e Receive GI.
+    out<<' '<<contributeGlobalIllumination<<' '<<receiveGlobalIllumination;
     out<<' ';
   }
   bool read(std::istream &in,u32 version) override {
@@ -260,7 +267,7 @@ public:
       return text=="-" || resources::AssetGuid::parse(text,out);
     };
     bool overridden=false;
-    if(version<1 || version>11 || !(in>>mesh>>enabled>>overridden)) return false;
+    if(version<1 || version>12 || !(in>>mesh>>enabled>>overridden)) return false;
     for(const auto &p:descriptor.numbers) if(!(in>>*p.write(*this))) return false;
     material.enabled=overridden;
     asset={};materialAsset={};textures={};surface={};sampling={};channels={};occlusionTexture={};lightmap={};submeshes.clear();
@@ -336,6 +343,10 @@ public:
     legacyObjectShadows=version<11;
     if(version>=11 && (!(in>>castShadows>>receiveShadows>>lightProbes>>reflectionProbes>>renderingLayerMask) ||
        castShadows>3 || lightProbes>1 || reflectionProbes>3 || (renderingLayerMask&~kAllRenderingLayers)!=0)) return false;
+    // Até a v11 não havia GI assada: todo renderer contribuía (só o Static
+    // decide) e recebia lightmap, o padrão da Unity para um objeto Static.
+    contributeGlobalIllumination=true;receiveGlobalIllumination=0;
+    if(version>=12 && (!(in>>contributeGlobalIllumination>>receiveGlobalIllumination) || receiveGlobalIllumination>1)) return false;
     return true;
   }
 };
@@ -364,12 +375,20 @@ inline constexpr std::array<ComponentEnumOption,2> meshLightProbeOptions{{{0,"De
 inline constexpr std::array<ComponentEnumOption,4> meshReflectionProbeOptions{{
   {0,"Desligado"},{1,"Misturar sondas"},{2,"Misturar sondas e céu"},{3,"Simples"}
 }};
-inline constexpr std::array<ComponentEnum,4> meshRendererEnums{{
+inline constexpr std::array<ComponentEnumOption,2> meshReceiveGiOptions{{{0,"Lightmaps"},{1,"Sondas de luz"}}};
+inline bool meshContributesGi(const ComponentValue &v){return static_cast<const MeshRenderer&>(v).contributeGlobalIllumination;}
+inline constexpr std::array<ComponentEnum,5> meshRendererEnums{{
   {"cast_shadows","Projetar sombras",meshCastShadowsOptions,
     [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).castShadows;},
     [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).castShadows=value;},
     {"Iluminação","","Ligado respeita a face do material; Dupla face projeta pelas duas; Só sombra some da câmera",nullptr,nullptr,
      "render.shadow.renderer","platform/android/instanced_renderer.cpp → passes de sombra",Invalidate::ShadowMap},true},
+  // G3c: Receive Global Illumination (Lightmaps / Light Probes) da Unity 6.
+  {"receive_gi","Receber iluminação global",meshReceiveGiOptions,
+    [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).receiveGlobalIllumination;},
+    [](ComponentValue &v,u32 value){static_cast<MeshRenderer&>(v).receiveGlobalIllumination=value;},
+    {"Iluminação","","Lightmaps recebe a luz assada na UV2; Sondas de luz usa as sondas em volta, como um objeto que se move",
+     meshContributesGi,nullptr,"render.gi.baked","renderer/lightmap_data.h → platform/android/instanced_probes.inl",Invalidate::Draw|Invalidate::Probes}},
   // PK-6: Probes do Mesh Renderer da Unity 6, agora com consumidor.
   {"light_probes","Sondas de luz",meshLightProbeOptions,
     [](const ComponentValue &v){return static_cast<const MeshRenderer&>(v).lightProbes;},
@@ -671,7 +690,7 @@ inline const std::array<ComponentSlotNumber,43> meshRendererAllSlotNumbers=[]{
   return all;
 }();
 inline const ComponentType MeshRenderer::descriptor{
-  "astra.render.mesh",11,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
+  "astra.render.mesh",12,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<MeshRenderer>();},
   meshRendererNumbers,meshRendererBooleans,meshRendererEnums,nullptr,false,{},{},meshRendererResources,
   meshRendererAllSlotNumbers,meshRendererSlotEnums
 };

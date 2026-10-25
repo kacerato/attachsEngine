@@ -29,10 +29,11 @@ namespace ae::scene {
 //    política: os padrões (0,05 e 0,4) reproduzem exatamente o que o aparelho
 //    já usava. Cenas até a v3 abrem com a direcional em sombra suave — o que
 //    elas tinham, sem controle.
-//  - Modo (Realtime/Mixed/Baked) é declarado e GRAVADO (`lightmapMode`), mas
-//    não é propriedade do Inspector nem da API: sem bake (PK-6) só Tempo real
-//    tem consumidor, e o registro recusa propriedade de capacidade planejada
-//    (`render.light.baked`). Vira propriedade junto com o bake.
+//  - Modo (Realtime/Mixed/Baked, `lightmapMode`) tem efeito desde o G3c: em
+//    Assado a luz direta e o rebote vão para o lightmap e a luz sai do tempo
+//    real nos desenhos que recebem lightmap (os que se movem continuam com
+//    ela); em Misto só o rebote é assado e a direta continua em tempo real; em
+//    Tempo real nada é assado. O sol da Hora do dia é sempre tempo real.
 //  - Cookie e luz de Área não existem no shader; não há campo para eles.
 class Light final : public ComponentValue {
 public:
@@ -166,7 +167,7 @@ inline constexpr std::array<ComponentEnumOption, 3> lightShadowModeOptions{{
 inline constexpr std::array<ComponentEnumOption, 5> lightShadowResolutionOptions{{
   {0, "Automática"}, {1, "Baixa"}, {2, "Média"}, {3, "Alta"}, {4, "Muito alta"}
 }};
-inline constexpr std::array<ComponentEnum, 6> lightEnums{{
+inline constexpr std::array<ComponentEnum, 7> lightEnums{{
   {"kind", "Tipo", lightKindOptions,
     [](const ComponentValue &v) { return static_cast<u32>(static_cast<const Light &>(v).kind); },
     [](ComponentValue &v, u32 value) { static_cast<Light &>(v).kind = static_cast<LightKind>(value); },
@@ -176,6 +177,12 @@ inline constexpr std::array<ComponentEnum, 6> lightEnums{{
     [](ComponentValue &v, u32 value) { static_cast<Light &>(v).unit = static_cast<LightUnit>(value); },
     {"Emissão","","Relativa é a intensidade da URP; lux, candela e lúmen são as unidades físicas da HDRP",nullptr,nullptr,
      "render.light.photometric","scene/light_units.h → irradiância linear",Invalidate::LightCluster}},
+  // G3c: Mode do Light Inspector (Realtime/Mixed/Baked).
+  {"mode", "Modo", lightModeOptions,
+    [](const ComponentValue &v) { return static_cast<const Light &>(v).lightmapMode; },
+    [](ComponentValue &v, u32 value) { static_cast<Light &>(v).lightmapMode = value; },
+    {"Geral","","Tempo real ilumina a cada quadro; Misto assa só o rebote; Assado grava luz e rebote no lightmap",nullptr,nullptr,
+     "render.light.baked","renderer/lightmap_baker.cpp + renderer/punctual_lights.h",Invalidate::LightCluster|Invalidate::Probes},true},
   {"shadow_mode", "Tipo de sombra", lightShadowModeOptions,
     [](const ComponentValue &v) { return static_cast<const Light &>(v).shadowMode; },
     [](ComponentValue &v, u32 value) { static_cast<Light &>(v).shadowMode = value; },

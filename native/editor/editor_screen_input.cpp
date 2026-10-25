@@ -427,6 +427,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget==widgetId(EditorWidget::SceneSkyToggle)) {state.sceneSky=!state.sceneSky;return outcome;}
   if(widget==widgetId(EditorWidget::SceneFogToggle)) {state.sceneFog=!state.sceneFog;return outcome;}
   if(widget==widgetId(EditorWidget::ScenePostToggle)) {state.scenePost=!state.scenePost;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneBakedLightmapView)) {state.sceneBakedLightmap=!state.sceneBakedLightmap;return outcome;}
   if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
     const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
     if(componentVisualSelectable(document,id,state.hiddenLayers,state.unpickableLayers,
@@ -859,7 +860,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabLighting: {
       // Janela Iluminação: abre no Ambiente da cena (ou na raiz, que mostra o
       // padrão e o botão de personalizar), na aba do céu.
-      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;
+      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;state.lightingTab=0;
       u64 instance=0;const auto target=sceneLightingEnvironment(document,&instance);
       state.selection=target!=kInvalidEntity?target:document.root();
       state.expandedNative=instance;state.componentSelection=state.selection;

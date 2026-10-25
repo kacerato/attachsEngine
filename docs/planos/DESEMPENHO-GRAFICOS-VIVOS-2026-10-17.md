@@ -509,6 +509,10 @@ dentro do orçamento do §7 em C e POCO; capturas de cada perfil no aparelho.
    objetos móveis. Referência: [Light Probes Unity](https://docs.unity3d.com/6000.0/Documentation/Manual/LightProbes.html).
 
 **G3c — lightmap (a capacidade do primeiro vídeo)**
+
+> Estado (23/10/2026): implementado na branch `claude/agitated-hodgkin-0a80d5` — UV2 por xatlas na importação, baker
+> progressivo em CPU, Gerar iluminação/Limpar na janela Iluminação, Modo da luz e GI do Mesh Renderer com efeito, lightmap
+> reescalado pelo céu da hora. Relatório e medições: `docs/validacao/g3c-lightmap-2026-10-23/`.
 6. **Desembrulho automático de UV2** (biblioteca [xatlas](https://github.com/jpcy/xatlas), MIT).
 7. **Baker progressivo** por caminho de luz em CPU com jobs (o aparelho C não tem
    ray query): luz direta + 1–3 rebotes, céu, emissivos, denoise simples, dilatação,

@@ -3579,6 +3579,12 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
         get => Component.GetBool("receive_shadows");
         set => Component.SetBool("receive_shadows", value);
     }
+    /// <summary>Contribuir para iluminação global. Com o objeto Static, entra no Gerar iluminação: bloqueia, rebate e pode receber lightmap</summary>
+    public bool ContributeGi
+    {
+        get => Component.GetBool("contribute_gi");
+        set => Component.SetBool("contribute_gi", value);
+    }
     public enum CastShadowsOption : uint
     {
         Desligado = 0,
@@ -3591,6 +3597,17 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
     {
         get => (CastShadowsOption)Component.GetEnum("cast_shadows");
         set => Component.SetEnum("cast_shadows", (uint)value);
+    }
+    public enum ReceiveGiOption : uint
+    {
+        Lightmaps = 0,
+        SondasDeLuz = 1,
+    }
+    /// <summary>Receber iluminação global. Lightmaps recebe a luz assada na UV2; Sondas de luz usa as sondas em volta, como um objeto que se move</summary>
+    public ReceiveGiOption ReceiveGi
+    {
+        get => (ReceiveGiOption)Component.GetEnum("receive_gi");
+        set => Component.SetEnum("receive_gi", (uint)value);
     }
     public enum LightProbesOption : uint
     {
@@ -5599,6 +5616,18 @@ public readonly struct Light : IComponentFacade<Light>
         get => (UnitOption)Component.GetEnum("unit");
         set => Component.SetEnum("unit", (uint)value);
     }
+    public enum ModeOption : uint
+    {
+        TempoReal = 0,
+        Misto = 1,
+        Assado = 2,
+    }
+    /// <summary>Modo. Tempo real ilumina a cada quadro; Misto assa só o rebote; Assado grava luz e rebote no lightmap</summary>
+    public ModeOption Mode
+    {
+        get => (ModeOption)Component.GetEnum("mode");
+        set => Component.SetEnum("mode", (uint)value);
+    }
     public enum ShadowModeOption : uint
     {
         SemSombra = 0,
@@ -5770,12 +5799,120 @@ public readonly struct LightingSettings : IComponentFacade<LightingSettings>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
+    /// <summary>Resolução do lightmap (texels/m). Texels por metro de superfície (Lightmap Resolution; Unity: 40)</summary>
+    /// <remarks>Faixa válida: 0.1 a 400.</remarks>
+    public float LightmapResolution
+    {
+        get => Component.GetFloat("lightmap_resolution");
+        set => Component.SetFloat("lightmap_resolution", value);
+    }
+    /// <summary>Espaçamento do lightmap (texels). Texels entre objetos na página (Lightmap Padding)</summary>
+    /// <remarks>Faixa válida: 0 a 16.</remarks>
+    public float LightmapPadding
+    {
+        get => Component.GetFloat("lightmap_padding");
+        set => Component.SetFloat("lightmap_padding", value);
+    }
+    /// <summary>Amostras diretas. Raios de sombra por texel das luzes com raio de sombra (Direct Samples)</summary>
+    /// <remarks>Faixa válida: 1 a 4096.</remarks>
+    public float DirectSamples
+    {
+        get => Component.GetFloat("direct_samples");
+        set => Component.SetFloat("direct_samples", value);
+    }
+    /// <summary>Amostras indiretas. Raios por texel em cada rebote (Indirect Samples)</summary>
+    /// <remarks>Faixa válida: 8 a 8192.</remarks>
+    public float IndirectSamples
+    {
+        get => Component.GetFloat("indirect_samples");
+        set => Component.SetFloat("indirect_samples", value);
+    }
+    /// <summary>Amostras do ambiente. Raios por texel para a visibilidade do céu (Environment Samples)</summary>
+    /// <remarks>Faixa válida: 8 a 8192.</remarks>
+    public float EnvironmentSamples
+    {
+        get => Component.GetFloat("environment_samples");
+        set => Component.SetFloat("environment_samples", value);
+    }
+    /// <summary>Intensidade indireta. Multiplica a luz indireta e o céu assados (Indirect Intensity)</summary>
+    /// <remarks>Faixa válida: 0 a 5.</remarks>
+    public float IndirectIntensity
+    {
+        get => Component.GetFloat("indirect_intensity");
+        set => Component.SetFloat("indirect_intensity", value);
+    }
+    /// <summary>Reforço de albedo. Clareia a cor que rebate (Albedo Boost)</summary>
+    /// <remarks>Faixa válida: 1 a 10.</remarks>
+    public float AlbedoBoost
+    {
+        get => Component.GetFloat("albedo_boost");
+        set => Component.SetFloat("albedo_boost", value);
+    }
+    /// <summary>Iluminação global assada. Liga o Generate Lighting de lightmaps (Baked Global Illumination)</summary>
+    public bool BakedGlobalIllumination
+    {
+        get => Component.GetBool("baked_global_illumination");
+        set => Component.SetBool("baked_global_illumination", value);
+    }
+    /// <summary>Remover ruído. Filtro guiado por normal e posição depois do bake (Filtering)</summary>
+    public bool Denoise
+    {
+        get => Component.GetBool("denoise");
+        set => Component.SetBool("denoise", value);
+    }
+    /// <summary>Comprimir lightmaps. 8 bits por canal com faixa por página; desligado usa meia precisão (Compress Lightmaps)</summary>
+    public bool CompressLightmaps
+    {
+        get => Component.GetBool("compress_lightmaps");
+        set => Component.SetBool("compress_lightmaps", value);
+    }
+    public enum MaxLightmapSizeOption : uint
+    {
+        V256 = 0,
+        V512 = 1,
+        V1024 = 2,
+        V2048 = 3,
+        V4096 = 4,
+    }
+    /// <summary>Tamanho máximo do lightmap. Lado máximo de cada página (Max Lightmap Size)</summary>
+    public MaxLightmapSizeOption MaxLightmapSize
+    {
+        get => (MaxLightmapSizeOption)Component.GetEnum("max_lightmap_size");
+        set => Component.SetEnum("max_lightmap_size", (uint)value);
+    }
+    public enum BouncesOption : uint
+    {
+        Nenhum = 0,
+        V1 = 1,
+        V2 = 2,
+        V3 = 3,
+        V4 = 4,
+    }
+    /// <summary>Rebotes. Quantas vezes a luz rebate entre superfícies (Bounces)</summary>
+    public BouncesOption Bounces
+    {
+        get => (BouncesOption)Component.GetEnum("bounces");
+        set => Component.SetEnum("bounces", (uint)value);
+    }
+    public enum DirectionalModeOption : uint
+    {
+        NaoDirecional = 0,
+    }
+    /// <summary>Modo direcional. Não direcional guarda só a irradiância (Directional Mode › Non-Directional)</summary>
+    public DirectionalModeOption DirectionalMode
+    {
+        get => (DirectionalModeOption)Component.GetEnum("directional_mode");
+        set => Component.SetEnum("directional_mode", (uint)value);
+    }
     /// <summary>Fonte do sol. A luz direcional que é o sol da cena: projeta as cascatas e aparece no céu</summary>
     public ObjectReference SunSource
     {
         get => Component.GetReference("sun_source");
         set => Component.SetReference("sun_source", value);
     }
+    /// <summary>Dados de iluminação. Recurso do projeto por slot</summary>
+    public AssetGuid GetLightingData(uint slot = 0) => Component.GetResource("lighting_data", slot);
+    public void SetLightingData(AssetGuid value, uint slot = 0) => Component.SetResource("lighting_data", value, slot);
 }
 
 /// <summary>Sonda de reflexo: Captura a cena num cubemap: metal e vidro refletem o cômodo em vez do céu. Família Luz · Sondas.</summary>
