@@ -52,6 +52,8 @@ param(
     [switch]$AnimationRate,
     # Sombra: movimento suja as 4 cascatas, como antes de 24/10 (aether.shadow_dirty_all).
     [switch]$ShadowDirtyAll,
+    # Lado da cascata no mapa dinâmico da sombra (0 = automático do APK).
+    [int]$ShadowDynamicResolution=0,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
@@ -130,6 +132,7 @@ try {
             if($ParallelAnimation) { $launch+=@('--ez','aether.animation_parallel','true') }
             if($AnimationRate) { $launch+=@('--ez','aether.animation_rate','true') }
             if($ShadowDirtyAll) { $launch+=@('--ez','aether.shadow_dirty_all','true') }
+            if($ShadowDynamicResolution -gt 0) { $launch+=@('--ei','aether.shadow_dynamic_resolution',[string]$ShadowDynamicResolution) }
             if($AnimatorCulling -ge 0) { $launch+=@('--ei','aether.animator_culling',[string]$AnimatorCulling) }
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }

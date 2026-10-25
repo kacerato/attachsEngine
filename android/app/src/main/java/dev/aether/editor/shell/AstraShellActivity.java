@@ -44,7 +44,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
         "aether.quality_post", "aether.quality_textures", "aether.reference_resolution"
     };
     private static final String[] INTEGER_MEASUREMENT_OPTIONS = {
-        "aether.gpu_isolation", "aether.post_isolation", "aether.animator_culling"
+        "aether.gpu_isolation", "aether.post_isolation", "aether.animator_culling", "aether.shadow_dynamic_resolution"
     };
 
     private FrameLayout root;

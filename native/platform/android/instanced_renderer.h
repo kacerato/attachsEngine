@@ -462,6 +462,9 @@ public:
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
   void setShadowDirtyAll(bool enabled) { shadowDirtyAll_ = enabled; }
+  // Lado de cada cascata no mapa dinâmico; 0 = automático (2048 com cascata de
+  // 4096, senão até 1024). Vale na próxima criação dos recursos de sombra.
+  void setShadowDynamicResolution(u32 side) { shadowDynamicRequested_ = side; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
   // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
   void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
@@ -1404,7 +1407,7 @@ private:
   rhi::VulkanImage shadowDynamicAtlas_{};
   VkRenderPass shadowDynamicRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer shadowDynamicFramebuffer_ = VK_NULL_HANDLE;
-  u32 shadowDynamicResolution_ = 0;
+  u32 shadowDynamicResolution_ = 0, shadowDynamicRequested_ = 0;
   // Retângulo justo (escala xy, deslocamento zw no uv da cascata) e a matriz
   // remapeada de cada cascata perto; escala zero = cascata sem dinâmicos.
   float shadowDynamicRect_[DynamicShadowCascades][4]{};

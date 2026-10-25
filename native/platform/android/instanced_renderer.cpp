@@ -3163,7 +3163,10 @@ bool InstancedRenderer::createShadowResources() {
     return false;
   if (renderingPolicy_.shadows.enabled && resolution > 1u) {
     rhi::ImageDesc dynamic = image;
-    shadowDynamicResolution_ = std::min(resolution, 1024u);
+    // A sombra dos moradores sumia com 1024 sob uma cascata de 4096 (prancha
+    // de 24/10): no S o mapa dinâmico vai a 2048; abaixo, até 1024.
+    const u32 automatic = resolution >= 4096u ? 2048u : std::min(resolution, 1024u);
+    shadowDynamicResolution_ = std::clamp(shadowDynamicRequested_ ? shadowDynamicRequested_ : automatic, 256u, resolution);
     dynamic.width = dynamic.height = shadowDynamicResolution_ * grid;
     dynamic.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     if (!memoryAllocator_->createImage(dynamic, &shadowDynamicAtlas_) ||
@@ -3468,7 +3471,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     VkRenderPassBeginInfo dynamicBegin = begin;
     dynamicBegin.renderPass = shadowDynamicRenderPass_;
     dynamicBegin.framebuffer = shadowDynamicFramebuffer_;
-    dynamicBegin.renderArea.extent = {shadowDynamicAtlas_.width(), shadowDynamicAtlas_.height()};
+    // Só a faixa das cascatas 0 e 1 (linha de cima da grade) é limpa e gravada.
+    dynamicBegin.renderArea.extent = {shadowDynamicAtlas_.width(), std::min(shadowDynamicAtlas_.height(), shadowDynamicResolution_)};
     dynamicBegin.clearValueCount = 1;dynamicBegin.pClearValues = &clear;
     vkCmdBeginRenderPass(commandBuffer_, &dynamicBegin, VK_SUBPASS_CONTENTS_INLINE);
     vkCmdBindVertexBuffers(commandBuffer_,0,1,&mesh,&offset);

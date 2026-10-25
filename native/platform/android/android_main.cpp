@@ -2443,6 +2443,12 @@ void android_main(android_app *app) {
   // Bancada: true volta a sujar as 4 cascatas a cada movimento (antes de 24/10).
   shell.instancedRenderer.setShadowDirtyAll(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.shadow_dirty_all"));
+  {
+    // Bancada: lado da cascata no mapa dinâmico da sombra (0 = automático).
+    ae::u32 side = 0;
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_dynamic_resolution", side);
+    shell.instancedRenderer.setShadowDynamicResolution(side);
+  }
   shell.instancedRenderer.setShadowGatherEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.shadow_gather", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[ShadowGather] %s",
