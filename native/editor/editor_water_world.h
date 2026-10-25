@@ -1,4 +1,5 @@
 #pragma once
+#include <memory>
 #include "editor/editor_water_body_component.h"
 #include "editor/editor_route_component.h"
 #include "editor/editor_map_scene.h"
@@ -7,7 +8,9 @@
 namespace ae::editor {
 inline bool extractEditorWaterWorld(const runtime::SceneGraph &document,const renderer::WaterFieldSetup &base,
                                    renderer::WaterWorld &output) {
-  renderer::WaterWorld replacement;
+  // WaterWorld tem ~100 KB: no heap, para não pesar na pilha da thread do jogo.
+  auto replacementStorage=std::make_unique<renderer::WaterWorld>();
+  auto &replacement=*replacementStorage;
   std::vector<EditorEntityId> ids;document.collectSubtree(document.root(),ids);
   for(auto id:ids) {
     const auto &entity=*document.find(id);

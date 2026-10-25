@@ -1,0 +1,15 @@
+04:54:07 trava pegada
+04:54:34     versionName=0.3.0-dev.261025999-lightmap-0443
+04:56:07 carregada
+04:56:07 cache: original=d53e6e09b78458f284bc24dc551cbb4ed672e80f8a0341351f0d6e47eb83e4d3.aic agora=2fd0f46d38bb12e66343cad6e54b8282d606fde5332bb521e55b87a6e9903ab4.aic
+10-25 04:56:38.297 22017 27853 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-3.56 EV100 adaptado=-3.56 limites=[-6.0, 10.0] comp=0.00
+10-25 04:56:40.314 22017 27853 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-3.56 EV100 adaptado=-3.56 limites=[-6.0, 10.0] comp=0.00
+10-25 04:56:42.328 22017 27853 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-3.56 EV100 adaptado=-3.56 limites=[-6.0, 10.0] comp=0.00
+04:56:43 EV automático: -3.56
+Static: 115 · luzes: 7 assadas com sombra (3 coloridas) + 1 mista · estandartes: 3 · sondas: 50 · perfis com UV de lightmap: 1 · hora 18.3
+04:57:37 carregada
+04:59:07 gpu-tempo-real: 17.23 (lm 0) 17.27 (lm 0) 17.31 (lm 0) 17.24 (lm 0) 17.23 (lm 0) 17.27 (lm 0) 
+04:59:20 bake iniciado
+05:02:23 gpu-assado: 15.57 (lm 307) 15.62 (lm 307) 15.56 (lm 307) 15.58 (lm 307) 15.46 (lm 307) 15.55 (lm 307) 
+05:02:49 rodada completa
+05:02:53 devolvida: 91ce9ac97720d0a64872efe6aa373115 cbd58d3069527781676a81358e94f457 

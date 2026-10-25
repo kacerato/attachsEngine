@@ -3,6 +3,7 @@
 #include "script_publication_fixture.h"
 #include "renderer/primitive_geometry.h"
 #include "scene/path_follow.h"
+#include "scene/particle_system.h"
 #include "editor/editor_component_impact.h"
 #include "editor/editor_reference_picker.h"
 #include "editor/editor_property_tween.h"
@@ -3789,6 +3790,75 @@ AE_TEST(curve_editor_adds_moves_edits_keys_and_applies_once) {
   AE_EXPECT_TRUE(runtime::ScriptBridge::attachments(doc).find("\"PostWrapMode\":1")!=std::string::npos,"o Play recebe a curva");
 }
 
+// G5 P1: Partículas criadas pela receita, curva do módulo editada pelo editor
+// de curvas do projeto em um passo de histórico, salva/reaberta e simulada na
+// prévia da cena.
+// PK-10b/c: Efeitos › Faíscas nasce com Trilhas, Luzes e a luz modelo como
+// filho desativado e ligado à referência; na prévia, trilhas e luzes saem.
+AE_TEST(particle_sparks_recipe_links_an_inactive_template_light_and_lights_up) {
+  Fixture f;auto &doc=f.session.document();
+  u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("effect.sparks",&recipe),"receita Efeitos › Faíscas");
+  const auto id=f.session.createRecipe(recipe,doc.root());
+  AE_EXPECT_TRUE(id!=0,"criado");
+  const auto &system=scene::particleSystem(*doc.find(id)->components.find(scene::ParticleSystem::descriptor));
+  const auto children=doc.childrenOf(id);
+  AE_EXPECT_TRUE(children.size()==1&&system.lightTemplate==children[0],"luz modelo ligada à referência");
+  AE_EXPECT_TRUE(!doc.find(children[0])->active&&doc.find(children[0])->components.find(scene::Light::descriptor),
+                 "luz modelo desativada: só é copiada");
+  AE_EXPECT_TRUE(system.trailsEnabled&&system.lightsEnabled,"Trilhas e Luzes ligadas");
+  const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
+  for(u32 i=0;i<40;++i) f.session.updateParticles(1.f/30,camera,frame);
+  AE_EXPECT_TRUE(frame.batches.size()==2&&!frame.lights.empty()&&frame.lights.size()<=8,"partículas, trilhas e até 8 luzes");
+  std::vector<renderer::SceneLight> lights;
+  AE_EXPECT_TRUE(f.session.extractLights(lights)&&lights.empty(),"a luz modelo não ilumina sozinha");
+  AE_EXPECT_TRUE(f.session.history().undo(doc)&&!doc.exists(id),"um desfazer remove faíscas e luz");
+}
+
+AE_TEST(particle_editor_creates_edits_curve_saves_and_previews) {
+  Fixture f;auto &doc=f.session.document();auto &history=f.session.history();
+  u32 recipe=0;AE_EXPECT_TRUE(findCreationRecipe("effect.particles",&recipe),"receita Efeitos › Partículas");
+  AE_EXPECT_EQ(editorCreationCatalog[recipe].category,kEffectsCreationCategory,"categoria Efeitos");
+  history.clear();
+  const auto id=f.session.createRecipe(recipe,doc.root());
+  AE_EXPECT_TRUE(id!=0,"criado");
+  const auto *value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_TRUE(value&&scene::particleSystem(*value).shapeRotation[0]==-90.f,"cone voltado para cima pela forma");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"criar é um passo");
+  f.session.setSelection(id);f.session.update();
+  const float camera[3]{0,1,-6};renderer::particles::ParticleFrame frame;
+  for(u32 i=0;i<20;++i) f.session.updateParticles(1.f/20,camera,frame);
+  AE_EXPECT_TRUE(frame.alive>0&&frame.systems==1,"prévia emite na edição (Tocar ao iniciar)");
+  // Curva de Tamanho no tempo: a linha da curva abre o editor do projeto.
+  auto &state=const_cast<EditorScreenState&>(f.session.screen());
+  state.componentGroup="Tamanho no tempo";
+  u32 slot=0;
+  for(u32 i=0;i<scene::ParticleSystem::curveSlots().size();++i) if(scene::ParticleSystem::curveSlots()[i].id=="size_over_lifetime.max") slot=i;
+  tapWidget(f,widgetId(EditorWidget::ParticleCurveRowBase)+slot);
+  AE_EXPECT_TRUE(f.session.screen().curveField!=0,"a linha abre o editor de curvas");
+  const auto draft=[&] {scene::ScriptCurve c;scene::parseScriptCurve(f.session.screen().curveDraft,c);return c;};
+  AE_EXPECT_EQ(draft().keys.size(),2u,"rascunho com a curva atual");
+  f.session.update();
+  const auto graph=f.session.layout().curveGraph;
+  const UiPoint middle{graph.x+graph.width*.5f,graph.y+graph.height*.2f};
+  f.session.handlePointer({96,UiPointerPhase::Down,middle,20});f.session.handlePointer({96,UiPointerPhase::Up,middle,20.05});
+  f.session.handlePointer({96,UiPointerPhase::Down,middle,20.2});f.session.handlePointer({96,UiPointerPhase::Up,middle,20.25});f.session.update();
+  AE_EXPECT_EQ(draft().keys.size(),3u,"toque duplo acrescenta a chave do meio");
+  AE_EXPECT_EQ(history.undoDepth(),1u,"nada gravado antes de Aplicar");
+  tapWidget(f,widgetId(EditorWidget::CurveApply));
+  value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_EQ(scene::particleSystem(*value).sizeOverLifetime.curveMax.keys.size(),usize(3),"curva gravada no componente");
+  AE_EXPECT_EQ(history.undoDepth(),2u,"aplicar é um passo");
+  // Salvar e reabrir preserva a curva; desfazer volta à curva anterior.
+  const auto archive=serializeEditorDocument(doc,0);EditorDocument reopened;
+  AE_EXPECT_TRUE(deserializeEditorDocument(archive,0,reopened),"cena reaberta");
+  const auto *again=reopened.find(id)?reopened.find(id)->components.find(scene::ParticleSystem::descriptor):nullptr;
+  AE_EXPECT_TRUE(again&&scene::particleSystem(*again).sizeOverLifetime.curveMax.keys.size()==3&&
+                 scene::particleSystem(*again).shapeRotation[0]==-90.f,"valores autorais preservados no arquivo");
+  AE_EXPECT_TRUE(history.undo(doc),"desfazer");
+  value=doc.find(id)->components.find(scene::ParticleSystem::descriptor);
+  AE_EXPECT_EQ(scene::particleSystem(*value).sizeOverLifetime.curveMax.keys.size(),usize(2),"curva anterior de volta");
+}
+
 // Unity Manual/InspectorBarSliders no LOD Group: arrastar o divisor muda só
 // aquela transição, presa entre as vizinhas, num passo; toque longo no
 // segmento insere antes ou apaga o nível.
@@ -6598,9 +6668,9 @@ AE_TEST(g7_touch_button_drives_player_input_connection_to_volume_weight) {
   auto values=*doc.find(volume);auto *environment=static_cast<scene::Environment*>(values.components.add(scene::Environment::descriptor));
   environment->weight=0;doc.applyEntityValues(volume,values);
   values=*doc.find(f.cube);values.components.add(scene::PlayerInput::descriptor);
-  for(const u32 event:{43u,44u}) {
+  for(const u32 event:{44u,45u}) {
     auto *c=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
-    c->event=event;c->action=scene::kEventConnectionCallMethod;c->method=36;c->receiver=volume;c->argument=event==43?1.f:0.f;c->inputAction=index;
+    c->event=event;c->action=scene::kEventConnectionCallMethod;c->method=41;c->receiver=volume;c->argument=event==44?1.f:0.f;c->inputAction=index;
   }
   AE_EXPECT_TRUE(doc.applyEntityValues(f.cube,values),"entrada e conexões");
   // Como no Android: o campo de texto da plataforma está ligado.

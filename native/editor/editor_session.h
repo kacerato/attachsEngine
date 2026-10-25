@@ -30,6 +30,7 @@
 #include "resources/curve3d.h"
 #include "resources/convex_bake.h"
 #include "runtime/scene_lights.h"
+#include "runtime/scene_probes.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
 #include "runtime/prefab.h"
@@ -1065,6 +1066,20 @@ public:
     return runtime::collectSceneEnvironmentVolumes(
         isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,environmentProfiles_);
   }
+  // Partículas (G5): no Play, o mundo de execução (avançado pelo quadro do
+  // Play); fora dele, a prévia sobre o documento avaliado, como o GPUParticles3D
+  // da Godot emitindo na vista. Sistemas sem repetir recomeçam na prévia.
+  void updateParticles(float deltaSeconds, const float (&camera)[3], renderer::particles::ParticleFrame &out);
+  // Teto do nível do aparelho; vale para a prévia e para o Play.
+  void setParticleBudget(u32 total);
+  // Reinicia a prévia de todos os sistemas (botão do inspetor).
+  void restartParticlePreview() { previewParticles_.restartAll(); }
+  const runtime::SceneParticles &previewParticles() const noexcept { return previewParticles_; }
+  // G4c: molhado, poças e neve acumulada do quadro (Play ou prévia da edição),
+  // para o shader de superfície.
+  runtime::SceneWeather::Surface weatherSurface() const noexcept {
+    return isPlaying() && playScene_.active() ? playScene_.weatherReport().surface : previewWeatherReport_.surface;
+  }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
@@ -1642,6 +1657,10 @@ private:
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
+  runtime::SceneParticles previewParticles_;
+  runtime::SceneWeather previewWeather_;
+  runtime::SceneWeather::Report previewWeatherReport_;
+  u32 particleBudget_ = 100000;
   std::string reportedPhysicsConnectionDiagnostic_;
   std::string reportedEventConnectionDiagnostic_;
   double playLastSeconds_=0;
@@ -1781,6 +1800,9 @@ private:
   double curveLastTap_=-1;
   ui::UiPoint curveLastTapPoint_{};
   void openCurveEditor(u32 key,std::string_view value,std::string_view type);
+  // Alvo "partícula" dos editores de curva e gradiente (state_.curveType/gradientType).
+  static constexpr std::string_view kParticleCurveType="particle-curve";
+  static constexpr std::string_view kParticleGradientType="particle-gradient:hdr";
   void publishCurveDraft();
   u32 settleCurveSelection(u32 selected);
   void refreshPathEditorState();
@@ -1853,6 +1875,7 @@ private:
                        const std::vector<u8> &bytes,usize maximum);
   bool commitReflectionBake(ProbeBakeJob &job,renderer::ReflectionProbeTexture texture);
   bool commitLightProbeBake(ProbeBakeJob &job);
+  bool commitLightProbesFromLightmap(const std::vector<runtime::SceneLightProbeGroup> &groups,const renderer::LightmapData &data);
   bool clearProbeBake(EditorEntityId entity,u64 instance);
   std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> reflectionProbeTextures_;
   u64 reflectionProbeTexturesRevision_=1;
@@ -1861,6 +1884,25 @@ private:
   mutable std::shared_ptr<const renderer::LightProbeSet> lightProbeSet_;
   mutable u64 lightProbeSetKey_=0;
   std::shared_ptr<ProbeBakeJob> probeBake_;
+  // G3c: lightmaps (editor_lightmaps.cpp). Recursos .aelightmap do projeto, o
+  // em vigor (o das Configurações de iluminação da cena) e o bake em segundo plano.
+  struct LightmapBakeJob;
+  void loadLightmapAssets();
+  void pumpLightmapBake();
+  void refreshLightmaps();
+  bool handleLightmapWidget(u32 widget);
+  std::shared_ptr<const renderer::LightmapData> lightmapAsset(const resources::AssetGuid &guid) const;
+  std::vector<std::shared_ptr<const renderer::LightmapData>> lightmapAssets_;
+  std::shared_ptr<const renderer::LightmapData> activeLightmap_;
+  resources::AssetGuid activeLightmapGuid_{};
+  u64 lightmapRevision_=1,lightmapViewRevision_=~u64{0},lightmapProbeRevision_=0;
+  bool pendingProbeBakeAfterLightmap_=false;
+  std::shared_ptr<LightmapBakeJob> lightmapBake_;
+  EditorLightmapView lightmapView_;
+  // Texturas publicadas (as das fontes e as do projeto, na ordem do renderer
+  // depois das do pacote) e onde elas começam no índice do renderer.
+  std::vector<renderer::SharedAuthoringTexture> bakeTextures_;
+  u32 bakeTextureBase_=0;
   std::deque<EditorProbeCaptureRequest> probeRequests_;
   EditorProbeView probeView_;
   EditorProbeRendererStats probeRendererStats_;
@@ -1880,6 +1922,16 @@ public:
   bool bakeReflectionProbe(EditorEntityId entity,u64 instance);
   bool bakeLightProbes();
   bool probeBaking() const noexcept;
+  // G3c: Lighting › Generate Lighting, Cancel e Clear Baked Data.
+  bool generateLighting();
+  void cancelLighting();
+  bool clearBakedLighting();
+  bool lightmapBaking() const noexcept;
+  const EditorLightmapView &lightmapView() const noexcept {return lightmapView_;}
+  void setLightmapRendererStats(u32 drawsLightmapped) noexcept {lightmapView_.drawsLightmapped=drawsLightmapped;}
+  // O recurso em vigor; o ponteiro muda quando o renderer precisa recarregar.
+  std::shared_ptr<const renderer::LightmapData> lightmapData() const noexcept {return activeLightmap_;}
+  u64 lightmapDataRevision() const noexcept {return lightmapRevision_;}
   // 0 adicionar, 1 duplicar a selecionada, 2 apagar a selecionada.
   bool editLightProbePoints(EditorEntityId entity,u64 instance,u32 operation);
   // No modo Editar sondas, o toque no viewport escolhe a sonda mais próxima.
@@ -1974,6 +2026,7 @@ private:
   float animatorPinchDistance_=1,animatorPinchZoom_=1;
   std::optional<EditorEntity> animatorDragOriginal_;
   bool commitCurveEditor();
+  bool commitParticleValue(bool curve);
   void saveCurveLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.

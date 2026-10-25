@@ -573,6 +573,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(routing.tapped&&probe_widget::owns(routing.widgetId)) {handleProbeWidget(routing.widgetId);return true;}
+  if(routing.tapped&&lightmap_widget::owns(routing.widgetId)) {handleLightmapWidget(routing.widgetId);return true;}
   if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
     // Animar: abre o primeiro clipe do próprio objeto (componente Animação);
     // sem clipe, cria um e já o toca nele.
@@ -782,6 +783,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando recurso…";
       }
     }
+    else if(routing.tapped && lightmap_widget::owns(routing.widgetId)) handleLightmapWidget(routing.widgetId);
     else handled=false;
     if(handled) return true;
   }
@@ -2178,6 +2180,34 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         if(collider && fitEditorCollider(mapScene_,document_,entity->id,*collider) && history_.applyValues(document_,entity->id,value))
           state_.status="Colisor ajustado pela geometria; forma e centro continuam editáveis";
         else state_.status="Não foi possível ajustar: geometria ausente, escala ou dimensões incompatíveis";
+      }
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::ParticleCurveRowBase)&&key<=widgetId(EditorWidget::ParticlePreviewRestart)) {
+      const auto *entity=document_.find(state_.selection);
+      const auto *value=entity?entity->components.find(scene::ParticleSystem::descriptor):nullptr;
+      if(!value) return true;
+      if(key==widgetId(EditorWidget::ParticlePreviewRestart)) {
+        restartParticlePreview();state_.status="Prévia de partículas reiniciada";return true;
+      }
+      if(isPlaying()||history_.isOpen()) {state_.status="Curvas e gradientes de partícula são editados fora do Play";return true;}
+      const auto &system=scene::particleSystem(*value);
+      if(key<widgetId(EditorWidget::ParticleGradientRowBase)) {
+        const u32 index=key-widgetId(EditorWidget::ParticleCurveRowBase);
+        const auto slots=scene::ParticleSystem::curveSlots();
+        if(index<slots.size()) {
+          state_.curveEntity=entity->id;state_.curveInstance=value->instanceId();
+          state_.curveProperty=std::string(slots[index].id);state_.curveElement=0;
+          openCurveEditor(key,scene::scriptCurveValue(*system.curve(slots[index].id)),kParticleCurveType);
+        }
+      } else {
+        const u32 index=key-widgetId(EditorWidget::ParticleGradientRowBase);
+        const auto slots=scene::ParticleSystem::gradientSlots();
+        if(index<slots.size()) {
+          state_.gradientEntity=entity->id;state_.gradientInstance=value->instanceId();
+          state_.gradientProperty=std::string(slots[index].id);state_.gradientElement=0;
+          openGradientEditor(key,scene::scriptGradientValue(*system.gradient(slots[index].id)),kParticleGradientType);
+        }
       }
       return true;
     }

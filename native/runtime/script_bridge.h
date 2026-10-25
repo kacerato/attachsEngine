@@ -105,6 +105,8 @@ public:
   void setNavigation(SceneNavigation *navigation) noexcept {navigation_=navigation;}
   void setIk(SceneIk *ik) noexcept {ik_=ik;}
   void setReflectionProbes(SceneReflectionProbeRequests *probes) noexcept {reflectionProbes_=probes;}
+  // Partículas do Play: ParticleSystem.Play/Stop/Emit dos scripts alcançam o mesmo mundo do editor.
+  void setParticles(SceneParticles *particles) noexcept {particles_=particles;}
   void setTimers(SceneTimers *timers) noexcept { timers_=timers; }
   void setPaths(ScenePaths *paths) noexcept { paths_ = paths; }
   // Fila de eventos de componente do Play; os scripts a leem pela família
@@ -158,7 +160,7 @@ private:
   void collectDiagnostics();
   void installAccess();
   void installExtensions();
-  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_,cameras_,animators_,navigation_,ik_,reflectionProbes_,assets_,environmentProfiles_,&resourceAvailable_};}
+  ComponentOperationServices operationServices() const noexcept {return {world_,timers_,tweens_,audio_,paths_,sequences_,queries_,physics_,cameras_,animators_,navigation_,ik_,particles_,reflectionProbes_,assets_,environmentProfiles_,&resourceAvailable_};}
   QueryFilter queryFilter(const scene::ScriptQueryFilter &filter) const;
   static QueryShapeDesc queryShape(const scene::ScriptShapeQuery &shape);
   static void copyHits(const std::vector<QueryHit> &hits, u32 total, scene::ScriptQueryHit *out, int capacity);
@@ -201,6 +203,7 @@ private:
   SceneNavigation *navigation_=nullptr;
   SceneIk *ik_=nullptr;
   SceneReflectionProbeRequests *reflectionProbes_=nullptr;
+  SceneParticles *particles_=nullptr;
   SceneNumberTweens *numberTweens_=nullptr;
   InputService *input_ = nullptr;
   SceneAnimator *animator_ = nullptr;

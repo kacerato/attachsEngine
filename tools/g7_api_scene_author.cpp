@@ -331,7 +331,7 @@ int main(int argc, char **argv) {
       if (csharp) b.script(b.sun, "g7.dia_acelerado", "DiaAcelerado.cs",
                            {{"velocidade", "float", "720"}, {"hora_inicial", "float", "16"}, {"sonda", "object", std::to_string(probe)}});
       // Flow: Duração do dia de 2 min no Inspector; a cada hora a sonda recaptura o céu.
-      else b.connection(b.sun, 39, call, 35, probe);
+      else b.connection(b.sun, 40, call, 35, probe);
       publish(output, "G7 1 Dia acelerado" + suffix, b, assets, scripts, csharp ? "DiaAcelerado.cs" : nullptr);
     }
     // 2. Trocar o perfil do Volume ao entrar numa área.
@@ -349,8 +349,8 @@ int main(int argc, char **argv) {
       if (csharp) b.script(area, "g7.perfil_por_area", "PerfilPorArea.cs",
                            {{"volume", "object", std::to_string(b.volume)}, {"perfil_da_area", "asset", guidText(assets.interior)}});
       else {
-        b.connection(area, 3, call, 37, b.volume, 0, assets.interior);
-        b.connection(area, 4, call, 37, b.volume, 0, assets.exterior);
+        b.connection(area, 3, call, 42, b.volume, 0, assets.interior);
+        b.connection(area, 4, call, 42, b.volume, 0, assets.exterior);
       }
       publish(output, "G7 2 Perfil por area" + suffix, b, assets, scripts, csharp ? "PerfilPorArea.cs" : nullptr);
     }
@@ -384,9 +384,9 @@ int main(int argc, char **argv) {
         // executada liga o Volume de mira; cancelada desliga.
         auto values = *b.doc.find(b.camera);
         values.components.add(scene::PlayerInput::descriptor);
-        for (const u32 event : {43u, 44u}) {
+        for (const u32 event : {44u, 45u}) {
           auto *c = static_cast<scene::EventConnection *>(values.components.add(scene::EventConnection::descriptor));
-          c->event = event;c->action = call;c->method = 36;c->receiver = aim;c->argument = event == 43 ? 1.0f : 0.0f;
+          c->event = event;c->action = call;c->method = 41;c->receiver = aim;c->argument = event == 44 ? 1.0f : 0.0f;
           c->inputAction = aimAction;
           if (!c->valid()) fail("conexão de entrada recusada");
         }
@@ -422,8 +422,8 @@ int main(int argc, char **argv) {
       else {
         auto values = *b.doc.find(posts);values.active = false;
         if (!b.doc.applyEntityValues(posts, values)) fail("postes recusados");
-        b.connection(b.sun, 41, 1, 0, posts);
-        b.connection(b.sun, 40, 2, 0, posts);
+        b.connection(b.sun, 42, 1, 0, posts);
+        b.connection(b.sun, 41, 2, 0, posts);
       }
       publish(output, "G7 4 Postes ao anoitecer" + suffix, b, assets, scripts, csharp ? "PostesAoAnoitecer.cs" : nullptr);
     }
@@ -468,8 +468,8 @@ int main(int argc, char **argv) {
       if (csharp) b.script(b.statue, "g7.troca_de_material", "TrocaDeMaterial.cs",
                            {{"material_a", "asset", guidText(assets.gold)}, {"material_b", "asset", guidText(assets.neon)}, {"intervalo", "float", "2"}});
       else {
-        b.connection(b.timer("Timer: neon", 2, false), 1, call, 39, b.statue, 0, assets.neon);
-        b.connection(b.timer("Timer: ouro", 5, false), 1, call, 39, b.statue, 0, assets.gold);
+        b.connection(b.timer("Timer: neon", 2, false), 1, call, 44, b.statue, 0, assets.neon);
+        b.connection(b.timer("Timer: ouro", 5, false), 1, call, 44, b.statue, 0, assets.gold);
       }
       publish(output, "G7 6 Troca de material" + suffix, b, assets, scripts, csharp ? "TrocaDeMaterial.cs" : nullptr);
     }
@@ -487,7 +487,7 @@ int main(int argc, char **argv) {
     b.place(visitor, 0, 24, 6);
     b.physics(visitor, scene::BodyMotion::Dynamic, false, .5f, .5f, .5f);
     // Sem perfil: o sensor só esconde a estátua (física e conexão sem mexer no Volume).
-    if (guid.valid()) b.connection(area, 3, call, 37, b.volume, 0, guid);
+    if (guid.valid()) b.connection(area, 3, call, 42, b.volume, 0, guid);
     else b.connection(area, 3, 3, 0, b.statue);
     publish(output, std::string("G7 ") + tag + " (Flow)", b, assets, scripts, nullptr);
   }

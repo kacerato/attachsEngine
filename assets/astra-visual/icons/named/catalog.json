@@ -2498,6 +2498,42 @@
       "dark_ui_ready": true,
       "generation": "component-v1"
     },
+    "component/particle-system": {
+      "category": "component",
+      "name": "particle-system",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/weather": {
+      "category": "lighting",
+      "name": "weather",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "effects/sparks": {
+      "category": "effects",
+      "name": "sparks",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/lightmap-baked": {
+      "category": "lighting",
+      "name": "lightmap-baked",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/generate-lighting": {
+      "category": "lighting",
+      "name": "generate-lighting",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "lighting/lightmap-uv": {
+      "category": "lighting",
+      "name": "lightmap-uv",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
     "component/player-input": {
       "category": "component",
       "name": "player-input",

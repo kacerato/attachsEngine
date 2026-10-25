@@ -52,6 +52,19 @@ enum class CreationPose : u8 {
   EditorCamera,      // na pose da câmera do editor (captura o enquadramento)
   BehindSelection    // na posição do objeto selecionado + deslocamento da referência
 };
+// Filho criado junto na mesma transação. Quando `component`/`property` são
+// dados, a referência de objeto do PAI recebe o filho criado -- é o que liga
+// o Clima às partículas de Chuva e Neve que ele dosa.
+struct CreationChild {
+  const char *name;
+  std::span<const CreationComponent> components;
+  std::string_view component{},property{};
+  // Filho que nasce desativado (a luz modelo das Faíscas: só é copiada).
+  bool active=true;
+  // A referência vai num IRMÃO com este nome em vez do pai (o plano e os
+  // respingos da Chuva do Clima).
+  std::string_view sibling{};
+};
 struct EditorCreationEntry {
   // Identidade persistente da receita: não muda com nome, ordem ou idioma.
   std::string_view id;
@@ -80,6 +93,7 @@ struct EditorCreationEntry {
   scene::PrimitiveType childVisual=scene::PrimitiveType::Count;
   // Põe um Cérebro na câmera da cena (ou cria uma), no mesmo comando de histórico.
   bool sceneBrain=false;
+  std::span<const CreationChild> children{};
   bool composed() const {return action==EditorWidget::None;}
 };
 
@@ -135,6 +149,68 @@ inline const CreationValue cloudVolumeValues[]{{environmentType,"override_sky",f
   {environmentType,"priority",1.f}};
 inline const CreationComponent cloudVolume[]{{environmentType,cloudVolumeValues}};
 inline const CreationComponent spot[]{{light,spotLight}};
+// G4c: o clima da Unity na prática é um Volume com Cloud Layer e neblina mais
+// um script que dosa Particle Systems de chuva e neve presos à câmera. Aqui:
+// Ambiente global (prioridade 2, só nuvens e neblina) + Clima, com Chuva e
+// Neve como filhos já ligados. Caixa larga emitindo para baixo, Mundo como
+// espaço de simulação (a gota não anda com a câmera) e prewarm para já chover.
+// Proporções calibradas por frames da Unity (docs/validacao/g4c-clima-2026-10-21/
+// referencia-unity): gota de ~0,6 m de traço, fina e translúcida como a da
+// Pixagon (Rain Storm, 1:38); floco pequeno e opaco como o da Synty (3:51).
+inline constexpr std::string_view weatherType="astra.environment.weather",particleType="astra.effects.particle_system";
+// Só nuvens e neblina: todo grupo de pós (exposição, cor, bloom...) desligado,
+// como no Volume de nuvens; o clima não pode trocar a imagem da cena.
+inline const CreationValue weatherVolumeValues[]{{environmentType,"override_sky",false},{environmentType,"override_fog",true},
+  {environmentType,"override_post",false},{environmentType,"override_indirect",false},
+  {environmentType,"override_exposure",false},{environmentType,"override_bloom",false},
+  {environmentType,"override_vignette",false},{environmentType,"override_color_adjustments",false},
+  {environmentType,"override_color_grading",false},{environmentType,"override_film_grain",false},
+  {environmentType,"override_ambient_occlusion",false},{environmentType,"clouds",true},
+  // Neblina exponencial que cobre o céu e acompanha a luz dele: o véu cinza
+  // da chuva da Unity. Com o padrão novo (Exp² e cor fixa) o céu ficava limpo
+  // e a cena, quente do sol, sem o cinza do tempo fechado.
+  {environmentType,"fog",true},{environmentType,"fog_mode",u32{1}},{environmentType,"fog_color_mode",u32{1}},
+  {environmentType,"fog_color.r",.55f},{environmentType,"fog_color.g",.6f},{environmentType,"fog_color.b",.66f},
+  {environmentType,"fog_base_height",0.f},{environmentType,"fog_height_falloff",.06f},
+  {environmentType,"priority",2.f}};
+inline const CreationValue weatherValues[]{{weatherType,"kind",u32{2}},{weatherType,"intensity",.7f}};
+inline const CreationComponent weather[]{{environmentType,weatherVolumeValues},{weatherType,weatherValues}};
+inline const CreationValue rainValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",30.f},
+  {particleType,"shape_box_y",30.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+  {particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},{particleType,"start_lifetime",1.6f},
+  {particleType,"start_speed_mode",u32{2}},{particleType,"start_speed_min",11.f},{particleType,"start_speed",17.f},
+  {particleType,"start_size_mode",u32{2}},{particleType,"start_size_min",.008f},{particleType,"start_size",.016f},
+  {particleType,"gravity_modifier",.3f},
+  {particleType,"collision_enabled",true},{particleType,"collision_bounce",0.f},{particleType,"collision_lifetime_loss",1.f},
+  {particleType,"sub_emitters_enabled",true},{particleType,"sub_emitter_collision_count",1.f},
+  {particleType,"max_particles",14000.f},{particleType,"emission_rate",7000.f},{particleType,"render_mode",u32{1}},
+  {particleType,"stretch_velocity_scale",.06f},{particleType,"stretch_length_scale",1.f},
+  {particleType,"start_color_r",.6f},{particleType,"start_color_g",.66f},{particleType,"start_color_b",.76f},
+  {particleType,"start_color_a",.28f}};
+// Respingo: coroa curta de gotículas para cima no ponto do toque (o splash dos
+// climas da Unity), emitido só pelo sub-emissor da Chuva.
+inline const CreationValue splashValues[]{{particleType,"emission_rate",0.f},{particleType,"simulation_space",u32{1}},
+  {particleType,"start_lifetime",.28f},{particleType,"start_speed_mode",u32{2}},{particleType,"start_speed_min",.8f},
+  {particleType,"start_speed",2.2f},{particleType,"start_size_mode",u32{2}},{particleType,"start_size_min",.015f},
+  {particleType,"start_size",.035f},{particleType,"gravity_modifier",1.f},{particleType,"shape_type",u32{2}},
+  {particleType,"shape_angle",45.f},{particleType,"shape_radius",.02f},{particleType,"shape_rotation_x",-90.f},
+  {particleType,"max_particles",3000.f},{particleType,"start_color_r",.72f},{particleType,"start_color_g",.78f},
+  {particleType,"start_color_b",.86f},{particleType,"start_color_a",.45f},{particleType,"color_over_lifetime_enabled",true}};
+inline const CreationValue snowValues[]{{particleType,"shape_type",u32{3}},{particleType,"shape_box_x",24.f},
+  {particleType,"shape_box_y",24.f},{particleType,"shape_box_z",.5f},{particleType,"shape_rotation_x",90.f},
+  {particleType,"shape_random_direction",.35f},{particleType,"simulation_space",u32{1}},{particleType,"prewarm",true},
+  {particleType,"start_lifetime",5.f},{particleType,"start_speed",1.5f},{particleType,"start_size",.07f},
+  {particleType,"gravity_modifier",.03f},{particleType,"max_particles",12000.f},{particleType,"emission_rate",0.f},
+  {particleType,"start_color_a",.9f},{particleType,"noise_enabled",true},{particleType,"noise_strength",.8f},
+  {particleType,"noise_frequency",.35f},{particleType,"noise_scroll_speed",.3f}};
+inline const CreationComponent rain[]{{particleType,rainValues}};
+inline const CreationComponent snow[]{{particleType,snowValues}};
+inline const CreationComponent splash[]{{particleType,splashValues}};
+// O Chão da chuva é só um plano (o +Y é a normal) na altura do Clima; a Chuva
+// colide com ele e solta os Respingos.
+inline const CreationChild weatherChildren[]{{"Chuva",rain,weatherType,"rain"},{"Neve",snow,weatherType,"snow"},
+  {"Chão da chuva",{},particleType,"collision_plane_0",true,"Chuva"},
+  {"Respingos",splash,particleType,"sub_emitter_collision",true,"Chuva"}};
 // PK-2 (V-03/E-01): GameObject › Volume da Unity. Um Volume novo não muda nada
 // sozinho (na Unity nasce com perfil vazio): nasce com todos os grupos
 // desligados, acima do Ambiente da cena; o autor liga os que quiser.
@@ -244,7 +320,7 @@ inline const CreationValue soundTriggerConnection[]{{eventConnection,"event",u32
 inline const CreationComponent soundTrigger[]{{body,soundTriggerBody},{collider},{"astra.audio.source"},{eventConnection,soundTriggerConnection}};
 inline const CreationComponent eventConnectionRecipe[]{{eventConnection}};
 // G7: Entrada do jogador já com uma Conexão de evento pronta para "ação executada".
-inline const CreationValue playerInputConnection[]{{eventConnection,"event",u32{43}}};
+inline const CreationValue playerInputConnection[]{{eventConnection,"event",u32{44}}};
 inline const CreationComponent playerInputRecipe[]{{"astra.input.player_input"},{eventConnection,playerInputConnection}};
 inline const CreationComponent audioListener[]{{"astra.audio.listener"}};
 inline const CreationComponent audioBus[]{{"astra.audio.bus"}};
@@ -298,19 +374,41 @@ inline const CreationComponent navigationAgent[]{{character},{navAgent}};
 inline const CreationComponent navigationObstacle[]{{navObstacle}};
 inline const CreationValue navigationLinkValues[]{{navLink,"start_z",-1.5f},{navLink,"end_z",1.5f}};
 inline const CreationComponent navigationLink[]{{navLink,navigationLinkValues}};
+// Partículas (G5): o cone padrão (+Z, convenção da Unity) é girado pela própria
+// forma para subir, sem girar o objeto — o gizmo continua alinhado ao mundo.
+inline constexpr std::string_view particleSystem="astra.effects.particle_system";
+inline const CreationValue particleValues[]{{particleSystem,"shape_rotation_x",-90.f}};
+inline const CreationComponent particles[]{{particleSystem,particleValues}};
+// PK-10b/c: Faíscas, como um efeito de faísca da Unity (Additive, esticado,
+// Trails e Lights com uma luz modelo). A luz modelo é um filho desativado: só
+// é copiada para as partículas sorteadas, nunca ilumina sozinha.
+inline const CreationValue sparkValues[]{{particleSystem,"shape_rotation_x",-90.f},{particleSystem,"shape_angle",30.f},
+  {particleSystem,"shape_radius",.1f},{particleSystem,"start_lifetime",.9f},{particleSystem,"start_speed",6.f},
+  {particleSystem,"start_size",.05f},{particleSystem,"gravity_modifier",1.f},{particleSystem,"emission_rate",40.f},
+  {particleSystem,"start_color_r",1.f},{particleSystem,"start_color_g",.55f},{particleSystem,"start_color_b",.15f},
+  {particleSystem,"color_over_lifetime_enabled",true},{particleSystem,"material_blend",u32{1}},
+  {particleSystem,"material_texture",u32{1}},{particleSystem,"material_emission",3.f},
+  {particleSystem,"trails_enabled",true},{particleSystem,"trail_lifetime",.35f},{particleSystem,"trail_min_vertex_distance",.05f},
+  {particleSystem,"trail_width",.8f},{particleSystem,"lights_enabled",true},{particleSystem,"light_ratio",.15f},
+  {particleSystem,"light_max",8.f},{particleSystem,"light_range_multiplier",1.5f},{particleSystem,"light_intensity_multiplier",3.f}};
+inline const CreationComponent sparks[]{{particleSystem,sparkValues}};
+inline const CreationValue sparkLightValues[]{{light,"range",3.f}};
+inline const CreationComponent sparkLight[]{{light,sparkLightValues}};
+inline const CreationChild sparkChildren[]{{"Luz modelo",sparkLight,particleSystem,"light_template",false}};
 } // namespace recipe
 
-inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu"};
+inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu","Efeitos"};
 // Ícones das categorias no trilho da folha de criação (nomes do catálogo do atlas).
 inline constexpr std::string_view creationCategoryIcons[]{"scene/object","primitive/cube","nature/water",
   "component/physics","lighting/sun","component/timer","audio/source","physics/body-2d","navigation/surface","component/character",
-  "volume/global"};
+  "volume/global","component/particle-system"};
 static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // Categoria Personagem: receitas sobre o personagem selecionado (ação
 // CharacterRecipeBase+k, na ordem de EditorStudio::CharacterRecipe a partir
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
-inline const std::array<EditorCreationEntry,106> editorCreationCatalog{{
+inline constexpr unsigned kEffectsCreationCategory=11;
+inline const std::array<EditorCreationEntry,109> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -334,6 +432,14 @@ inline const std::array<EditorCreationEntry,106> editorCreationCatalog{{
   {"import.model",EditorWidget::ImportModel,1,"Importar modelo","Abre um .glb do aparelho e traz suas malhas.",ui::UiIcon::AssetsImport},
   // Modelos de cena (Scene Templates da Unity, aplicados à cena aberta).
   {"basic.scene_template",EditorWidget::CreateSceneTemplate,0,"Modelo de cena","Cenário pronto para comparar mudanças, com vistas salvas.",ui::UiIcon::SceneLayers},
+  {"effect.particles",EditorWidget::None,kEffectsCreationCategory,"Partículas","Emissor de partículas: fogo, faíscas, fumaça, magia.",
+    ui::UiIcon::ComponentParticleSystem,runtime::ObjectKind::Folder,recipe::particles,CreationPose::ViewTarget,0.5f,{},{},
+    "ParticleSystem Shuriken GPUParticles3D CPUParticles3D VFX Efeito Fogo Faisca Fumaca Particulas",scene::PrimitiveType::Count,false,{},
+    recipe::particleSystem},
+  {"effect.sparks",EditorWidget::None,kEffectsCreationCategory,"Faíscas","Faíscas com trilha que acendem luzes por onde passam.",
+    ui::UiIcon::EffectsSparks,runtime::ObjectKind::Folder,recipe::sparks,CreationPose::ViewTarget,0.5f,{},{},
+    "Sparks Trails Lights Faisca Trilha Rastro Luz Particulas",scene::PrimitiveType::Count,false,{},
+    recipe::particleSystem,scene::PrimitiveType::Count,false,recipe::sparkChildren},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,
@@ -346,6 +452,10 @@ inline const std::array<EditorCreationEntry,106> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::sphereVolume,CreationPose::ViewTarget,0,{},{},"Sphere Volume Local Esfera"},
   {"volume.environment",EditorWidget::None,10,"Ambiente","Céu, luz ambiente, neblina e pós num Volume global da cena.",ui::UiIcon::LightingSky,
     runtime::ObjectKind::Folder,recipe::sceneEnvironment,CreationPose::ViewTarget,0,{},{},"Environment Skybox Lighting Ambiente Céu Fog Neblina"},
+  {"light.weather",EditorWidget::None,10,"Clima","Chuva, neve ou tempestade sobre a câmera, com as nuvens do céu.",ui::UiIcon::LightingWeather,
+    runtime::ObjectKind::Folder,recipe::weather,CreationPose::ViewTarget,0,{},{},
+    "Weather Clima Chuva Neve Tempestade Rain Snow Storm Relampago Lightning UniStorm Tempo",scene::PrimitiveType::Count,false,{},
+    recipe::weatherType,scene::PrimitiveType::Count,false,recipe::weatherChildren},
   {"light.clouds",EditorWidget::None,10,"Volume de nuvens","Nuvens com vento e sombra sobre o céu da cena.",ui::UiIcon::LightingClouds,
     runtime::ObjectKind::Folder,recipe::cloudVolume,CreationPose::ViewTarget,0,{},{},"Cloud Layer Clouds Nuvens Clima Weather Volume Céu nublado"},
   {"light.lighting_settings",EditorWidget::None,4,"Iluminação da cena","Escolhe qual luz direcional é o sol: a das cascatas e do céu.",ui::UiIcon::LightingSunSource,

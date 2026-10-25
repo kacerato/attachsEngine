@@ -89,8 +89,8 @@ AE_TEST(g7_time_of_day_events_light_the_lamps_at_sunset_without_script) {
   // Postes começam apagados; o pôr do sol os acende, o nascer apaga.
   const auto lamps=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Postes");
   auto values=*doc.find(lamps);values.active=false;doc.applyEntityValues(lamps,values);
-  connection(doc,id,41,1,0,lamps);
-  connection(doc,id,40,2,0,lamps);
+  connection(doc,id,42,1,0,lamps);
+  connection(doc,id,41,2,0,lamps);
   EditorMapScene resources;EditorPlayScene play;AE_EXPECT_TRUE(play.start(doc,resources),"Play");
   auto &events=play.events();events.attach(runtime::ComponentEventQueue::Consumer::Scripts,true);
   bool lit=false,darkAgain=false;u32 hours=0,sunsets=0,sunrises=0,days=0;
@@ -167,11 +167,11 @@ AE_TEST(g7_volume_methods_copy_the_shared_profile_and_edit_override_boxes) {
 }
 
 AE_TEST(g7_event_connection_v3_carries_the_asset_and_reads_v2) {
-  scene::EventConnection authored;authored.event=1;authored.action=scene::kEventConnectionCallMethod;authored.method=39;
+  scene::EventConnection authored;authored.event=1;authored.action=scene::kEventConnectionCallMethod;authored.method=44;
   authored.asset={0xabc,0xdef};
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::EventConnection reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_TRUE(reread.read(in,3)&&reread.asset==authored.asset&&reread.method==39,"material da conexão atravessa a v3");
+  AE_EXPECT_TRUE(reread.read(in,3)&&reread.asset==authored.asset&&reread.method==44,"material da conexão atravessa a v3");
   std::istringstream old("1 1 4 6 0.5 0 0 0 -1");old.imbue(std::locale::classic());
   scene::EventConnection legacy;
   AE_EXPECT_TRUE(legacy.read(old,2)&&!legacy.asset.valid()&&legacy.method==6,"v2 lida sem recurso");
@@ -179,10 +179,10 @@ AE_TEST(g7_event_connection_v3_carries_the_asset_and_reads_v2) {
   AE_EXPECT_EQ(type.version,3u,"versão 3");
   AE_EXPECT_TRUE(type.resourceBindings[1].slotCount(authored)==1&&type.resourceBindings[0].slotCount(authored)==0,
                  "só o seletor de Material aparece para Malha: trocar material");
-  authored.method=37;
+  authored.method=42;
   AE_EXPECT_TRUE(type.resourceBindings[0].slotCount(authored)==1&&type.resourceBindings[1].slotCount(authored)==0,
                  "só o seletor de Perfil aparece para Volume: trocar perfil");
-  AE_EXPECT_TRUE(scene::eventConnectionTakesNumber(36)&&scene::eventConnectionTakesAsset(37)&&scene::eventConnectionTakesAsset(39),
+  AE_EXPECT_TRUE(scene::eventConnectionTakesNumber(41)&&scene::eventConnectionTakesAsset(42)&&scene::eventConnectionTakesAsset(44),
                  "peso leva número; perfil e material levam recurso");
 }
 
@@ -193,7 +193,7 @@ AE_TEST(g7_event_connection_sets_volume_weight_from_a_timer) {
   doc.applyEntityValues(clock,values);
   const auto id=doc.createEntity(doc.root(),EditorEntityKind::Folder,"Volume DoF");values=*doc.find(id);
   values.components.add(scene::Environment::descriptor);doc.applyEntityValues(id,values);
-  connection(doc,clock,1,scene::kEventConnectionCallMethod,36,id,.4f);
+  connection(doc,clock,1,scene::kEventConnectionCallMethod,41,id,.4f);
   EditorMapScene resources;EditorPlayScene play;AE_EXPECT_TRUE(play.start(doc,resources),"Play");
   for(u32 frame=0;frame<20;++frame) AE_EXPECT_TRUE(play.advance(.02),"quadro");
   AE_EXPECT_TRUE(std::abs(worldVolume(play,id)->weight-.4f)<1e-6f,"Timer → Volume: definir peso");
@@ -231,9 +231,9 @@ AE_TEST(g7_player_input_turns_actions_into_events_filtered_by_action) {
   values=*doc.find(player);
   values.components.add(scene::PlayerInput::descriptor);
   auto *pressed=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
-  pressed->event=43;pressed->action=1;pressed->receiver=lamp;pressed->inputAction=base+2;
+  pressed->event=44;pressed->action=1;pressed->receiver=lamp;pressed->inputAction=base+2;
   auto *released=static_cast<scene::EventConnection*>(values.components.add(scene::EventConnection::descriptor));
-  released->event=44;released->action=2;released->receiver=lamp;released->inputAction=base+2;
+  released->event=45;released->action=2;released->receiver=lamp;released->inputAction=base+2;
   AE_EXPECT_TRUE(doc.applyEntityValues(player,values),"entrada e conexões");
   // Ida e volta: o filtro pela ação persiste na v3.
   EditorDocument reopened;AE_EXPECT_TRUE(deserializeEditorDocument(serializeEditorDocument(doc,0),0,reopened),"ida e volta");

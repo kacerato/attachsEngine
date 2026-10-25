@@ -337,6 +337,19 @@ ProbeInterpolation locateProbes(const LightProbeSet &set, const float point[3], 
   return result;
 }
 
+float evaluateProbeSky(const ProbeSkyVisibility &sky, const float d[3]) noexcept {
+  // Mesma base de shL2Basis nas quatro primeiras funções: (0,0), y, z, x.
+  return std::max(0.0f, sky[0] * 0.2820947918f + 0.4886025119f * (sky[1] * d[1] + sky[2] * d[2] + sky[3] * d[0]));
+}
+
+ProbeSkyVisibility interpolateProbeSky(const LightProbeSet &set, const ProbeInterpolation &where) noexcept {
+  ProbeSkyVisibility out{};
+  for (u32 k = 0; k < where.count; ++k)
+    if (where.vertex[k] < set.skyVisibility.size())
+      for (u32 i = 0; i < 4; ++i) out[i] += set.skyVisibility[where.vertex[k]][i] * where.weight[k];
+  return out;
+}
+
 ShL2 interpolateProbes(const LightProbeSet &set, const ProbeInterpolation &where) noexcept {
   ShL2 out;
   for (u32 k = 0; k < where.count; ++k)
@@ -360,6 +373,8 @@ bool LightProbeBakeData::valid() const noexcept {
   if (positions.size() != sh.size() || positions.size() != pointIds.size() || positions.size() > MaximumLightProbes) return false;
   for (const auto &p : positions) for (float v : p) if (!std::isfinite(v)) return false;
   for (const auto &s : sh) for (const auto &c : s.c) for (float v : c) if (!std::isfinite(v)) return false;
+  if (!skyVisibility.empty() && skyVisibility.size() != positions.size()) return false;
+  for (const auto &s : skyVisibility) for (float v : s) if (!std::isfinite(v)) return false;
   return true;
 }
 
@@ -372,11 +387,14 @@ std::vector<u8> LightProbeBakeData::serialize() const {
   put32(Version);
   put64(guidHigh); put64(guidLow); put64(sourceHash);
   putFloat(bakeSeconds);
+  const bool sky = !skyVisibility.empty();
+  put32(sky ? 1u : 0u); // v2: bit 0 visibilidade do céu por ponto
   put32(static_cast<u32>(positions.size()));
   for (usize i = 0; i < positions.size(); ++i) {
     put64(pointIds[i]);
     for (float v : positions[i]) putFloat(v);
     for (const auto &c : sh[i].c) for (float v : c) putFloat(v);
+    if (sky) for (float v : skyVisibility[i]) putFloat(v);
   }
   return out;
 }
@@ -389,18 +407,22 @@ bool LightProbeBakeData::deserialize(std::span<const u8> bytes, LightProbeBakeDa
   const auto get32 = [&]() { u32 v = 0; for (u32 i = 0; i < 4; ++i) v |= static_cast<u32>(bytes[at + i]) << (i * 8); at += 4; return v; };
   const auto get64 = [&]() { const u64 lo = get32(); return lo | (static_cast<u64>(get32()) << 32); };
   const auto getFloat = [&]() { const u32 bits = get32(); float v; std::memcpy(&v, &bits, 4); return v; };
-  if (get32() != Version) return fail("versão de sondas de luz desconhecida");
+  const u32 version = get32();
+  if (version != 1 && version != Version) return fail("versão de sondas de luz desconhecida");
   LightProbeBakeData value;
   value.guidHigh = get64(); value.guidLow = get64(); value.sourceHash = get64();
   value.bakeSeconds = getFloat();
+  const bool sky = version >= 2 && bytes.size() - at >= 8 && (get32() & 1u) != 0;
   const u32 count = get32();
-  constexpr usize record = 8 + 12 + 27 * 4;
+  const usize record = 8 + 12 + 27 * 4 + (sky ? 16 : 0);
   if (count > MaximumLightProbes || bytes.size() - at != static_cast<usize>(count) * record) return fail("sondas de luz truncadas");
   value.pointIds.resize(count); value.positions.resize(count); value.sh.resize(count);
+  if (sky) value.skyVisibility.resize(count);
   for (u32 i = 0; i < count; ++i) {
     value.pointIds[i] = get64();
     for (float &v : value.positions[i]) v = getFloat();
     for (auto &c : value.sh[i].c) for (float &v : c) v = getFloat();
+    if (sky) for (float &v : value.skyVisibility[i]) v = getFloat();
   }
   if (!value.valid()) return fail("valores não finitos nas sondas de luz");
   out = std::move(value);

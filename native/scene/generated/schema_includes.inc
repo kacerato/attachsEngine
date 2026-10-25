@@ -11,3 +11,4 @@
 #include "scene/schemas/path.h"
 #include "scene/schemas/path_follow.h"
 #include "scene/schemas/navigation.h"
+#include "scene/schemas/effects.h"

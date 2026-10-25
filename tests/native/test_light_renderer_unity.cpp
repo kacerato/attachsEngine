@@ -94,9 +94,9 @@ AE_TEST(light_inspector_follows_unity_light_component) {
   // Cor sRGB, como o seletor.
   AE_EXPECT_TRUE(type.triples.size() == 1 && type.triples[0].kind == scene::ComponentTripleKind::SrgbColor,
                  "a cor da Luz é sRGB");
-  // Modo: gravado no arquivo, fora do Inspector até o bake existir.
-  AE_EXPECT_TRUE(findEnum("mode") == nullptr && fresh.lightmapMode == 0,
-                 "Modo não vira campo sem consumidor; a luz é de tempo real");
+  // Modo: com o bake de lightmap (G3c) virou campo, com Tempo real de padrão.
+  AE_EXPECT_TRUE(findEnum("mode") != nullptr && fresh.lightmapMode == 0,
+                 "Modo exposto desde o G3c; a luz nasce em tempo real");
   auto components = scene::Components{};
   auto *light = static_cast<scene::Light *>(components.add(scene::Light::descriptor));
   AE_EXPECT_TRUE(light != nullptr, "luz criada");
@@ -255,7 +255,7 @@ AE_TEST(light_budget_follows_the_device_profile_like_the_urp_asset) {
 
 AE_TEST(mesh_renderer_v11_owns_shadows_probes_and_layers) {
   const auto &type = scene::MeshRenderer::descriptor;
-  AE_EXPECT_EQ(type.version, 11u, "Mesh Renderer v11");
+  AE_EXPECT_EQ(type.version, 12u, "Mesh Renderer v12 (G3c: GI assada)");
   scene::MeshRenderer renderer;
   AE_EXPECT_TRUE(renderer.castShadows == 1 && renderer.receiveShadows && renderer.renderingLayerMask == 1,
                  "padrões da Unity: projeta, recebe, camada Padrão");
@@ -274,8 +274,8 @@ AE_TEST(mesh_renderer_v11_owns_shadows_probes_and_layers) {
   std::stringstream current;
   fresh.write(current);
   std::string payload = current.str();
-  // Os cinco números da v11 no fim ("1 1 1 1 1 ") somem: é o texto de uma v10.
-  for (int field = 0; field < 5; ++field) {
+  // Os cinco números da v11 e os dois da v12 no fim somem: é o texto de uma v10.
+  for (int field = 0; field < 7; ++field) {
     payload.pop_back();
     payload.erase(payload.find_last_of(' ') + 1);
   }

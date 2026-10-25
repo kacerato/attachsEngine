@@ -1,0 +1,16 @@
+xatlas — parametrização (UV2 para lightmap) de malhas de triângulos
+
+Origem:   https://github.com/jpcy/xatlas
+Ramo:     master
+Commit:   f700c7790aaa030e794b52ba7791a05c085faf0c (25/07/2022)
+Licença:  MIT (LICENSE)
+
+Subconjunto vendorizado (source/xatlas):
+  xatlas.h    E7675335AD8AB1C1CC9060AD153CF6B8BA2EE914282044EB5F02C49590218FBD
+  xatlas.cpp  0ED0283AAD005C94738CB0CC4612DBA264379D29DEA5B3C9B242F2D4752D5DF4
+  LICENSE     2C16D5B1C2808277FE975B4F70F0FD9AFC9B3BCF04E6C676665A82CB2D5579E3
+Arquivos sem modificação.
+
+Uso: resources/lightmap_uv_generate.cpp (G3c, "Generate Lightmap UVs" do Model Importer).
+Política de atualização: trocar o commit, recopiar os três arquivos, atualizar os hashes acima e
+rodar aether_lightmap_tests no host antes de publicar um APK.

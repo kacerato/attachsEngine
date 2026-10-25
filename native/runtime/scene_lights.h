@@ -1,6 +1,7 @@
 #pragma once
 #include "renderer/punctual_lights.h"
 #include "runtime/scene_graph.h"
+#include "scene/light.h"
 #include <vector>
 
 namespace ae::runtime {
@@ -13,4 +14,8 @@ namespace ae::runtime {
 // o Play muda a tela sem nenhum caminho separado.
 bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLight> &out,
                         double sceneSeconds = 0.0);
+// Cor, intensidade (na unidade do shader), alcance, ângulos e filtros de um
+// componente Luz, sem pose nem regras do sol. Usado por collectSceneLights e
+// pela luz modelo do módulo Luzes das partículas (PK-10b).
+void sceneLightValues(const scene::Light &light, renderer::SceneLight &entry);
 } // namespace ae::runtime

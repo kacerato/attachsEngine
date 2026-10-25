@@ -9,6 +9,8 @@
 #include "runtime/scene_virtual_cameras.h"
 #include "runtime/scene_navigation.h"
 #include "runtime/scene_ik.h"
+#include "runtime/scene_particles.h"
+#include "scene/particle_system.h"
 #include "runtime/scene_probes.h"
 #include "scene/reflection_probe.h"
 #include "scene/light_probe_group.h"
@@ -108,6 +110,27 @@ WorldStatus pathOperation(const ComponentOperationServices &s,ComponentHandle h,
   return ok?WorldStatus::Ok:WorldStatus::Rejected;
 }
 
+// Partículas (runtime/scene_particles.h): a mesma porta do editor e dos scripts.
+WorldStatus particleTarget(const ComponentOperationServices &s,ComponentHandle h) {
+  if(!s.particles||!s.world) return WorldStatus::NotRunning;
+  const auto status=s.world->validate(h.object);if(status!=WorldStatus::Ok) return status;
+  const auto *value=s.world->readComponent(h);if(!value) return WorldStatus::ComponentMissing;
+  return &value->type()==&scene::ParticleSystem::descriptor?WorldStatus::Ok:WorldStatus::InvalidArgument;
+}
+WorldStatus particleOperation(const ComponentOperationServices &s,ComponentHandle h,SceneParticles::Command command,u32 count=0) {
+  const auto status=particleTarget(s,h);if(status!=WorldStatus::Ok) return status;
+  return s.particles->command(s.world->graph(),h.object.id,h.instance,command,count)?WorldStatus::Ok:WorldStatus::Rejected;
+}
+WorldStatus particleQuery(const ComponentOperationServices &s,ComponentHandle h,u32 field,Value &result) {
+  const auto status=particleTarget(s,h);if(status!=WorldStatus::Ok) return status;
+  SceneParticles::Status state;
+  if(!s.particles->status(s.world->graph(),h.object.id,h.instance,state)) return WorldStatus::Rejected;
+  if(field==0) result=Value::makeBoolean(state.playing);
+  else if(field==1) result=Value::makeInteger(state.alive);
+  else result=Value::makeNumber(state.time);
+  return WorldStatus::Ok;
+}
+
 WorldStatus cameraOperation(const ComponentOperationServices &s,ComponentHandle h,std::string_view method,Value &result) {
   if(!s.cameras) return WorldStatus::NotRunning;
   return s.cameras->command(*s.world,h,method,result);
@@ -188,7 +211,7 @@ WorldStatus meshRendererOperation(const ComponentOperationServices &s,ComponentH
   return s.world->setResource(h,"material",0,assetArgument(args),*s.assets,{},*s.resolveResource);
 }
 
-const std::array<ComponentMethodBinding,96> bindings{{
+const std::array<ComponentMethodBinding,105> bindings{{
   {&scene::LightProbeGroup::descriptor,"probe_count",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){
     if(!s.world) return WorldStatus::NotRunning;
     const auto *value=s.world->readComponent(h);
@@ -203,6 +226,17 @@ const std::array<ComponentMethodBinding,96> bindings{{
   {&scene::Environment::descriptor,"component_active",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"component_active",a,r);}},
   {&scene::Environment::descriptor,"set_component_active",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &r){return environmentOperation(s,h,"set_component_active",a,r);}},
   {&scene::MeshRenderer::descriptor,"set_shared_material",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){return meshRendererOperation(s,h,a);}},
+  {&scene::ParticleSystem::descriptor,"play",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return particleOperation(s,h,SceneParticles::Command::Play);}},
+  {&scene::ParticleSystem::descriptor,"stop",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return particleOperation(s,h,SceneParticles::Command::Stop);}},
+  {&scene::ParticleSystem::descriptor,"stop_and_clear",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return particleOperation(s,h,SceneParticles::Command::StopAndClear);}},
+  {&scene::ParticleSystem::descriptor,"pause",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return particleOperation(s,h,SceneParticles::Command::Pause);}},
+  {&scene::ParticleSystem::descriptor,"clear",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &){return particleOperation(s,h,SceneParticles::Command::Clear);}},
+  {&scene::ParticleSystem::descriptor,"emit",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
+    if(a[0].integer<0||a[0].integer>100000) return WorldStatus::InvalidArgument;
+    return particleOperation(s,h,SceneParticles::Command::Emit,static_cast<u32>(a[0].integer));}},
+  {&scene::ParticleSystem::descriptor,"is_playing",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return particleQuery(s,h,0,r);}},
+  {&scene::ParticleSystem::descriptor,"particle_count",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return particleQuery(s,h,1,r);}},
+  {&scene::ParticleSystem::descriptor,"time",[](const ComponentOperationServices &s,ComponentHandle h,Arguments,Value &r){return particleQuery(s,h,2,r);}},
   {&scene::Timer::descriptor,"start",[](const ComponentOperationServices &s,ComponentHandle h,Arguments a,Value &){
     const double seconds=a[0].number;
     if(!std::isfinite(seconds) || seconds<0) return WorldStatus::InvalidArgument;

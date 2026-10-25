@@ -8,11 +8,13 @@
 #include "renderer/lens_dirt.h"
 #include "renderer/light_probes.h"
 #include "renderer/reflection_probes.h"
+#include "renderer/lightmap_data.h"
 #include "renderer/scene_environment.h"
 #include "renderer/environment_ambient.h"
 #include "renderer/color_grading.h"
 #include "renderer/physical_atmosphere.h"
 #include "renderer/grid_plan.h"
+#include "renderer/particles/particle_gpu.h"
 
 #include "core/base.h"
 #include "profiler/frame_statistics.h"
@@ -109,6 +111,8 @@ public:
   // publicar de novo simplesmente não desenha interface, sem estado preso.
   void setUiInstances(std::span<const ui::UiInstance> instances);
   void setTemporalDebugView(TemporalDebugView view) { temporalDebugView_ = view; }
+  // G3c: modo de visão Lightmap assado (bit 3 do cabeçalho das sondas).
+  void setLightmapView(bool enabled) noexcept { lightmapView_ = enabled; }
   bool temporalDebugAvailable() const {
     return temporalInputsActive_ &&
            (temporalUpscaler_.ready() || (temporalAaActive_ && sceneOrthographicHalfHeight_ == 0.0f));
@@ -175,6 +179,10 @@ public:
   bool takeProbeCaptureResult(ProbeCaptureResult &out);
   bool probeCaptureBusy() const noexcept {return !probeCaptureQueue_.empty()||probeJob_.active||probeReadbackPending_;}
   const ProbeFrameStats &probeStats() const noexcept {return probeStats_;}
+  // G3c: lightmaps assados (recurso .aelightmap) e o que custam no quadro.
+  struct LightmapFrameStats {u32 pages=0,drawsLightmapped=0;u64 gpuBytes=0;float uploadMs=0;};
+  void setLightmapData(std::shared_ptr<const renderer::LightmapData> data);
+  const LightmapFrameStats &lightmapStats() const noexcept {return lightmapStats_;}
   // Conta-gotas do editor (Unity: eyedropper da janela de cor): um pixel da
   // imagem final, depois da interface, copiado para a CPU e lido no quadro
   // seguinte. Coordenadas da interface (as mesmas do toque). Falso quando a
@@ -348,6 +356,17 @@ public:
   // Desenhos com skin deformados pelo compute no último quadro.
   u32 profileSkinnedDraws() const noexcept { return skinnedDrawsThisFrame_; }
 
+
+  // Partículas (G5, platform/android/instanced_particles.inl): o quadro da
+  // simulação, já ordenado, trocado por valor a cada quadro; o que o passe
+  // desenhou e quanto custou na GPU volta em `particleStats`.
+  void queueParticles(renderer::particles::ParticleFrame &frame);
+  // G4c: superfícies do clima deste quadro (0..1 cada), lidas pelo shader de superfície.
+  void setWeatherSurface(float wetness, float puddles, float snow, float sunScale = 1, float ambientScale = 1) {
+    weatherSurface_[0]=wetness;weatherSurface_[1]=puddles;weatherSurface_[2]=snow;
+    weatherSunScale_=sunScale;weatherAmbientScale_=ambientScale;
+  }
+  const renderer::particles::ParticleRenderStats &particleStats() const;
 
   bool uiRendererReady() const { return uiRenderer_.isReady(); }
   const ui::UiFont &uiFont() const { return uiFont_; }
@@ -776,6 +795,12 @@ private:
   bool createSpectralWaterResources();
   bool createSkyPipeline();
   bool createEditorGridPipeline();
+  struct ParticleResources;
+  ParticleResources *particles_ = nullptr;
+  bool createParticleResources();
+  void destroyParticleResources();
+  void recordParticlePass(u32 imageIndex, float timeSeconds);
+  bool particlesBlockSceneReuse() const;
   bool createRuntimeHudPipeline();
   bool createUiRenderPass();
   void recordRuntimeHud(u32 imageIndex, const renderer::RuntimeHudState &hud);
@@ -1027,6 +1052,10 @@ private:
     u64 lightRevision=0,layerRevision=0;
     u8 lightProbes=0,reflectionProbes=0;
     bool valid=false;
+    // G3c: o lightmap que o registro tem escrito.
+    u64 lightmapRevision=0;
+    u16 lightmapPage=0;
+    float lightmapScaleOffset[4]{};
   };
   bool createProbeResources();
   void destroyProbeResources();
@@ -1041,6 +1070,19 @@ private:
   bool prepareProbes(const platform::FreeCameraState &camera);
   void recordProbes(float timeSeconds);
   void recordProbeFace(u32 face,float timeSeconds);
+  bool createLightmapResources();
+  void destroyLightmapResources();
+  void writeLightmapDescriptors();
+  bool prepareLightmaps();
+  void recordLightmaps();
+  rhi::VulkanImage lightmapAtlas_,lightmapRetired_;
+  rhi::VulkanSampler lightmapSampler_;
+  rhi::VulkanBuffer lightmapUpload_;
+  std::shared_ptr<const renderer::LightmapData> lightmapData_,lightmapResident_;
+  u32 lightmapLayers_=0;
+  u64 lightmapRevision_=1;
+  bool lightmapUploadPending_=false;
+  LightmapFrameStats lightmapStats_{};
   rhi::VulkanImage probeAtlas_,probeScratch_,probeCapture_,probeCaptureDepth_,probeCaptureMaskA_,probeCaptureMaskB_;
   // V-1, "Environment Reflections › Source: Skybox" da Unity: o céu da cena
   // capturado só com o céu (sem objetos), filtrado em GGX num octaedro próprio
@@ -1314,6 +1356,7 @@ private:
   VkFramebuffer postFramebuffers_[kMaxFramebuffers]{};
   bool temporalAaActive_ = false;
   TemporalDebugView temporalDebugView_ = TemporalDebugView::Final;
+  bool lightmapView_ = false;
   // Image layout and color validity are separate states. The descriptor is
   // statically used by the temporal shader even on its first-frame branch, so
   // the image must already be shader-readable before it contains history.
@@ -1421,6 +1464,10 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
+  // G4c: molhado, poças e neve acumulada do clima, copiados para o quadro, e
+  // os multiplicadores da luz direta e da ambiente do clima.
+  float weatherSurface_[4]{};
+  float weatherSunScale_ = 1, weatherAmbientScale_ = 1;
   rhi::VulkanSampler baseSampler_{};
   VkFormat depthFormat_ = VK_FORMAT_UNDEFINED;
   u32 instanceCount_ = 0;

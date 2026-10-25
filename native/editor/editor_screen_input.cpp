@@ -31,6 +31,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Partículas: a ordem dos módulos da Unity, não a ordem do tipo de controle.
+  if(type.id==std::string_view{"astra.effects.particle_system"}) {
+    static constexpr std::string_view order[]{"Principal","Emissão","Forma","Velocidade no tempo","Limite de velocidade","Herdar velocidade","Força no tempo",
+      "Cor no tempo","Cor pela velocidade","Tamanho no tempo","Tamanho pela velocidade","Rotação no tempo","Rotação pela velocidade","Ruído","Colisão","Sub-emissores","Folha de textura","Luzes","Trilhas","Renderização","Material"};
+    const auto rank=[](std::string_view group){for(u32 i=0;i<std::size(order);++i) if(order[i]==group) return i;return u32(std::size(order));};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
   if(&type==&scene::Camera::descriptor) {
     const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};
@@ -420,6 +427,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
   if(widget==widgetId(EditorWidget::SceneSkyToggle)) {state.sceneSky=!state.sceneSky;return outcome;}
   if(widget==widgetId(EditorWidget::SceneFogToggle)) {state.sceneFog=!state.sceneFog;return outcome;}
   if(widget==widgetId(EditorWidget::ScenePostToggle)) {state.scenePost=!state.scenePost;return outcome;}
+  if(widget==widgetId(EditorWidget::SceneBakedLightmapView)) {state.sceneBakedLightmap=!state.sceneBakedLightmap;return outcome;}
   if(widget>=widgetId(EditorWidget::ComponentVisualBase)&&widget<widgetId(EditorWidget::ComponentVisualBase)+0x01000000u) {
     const auto id=widget-widgetId(EditorWidget::ComponentVisualBase);
     if(componentVisualSelectable(document,id,state.hiddenLayers,state.unpickableLayers,
@@ -852,7 +860,7 @@ EditorPointerOutcome applyEditorPointer(EditorScreenState &state,
     case EditorWidget::TabLighting: {
       // Janela Iluminação: abre no Ambiente da cena (ou na raiz, que mostra o
       // padrão e o botão de personalizar), na aba do céu.
-      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;
+      state.contextMenu=false;state.workspace=EditorWorkspace::Lighting;state.lightingTab=0;
       u64 instance=0;const auto target=sceneLightingEnvironment(document,&instance);
       state.selection=target!=kInvalidEntity?target:document.root();
       state.expandedNative=instance;state.componentSelection=state.selection;

@@ -11,6 +11,9 @@
 #include "renderer/spatial_render_chunks.h"
 
 #include "rhi/shaders/editor_grid_spirv.h"
+#include "rhi/shaders/particle_billboard_spirv.h"
+#include "rhi/shaders/particle_material_spirv.h"
+#include "rhi/shaders/particle_material_project_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"
 #include "rhi/shaders/instanced_fallback_spirv.h"
 #include "rhi/shaders/scene_preview_spirv.h"
@@ -585,6 +588,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_depth_of_field.inl"
 #include "platform/android/instanced_color_grading.inl"
 #include "platform/android/instanced_skinning.inl"
+#include "platform/android/instanced_particles.inl"
 
 bool InstancedRenderer::createPipeline() {
   VkShaderModule vertModule = dirtRoadPreview_
@@ -1206,12 +1210,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
   bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   bindings[bindingCount++]={25,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G3c: páginas de lightmap (probe_lighting.glsl, astraLightmapTexel).
+  bindings[bindingCount++]={26,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 3u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 4u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
@@ -1402,6 +1408,12 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   probeWrites[1].pBufferInfo = nullptr;
   probeWrites[1].pImageInfo = &probeAtlas;
   vkUpdateDescriptorSets(device_, 2, probeWrites, 0, nullptr);
+  // G3c: camada vazia até o primeiro recurso de lightmap.
+  if (!createLightmapResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Lightmap] recursos de lightmap indisponíveis.");
+    return false;
+  }
+  writeLightmapDescriptors();
   return true;
 }
 
@@ -2164,19 +2176,52 @@ bool applySceneEnvironmentLook(
   std::copy_n(clouds.shadow,4,frame.cloudShadow);
   const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
   if(occlusion>0.0f) {
+    // Céu nublado é cinza-azulado (~7000 K), não cinza neutro: com o cinza puro
+    // o albedo quente da cena dominava e tudo virava bege (Vila sépia na chuva
+    // e sob as nuvens do G4). Luminância de cada tom: 1.
+    constexpr float overcastTint[3]{0.9f,0.97f,1.12f};
     const auto grey=[&](float color[3]) {
       const float luminance=0.2126f*color[0]+0.7152f*color[1]+0.0722f*color[2];
-      for(u32 channel=0;channel<3;++channel) color[channel]+=(luminance*0.92f-color[channel])*occlusion*0.75f;
+      for(u32 channel=0;channel<3;++channel)
+        color[channel]+=(luminance*0.92f*overcastTint[channel]-color[channel])*occlusion*0.75f;
     };
     grey(frame.environment.ambientColorStrength);
     grey(frame.atmosphereGroundIrradiance);
     if(probe) for(auto &coefficient:frame.diffuseIrradianceSh) grey(coefficient.data());
+    // G4c: o sol que a sombra das nuvens tira volta como céu cinza difuso -- a
+    // luz que a camada espalha para baixo, como a sonda de ambiente do HDRP
+    // renderizada com as nuvens. Sem isso o tempo fechado ficava só com o
+    // reflexo do céu e a cena perdia a cor (Vila sépia na chuva). Na convenção
+    // da Unity (cor de ambiente c ilumina albedo*c), a parte bloqueada do sol
+    // num chão plano, vezes a fração que a nuvem transmite difusa.
+    const float shadowStrength=look.clouds.castShadows?look.clouds.shadowMultiplier:0.0f;
+    const float sunHeight=std::max(frame.environment.sunDirectionIntensity[1],0.0f);
+    const float sunLuminance=luminance(frame.environment.sunColorAngularRadius)*std::max(frame.environment.sunDirectionIntensity[3],0.0f);
+    // Nuvem fina deixa passar metade em luz difusa; a de tempestade, densa,
+    // quase nada: o céu fechado escurece com a densidade, como na Unity.
+    const float diffuseTransmission=std::clamp(0.5f-0.35f*look.clouds.density,0.1f,0.5f);
+    const float scattered=sunLuminance*sunHeight*occlusion*shadowStrength*diffuseTransmission;
+    if(scattered>0.0f) {
+      const float sky[3]{scattered*overcastTint[0],scattered*overcastTint[1],scattered*overcastTint[2]};
+      const float equator[3]{sky[0]*0.7f,sky[1]*0.7f,sky[2]*0.7f};
+      const float ground[3]{scattered*0.25f,scattered*0.25f,scattered*0.25f};
+      if(probe) {
+        renderer::DiffuseIrradianceSh9 overcast{};
+        renderer::ambientProbeFromGradient(sky,equator,ground,overcast);
+        for(u32 k=0;k<overcast.size();++k) for(u32 c=0;c<3;++c) frame.diffuseIrradianceSh[k][c]+=overcast[k][c];
+      }
+      for(u32 c=0;c<3;++c) {
+        frame.environment.ambientColorStrength[c]+=sky[c];
+        frame.environment.groundColorSaturation[c]+=scattered*0.25f;
+      }
+    }
   }
   return true;
 }
 
 #include "platform/android/instanced_camera_preview.inl"
 #include "platform/android/instanced_probes.inl"
+#include "platform/android/instanced_lightmaps.inl"
 
 void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
   if (!createUiRenderPass()) return;
@@ -3618,6 +3663,7 @@ bool InstancedRenderer::createDepthImage() {
   graphInputs.temporalAaEnabled = temporalInputsActive_;
   graphInputs.postDepthEnabled = dirtRoadPreview_ && renderingPolicy_.post.dedicatedPass;
   graphInputs.waterDepthInputEnabled = waterSubpassActive_;
+  graphInputs.particleDepthEnabled = dirtRoadPreview_;
   frameAttachmentPolicy_ = renderer::resolveFrameAttachmentPolicy(graphInputs);
   if (!frameAttachmentPolicy_.valid) {
     // Falha aberta: sem política compilada, armazenar é o comportamento que
@@ -5234,6 +5280,11 @@ bool InstancedRenderer::initialize(rhi::VulkanDevice &device, rhi::VulkanSwapcha
     __android_log_print(ANDROID_LOG_ERROR, LogTag, "Falha ao criar os framebuffers instanciados.");
     return false;
   }
+  // Partículas são opcionais: a cena continua sem elas e o log diz por quê.
+  if (!createParticleResources()) {
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[Particles] passe de partículas indisponível.");
+    destroyParticleResources();
+  }
   // Opt-in and off by default (see setHzbOcclusionEnabled) -- a no-op that
   // returns true when disabled, so this never blocks initialization for the
   // renderer's existing, already-validated path.
@@ -5294,8 +5345,10 @@ void InstancedRenderer::shutdown() {
   activeEnvironmentMap_.reset();environmentMaps_.clear();environmentMapDiagnostic_.clear();
   if (device_ == VK_NULL_HANDLE) return;
   vkDeviceWaitIdle(device_);
+  destroyParticleResources();
   destroyCameraPreview();
   destroyProbeResources();
+  destroyLightmapResources();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
   // The UI owns VMA buffers and images too. Release them before its render pass
@@ -6484,6 +6537,16 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->postVignetteShape[2]=renderingPolicy_.post.vignetteIntensity*3.0f;frame->postVignetteShape[3]=1.0f;
       frame->postVignette[0]=frame->postVignette[1]=frame->postVignette[2]=0.0f;frame->postVignette[3]=1.0f;
     }
+    // Superfícies do clima nos reservados (dirt_road_shading.glsl): molhado;
+    // neve em centésimos + poças como fração no mesmo float.
+    frame->shadowTransitionParameters[3]=std::clamp(weatherSurface_[0],0.0f,1.0f);
+    frame->materialDistanceParameters[3]=std::round(std::clamp(weatherSurface_[2],0.0f,1.0f)*100.0f)+
+        std::clamp(weatherSurface_[1],0.0f,1.0f)*0.99f;
+    // Clima: luz direta e ambiente escurecem com a intensidade (Enviro 3:
+    // directLightIntensityModifier/ambientIntensityModifier). A força do
+    // ambiente multiplica a sonda SH e o ambiente constante no shader.
+    frame->environment.sunDirectionIntensity[3]*=weatherSunScale_;
+    frame->environment.ambientColorStrength[3]*=weatherAmbientScale_;
     // V-1: com céu procedural (sem HDRI), o reflexo do ambiente é o próprio céu
     // capturado (Environment Reflections › Skybox da Unity). O mapa empacotado
     // é uma foto de meio-dia: refletido na sombra e nas bordas rasantes, deixava
@@ -6832,10 +6895,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       renderingPolicy_.post.dedicatedPass && postPipeline_!=VK_NULL_HANDLE &&
       !temporalInputsActive_ && !temporalUpscaler_.ready() &&
       waterDrawOrder_.empty() && skinnedDraws_.empty() && !pendingPreview_.requestId &&
-      !textureStreamingDebugView_;
+      !textureStreamingDebugView_ && !particlesBlockSceneReuse();
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
-      (textureStreamingDebugView_?32u:0u);
+      (textureStreamingDebugView_?32u:0u)|(lightmapView_?64u:0u);
   const bool sceneUniformMatches=sceneCacheEligible && editorSceneCachedUniform_.size()==sizeof(DirtRoadFrameUniform) &&
       std::memcmp(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform))==0;
   editorSceneReusedLastFrame_=sceneCacheEligible && editorSceneCacheValid_ &&
@@ -7745,6 +7808,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // deferred store is incorrectly charged to the following motion pass.
   if(dirtRoadPreview_) endGpuRegion(GpuPassClass::Transparent);
   rhiDevice_->cmdEndDebugLabel(commandBuffer_);
+  if(dirtRoadPreview_) recordParticlePass(imageIndex,timeSeconds);
   if(sceneCacheEligible) {
     editorSceneCachedUniform_.resize(sizeof(DirtRoadFrameUniform));
     std::memcpy(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform));

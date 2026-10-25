@@ -32,6 +32,8 @@
 #include "editor/editor_creation_catalog.h"
 #include "renderer/color_grading.h"
 #include "resources/environment_looks.h"
+#include "editor/editor_particle_inspector.h"
+#include "runtime/scene_particles.h"
 #include <unordered_set>
 #include <cctype>
 #include "editor/editor_screen.h"
@@ -5327,6 +5329,68 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       for(u32 slot=0;slot<property.slotCount(*component) && slot<256;++slot) fields.push_back({9,i,slot});
     }
   }
+  // Sistema de partículas: linhas de curva e gradiente logo abaixo do modo que
+  // as liga, a prévia no topo de Principal e a ordem dos módulos da Unity.
+  if(entry.type==&scene::ParticleSystem::descriptor&&!searching) {
+    const auto &system=scene::particleSystem(*component);
+    const auto curves=scene::ParticleSystem::curveSlots();
+    const auto gradients=scene::ParticleSystem::gradientSlots();
+    for(u32 i=0;i<curves.size();++i)
+      if(particleSlotGroup(curves[i].id)==group&&particleCurveRowVisible(system,curves[i])) fields.push_back({30,i});
+    for(u32 i=0;i<gradients.size();++i)
+      if(particleSlotGroup(gradients[i].id)==group&&particleGradientRowVisible(system,gradients[i])) fields.push_back({31,i});
+    if(group=="Principal") fields.push_back({32,0});
+    const auto fieldId=[&](const Field &f)->std::string_view {
+      switch(f.kind) {
+      case 0: return entry.type->booleans[f.index].id;
+      case 1: return entry.type->enums[f.index].id;
+      case 2: return entry.type->numbers[f.index].id;
+      case 5: return entry.type->triples[f.index].id;
+      case 30: return curves[f.index].id;
+      case 31: return gradients[f.index].id;
+      case 32: return kParticlePreviewRow;
+      default: return {};
+      }
+    };
+    std::stable_sort(fields.begin(),fields.end(),[&](const Field &a,const Field &b){
+      return particleInspectorRank(fieldId(a))<particleInspectorRank(fieldId(b));});
+    // Min/Max numa linha só (valor ou par + chip do modo), rajada numa linha e,
+    // em coluna, o interruptor do módulo vai para o cabeçalho da seção.
+    const auto numberIndex=[&](const std::string &id)->u32 {
+      for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) return i;
+      return 0xffffu;
+    };
+    const auto hasMode=[&](const std::string &base) {
+      for(const auto &e:entry.type->enums) if(e.id==base+"_mode") return true;
+      return false;
+    };
+    std::vector<Field> compact;
+    for(const auto &f:fields) {
+      if(f.kind==1) {
+        const std::string id(entry.type->enums[f.index].id);
+        // Só modos de Min/Max (há um número com o mesmo nome base); "Modo" de
+        // renderização e "Ordenação" continuam listas comuns.
+        if(id.ends_with("_mode")&&numberIndex(id.substr(0,id.size()-5))!=0xffffu) {
+          const auto base=id.substr(0,id.size()-5);
+          compact.push_back({33,f.index,(numberIndex(base+"_min")&0xffffu)|(numberIndex(base+"_multiplier")<<16),numberIndex(base)});
+          continue;
+        }
+      }
+      if(f.kind==2) {
+        const std::string id(entry.type->numbers[f.index].id);
+        if(hasMode(id)) continue;
+        if(id.ends_with("_min")&&hasMode(id.substr(0,id.size()-4))) continue;
+        if(id.ends_with("_multiplier")&&hasMode(id.substr(0,id.size()-11))) continue;
+        if(id.starts_with("burst_")&&id!="burst_count") {
+          if(id.ends_with("_time")) compact.push_back({34,static_cast<u32>(id[6]-'0')});
+          continue;
+        }
+      }
+      if(stacked&&f.kind==0&&particleModuleToggle(group)==entry.type->booleans[f.index].id) continue;
+      compact.push_back(f);
+    }
+    fields=std::move(compact);
+  }
   // Câmera virtual e Cérebro: o interruptor que liga o grupo e a escolha de modo
   // vêm antes dos valores que eles mostram; os alvos fecham a aba Geral.
   if((entry.type==&scene::VirtualCamera::descriptor||entry.type==&scene::CameraBrain::descriptor)&&!searching) {
@@ -5655,7 +5719,87 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       builder.list.addRect({slot.x+2,slot.bottom()-2,slot.width-4,1},theme.color.line);
       continue;
     }
-    if(f.kind==8) {
+    if(f.kind==30||f.kind==31) {
+      // Curva ou gradiente do componente: miniatura do valor; o toque abre o
+      // editor de curva/gradiente do projeto com bibliotecas e histórico.
+      const auto &system=scene::particleSystem(*component);
+      const bool curve=f.kind==30;
+      const auto slotId=curve?scene::ParticleSystem::curveSlots()[f.index].id:scene::ParticleSystem::gradientSlots()[f.index].id;
+      const char *rowName=curve?particleCurveRowLabel(system,scene::ParticleSystem::curveSlots()[f.index]):
+                                particleGradientRowLabel(system,scene::ParticleSystem::gradientSlots()[f.index]);
+      builder.label(takeLeft(slot,std::min(120.f,slot.width*.42f)),rowName,theme.color.textDim,theme.type.caption);
+      auto box=deflate(slot,UiInsets{2,6,2,6});
+      builder.list.addRect(box,theme.color.silhouette,theme.radius.control);
+      const auto inner=deflate(box,UiInsets::all(4));
+      if(curve) drawCurveThumbnail(builder,inner,*system.curve(slotId),theme.color.accent);
+      else drawGradientBar(builder,inner,*system.gradient(slotId),32);
+      const bool editable=builder.state.workspace!=EditorWorkspace::Play;
+      if(editable) builder.router.addRegion(hit,widgetId(curve?EditorWidget::ParticleCurveRowBase:EditorWidget::ParticleGradientRowBase)+f.index);
+    } else if(f.kind==33||f.kind==34) {
+      // Células numéricas compactas: rótulo pequeno em cima, valor embaixo; o
+      // toque edita pelo mesmo widget do número refletido.
+      const auto cell=[&](UiRect area,u32 field,const char *top) {
+        if(field>=entry.type->numbers.size()) return;
+        const auto &p=entry.type->numbers[field];
+        builder.list.addRect(deflate(area,UiInsets::all(2)),theme.color.silhouette,theme.radius.control);
+        if(top) builder.label(takeTop(area,15),top,theme.color.textDim,theme.type.caption,UiAlign::Center);
+        char value[32];std::snprintf(value,sizeof value,"%.6g%s%s",static_cast<double>(p.read(*component)),
+                                     p.presentation.unit.empty()||top?"":" ",top?"":std::string(p.presentation.unit).c_str());
+        builder.label(area,builder.mixed(multiKey(component->instanceId(),p.id))?"\xE2\x80\x94":value,theme.color.text,theme.type.caption,UiAlign::Center);
+        if(p.presentation.isEditable(*component)) builder.router.addRegion(area,widgetId(EditorWidget::ComponentNumberBase)+index+(field<<8));
+      };
+      if(f.kind==33) {
+        const auto &mode=entry.type->enums[f.index];
+        const u32 current=mode.read(*component),minimum=f.slot&0xffffu,multiplier=f.slot>>16;
+        builder.label(takeLeft(slot,slot.width*.36f),f.second<entry.type->numbers.size()?entry.type->numbers[f.second].name:mode.name,
+                      theme.color.textDim,theme.type.caption);
+        auto chip=takeRight(slot,82);
+        auto chipBox=deflate(chip,UiInsets::all(2));
+        builder.list.addRect(chipBox,withAlpha(theme.color.accent,.14f),theme.radius.control);
+        builder.list.addImage(centred(takeRight(chipBox,18),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.accent);
+        builder.label(chipBox,particleModeChip(current),theme.color.accent,theme.type.caption,UiAlign::Center);
+        if(mode.presentation.isEditable(*component)) builder.router.addRegion(chip,widgetId(EditorWidget::ComponentEnumBase)+index+(f.index<<8));
+        if(current==2) {const float w=slot.width*.5f;cell(takeLeft(slot,w),minimum,nullptr);cell(slot,f.second,nullptr);}
+        else if(current==1||current==3) cell(slot,multiplier,nullptr);
+        else cell(slot,f.second,nullptr);
+      } else {
+        char title[16];std::snprintf(title,sizeof title,"Rajada %u",f.index+1);
+        builder.label(takeLeft(slot,58),title,theme.color.textDim,theme.type.caption);
+        static constexpr const char *parts[]{"time","count_min","count_max","cycles","interval","probability"};
+        static constexpr const char *tops[]{"tempo","mín","máx","ciclos","interv.","chance"};
+        const float w=slot.width/6;
+        for(u32 k=0;k<6;++k) {
+          char id[40];std::snprintf(id,sizeof id,"burst_%u_%s",f.index,parts[k]);
+          u32 field=0xffffu;
+          for(u32 i=0;i<entry.type->numbers.size();++i) if(entry.type->numbers[i].id==id) field=i;
+          cell(k<5?takeLeft(slot,w):slot,field,tops[k]);
+        }
+      }
+    } else if(f.kind==32) {
+      // Prévia: o que o sistema está fazendo agora na vista, e reiniciar.
+      runtime::SceneParticles::Status live;
+      const auto *particles=builder.state.particleRuntime;
+      const bool known=particles&&particles->peek(entity.id,component->instanceId(),live);
+      const u32 capacity=particles?particles->capacityOf(entity.id,component->instanceId()):0;
+      const auto &system=scene::particleSystem(*component);
+      const bool limited=known&&capacity<static_cast<u32>(system.maxParticles);
+      auto card=deflate(slot,UiInsets::all(2));
+      builder.list.addRect(card,withAlpha(theme.color.accent,.10f),8);
+      auto inside=deflate(card,UiInsets{6,8,6,4});
+      const bool editing=builder.state.workspace!=EditorWorkspace::Play;
+      if(editing) {
+        auto restart=takeRight(inside,40);
+        builder.list.addRect(deflate(restart,UiInsets::all(2)),theme.color.raised,theme.radius.control);
+        builder.list.addImage(centred(restart,18,18),static_cast<UiImageId>(UiIcon::RuntimePlay),theme.color.accent);
+        builder.router.addRegion(restart,widgetId(EditorWidget::ParticlePreviewRestart));
+      }
+      builder.list.addImage(centred(takeLeft(inside,24),18,18),static_cast<UiImageId>(UiIcon::ComponentParticleSystem),theme.color.accent);
+      char text[128];
+      if(!known) std::snprintf(text,sizeof text,"%s",editing?"Prévia parada":"Sem simulação");
+      else std::snprintf(text,sizeof text,"%s · %u vivas%s · %.2f ms",live.paused?"Pausado":live.playing?(live.emitting?"Emitindo":"Terminando"):"Parado",
+                         live.alive,limited?" · teto do aparelho":"",static_cast<double>(builder.state.particleSimulationMs));
+      builder.label(inside,text,limited?theme.color.warning:theme.color.text,theme.type.caption);
+    } else if(f.kind==8) {
       std::string summary="Influência indisponível";bool warning=true;
       std::vector<renderer::SceneEnvironmentVolume> volumes;
       if(builder.state.view && runtime::collectSceneEnvironmentVolumes(*builder.state.document,volumes))
@@ -6345,8 +6489,19 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
     builder.list.addImage(centred(takeLeft(row,24),12,12),static_cast<UiImageId>(open?UiIcon::UiChevronDown:UiIcon::UiChevronRight),
                           open?theme.color.accent:theme.color.textDim);
     const bool spring=entry.type==&scene::Joint::descriptor&&static_cast<const scene::Joint&>(*component).kind==scene::JointKind::Spring&&groups[g]=="Motor";
+    // Partículas: o interruptor do módulo no cabeçalho, registrado depois do
+    // dobrar para ganhar o toque dentro do próprio retângulo.
+    u32 moduleToggle=~u32{0};UiRect toggleArea{};
+    if(entry.type==&scene::ParticleSystem::descriptor)
+      for(u32 b=0;b<entry.type->booleans.size();++b)
+        if(entry.type->booleans[b].id==particleModuleToggle(groups[g])) {moduleToggle=b;toggleArea=takeRight(row,44);}
     builder.label(row,spring?std::string_view{"Mola"}:groups[g],open&&overridden?theme.color.text:theme.color.textDim,theme.type.body);
     if(index<256&&g<256) builder.router.addRegion(hit,widgetId(EditorWidget::ComponentGroupBase)+0x10000u+(index<<8)+g);
+    if(moduleToggle!=~u32{0}) {
+      const auto &property=entry.type->booleans[moduleToggle];
+      builder.checkbox(centred(toggleArea,28,28),property.read(*component),widgetId(EditorWidget::ComponentBooleanBase)+index+(moduleToggle<<8),
+                       property.presentation.isEditable(*component),builder.mixed(multiKey(component->instanceId(),property.id)));
+    }
     if(open) {takeTop(content,4);body(groups[g]);takeTop(content,6);}
   }
   addOverride();
@@ -9219,7 +9374,10 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                             state.importFbxDeformation==state.importPreparedFbxDeformation &&
                             state.importFbxReduceWeights==state.importPreparedFbxReduceWeights &&
                             state.importFbxApproximateSteps==state.importPreparedFbxApproximateSteps &&
-                            state.importFbxBakeRate==state.importPreparedFbxBakeRate;
+                            state.importFbxBakeRate==state.importPreparedFbxBakeRate &&
+                            state.importLightmapUvs==state.importPreparedLightmapUvs &&
+                            state.importLightmapHardAngle==state.importPreparedLightmapHardAngle &&
+                            state.importLightmapPackMargin==state.importPreparedLightmapPackMargin;
 
   const bool focal=state.workspace==EditorWorkspace::Library&&!state.importTexture&&!state.importEnvironment&&!state.importBatch;
   auto sourceExtension=std::filesystem::path(state.importPath).extension().string();
@@ -9647,7 +9805,8 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
     // (um celular deitado tem ~400 de altura útil) a lista corrida cortava as
     // linhas de baixo sem aviso nem como alcançá-las.
     enum ProfileRow : usize {Scale,Size,TextureLabel,TextureSteps,Compression,Streaming,StreamingPriority,Normals,Weighting,Smoothing,
-                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,FbxDeformation,FbxWeights,FbxSteps,FbxRate,ProfileRowCount};
+                             Tangents,Lods,LodLevels,PolygonOrder,Cameras,Lights,LightmapUvs,LightmapAngle,LightmapMargin,
+                             FbxDeformation,FbxWeights,FbxSteps,FbxRate,ProfileRowCount};
     const auto [firstRow,lastRow]=paginate(staticFbx?ProfileRowCount:FbxDeformation,focal?48:40);
     const auto cycle=[&](UiRect row,const char *label,const char *value,EditorWidget widget) {
       const bool fbxControl=widget==EditorWidget::ImportFbxDeformation||widget==EditorWidget::ImportFbxWeights||widget==EditorWidget::ImportFbxSteps||widget==EditorWidget::ImportFbxRate;
@@ -9746,6 +9905,35 @@ void buildImportDock(ScreenBuilder &builder,UiRect content) {
                            EditorWidget::ImportLodLevelsCycle);break;
       case PolygonOrder:cycle(row,"Otimizar ordem dos polígonos",state.importOptimizeOrder?"Sim":"Não",
                               EditorWidget::ImportOptimizeOrderToggle);break;
+      // G3c: Generate Lightmap UVs do Model Importer da Unity, com Hard Angle
+      // e Pack Margin; o lightmap assado lê esta UV2.
+      case LightmapUvs: {
+        builder.label(takeLeft(row,row.width*.45f),"Gerar UV de lightmap",theme.color.text,theme.type.caption);
+        const auto cell=deflate(row,UiInsets::all(2));
+        list.addRect(cell,state.importLightmapUvs?theme.color.accent:theme.color.raised,theme.radius.control);
+        builder.label(cell,state.importLightmapUvs?"Gerar (xatlas)":"Não gerar",state.importLightmapUvs?theme.color.accentInk:theme.color.text,
+                      theme.type.caption,UiAlign::Center);
+        router.addRegion(focal?deflate(cell,UiInsets::all(-2)):cell,lightmap_widget::id(lightmap_widget::ImportUvs));
+        break;
+      }
+      case LightmapAngle:
+      case LightmapMargin: {
+        const bool angle=index==LightmapAngle;
+        const bool enabled=state.importLightmapUvs;
+        builder.label(takeLeft(row,row.width*.45f),angle?"Ângulo vivo":"Margem entre ilhas",enabled?theme.color.text:theme.color.textMuted,theme.type.caption);
+        if(!enabled) {builder.label(row,"Ative Gerar UV de lightmap",theme.color.textMuted,theme.type.caption,UiAlign::Center);break;}
+        const auto down=deflate(takeLeft(row,focal?48:36),UiInsets::all(2)),up=deflate(takeRight(row,focal?48:36),UiInsets::all(2));
+        const u32 downCode=angle?lightmap_widget::ImportHardAngleDown:lightmap_widget::ImportMarginDown;
+        const u32 upCode=angle?lightmap_widget::ImportHardAngleUp:lightmap_widget::ImportMarginUp;
+        for(const auto &[rect,label,code]:{std::tuple{down,"-",downCode},std::tuple{up,"+",upCode}}) {
+          list.addRect(rect,theme.color.raised,theme.radius.control);
+          builder.label(rect,label,theme.color.text,theme.type.body,UiAlign::Center);
+          router.addRegion(focal?deflate(rect,UiInsets::all(-2)):rect,lightmap_widget::id(code));
+        }
+        builder.label(row,angle?std::to_string(state.importLightmapHardAngle)+"°":std::to_string(state.importLightmapPackMargin)+" px",
+                      theme.color.text,theme.type.body,UiAlign::Center);
+        break;
+      }
       case Cameras:cycle(row,"Importar câmeras",state.importCameras?"Sim":"Não",EditorWidget::ImportCamerasToggle);break;
       case Lights:cycle(row,"Importar luzes",state.importLights?"Sim":"Não",EditorWidget::ImportLightsToggle);break;
       case FbxDeformation:cycle(row,"FBX rig/takes/morph",state.importFbxDeformation?"Importar":"Perfil estático",EditorWidget::ImportFbxDeformation);break;
@@ -10189,6 +10377,109 @@ void buildObjectGroups(ScreenBuilder &builder,UiRect content,const EditorEntity 
   builder.label(footer,std::to_string(names.size())+" / 32 associações",theme.color.textMuted,theme.type.caption,UiAlign::Center);
 }
 
+// G3c: janela Iluminação › Lightmaps (aba Scene da Lighting window da Unity:
+// Lightmapping Settings + Generate Lighting). Cartão de estado do recurso,
+// o que o bake vai encontrar, a ação principal com progresso e as
+// Configurações de iluminação da cena com os controles de sempre.
+void buildLightmapPanel(ScreenBuilder &builder,UiRect &content,const EditorEntity &entity,EditorEntityId target) {
+  namespace lw=lightmap_widget;
+  const auto &theme=builder.theme;
+  const auto *view=builder.state.lightmapView;
+  if(!view) return;
+  const bool authoring=builder.state.workspace!=EditorWorkspace::Play;
+  const auto megabytes=[](u64 bytes){char t[32];std::snprintf(t,sizeof t,"%.1f MB",static_cast<double>(bytes)/(1024.0*1024.0));return std::string(t);};
+  const auto duration=[](float seconds){
+    char t[32];
+    if(seconds<60) std::snprintf(t,sizeof t,"%.0f s",static_cast<double>(seconds));
+    else std::snprintf(t,sizeof t,"%u min %02u s",static_cast<u32>(seconds/60),static_cast<u32>(seconds)%60u);
+    return std::string(t);};
+  // 1. Estado do recurso em vigor.
+  {
+    std::string title,detail;UiColor tone=theme.color.textDim;
+    if(view->baking) {
+      title=view->stage.empty()?"Gerando iluminação":view->stage;tone=theme.color.accent;
+      char t[96];
+      if(view->passes>1&&view->pass) std::snprintf(t,sizeof t,"Rebote %u de %u · %.0f%%",view->pass,view->passes,static_cast<double>(view->progress*100));
+      else std::snprintf(t,sizeof t,"%.0f%%",static_cast<double>(view->progress*100));
+      detail=t;
+    } else if(view->missing) {
+      title="Recurso de lightmap ausente";tone=theme.color.warning;detail="Gere de novo para recriar "+view->path;
+    } else if(view->hasData) {
+      title=view->stale?"Lightmaps desatualizados":"Lightmaps em dia";tone=view->stale?theme.color.warning:theme.color.accent;
+      char t[160];
+      std::snprintf(t,sizeof t,"%u página(s) de %u px · %s · %s",view->pages,view->pageSize,megabytes(view->gpuBytes).c_str(),
+                    view->compressed?"comprimido":"meia precisão");
+      detail=t;
+    } else {
+      title="Sem iluminação assada";detail="Luz local e céu em tempo real; os objetos Static não têm lightmap";
+    }
+    inspectorStatusCard(builder,content,UiIcon::LightingLightmapBaked,title,detail,tone,view->baking?view->progress:-1);
+  }
+  // 2. O que o próximo bake vai encontrar, em blocos.
+  {
+    auto row=takeTop(content,58);takeTop(content,6);
+    // Rótulos curtos: cabem no bloco sem cortar. "Sem UV2" é estado com ação --
+    // tocar seleciona esses objetos (recebem pelas sondas de luz).
+    struct Chip {const char *label;std::string value;bool warning;u32 action;};
+    const Chip chips[]{
+      {"Static",std::to_string(view->contributors),view->contributors==0,0},
+      {"Recebem",std::to_string(view->receivers),false,0},
+      {"Sem UV2",std::to_string(view->receiversWithoutUv),view->receiversWithoutUv>0,view->receiversWithoutUv>0?lw::id(lw::SelectWithoutUv):0u},
+      {"Assada · Mista",std::to_string(view->bakedLights)+" · "+std::to_string(view->mixedLights),false,0}};
+    const float width=row.width/4;
+    for(const auto &chip:chips) {
+      auto cell=deflate(takeLeft(row,width),UiInsets{2,0,2,0});
+      builder.list.addRect(cell,chip.action?theme.color.raised:theme.color.silhouette,theme.radius.control);
+      if(chip.warning) builder.list.addBorder(cell,theme.color.warning,1,theme.radius.control);
+      auto inner=deflate(cell,UiInsets{6,6,6,4});
+      auto top=takeTop(inner,24);
+      if(chip.action) {
+        builder.list.addImage(centred(takeRight(top,18),14,14),static_cast<UiImageId>(UiIcon::UiChevronRight),theme.color.warning);
+        if(authoring) builder.router.addRegion(cell,chip.action,theme.touch.minimumTarget);
+      }
+      builder.label(top,fitMiddle(builder.list,chip.value,top.width,theme.type.body),
+                    chip.warning?theme.color.warning:theme.color.text,theme.type.body,UiAlign::Center);
+      builder.label(inner,fitMiddle(builder.list,chip.label,inner.width,theme.type.caption),theme.color.textMuted,theme.type.caption,UiAlign::Center);
+    }
+  }
+  // 3. A ação principal e as secundárias.
+  if(authoring) {
+    auto row=takeTop(content,48);takeTop(content,4);
+    if(view->baking) {
+      const auto primary=takeLeft(row,row.width*.62f);
+      auto progress=deflate(primary,UiInsets{2,0,2,4});
+      builder.list.addRect(progress,theme.color.raised,theme.radius.control);
+      builder.list.addRect({progress.x,progress.y,progress.width*std::clamp(view->progress,0.f,1.f),progress.height},
+                           withAlpha(theme.color.accent,.35f),theme.radius.control);
+      std::string text=duration(view->elapsedSeconds);
+      if(view->remainingSeconds>=0) text+=" · faltam "+duration(view->remainingSeconds);
+      builder.label(progress,fitMiddle(builder.list,text,progress.width-8,theme.type.caption),theme.color.text,theme.type.caption,UiAlign::Center);
+      probeActionButton(builder,row,UiIcon::UiClose,"Cancelar",lw::id(lw::Cancel),false,true);
+    } else {
+      const auto primary=takeLeft(row,view->hasData?row.width*.62f:row.width);
+      probeActionButton(builder,primary,UiIcon::LightingGenerateLighting,view->hasData?"Gerar de novo":"Gerar iluminação",lw::id(lw::Generate),true,
+                        view->bakedGi&&view->contributors>0);
+      if(view->hasData) probeActionButton(builder,row,UiIcon::UiRemove,"Limpar",lw::id(lw::Clear),false,true);
+    }
+  }
+  if(view->hasData&&!view->baking) {
+    auto row=takeTop(content,20);takeTop(content,6);
+    char t[160];
+    std::snprintf(t,sizeof t,"%u objetos · %.1f M texels · %.0f M raios · %s · %u desenhos com lightmap",view->entries,
+                  static_cast<double>(view->texels)/1e6,static_cast<double>(view->rays)/1e6,duration(view->bakeSeconds).c_str(),view->drawsLightmapped);
+    builder.label(row,fitMiddle(builder.list,t,row.width,theme.type.caption),theme.color.textMuted,theme.type.caption);
+  }
+  // 4. Configurações (Lightmapping Settings), no componente da cena.
+  if(!view->settingsExist) {
+    auto row=takeTop(content,44);
+    if(authoring) probeActionButton(builder,row,UiIcon::ComponentAdd,"Criar configurações de iluminação",lw::id(lw::CreateSettings),false,true);
+    return;
+  }
+  if(static_cast<EditorEntityId>(view->settingsEntity)!=target) return;
+  builder.onlyComponent=view->settingsInstance;
+  buildComponents(builder,content,entity);
+}
+
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent) {
   const UiTheme &theme = builder.theme;
   const EditorEntity *entity = builder.state.document->find(target);
@@ -10298,7 +10589,35 @@ void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntity
     builder.list.addRect({banner.x,banner.y+6,3,banner.height-12},theme.color.accent,1);
     auto bannerText=deflate(banner,UiInsets{10,4,8,4});
     builder.list.addImage(centred(takeLeft(bannerText,34),24,24),static_cast<UiImageId>(UiIcon::LightingWindow),theme.color.accent);
+    // G3c: abas da Lighting window -- Ambiente (Environment) e Lightmaps (Scene),
+    // num seletor segmentado no próprio cabeçalho: nenhuma linha a mais na janela.
+    {
+      namespace lw=lightmap_widget;
+      auto tabs=takeRight(bannerText,std::min(236.0f,bannerText.width*.58f));
+      tabs=deflate(tabs,UiInsets{4,4,0,4});
+      builder.list.addRect(tabs,theme.color.silhouette,theme.radius.control);
+      const struct {UiIcon icon;const char *name;u32 code;} entries[]{
+          {UiIcon::LightingSky,"Ambiente",lw::TabEnvironment},{UiIcon::LightingLightmapBaked,"Lightmaps",lw::TabLightmaps}};
+      const float width=tabs.width/2;
+      for(u32 i=0;i<2;++i) {
+        auto tab=takeLeft(tabs,width);
+        const bool active=builder.state.lightingTab==i;
+        const auto hit=tab;
+        if(active) builder.list.addRect(deflate(tab,UiInsets::all(2)),theme.color.accent,theme.radius.control);
+        auto inner=deflate(tab,UiInsets{6,0,6,0});
+        builder.list.addImage(centred(takeLeft(inner,22),16,16),static_cast<UiImageId>(entries[i].icon),
+                              active?theme.color.accentInk:theme.color.textMuted);
+        builder.label(inner,entries[i].name,active?theme.color.accentInk:theme.color.textMuted,theme.type.caption,UiAlign::Center);
+        builder.router.addRegion(hit,lw::id(entries[i].code));
+      }
+    }
     builder.label(takeTop(bannerText,22),"Iluminação",theme.color.text,theme.type.body);
+    if(builder.state.lightingTab==1) {
+      builder.label(bannerText,"Lightmaps · Gerar iluminação",theme.color.textDim,theme.type.caption);
+      buildLightmapPanel(builder,content,*entity,target);
+      builder.onlyComponent=onlyComponent;
+      return;
+    }
     if(owner!=kInvalidEntity&&owner==target&&instance) {
       const auto *ownerEntity=builder.state.document->find(owner);
       builder.label(bannerText,fitMiddle(builder.list,std::string("Ambiente da cena · ")+(ownerEntity?ownerEntity->name:""),
@@ -12456,7 +12775,7 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
     builder.iconButton(effectsMenu,state.sceneEffectsMenu?UiIcon::UiChevronUp:UiIcon::UiChevronDown,
                        widgetId(EditorWidget::SceneEffectsMenu),state.sceneEffectsMenu);
     if(state.sceneEffectsMenu) {
-      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 126.0f};
+      const UiRect panel{effects.x, effects.bottom()+6.0f, 218.0f, 165.0f};
       list.addRect(panel,withAlpha(theme.color.surface,.97f),theme.radius.control);
       // Construção explícita para preservar o retângulo completo como alvo.
       const auto row=[&](float y,UiIcon glyph,const char *label,EditorWidget widget,bool active) {
@@ -12471,6 +12790,8 @@ EditorScreenLayout buildEditorScreen(const EditorScreenState &state, const UiThe
       row(panel.y+6.0f,UiIcon::LightingSky,"Sky",EditorWidget::SceneSkyToggle,state.sceneSky);
       row(panel.y+45.0f,UiIcon::LightingFog,"Fog",EditorWidget::SceneFogToggle,state.sceneFog);
       row(panel.y+84.0f,UiIcon::LightingPostProcessing,"Post Processing",EditorWidget::ScenePostToggle,state.scenePost);
+      // Draw mode Baked Lightmap da Unity: o que o lightmap guarda, sem albedo.
+      row(panel.y+123.0f,UiIcon::LightingLightmapBaked,"Lightmap assado",EditorWidget::SceneBakedLightmapView,state.sceneBakedLightmap);
     }
     }
     if(state.cameraViewEntity) {

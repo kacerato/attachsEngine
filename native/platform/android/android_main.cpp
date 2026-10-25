@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cctype>
 #include <set>
+#include <memory>
 #include "resources/gltf_package.h"
 #include "resources/gltf_folder_source.h"
 #include "resources/model_import.h"
@@ -25,6 +26,7 @@
 #include "platform/android/water_spectral_probe.h"
 #include "platform/android/android_frame_profiler.h"
 #include "platform/android/android_telemetry.h"
+#include "renderer/lightmap_data.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/rendering_settings_file.h"
 #include "renderer/water_fft.h"
@@ -39,6 +41,7 @@
 #include "platform/android/ocean_validation.h"
 #include "editor/editor_water_play.h"
 #include "platform/android/lifecycle_trace.h"
+#include "platform/android/exit_trace.h"
 #include "platform/app_lifecycle.h"
 #include "platform/camera_route.h"
 #include "platform/first_person_controller.h"
@@ -73,6 +76,18 @@
 namespace {
 
 constexpr const char *LogTag = "Aether.Android";
+
+// G3c: como o Light Mode Baked da Unity, uma luz Assada com lightmap em vigor
+// não existe em tempo real -- nem luz por pixel nem mapa de sombra. Os objetos
+// com lightmap já a têm no RGB; os móveis a recebem pelas sondas de luz.
+// Sem lightmap (nunca gerado ou Limpar) ela volta a iluminar em tempo real.
+std::vector<ae::renderer::SceneLight> &withoutBakedLights(std::vector<ae::renderer::SceneLight> &lights,
+                                                          const ae::renderer::LightmapData *lightmap) {
+  if(lightmap && !lightmap->pages.empty())
+    lights.erase(std::remove_if(lights.begin(),lights.end(),
+        [](const ae::renderer::SceneLight &light){return light.lightmapMode==2;}),lights.end());
+  return lights;
+}
 constexpr ae::u64 ValidationFrameMilestone = 1000;
 // PoC-A (item 0.2 do plano): 5.000 objetos é o número que o critério de
 // sucesso pede ("5.000 objetos renderizados a 60 fps com < 3 ms de CPU").
@@ -136,10 +151,16 @@ struct AndroidShell final {
   ae::editor::EditorWaterPlay authoredWaterPlay;
   std::vector<ae::renderer::MapDrawState> authoredDraws;
   std::vector<ae::renderer::SceneLight> authoredLights;
+  // G5: quadro de partículas trocado com o renderer a cada quadro (sem cópia).
+  ae::renderer::particles::ParticleFrame particleFrame;
+  double particleClock = 0, particleLogClock = 0;
+  bool particleLightsPublished = false;  // PK-10b: o quadro anterior tinha luzes de partícula
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
   // PK-6: sondas publicadas para o renderer e o que já foi entregue a ele.
   std::vector<ae::renderer::SceneReflectionProbe> authoredReflectionProbes;
   ae::u64 publishedProbeTextures=0;
+  // G3c: revisão do lightmap em vigor publicada no renderer.
+  ae::u64 publishedLightmapRevision=0;
   std::shared_ptr<const ae::renderer::LightProbeSet> publishedLightProbes;
   std::vector<ae::editor::EditorProbeCaptureRequest> probeRequests;
   float probeStatsLogClock=0;
@@ -2221,8 +2242,14 @@ private:
 } // namespace
 
 void android_main(android_app *app) {
+  ae::platform::android::installExitTrace();
   const GameThreadJvmAttachment jvmAttachment(app->activity);
-  AndroidShell shell{};
+  // O shell fica no heap: na pilha ele ocupava ~900 KB da thread do
+  // native_app_glue (1 MB). O Play somava ~100 KB de quadros e batia na
+  // pagina de guarda; o SIGSEGV caia no handler do CoreCLR, que chama exit()
+  // sem tombstone (so o FORTIFY de mutex destruido nas threads do sistema).
+  const auto shellStorage=std::make_unique<AndroidShell>();
+  AndroidShell &shell=*shellStorage;
   shell.app = app;
   shell.editorSession.setAudioFocus(false);
   shell.editorSession.setAudioOutput(ae::runtime::SceneAudio::Output::Device);
@@ -2958,6 +2985,18 @@ void android_main(android_app *app) {
             const auto &lod=shell.instancedRenderer.meshLodStats();
             statistics.lodDraws=lod.drawsWithLods;statistics.lodReducedDraws=lod.reducedDraws;
             statistics.lodBaseTriangles=lod.baseTriangles;statistics.lodSelectedTriangles=lod.selectedTriangles;
+            // Média da GPU a cada 120 quadros medidos (estatísticas abertas):
+            // a comparação luz em tempo real x assada sai do logcat.
+            static double gpuSum=0,intervalSum=0;
+            static ae::u32 gpuCount=0;
+            if(statistics.gpuFrameMs>0) {
+              gpuSum+=statistics.gpuFrameMs;intervalSum+=statistics.frameIntervalMs;
+              if(++gpuCount==120) {
+                __android_log_print(ANDROID_LOG_INFO,LogTag,"[GpuMedia] gpu=%.2f ms quadro=%.2f ms desenhos=%u lightmap=%u",
+                    gpuSum/gpuCount,intervalSum/gpuCount,statistics.drawCalls,shell.instancedRenderer.lightmapStats().drawsLightmapped);
+                gpuSum=intervalSum=0;gpuCount=0;
+              }
+            }
             shell.editorSession.setSceneStatistics(statistics);
           }
           shell.editorSession.setTextureStreamingStatus(shell.instancedRenderer.textureStreamingStats());
@@ -3876,7 +3915,7 @@ void android_main(android_app *app) {
             // barato (são poucas) e evita um segundo conceito de "sujo" para um
             // estado que muda por script no meio do Play.
             if(shell.editorSession.extractLights(shell.authoredLights))
-              shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+              shell.instancedRenderer.queueSceneLights(withoutBakedLights(shell.authoredLights,shell.editorSession.lightmapData().get()));
             if(shell.editorSession.extractEnvironmentVolumes(shell.authoredEnvironmentVolumes))
               shell.instancedRenderer.queueSceneEnvironmentVolumes(shell.authoredEnvironmentVolumes);
             // PK-5: as texturas de sujeira da lente (Bloom › Lens Dirt) da cena.
@@ -3905,6 +3944,15 @@ void android_main(android_app *app) {
           }
         }
         // PK-6: recursos assados, pedidos de captura do bake e o retorno deles.
+        // G3c: o lightmap das Configurações de iluminação da cena.
+        if(shell.editorSession.lightmapDataRevision()!=shell.publishedLightmapRevision) {
+          shell.publishedLightmapRevision=shell.editorSession.lightmapDataRevision();
+          shell.instancedRenderer.setLightmapData(shell.editorSession.lightmapData());
+          // Com o lightmap no lugar, a luz Assada sai do tempo real (e da sombra).
+          if(shell.editorSession.extractLights(shell.authoredLights))
+            shell.instancedRenderer.queueSceneLights(withoutBakedLights(shell.authoredLights,shell.editorSession.lightmapData().get()));
+        }
+        shell.editorSession.setLightmapRendererStats(shell.instancedRenderer.lightmapStats().drawsLightmapped);
         if(shell.editorSession.reflectionProbeTexturesRevision()!=shell.publishedProbeTextures) {
           shell.publishedProbeTextures=shell.editorSession.reflectionProbeTexturesRevision();
           shell.instancedRenderer.setReflectionProbeTextures(shell.editorSession.reflectionProbeTextures());
@@ -3997,6 +4045,7 @@ void android_main(android_app *app) {
           !editorActive||editorPlaying||editorScreen.sceneSky,
           !editorActive||editorPlaying||editorScreen.sceneFog,
           !editorActive||editorPlaying||editorScreen.scenePost);
+      shell.instancedRenderer.setLightmapView(editorActive&&!editorPlaying&&editorScreen.sceneBakedLightmap);
       if (editorActive) {
         const auto &projection = shell.editorSession.view().frustum;
         sceneNear=projection.nearPlane;sceneFar=projection.farPlane;
@@ -4071,6 +4120,40 @@ void android_main(android_app *app) {
                            shell.editorSession.screen().resources,previewMaterialRevision))
           shell.instancedRenderer.requestCameraPreview(previewRequest);
         if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      }
+      if(editorActive && shell.editorMapImported) {
+        // Partículas na mesma câmera do quadro: a ordenação de trás para a frente
+        // e o tamanho máximo na tela dependem dela. Teto pelo perfil do aparelho.
+        const double particleNow=currentMonotonicNanoseconds()*1e-9;
+        const float particleDelta=shell.particleClock>0?static_cast<float>(std::clamp(particleNow-shell.particleClock,0.0,0.1)):0.0f;
+        shell.particleClock=particleNow;
+        const auto tier=static_cast<ae::renderer::particles::ParticleTier>(std::min<ae::u32>(3u,static_cast<ae::u32>(shell.renderingCapabilities.profile)));
+        shell.editorSession.setParticleBudget(ae::renderer::particles::particleTierBudget(tier));
+        shell.editorSession.updateParticles(particleDelta,sceneCamera.position,shell.particleFrame);
+        // PK-10b: luzes das partículas mudam a cada quadro. Republica as luzes
+        // da cena com elas (e uma última vez sem elas, quando apagam).
+        if(!shell.particleFrame.lights.empty() || shell.particleLightsPublished) {
+          if(shell.editorSession.extractLights(shell.authoredLights)) {
+            ae::runtime::appendParticleLights(shell.particleFrame,shell.authoredLights);
+            shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+          }
+          shell.particleLightsPublished=!shell.particleFrame.lights.empty();
+        }
+        shell.instancedRenderer.queueParticles(shell.particleFrame);
+        {
+          const auto surface=shell.editorSession.weatherSurface();
+          shell.instancedRenderer.setWeatherSurface(surface.wetness,surface.puddles,surface.snow,
+                                                    surface.sunScale,surface.ambientScale);
+        }
+        // Bancada: uma linha a cada 2 s com o custo medido do quadro anterior
+        // (simulação e montagem na CPU, passe próprio na GPU por timestamps).
+        const auto &stats=shell.instancedRenderer.particleStats();
+        if(stats.alive && particleNow-shell.particleLogClock>=2.0) {
+          shell.particleLogClock=particleNow;
+          __android_log_print(ANDROID_LOG_INFO,LogTag,"[Particles] sistemas=%u vivas=%u desenhadas=%u lotes=%u teto=%u sim_ms=%.3f build_ms=%.3f gpu_ms=%.3f suave=%s",
+              stats.systems,stats.alive,stats.drawn,stats.batches,stats.budget,static_cast<double>(stats.simulationMs),
+              static_cast<double>(stats.buildMs),static_cast<double>(stats.gpuMs),stats.softAvailable?"sim":"nao");
+        }
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);

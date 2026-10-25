@@ -9,6 +9,7 @@ namespace ae::ui { class UiDrawList; }
 #include "resources/animator_controller.h"
 #include "navigation/navigation_mesh.h"
 #include "editor/editor_probes.h"
+#include "editor/editor_lightmaps.h"
 #include "resources/animation_clip_asset.h"
 #include "resources/animation_clip_selection.h"
 #include "resources/animation_clip_clipboard.h"
@@ -41,7 +42,7 @@ namespace ae::ui { class UiDrawList; }
 #include "editor/editor_rig_screen.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;class SceneParticles;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -288,11 +289,18 @@ struct EditorScreenState final {
   const runtime::ScenePhysics *characterRuntime=nullptr;
   const runtime::GameWorld *characterWorld=nullptr;
   const runtime::SceneTweens *tweenRuntime=nullptr;
+  // Partículas da vista (prévia na edição, mundo no Play): estado e teto por sistema.
+  const runtime::SceneParticles *particleRuntime=nullptr;
+  float particleSimulationMs=0;
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const EditorNavigationView *navigationView=nullptr;
   // PK-6: a sonda (de reflexo ou grupo de luz) selecionada no Inspector.
   const EditorProbeView *probeView=nullptr;
+  // G3c: janela Iluminação › Lightmaps (Generate Lighting) e a aba aberta
+  // (0 Ambiente, 1 Lightmaps).
+  const EditorLightmapView *lightmapView=nullptr;
+  u8 lightingTab=0;
   const runtime::SceneNavigation *navigationRuntime=nullptr;
   const runtime::SceneVirtualCameras *virtualCameraRuntime=nullptr;
   const runtime::SceneAudio *audioRuntime=nullptr;
@@ -739,6 +747,8 @@ struct EditorScreenState final {
   // View. São estado do editor: não alteram o Ambiente salvo nem entram no
   // histórico da cena.
   bool sceneLighting=true,sceneEffects=true,sceneSky=true,sceneFog=true,scenePost=true;
+  // G3c: modo de visão Baked Lightmap do Scene view (só o lightmap, sem albedo).
+  bool sceneBakedLightmap=false;
   bool sceneEffectsMenu=false;
   EditorEntityId cameraViewEntity=0;
   EditorEntityId cameraPreviewEntity=0;
@@ -979,6 +989,10 @@ struct EditorScreenState final {
   bool importFbxReduceWeights=false,importPreparedFbxReduceWeights=false;
   bool importFbxApproximateSteps=false,importPreparedFbxApproximateSteps=false;
   u8 importFbxBakeRate=30,importPreparedFbxBakeRate=30;
+  // G3c: Generate Lightmap UVs + Hard Angle + Pack Margin; pedem nova preparação.
+  bool importLightmapUvs=false,importPreparedLightmapUvs=false;
+  u8 importLightmapHardAngle=88,importPreparedLightmapHardAngle=88;
+  u8 importLightmapPackMargin=4,importPreparedLightmapPackMargin=4;
   bool importRetryable=false,importPublishedView=false;
   struct ImportTakeRow {std::string name;float duration=0;u32 channels=0,morphChannels=0;};
   std::vector<ImportTakeRow> importTakes;

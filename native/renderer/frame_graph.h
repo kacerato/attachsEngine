@@ -36,6 +36,10 @@ struct FrameGraphInputs {
   // corrente como input attachment. Diferente de HZB/TAA, essa leitura não
   // escapa do tile: exige INPUT_ATTACHMENT, mas não STORE nem SAMPLED.
   bool waterDepthInputEnabled = false;
+  // O passe de partículas (platform/android/instanced_particles.inl) carrega a
+  // profundidade num render pass próprio depois da cena e a amostra para a
+  // partícula suave: precisa de STORE e SAMPLED, como o pós.
+  bool particleDepthEnabled = false;
 };
 
 // Política resolvida para o anexo de profundidade. O anexo de cor é sempre

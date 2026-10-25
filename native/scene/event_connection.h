@@ -29,7 +29,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,44> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,45> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -60,13 +60,14 @@ inline constexpr std::array<EventConnectionEventKey,44> eventConnectionEventKeys
   {34,"astra.ik.interaction_system","reached"},{35,"astra.ik.interaction_system","released"},
   {36,"astra.ik.interaction_system","picked"},
   {37,"astra.ik.interaction_system","entered"},{38,"astra.ik.interaction_system","left"},
+  {39,"astra.effects.particle_system","stopped"},
   // G7: relógio da Hora do dia (runtime/scene_time_of_day.cpp).
-  {39,"astra.render.time_of_day","hour_changed"},{40,"astra.render.time_of_day","sunrise"},
-  {41,"astra.render.time_of_day","sunset"},{42,"astra.render.time_of_day","day_changed"},
+  {40,"astra.render.time_of_day","hour_changed"},{41,"astra.render.time_of_day","sunrise"},
+  {42,"astra.render.time_of_day","sunset"},{43,"astra.render.time_of_day","day_changed"},
   // G7: Entrada do jogador (PlayerInput › Invoke Unity Events).
-  {43,"astra.input.player_input","performed"},{44,"astra.input.player_input","canceled"},
+  {44,"astra.input.player_input","performed"},{45,"astra.input.player_input","canceled"},
 }};
-inline constexpr std::array<ComponentEnumOption,45> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,46> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -86,10 +87,11 @@ inline constexpr std::array<ComponentEnumOption,45> eventConnectionEvents{{
   {34,"Interação: mão alcançou"},{35,"Interação: mão soltou"},
   {36,"Interação: objeto levantado"},
   {37,"Interação: entrou no gatilho"},{38,"Interação: saiu do gatilho"},
-  {39,"Hora do dia: hora mudou"},{40,"Hora do dia: nascer do sol"},{41,"Hora do dia: pôr do sol"},{42,"Hora do dia: dia mudou"},
-  {43,"Entrada: ação executada"},{44,"Entrada: ação cancelada"},
+  {39,"Partículas: parou"},
+  {40,"Hora do dia: hora mudou"},{41,"Hora do dia: nascer do sol"},{42,"Hora do dia: pôr do sol"},{43,"Hora do dia: dia mudou"},
+  {44,"Entrada: ação executada"},{45,"Entrada: ação cancelada"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,39> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,44> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -125,13 +127,18 @@ inline constexpr std::array<EventConnectionMethodKey,39> eventConnectionMethodKe
   {33,"astra.ik.hit_reaction","hit_front"},
   {34,"astra.physics.character","set_vertical"},
   {35,"astra.render.reflection_probe","render_probe"},
+  {36,"astra.effects.particle_system","play"},
+  {37,"astra.effects.particle_system","stop"},
+  {38,"astra.effects.particle_system","stop_and_clear"},
+  {39,"astra.effects.particle_system","pause"},
+  {40,"astra.effects.particle_system","clear"},
   // G7: Volume e Mesh Renderer.
-  {36,"astra.render.environment","set_weight"},
-  {37,"astra.render.environment","set_shared_profile"},
-  {38,"astra.render.environment","instantiate_profile"},
-  {39,"astra.render.mesh","set_shared_material"},
+  {41,"astra.render.environment","set_weight"},
+  {42,"astra.render.environment","set_shared_profile"},
+  {43,"astra.render.environment","instantiate_profile"},
+  {44,"astra.render.mesh","set_shared_material"},
 }};
-inline constexpr std::array<ComponentEnumOption,40> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,45> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -145,8 +152,9 @@ inline constexpr std::array<ComponentEnumOption,40> eventConnectionMethods{{
   {30,"Agente: parar"},{31,"Agente: retomar"},
   {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},{34,"Personagem: subir/descer"},
   {35,"Sonda de reflexo: capturar agora"},
-  {36,"Volume: definir peso"},{37,"Volume: trocar perfil"},{38,"Volume: usar cópia do perfil"},
-  {39,"Malha: trocar material"},
+  {36,"Partículas: tocar"},{37,"Partículas: parar"},{38,"Partículas: parar e limpar"},{39,"Partículas: pausar"},{40,"Partículas: limpar"},
+  {41,"Volume: definir peso"},{42,"Volume: trocar perfil"},{43,"Volume: usar cópia do perfil"},
+  {44,"Malha: trocar material"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -170,14 +178,14 @@ inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
 // audio.seek (segundos), snapshot.transition_to (duração; negativo usa a autorada)
 // recoil.fire (intensidade; 1 usa os valores autorados) e hit_reaction.hit_front (força).
-inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32 || method==33 || method==34 || method==36;}
+inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32 || method==33 || method==34 || method==41;}
 // G7: métodos que recebem um recurso do projeto (GUID em duas metades
 // inteiras): trocar o perfil do Volume e o material do Mesh Renderer.
 // G7: eventos da Entrada do jogador aceitam filtro pela ação.
-inline bool eventConnectionFiltersAction(u32 event) {return event==43 || event==44;}
-inline bool eventConnectionTakesAsset(u32 method) {return method==37 || method==39;}
-inline bool eventConnectionTakesProfile(u32 method) {return method==37;}
-inline bool eventConnectionTakesMaterial(u32 method) {return method==39;}
+inline bool eventConnectionFiltersAction(u32 event) {return event==44 || event==45;}
+inline bool eventConnectionTakesAsset(u32 method) {return method==42 || method==44;}
+inline bool eventConnectionTakesProfile(u32 method) {return method==42;}
+inline bool eventConnectionTakesMaterial(u32 method) {return method==44;}
 
 class EventConnection final : public ComponentValue {
 public:

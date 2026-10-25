@@ -87,6 +87,7 @@ bool collectSceneLightProbeGroups(const SceneGraph &graph, std::vector<SceneLigh
 bool buildSceneLightProbeSet(std::span<const SceneLightProbeGroup> groups, std::span<const LightProbeBakeLookup> bakes,
                              renderer::LightProbeSet &out) {
   out = {};
+  bool separated = true, any = false;
   for (const auto &group : groups) {
     if (!group.baked.valid()) continue;
     const auto found = std::find_if(bakes.begin(), bakes.end(), [&](const auto &b) { return b.guid == group.baked; });
@@ -98,8 +99,14 @@ bool buildSceneLightProbeSet(std::span<const SceneLightProbeGroup> groups, std::
       if (group.removeRinging) renderer::deringShL2(sh);
       out.positions.push_back(data.positions[i]);
       out.sh.push_back(sh);
+      // Unidades não se misturam: um grupo com SH absoluto (captura) tira a
+      // separação do céu do conjunto inteiro até ser assado de novo.
+      separated = separated && !data.skyVisibility.empty();
+      out.skyVisibility.push_back(data.skyVisibility.empty() ? renderer::ProbeSkyVisibility{} : data.skyVisibility[i]);
+      any = true;
     }
   }
+  if (!separated || !any) out.skyVisibility.clear();
   return out.tetrahedralize();
 }
 

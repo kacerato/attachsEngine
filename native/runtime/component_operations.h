@@ -31,6 +31,7 @@ class SceneVirtualCameras;
 class SceneAnimatorGraphs;
 class SceneNavigation;
 class SceneIk;
+class SceneParticles;
 class SceneReflectionProbeRequests;
 
 struct ComponentOperationServices {
@@ -46,6 +47,7 @@ struct ComponentOperationServices {
   SceneAnimatorGraphs *animators=nullptr;
   SceneNavigation *navigation=nullptr;
   SceneIk *ik=nullptr;
+  SceneParticles *particles=nullptr;
   SceneReflectionProbeRequests *reflectionProbes=nullptr;
   // G7: recursos do projeto para métodos que trocam material ou perfil (o
   // mesmo registro, biblioteca de perfis e resolvedor que o script usa em
