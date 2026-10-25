@@ -88,12 +88,15 @@ int main(int argc, char **argv) {
   // "ev=<EV100>" em qualquer posição: Ambiente na raiz com exposição Fixa, para
   // o par tempo real x assado ser julgado na mesma exposição (a automática
   // estica o contraste quando a arcada escurece).
-  float fixedEv = 0;
-  bool fixedExposure = false;
+  float fixedEv = 0, ambient = 1;
+  bool fixedExposure = false, ambientSet = false;
   std::vector<char *> args;
   for (int i = 0; i < argc; ++i) {
     const std::string a = argv[i];
     if (a.rfind("ev=", 0) == 0) { fixedEv = std::stof(a.substr(3)); fixedExposure = true; }
+    // "ambiente=0": tira o céu dos dois lados do par (Indirect Diffuse e
+    // Specular do Ambiente) -- sobra só a energia das lanternas.
+    else if (a.rfind("ambiente=", 0) == 0) { ambient = std::stof(a.substr(9)); ambientSet = true; }
     else args.push_back(argv[i]);
   }
   argc = static_cast<int>(args.size());
@@ -203,14 +206,17 @@ int main(int argc, char **argv) {
     settings->bounces = 2;
     if (!settings->valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("Configurações recusadas");
   }
-  if (fixedExposure) {
+  if (fixedExposure || ambientSet) {
     auto rootValues = *doc.find(doc.root());
     auto *environment = static_cast<scene::Environment *>(rootValues.components.find(scene::Environment::descriptor) ?
         rootValues.components.edit(scene::Environment::descriptor) : rootValues.components.add(scene::Environment::descriptor));
     if (!environment) fail("Ambiente recusado");
     environment->values.active = true;
-    environment->values.exposureMode = renderer::ExposureMode::Fixed;
-    environment->values.fixedExposure = fixedEv;
+    if (fixedExposure) {
+      environment->values.exposureMode = renderer::ExposureMode::Fixed;
+      environment->values.fixedExposure = fixedEv;
+    }
+    if (ambientSet) environment->values.indirectDiffuse = environment->values.indirectSpecular = ambient;
     if (!environment->values.valid() || !doc.applyEntityValues(doc.root(), rootValues)) fail("exposição fixa recusada");
   }
   if (!generic) {

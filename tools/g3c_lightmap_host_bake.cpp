@@ -250,6 +250,104 @@ int main(int argc, char **argv) {
     std::cout << "  V=" << rows[i].vis << " lado=" << rows[i].area << " " << (e ? std::string(e->name) : "?") << " slot " << rows[i].slot
               << (m.alphaTest ? " recorte" : "") << (m.doubleSided ? " 2faces" : "") << '\n';
   }
+  // Paridade na vista "G3c arcada norte": por pixel, o que o tempo real soma
+  // (direta difusa de todas as luzes locais, com e sem sombra, e o especular
+  // GGX) contra o que o assado soma (lightmap decodificado + direta da Mista,
+  // que continua em tempo real). Uma variável por vez, a mesma geometria.
+  {
+    renderer::LightmapTracer tracer(scene);
+    auto shared = std::make_shared<renderer::LightmapData>(data);
+    renderer::LightmapLookup lookup(shared);
+    const float target[3]{1.0f, 1.1f, 4.4f}, distance = 10, yaw = 1.5708f, pitch = .08f;
+    const float forward[3]{std::cos(pitch) * std::sin(yaw), -std::sin(pitch), std::cos(pitch) * std::cos(yaw)};
+    const float eye[3]{target[0] - forward[0] * distance, target[1] - forward[1] * distance, target[2] - forward[2] * distance};
+    const float right[3]{std::cos(yaw), 0, -std::sin(yaw)};
+    const float up[3]{forward[1] * right[2] - forward[2] * right[1], forward[2] * right[0] - forward[0] * right[2], forward[0] * right[1] - forward[1] * right[0]};
+    const float tanHalf = std::tan(30.0f * 3.14159265f / 180), aspect = 1330.0f / 1140.0f;
+    const u32 W = 117, H = 100;
+    double sum[6]{}, green[2]{}, disney[2]{};
+    u32 hits = 0, greenHits = 0;
+    const auto luma = [](const float c[3]) { return .2126 * c[0] + .7152 * c[1] + .0722 * c[2]; };
+    for (u32 py = 0; py < H; ++py)
+      for (u32 px = 0; px < W; ++px) {
+        const float sx = (2 * (px + .5f) / W - 1) * tanHalf * aspect, sy = (1 - 2 * (py + .5f) / H) * tanHalf;
+        float dir[3];
+        for (u32 k = 0; k < 3; ++k) dir[k] = forward[k] + right[k] * sx + up[k] * sy;
+        const float len = std::sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
+        for (float &d : dir) d /= len;
+        const auto hit = tracer.trace(eye, dir, 100);
+        if (!hit.hit || hit.back) continue;
+        const auto &inst = scene.instances[hit.instance];
+        const auto *entry = lookup.find(inst.objectId, inst.slot);
+        if (!entry) continue;
+        float p[3], E[3]{}, Eno[3]{}, Emixed[3]{}, spec[3]{};
+        for (u32 k = 0; k < 3; ++k) p[k] = eye[k] + dir[k] * hit.distance;
+        const float *n = hit.normal;
+        for (const auto &light : lights) {
+          if (light.modality == renderer::LightModality::Directional || light.celestialBody != renderer::CelestialLightBody::None) continue;
+          float l[3]{light.position[0] - p[0], light.position[1] - p[1], light.position[2] - p[2]};
+          const float d2 = std::max(l[0] * l[0] + l[1] * l[1] + l[2] * l[2], 1e-4f), d = std::sqrt(d2);
+          for (float &c : l) c /= d;
+          const float nl = n[0] * l[0] + n[1] * l[1] + n[2] * l[2];
+          if (nl <= 0) continue;
+          const float ratio = d2 / (light.range * light.range);
+          float window = std::clamp(1 - ratio * ratio, 0.0f, 1.0f);
+          window *= window;
+          float origin[3];
+          for (u32 k = 0; k < 3; ++k) origin[k] = p[k] + n[k] * .01f;
+          const auto block = tracer.trace(origin, l, d - .02f);
+          const float vis = (light.shadow.casts() && block.hit) ? 0.0f : 1.0f;
+          // GGX (rugosidade 0,6; f0 0,04), mesma forma do directLight.
+          const float v[3]{-dir[0], -dir[1], -dir[2]};
+          float h[3]{v[0] + l[0], v[1] + l[1], v[2] + l[2]};
+          const float hl = std::sqrt(h[0] * h[0] + h[1] * h[1] + h[2] * h[2]);
+          for (float &c : h) c /= hl;
+          const float nh = std::max(0.0f, n[0] * h[0] + n[1] * h[1] + n[2] * h[2]), nv = std::max(1e-4f, n[0] * v[0] + n[1] * v[1] + n[2] * v[2]);
+          const float a2 = .36f * .36f, dd = nh * nh * (a2 - 1) + 1, D = a2 / (3.14159265f * dd * dd);
+          const float k = .36f / 2, G = (nl / (nl * (1 - k) + k)) * (nv / (nv * (1 - k) + k)) / (4 * nl * nv);
+          const float F = .04f + .96f * std::pow(1 - std::max(0.0f, v[0] * h[0] + v[1] * h[1] + v[2] * h[2]), 5.0f);
+          // Difuso do directLight: Burley sem renormalização (rugosidade 0,8),
+          // e a versão renormalizada do Frostbite (Lagarde 2014), contra Lambert.
+          const float lh = std::max(0.0f, l[0] * h[0] + l[1] * h[1] + l[2] * h[2]), rough = .8f;
+          const float fd90 = .5f + 2 * rough * lh * lh;
+          const float burley = (1 + (fd90 - 1) * std::pow(1 - nl, 5.0f)) * (1 + (fd90 - 1) * std::pow(1 - nv, 5.0f));
+          const float bias = .5f * rough, factor = 1 + (1 / 1.51f - 1) * rough, fd90r = bias + 2 * rough * lh * lh;
+          const float frostbite = (1 + (fd90r - 1) * std::pow(1 - nl, 5.0f)) * (1 + (fd90r - 1) * std::pow(1 - nv, 5.0f)) * factor;
+          disney[0] += burley * luma(hit.albedo) / 3.14159265f * (light.color[1] * light.intensity * window / d2) * nl * vis;
+          disney[1] += frostbite * luma(hit.albedo) / 3.14159265f * (light.color[1] * light.intensity * window / d2) * nl * vis;
+          for (u32 c = 0; c < 3; ++c) {
+            const float radiance = light.color[c] * light.intensity * window / d2;
+            Eno[c] += radiance * nl;
+            E[c] += radiance * nl * vis;
+            spec[c] += D * G * F * radiance * nl * vis;
+            if (light.lightmapMode == 1) Emixed[c] += radiance * nl * vis;
+          }
+        }
+        const auto &page = data.pages[entry->page];
+        const u32 x = std::min(page.width - 1, static_cast<u32>((hit.uv1[0] * entry->scaleOffset[0] + entry->scaleOffset[2]) * page.width));
+        const u32 y = std::min(page.height - 1, static_cast<u32>((hit.uv1[1] * entry->scaleOffset[1] + entry->scaleOffset[3]) * page.height));
+        float lm[3], vis;
+        renderer::decodeLightmapTexel(page, x, y, lm, vis);
+        float rtS[3], rtN[3], sp[3], bk[3], bkDirectOnly[3];
+        for (u32 c = 0; c < 3; ++c) {
+          const float a = hit.albedo[c] / 3.14159265f;
+          rtS[c] = a * E[c]; rtN[c] = a * Eno[c]; sp[c] = spec[c]; bk[c] = a * (lm[c] + Emixed[c]); bkDirectOnly[c] = a * Emixed[c];
+        }
+        sum[0] += luma(rtS); sum[1] += luma(rtN); sum[2] += luma(sp); sum[3] += luma(bk); sum[4] += luma(bkDirectOnly);
+        float alb[3]{hit.albedo[0], hit.albedo[1], hit.albedo[2]}; sum[5] += luma(alb);
+        ++hits;
+        if (px < W / 3 && py > H / 4 && py < 3 * H / 4) { green[0] += rtS[1]; green[1] += bk[1]; ++greenHits; }
+      }
+    if (hits) {
+      std::cout << "paridade na vista (" << hits << " pixels): tempo real difuso com sombra " << sum[0] / hits << " · sem sombra " << sum[1] / hits
+                << " · especular GGX " << sum[2] / hits << " · assado (lightmap + Mista) " << sum[3] / hits << " · albedo médio " << sum[5] / hits << '\n';
+      std::cout << "  razão assado/tempo real (com sombra) " << sum[3] / sum[0] << " · com especular " << sum[3] / (sum[0] + sum[2])
+                << " · sem sombra " << sum[3] / sum[1] << '\n';
+      std::cout << "  difuso direto: Lambert " << sum[0] / hits << " · Burley do shader " << disney[0] / hits << " (x" << disney[0] / sum[0]
+                << ") · Burley renormalizado " << disney[1] / hits << " (x" << disney[1] / sum[0] << ")\n";
+      if (greenHits) std::cout << "  parede esquerda, canal verde: tempo real " << green[0] / greenHits << " · assado " << green[1] / greenHits << '\n';
+    }
+  }
   data.guidHigh = 1; data.guidLow = 2;
   const auto bytes = data.serialize();
   std::ofstream(argv[4], std::ios::binary).write(reinterpret_cast<const char *>(bytes.data()), static_cast<std::streamsize>(bytes.size()));

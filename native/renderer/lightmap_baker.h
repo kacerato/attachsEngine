@@ -122,7 +122,12 @@ class LightmapTracer {
 public:
   explicit LightmapTracer(const LightmapBakeScene &scene);
   ~LightmapTracer();
-  struct Result { bool hit = false, back = false; float distance = 0; u32 instance = 0; };
+  struct Result {
+    bool hit = false, back = false; float distance = 0; u32 instance = 0;
+    // Diagnóstico de paridade: normal da face que o raio vê, cor base do ponto
+    // e a UV2 (lightmap) interpolada.
+    float normal[3]{}, albedo[3]{}, uv1[2]{};
+  };
   Result trace(const float origin[3], const float direction[3], float maximum) const;
 private:
   struct Impl;

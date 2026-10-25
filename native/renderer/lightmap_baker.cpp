@@ -523,7 +523,24 @@ LightmapTracer::Result LightmapTracer::trace(const float origin[3], const float 
   result.hit = true;
   result.back = hit.back;
   result.distance = hit.t;
-  result.instance = impl_->world.triangles[hit.triangle].instance;
+  const auto &world = impl_->world;
+  const auto &tri = world.triangles[hit.triangle];
+  result.instance = tri.instance;
+  V3 n = normalize(cross(tri.e1, tri.e2));
+  if (tri.flags & TriMirrored) n = n * -1.0f;
+  if (tri.flags & TriFlipped) n = n * -1.0f;
+  if (dot(n, V3(direction)) > 0) n = n * -1.0f; // a face voltada para o raio
+  V3 albedo;
+  float alpha;
+  world.surface(hit.triangle, hit.u, hit.v, albedo, alpha);
+  const auto &mesh = world.scene.meshes[world.scene.instances[tri.instance].mesh];
+  if (mesh.uv1.size() >= mesh.positions.size() / 3 * 2) {
+    const u32 a = mesh.indices[tri.local * 3], b = mesh.indices[tri.local * 3 + 1], c = mesh.indices[tri.local * 3 + 2];
+    const float w = 1 - hit.u - hit.v;
+    result.uv1[0] = mesh.uv1[a * 2] * w + mesh.uv1[b * 2] * hit.u + mesh.uv1[c * 2] * hit.v;
+    result.uv1[1] = mesh.uv1[a * 2 + 1] * w + mesh.uv1[b * 2 + 1] * hit.u + mesh.uv1[c * 2 + 1] * hit.v;
+  }
+  for (u32 k = 0; k < 3; ++k) { result.normal[k] = n[k]; result.albedo[k] = albedo[k]; }
   return result;
 }
 
