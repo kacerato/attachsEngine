@@ -25,6 +25,7 @@
 #include "scene/lighting_settings.h"
 #include "scene/mesh_renderer.h"
 #include "scene/time_of_day.h"
+#include "runtime/scene_views.h"
 
 #include <filesystem>
 #include <fstream>
@@ -241,6 +242,20 @@ int main(int argc, char **argv) {
     mesh->material.roughness = .9f;
     mesh->lightProbes = 1;
     if (!doc.applyEntityValues(id, values)) fail("esfera recusada");
+  }
+  // Vista salva para o roteiro do aparelho: de dentro da arcada norte, olhando
+  // ao longo dela (+X), com as três luzes coloridas e os estandartes à frente.
+  // O mesmo enquadramento em todas as capturas, sem gesto de câmera.
+  {
+    runtime::SceneViews views = doc.views();
+    runtime::SceneView view;
+    view.name = "G3c arcada norte";
+    view.target[0] = 1.0f; view.target[1] = 1.1f; view.target[2] = 4.4f;
+    view.distance = 10.0f;
+    view.yaw = 1.5708f;
+    view.pitch = .08f;
+    if (!views.add(view)) fail("vista recusada");
+    doc.setViews(views);
   }
   // Câmera de validação: da arcada norte olhando o pátio e o beiral.
   {
