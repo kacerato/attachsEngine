@@ -20,6 +20,12 @@ struct InstancedRenderer::ParticleResources {
   VkDescriptorSet set = VK_NULL_HANDLE;
   VkPipelineLayout layout = VK_NULL_HANDLE;
   VkPipeline pipelines[2]{};  // mistura, aditivo
+  VkPipeline meshPipelines[2]{};  // G6a: malha por partícula, mesmas famílias
+  // G6a: malhas das partículas (vértices e índices), subidas quando a revisão
+  // do conjunto muda.
+  rhi::VulkanBuffer meshVertices, meshIndices;
+  u64 meshVertexCapacity = 0, meshIndexCapacity = 0, meshRevision = ~u64{0};
+  bool meshesReady = false;
   VkRenderPass renderPass = VK_NULL_HANDLE;
   VkFramebuffer framebuffers[kMaxFramebuffers]{};
   u32 framebufferCount = 0;
@@ -198,6 +204,8 @@ bool InstancedRenderer::createParticleResources() {
   // Pipelines: um por família de mistura, mesmo vértice e mesmo fragmento.
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kParticle_BillboardVertSpirv,
                                            rhi::shaders::kParticle_BillboardVertSpirvSize);
+  VkShaderModule meshVert = createShaderModule(device_, rhi::shaders::kParticle_MeshVertSpirv,
+                                               rhi::shaders::kParticle_MeshVertSpirvSize);
   // PK-10a: com bindless, a variante que lê a textura do Material de projeto
   // no mesmo conjunto das texturas da cena (set 2).
   const bool projectTextures = useBindless_ && textureSetLayout_ != VK_NULL_HANDLE && textureSet_ != VK_NULL_HANDLE;
@@ -207,9 +215,10 @@ bool InstancedRenderer::createParticleResources() {
   p.projectTextures = projectTextures;
   const auto releaseModules = [&] {
     if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
+    if (meshVert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, meshVert, nullptr);
     if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
   };
-  if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) { releaseModules(); return false; }
+  if (vert == VK_NULL_HANDLE || meshVert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) { releaseModules(); return false; }
   const VkDescriptorSetLayout setLayouts[3]{environmentSetLayout_, p.setLayout, textureSetLayout_};
   VkPushConstantRange push{VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0,
                            sizeof(renderer::particles::ParticlePushConstants)};
@@ -224,18 +233,44 @@ bool InstancedRenderer::createParticleResources() {
   stages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, vert, "main", nullptr};
   stages[1] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_FRAGMENT_BIT, frag, "main", nullptr};
   VkVertexInputBindingDescription binding{0, sizeof(renderer::particles::ParticleInstance), VK_VERTEX_INPUT_RATE_INSTANCE};
-  VkVertexInputAttributeDescription attributes[5]{
+  VkVertexInputAttributeDescription attributes[7]{
     {0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
     {1, 0, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
     {2, 0, VK_FORMAT_R16G16B16A16_SFLOAT, 32},
     {3, 0, VK_FORMAT_R32_UINT, 40},
-    {4, 0, VK_FORMAT_R32_SFLOAT, 44}};
+    {4, 0, VK_FORMAT_R32_SFLOAT, 44},
+    {5, 0, VK_FORMAT_R32G32_SFLOAT, 48},
+    {6, 0, VK_FORMAT_R16G16B16A16_SNORM, 56}};
   VkPipelineVertexInputStateCreateInfo vertex{};
   vertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertex.vertexBindingDescriptionCount = 1;
   vertex.pVertexBindingDescriptions = &binding;
-  vertex.vertexAttributeDescriptionCount = 5;
+  vertex.vertexAttributeDescriptionCount = 7;
   vertex.pVertexAttributeDescriptions = attributes;
+  // Malha: vértice da malha no binding 0 e a mesma instância no binding 1,
+  // com os atributos da instância deslocados de duas posições.
+  VkVertexInputBindingDescription meshBindings[2]{
+    {0, sizeof(renderer::particles::ParticleMeshVertex), VK_VERTEX_INPUT_RATE_VERTEX},
+    {1, sizeof(renderer::particles::ParticleInstance), VK_VERTEX_INPUT_RATE_INSTANCE}};
+  VkVertexInputAttributeDescription meshAttributes[9]{
+    {0, 0, VK_FORMAT_R32G32B32_SFLOAT, 0},
+    {1, 0, VK_FORMAT_R32G32_SFLOAT, 12},
+    {2, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 0},
+    {3, 1, VK_FORMAT_R32G32B32A32_SFLOAT, 16},
+    {4, 1, VK_FORMAT_R16G16B16A16_SFLOAT, 32},
+    {5, 1, VK_FORMAT_R32_UINT, 40},
+    {6, 1, VK_FORMAT_R32_SFLOAT, 44},
+    {7, 1, VK_FORMAT_R32G32_SFLOAT, 48},
+    {8, 1, VK_FORMAT_R16G16B16A16_SNORM, 56}};
+  VkPipelineVertexInputStateCreateInfo meshVertex{};
+  meshVertex.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  meshVertex.vertexBindingDescriptionCount = 2;
+  meshVertex.pVertexBindingDescriptions = meshBindings;
+  meshVertex.vertexAttributeDescriptionCount = 9;
+  meshVertex.pVertexAttributeDescriptions = meshAttributes;
+  VkPipelineShaderStageCreateInfo meshStages[2]{};
+  meshStages[0] = {VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, nullptr, 0, VK_SHADER_STAGE_VERTEX_BIT, meshVert, "main", nullptr};
+  meshStages[1] = stages[1];
   VkPipelineInputAssemblyStateCreateInfo assembly{};
   assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
@@ -295,6 +330,12 @@ bool InstancedRenderer::createParticleResources() {
     pipeline.layout = p.layout;
     pipeline.renderPass = p.renderPass;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &p.pipelines[family]) == VK_SUCCESS;
+    if (!ok) break;
+    // Malha: mesmo estado, outro vértice. Profundidade só testada (sem escrita),
+    // como o billboard; a ordem é a dos lotes.
+    pipeline.pStages = meshStages;
+    pipeline.pVertexInputState = &meshVertex;
+    ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &p.meshPipelines[family]) == VK_SUCCESS;
   }
   releaseModules();
   if (!ok) return false;
@@ -323,6 +364,9 @@ void InstancedRenderer::destroyParticleResources() {
   for (u32 i = 0; i < p.framebufferCount; ++i)
     if (p.framebuffers[i]) vkDestroyFramebuffer(device_, p.framebuffers[i], nullptr);
   for (auto pipeline : p.pipelines) if (pipeline) vkDestroyPipeline(device_, pipeline, nullptr);
+  for (auto pipeline : p.meshPipelines) if (pipeline) vkDestroyPipeline(device_, pipeline, nullptr);
+  p.meshVertices.reset();
+  p.meshIndices.reset();
   if (p.layout) vkDestroyPipelineLayout(device_, p.layout, nullptr);
   if (p.renderPass) vkDestroyRenderPass(device_, p.renderPass, nullptr);
   if (p.pool) vkDestroyDescriptorPool(device_, p.pool, nullptr);
@@ -372,6 +416,36 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
   }
   std::memcpy(p.instances.mappedData(), frame.instances.data(), static_cast<usize>(bytes));
   if (!memoryAllocator_->flushBuffer(p.instances)) return;
+  // G6a: malhas das partículas. Mesma regra do buffer de instâncias: o quadro
+  // anterior terminou, então trocar o conteúdo é seguro.
+  if (frame.meshes && frame.meshes->revision != p.meshRevision) {
+    const auto &set = *frame.meshes;
+    p.meshesReady = false;
+    const u64 vertexBytes = static_cast<u64>(set.vertices.size()) * sizeof(renderer::particles::ParticleMeshVertex);
+    const u64 indexBytes = static_cast<u64>(set.indices.size()) * sizeof(u32);
+    const auto ensure = [&](rhi::VulkanBuffer &buffer, u64 &capacity, u64 needed, VkBufferUsageFlags usage) {
+      if (needed <= capacity && buffer.mappedData()) return true;
+      u64 size = 16 * 1024;
+      while (size < needed) size *= 2;
+      buffer.reset();
+      rhi::BufferDesc desc{};
+      desc.sizeBytes = size;
+      desc.usage = usage;
+      desc.memoryClass = rhi::MemoryClass::Buffer;
+      desc.cpuAccess = rhi::CpuAccess::SequentialWrite;
+      desc.preferDeviceMemory = false;
+      if (!memoryAllocator_->createBuffer(desc, &buffer) || !buffer.mappedData()) { capacity = 0; return false; }
+      capacity = size;
+      return true;
+    };
+    if (vertexBytes && indexBytes && ensure(p.meshVertices, p.meshVertexCapacity, vertexBytes, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) &&
+        ensure(p.meshIndices, p.meshIndexCapacity, indexBytes, VK_BUFFER_USAGE_INDEX_BUFFER_BIT)) {
+      std::memcpy(p.meshVertices.mappedData(), set.vertices.data(), static_cast<usize>(vertexBytes));
+      std::memcpy(p.meshIndices.mappedData(), set.indices.data(), static_cast<usize>(indexBytes));
+      p.meshesReady = memoryAllocator_->flushBuffer(p.meshVertices) && memoryAllocator_->flushBuffer(p.meshIndices);
+    }
+    p.meshRevision = set.revision;
+  }
 
   if (p.timestamps) {
     vkCmdResetQueryPool(commandBuffer_, p.timestamps, 0, 2);
@@ -404,12 +478,31 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
   const VkDeviceSize offset = 0;
   vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &buffer, &offset);
   VkPipeline bound = VK_NULL_HANDLE;
+  bool meshBuffersBound = false;
   for (const auto &batch : frame.batches) {
     if (!batch.instanceCount) continue;
-    const VkPipeline pipeline = p.pipelines[batch.material.blend == 1 ? 1 : 0];
+    const bool mesh = batch.material.renderMode == static_cast<u32>(scene::ParticleRenderMode::Mesh);
+    const renderer::particles::ParticleMeshRange *range = nullptr;
+    if (mesh) {
+      // Malha ausente ou ainda não subida: o lote não desenha (nunca um
+      // quadrado no lugar, que mudaria a forma do efeito sem aviso).
+      if (!p.meshesReady || !frame.meshes || batch.mesh >= frame.meshes->ranges.size()) continue;
+      range = &frame.meshes->ranges[batch.mesh];
+    }
+    const VkPipeline pipeline = (mesh ? p.meshPipelines : p.pipelines)[batch.material.blend == 1 ? 1 : 0];
     if (pipeline != bound) {
       vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
       bound = pipeline;
+    }
+    if (mesh && !meshBuffersBound) {
+      const VkBuffer buffers[2]{p.meshVertices.handle(), p.instances.handle()};
+      const VkDeviceSize offsets[2]{0, 0};
+      vkCmdBindVertexBuffers(commandBuffer_, 0, 2, buffers, offsets);
+      vkCmdBindIndexBuffer(commandBuffer_, p.meshIndices.handle(), 0, VK_INDEX_TYPE_UINT32);
+      meshBuffersBound = true;
+    } else if (!mesh && meshBuffersBound) {
+      vkCmdBindVertexBuffers(commandBuffer_, 0, 1, &buffer, &offset);
+      meshBuffersBound = false;
     }
     // Índice da biblioteca publicada -> slot bindless (o mesmo mapa das malhas).
     const u32 texture = batch.material.projectTexture;
@@ -417,7 +510,8 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
     const auto push = renderer::particles::particlePushConstants(batch.material, timeSeconds,
         static_cast<float>(renderTargetWidth()), static_cast<float>(renderTargetHeight()), p.softAvailable, projectSlot);
     vkCmdPushConstants(commandBuffer_, p.layout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(push), &push);
-    vkCmdDraw(commandBuffer_, 6, batch.instanceCount, 0, batch.firstInstance);
+    if (range) vkCmdDrawIndexed(commandBuffer_, range->indexCount, batch.instanceCount, range->firstIndex, range->vertexOffset, batch.firstInstance);
+    else vkCmdDraw(commandBuffer_, 6, batch.instanceCount, 0, batch.firstInstance);
     p.stats.drawn += batch.instanceCount;
     ++p.stats.batches;
   }

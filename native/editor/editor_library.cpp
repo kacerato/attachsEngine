@@ -331,6 +331,12 @@ bool EditorSession::openLibraryItem(resources::AssetGuid id,std::string &diagnos
       state_.status=diagnostic;return true;
     }
   }
+  // G6b: perfis do UniStorm (só dados) viram presets do Clima e perfis de Ambiente.
+  if(std::string script;extension==".asset"&&uniStormAsset(sourcePath,script)) {
+    const bool ok=importUniStormProfiles(sourcePath,diagnostic);
+    state_.workspace=EditorWorkspace::Library;state_.libraryDetailItem=id;
+    state_.libraryDiagnostic=diagnostic;state_.libraryDiagnosticScroll=0;return ok;
+  }
   const bool unity=extension==".anim"||extension==".prefab"||extension==".controller";
   if(unity) {
     std::filesystem::path absolute;std::error_code ec;

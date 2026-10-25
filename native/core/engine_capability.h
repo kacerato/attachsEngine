@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 77> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 82> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -250,16 +250,30 @@ inline constexpr std::array<EngineCapability, 77> engineCapabilities{{
    "Modo Grid da Unity: Colunas x Linhas, Folha inteira ou Uma linha (escolhida ou sorteada), Quadro no tempo (curva), Quadro inicial e Ciclos; sem modo Sprites nem mistura entre quadros"},
   {"render.particles.soft", "Partícula suave por profundidade", CapabilityState::DeviceLimited,
    "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
-  {"render.particles.mesh", "Partícula de malha", CapabilityState::Planned, "renderer/particles/", "Pacote P2"},
+  {"render.particles.mesh", "Partícula de malha e alinhamentos", CapabilityState::Implemented,
+   "rhi/shaders/particle_mesh.vert + rhi/shaders/particle_billboard.vert + platform/android/instanced_particles.inl",
+   "G6a: Render Mode Mesh (Quadrado, Cubo, Esfera, Cilindro ou uma Malha do projeto), Render Alignment Vista/Mundo/Local/Velocidade, Tamanho 3D e Rotação 3D por partícula, Modo de escala; malha sem iluminação (o material de partícula), sem Mesh Distribution entre várias malhas"},
   {"render.particles.trails", "Trilhas das partículas (Trails)", CapabilityState::Implemented,
    "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
-   "Modo Particles da Unity: até 12 pontos por partícula, Proporção, Vida da trilha, Distância mínima, largura do início ao fim, cor herdada e esmaecer; segmentos como billboards esticados no passe das partículas, com o material do sistema. Sem modo Ribbon, sem Trail Material próprio; componentes TrailRenderer e LineRenderer ainda não"},
-  {"render.particles.collision", "Colisão de partículas com planos", CapabilityState::Implemented,
-   "renderer/particles/particle_simulation.cpp",
-   "Modo Planes da Unity: até dois objetos-plano com quique, amortecimento, perda de vida e velocidade mínima; sem colisão com a física da cena (modo World)"},
+   "Modo Particles da Unity: até 12 pontos por partícula, Proporção, Vida da trilha, Distância mínima, largura do início ao fim, cor herdada e esmaecer; segmentos como billboards esticados no passe das partículas, com o material do sistema. Sem modo Ribbon, sem Trail Material próprio; o componente TrailRenderer ainda não (a Linha cobre o LineRenderer)"},
+  {"render.particles.collision", "Colisão de partículas", CapabilityState::Implemented,
+   "renderer/particles/particle_simulation.cpp + runtime/scene_particles.cpp",
+   "Modo Planes da Unity (até dois objetos-plano) e, desde o G6a, modo World em Play: um raio da física por partícula e quadro, com teto por sistema; quique, amortecimento, perda de vida e velocidade mínima. Sem colisão com a física na prévia do editor"},
   {"render.particles.sub_emitters", "Sub-emissores", CapabilityState::Implemented, "runtime/scene_particles.cpp",
    "Ao nascer, ao colidir e ao morrer, com quantidade por evento; o sub-sistema usa a própria forma e visual. Sem herdar cor, tamanho ou velocidade"},
   {"render.particles.compute", "Simulação de partículas em compute (níveis A/S)", CapabilityState::Planned, "renderer/particles/", "Pacote P5"},
+  // --- Comportamentos de efeito (G6a) ---------------------------------------
+  {"render.lines", "Linha (LineRenderer)", CapabilityState::Implemented,
+   "runtime/scene_lines.cpp + platform/android/instanced_particles.inl",
+   "Até 8 pontos em mundo ou no objeto, fechar, largura e cor do início ao fim, Material Partícula com a imagem esticada ou repetida a cada trecho; faixa virada para a câmera no passe das partículas"},
+  {"render.effects.laser", "Laser", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
+   "Em Play: raio da física pela frente do objeto até o Alcance, Linha do objeto do início ao ponto, efeito de impacto levado ao ponto e partículas dele tocando só com acerto"},
+  {"render.effects.projectile", "Projétil", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
+   "Em Play: avança pela frente com consulta esférica à física, cria Disparo e Impacto (prefabs destruídos ao fim das partículas), solta os filhos marcados e some; Vida máxima"},
+  {"render.effects.collision_spawn", "Instanciar ao colidir", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
+   "Em Play: cada toque de partícula (planos ou mundo) cria até 4 prefabs no ponto, soltos ou filhos, com giro fixo ou pela superfície, teto por quadro e duração"},
+  {"audio.effect_sound", "Som repetido", CapabilityState::Implemented, "runtime/scene_vfx.cpp + runtime/scene_audio.cpp",
+   "Em Play: toca o clipe da Fonte de áudio depois do Atraso e a cada Intervalo, com volume sorteado; cada toque reinicia a voz (sem vozes sobrepostas como o PlayOneShot)"},
 
   // --- Animação ------------------------------------------------------------
   {"animation.clip", "Clipe de animação por nós", CapabilityState::Implemented,

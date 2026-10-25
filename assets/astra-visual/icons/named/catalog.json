@@ -2533,6 +2533,36 @@
       "name": "lightmap-uv",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/line": {
+      "category": "component",
+      "name": "line",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/laser": {
+      "category": "component",
+      "name": "laser",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/projectile": {
+      "category": "component",
+      "name": "projectile",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "component/collision-spawn": {
+      "category": "component",
+      "name": "collision-spawn",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
+    },
+    "audio/effect-sound": {
+      "category": "audio",
+      "name": "effect-sound",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

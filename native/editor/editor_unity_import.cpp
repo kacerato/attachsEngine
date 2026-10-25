@@ -7,6 +7,8 @@
 #include "resources/unity_subassets.h"
 #include "runtime/transform_math.h"
 #include "runtime/unity_prefab.h"
+#include "resources/unity_material_import.h"
+#include "resources/model_import.h"
 #include "scene/import_link.h"
 #include "scene/prefab_link.h"
 #include <algorithm>
@@ -100,12 +102,56 @@ class UnityPackageImporter {
 public:
   static AssetGuid import(EditorSession &session,const std::string &path,EditorEntityId owner,UnityReimportPolicy policy,std::string &error);
 private:
-  static bool resolve(EditorSession &,const std::string &,const UnityObjectReference &,AssetType,Dependency &,std::string &);
+  static bool resolve(EditorSession &,const std::string &,const UnityObjectReference &,AssetType,Dependency &,std::string &,bool cascade=true);
+  // G6a: o material de partícula do pacote (dica para o componente) e a malha
+  // de partícula, que converte a fonte FBX/GLB do pacote quando preciso.
+  static bool particleLook(EditorSession &,const std::string &,const UnityObjectReference &,UnityParticleLook &);
+  static bool particleMesh(EditorSession &,const std::string &,const UnityObjectReference &,Dependency &,std::string &);
+  static const LibraryItem *sourceItem(EditorSession &,const std::string &origin,const AssetGuid &guid);
   static bool publish(EditorSession &,const Snapshot &,Snapshot &,std::string &);
 };
 
+const LibraryItem *UnityPackageImporter::sourceItem(EditorSession &session,const std::string &origin,const AssetGuid &guid) {
+  const LibraryPackage *scope=nullptr;
+  for(const auto &package:session.library_.packages())for(const auto &item:package.items)if(item.path==origin)scope=&package;
+  if(!scope)return nullptr;
+  const LibraryItem *found=nullptr;
+  for(const auto &item:scope->items)if(item.sourceIdentity=="unity:"+guid.text()){if(found)return nullptr;found=&item;}
+  return found;
+}
+
+bool UnityPackageImporter::particleLook(EditorSession &session,const std::string &origin,const UnityObjectReference &reference,UnityParticleLook &out) {
+  const auto *source=sourceItem(session,origin,reference.guid);if(!source||!source->path.ends_with(".mat"))return false;
+  std::string text;const auto root=EditorImportTransaction::fromUtf8(session.files_.rootPath());
+  if(!read(root,source->path,text,256u*1024u))return false;
+  UnityMaterialImport converted;if(!readUnityMaterial(text,converted)||converted.particle.family==UnityParticleFamily::None)return false;
+  out=converted.particle;return true;
+}
+
+bool UnityPackageImporter::particleMesh(EditorSession &session,const std::string &origin,const UnityObjectReference &reference,Dependency &out,std::string &error) {
+  if(resolve(session,origin,reference,AssetType::Mesh,out,error,false))return true;
+  // A fonte do modelo ainda não foi convertida: o perfil padrão dela, sem
+  // instanciar nada na cena (só o recurso), e de novo a resolução por nome.
+  const auto *source=sourceItem(session,origin,reference.guid);
+  if(!source)return false;
+  const auto path=source->path;
+  const auto extension=std::filesystem::path(path).extension().string();
+  if(extension!=".fbx"&&extension!=".FBX"&&extension!=".glb"&&extension!=".gltf"){error="Malha de partícula fora de FBX/glTF: "+path;return false;}
+  for(const auto &record:session.assets_.records())if(record.source==path||record.path==path)return false;
+  std::vector<u8> bytes;std::filesystem::path absolute;
+  if(!EditorImportTransaction::safePath(EditorImportTransaction::fromUtf8(session.files_.rootPath()),path,absolute)||
+     !EditorImportTransaction::read(absolute,bytes,256u*1024u*1024u)){error="Fonte do modelo ilegível: "+path;return false;}
+  const auto profile=session.importProfileForPath(path);
+  GltfImport model;
+  if(!importModelSource(bytes,session.importLimitsFor(profile),{},model)){error=path+": "+model.diagnostic;return false;}
+  EditorSession::ModelImportReport report;
+  if(!session.publishModel(model,Sha256::hex(bytes),path,report,ImportAmbiguityPolicy::Refuse,profile.excludedNodes)){error=path+": "+report.diagnostic;return false;}
+  session.persistImportMap(report.source);
+  return resolve(session,origin,reference,AssetType::Mesh,out,error,false);
+}
+
 bool UnityPackageImporter::resolve(EditorSession &session,const std::string &origin,const UnityObjectReference &reference,
-    AssetType type,Dependency &out,std::string &error) {
+    AssetType type,Dependency &out,std::string &error,bool cascade) {
   const auto fail=[&](const std::string &message){error=message;return false;};
   if(!reference.external()||!reference.fileId)return fail("Dependência Unity exige GUID/fileID externo completo.");
   const LibraryPackage *scope=nullptr;
@@ -125,6 +171,22 @@ bool UnityPackageImporter::resolve(EditorSession &session,const std::string &ori
       (entry.type==type||(type==AssetType::AnimationClip&&entry.type==AssetType::Mesh))) {
     if(record)return fail("Mais de uma saída corresponde à dependência Unity: "+source->path);
     record=&entry;
+  }
+  // G6a: material, áudio e prefab do pacote convertem na hora, pela mesma porta
+  // da Biblioteca (com receita e histórico próprios). A malha de MeshRenderer
+  // continua pedindo a conversão revisada do modelo.
+  if(!record&&cascade) {
+    static thread_local u32 depth=0;
+    const auto path=source->path;std::string nested;bool converted=false;
+    if(depth<8) {
+      ++depth;
+      if(type==AssetType::Material&&path.ends_with(".mat"))converted=session.importUnityMaterial(path,nested).valid();
+      else if(type==AssetType::AudioClip&&(path.ends_with(".wav")||path.ends_with(".WAV"))){AssetGuid clip;converted=session.importWaveClip(path,clip,nested);}
+      else if(type==AssetType::Prefab&&path.ends_with(".prefab"))converted=import(session,path,0,UnityReimportPolicy::RefuseConflict,nested).valid();
+      --depth;
+    }
+    if(converted)return resolve(session,origin,reference,type,out,error,false);
+    if(!nested.empty())return fail("Dependência não convertida ("+path+"): "+nested);
   }
   if(!record)return fail("Converta primeiro a dependência pela Biblioteca: "+source->path+" · fileID "+std::to_string(reference.fileId));
   Dependency result;result.owner=record->guid;
@@ -157,11 +219,17 @@ bool UnityPackageImporter::resolve(EditorSession &session,const std::string &ori
       }
       if(!specified)result.loop=false;
     }
+  } else if(type==AssetType::AudioClip) {
+    // WAV: um recurso por arquivo (o fileID 8300000 da Unity é o próprio clipe).
+    result.identities.push_back(record->guid);
   } else {
     std::string encoded;UnityYamlDocument document;
     if(!read(root,source->path,encoded)||!readUnityYaml(encoded,document,error))return false;
-    const auto *object=document.find(reference.fileId);const u32 expected=type==AssetType::Material?21:type==AssetType::AnimationClip?74:0;
-    if(!object||object->classId!=expected)return fail("GUID existe, mas fileID/tipo da dependência não corresponde: "+source->path);
+    const auto *object=document.find(reference.fileId);
+    // Prefab: a referência aponta para um GameObject (ou o Prefab raiz) dele.
+    const bool matches=object&&(type==AssetType::Prefab?object->classId==1||object->classId==1001:
+                                object->classId==(type==AssetType::Material?21u:type==AssetType::AnimationClip?74u:0u));
+    if(!matches)return fail("GUID existe, mas fileID/tipo da dependência não corresponde: "+source->path);
     result.identities.push_back(record->guid);
     if(type==AssetType::AnimationClip) {
       UnityImportRecipe recipe;if(!UnityImportRecipe::deserialize(record->importerParameters,recipe,error))return false;
@@ -441,25 +509,44 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
     if(owner) {AnimationClipPreview preview;if(!preview.begin(session.document_,owner,value,error)||!preview.seek(0,error)||!preview.seek(value.duration,error))return {};}
     native=value.serialize();recipe.nextIdentity=value.nextId;
   } else if(kind==UnityImportKind::Prefab) {
-    UnityPrefabImport imported;if(!convertUnityPrefab(document,imported,error))return {};
+    // G6a: scripts do pacote pelo GUID do .cs (o nome do arquivo é o da classe).
+    UnityPrefabContext context;
+    context.scriptName=[&session,path](const AssetGuid &guid)->std::string {
+      const auto *item=sourceItem(session,path,guid);
+      return item&&item->path.ends_with(".cs")?std::filesystem::path(item->path).stem().string():std::string();
+    };
+    UnityPrefabImport imported;if(!convertUnityPrefab(document,imported,error,&context))return {};
     runtime::UnityPrefabIdentityMap previous,identities;
     if(existing){previous.nextObject=static_cast<u32>(oldRecipe.nextIdentity);for(const auto &[file,id]:oldRecipe.identities)previous.entries.push_back({file,static_cast<u32>(id)});}
     const runtime::UnityPrefabResolver resolver=[&](const UnityObjectReference &reference,AssetType type,std::vector<AssetGuid> &ids,std::string &diagnostic) {
       Dependency result;if(!resolve(session,path,reference,type,result,diagnostic))return false;
       ids=std::move(result.identities);dependency(result.owner);return true;
     };
+    std::vector<std::string> notes;runtime::UnityPrefabEffectServices effects;effects.notes=&notes;
+    effects.particleLook=[&session,path](const UnityObjectReference &reference,UnityParticleLook &look){return particleLook(session,path,reference,look);};
+    effects.particleMesh=[&](const UnityObjectReference &reference,AssetType,std::vector<AssetGuid> &ids,std::string &diagnostic) {
+      Dependency result;if(!particleMesh(session,path,reference,result,diagnostic))return false;
+      ids=std::move(result.identities);dependency(result.owner);return true;
+    };
     runtime::Prefab value;
-    if(!runtime::buildUnityPrefab(imported,record.guid,resolver,existing?&previous:nullptr,value,identities,error))return {};
+    if(!runtime::buildUnityPrefab(imported,record.guid,resolver,existing?&previous:nullptr,value,identities,error,&effects))return {};
     sourceBaseline=value.write();native=sourceBaseline;recipe.fileId=imported.rootFileId;
     recipe.nextIdentity=identities.nextObject;for(const auto &entry:identities.entries)recipe.identities.emplace_back(entry.fileId,entry.object);
     recipe.transformations=imported.transformations;
+    for(const auto &text:notes)recipe.transformations.push_back("Perda: "+text);
+    // A receita guarda até 64 notas; o resto vira uma contagem.
+    if(recipe.transformations.size()>64) {
+      const auto extra=recipe.transformations.size()-63;recipe.transformations.resize(63);
+      recipe.transformations.push_back("E mais "+std::to_string(extra)+" notas de conversão neste prefab.");
+    }
+    for(auto &text:recipe.transformations)if(text.size()>4000)text.resize(4000);
     const auto previousContent=existing?prefabContent(oldBaseline,error):std::string();
     const auto localContent=existing?prefabContent(before.text,error):std::string();
     const auto incomingContent=existing?prefabContent(native,error):std::string();
     if(existing&&(previousContent.empty()||localContent.empty()||incomingContent.empty()))return {};
     if(existing&&localContent!=previousContent&&incomingContent!=previousContent&&incomingContent!=localContent) {
       if(policy==UnityReimportPolicy::RefuseConflict)return fail("Prefab possui alterações locais e nova origem; escolha Manter local ou Receber origem. Instâncias da cena conservam seus overrides.");
-      if(policy==UnityReimportPolicy::KeepLocal){native=before.text;record.dependencies=existing->dependencies;recipe.transformations.push_back("Prefab autoral local preservado; origem nova registrada como baseline, sem sobrescrever instâncias.");}
+      if(policy==UnityReimportPolicy::KeepLocal){native=before.text;record.dependencies=before.record->dependencies;recipe.transformations.push_back("Prefab autoral local preservado; origem nova registrada como baseline, sem sobrescrever instâncias.");}
     } else if(existing&&localContent!=previousContent)native=before.text;
   } else {
     UnityControllerImport imported;

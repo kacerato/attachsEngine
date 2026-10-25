@@ -4,6 +4,7 @@
 #include "runtime/scene_lights.h"
 #include "runtime/transform_math.h"
 #include "scene/light.h"
+#include "scene/vfx_behaviors.h"
 
 #include <algorithm>
 #include <chrono>
@@ -31,6 +32,16 @@ std::string fingerprintOf(const scene::ParticleSystem &system) {
   return out.str();
 }
 } // namespace
+
+std::shared_ptr<const renderer::particles::ParticleMeshSet> builtinParticleMeshes() {
+  static const auto set = [] {
+    auto value = std::make_shared<renderer::particles::ParticleMeshSet>();
+    value->revision = 1;
+    renderer::particles::appendBuiltinParticleMeshes(*value);
+    return std::shared_ptr<const renderer::particles::ParticleMeshSet>(std::move(value));
+  }();
+  return set;
+}
 
 u32 particleSeed(const scene::ParticleSystemSettings &settings, ObjectId object, u64 instance) {
   if (!settings.autoRandomSeed) return static_cast<u32>(settings.randomSeed);
@@ -73,6 +84,10 @@ void SceneParticles::reconcile(const SceneGraph &graph) {
         entry.emitter.configure(system, particleSeed(system, id, value->instanceId()));
         entry.fingerprint = std::move(fingerprint);
       }
+      // G6a: Instanciar ao colidir no mesmo objeto quer os toques deste sistema.
+      const auto *listener = object->components.find(scene::ParticleCollisionSpawn::descriptor);
+      entry.listens = listener && static_cast<const scene::ParticleCollisionSpawn *>(listener)->enabled;
+      entry.emitter.setCollisionEventsWanted(entry.listens);
       const bool active = graph.activeInHierarchy(id);
       // Unity: desativar o objeto apaga as partículas; reativar com "Tocar ao
       // iniciar" recomeça. O primeiro encontro conta como ativação.
@@ -143,6 +158,23 @@ void SceneParticles::preparePlanes(const SceneGraph &graph, Entry &entry) const 
   entry.emitter.setCollisionPlanes(planes, count);
 }
 
+// Modo de escala (Unity Scaling Mode): Hierarquia lê a escala de mundo (o
+// objeto e os pais), Local só a do objeto, Forma não escala a partícula.
+float SceneParticles::sizeScale(const SceneGraph &graph, ObjectId object, const Entry &entry) const {
+  const auto mode = entry.emitter.settings().scalingMode;
+  if (mode == scene::ParticleScalingMode::Shape) return 1.0f;
+  if (mode == scene::ParticleScalingMode::Local) {
+    const auto *value = graph.find(object);
+    if (!value) return 1.0f;
+    const auto &s = value->transform.scale;
+    return (std::abs(s[0]) + std::abs(s[1]) + std::abs(s[2])) / 3.0f;
+  }
+  const float *m = entry.world;
+  float sum = 0;
+  for (u32 c = 0; c < 3; ++c) sum += std::sqrt(m[c * 4] * m[c * 4] + m[c * 4 + 1] * m[c * 4 + 1] + m[c * 4 + 2] * m[c * 4 + 2]);
+  return sum / 3.0f;
+}
+
 SceneParticles::Entry *SceneParticles::firstEntryOf(ObjectId object) {
   const auto it = entries_.lower_bound({object, 0});
   return it != entries_.end() && it->first.object == object ? &it->second : nullptr;
@@ -185,6 +217,8 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
     if (!worldMatrix(graph, key.object, entry.world)) continue;
     entry.emitter.clearEvents();
     preparePlanes(graph, entry);
+    entry.emitter.setWorldCollider(worldRaycast_, worldContext_, worldQueries_);
+    entry.emitter.setSizeScale(sizeScale(graph, key.object, entry));
     work.push_back(&entry);
     alive += entry.emitter.alive();
   }
@@ -201,6 +235,19 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
       for (auto *entry : work) step(entry);
     }
     routeSubEmitters(graph);
+    collisions_.clear();
+    for (auto &[key, entry] : entries_) {
+      if (!entry.active || !entry.listens) continue;
+      for (const auto &event : entry.emitter.collisions()) {
+        Collision collision;
+        collision.object = key.object;
+        collision.instance = key.instance;
+        std::copy(event.position, event.position + 3, collision.position);
+        std::copy(event.velocity, event.velocity + 3, collision.velocity);
+        std::copy(event.normal, event.normal + 3, collision.normal);
+        collisions_.push_back(collision);
+      }
+    }
     for (auto &[key, entry] : entries_) {
       if (!entry.active) continue;
       if (entry.emitter.takeFinished()) {
@@ -267,11 +314,12 @@ void appendParticleLights(const renderer::particles::ParticleFrame &frame, std::
 }
 
 void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out,
-                           const ParticleMaterialResolver *materials) const {
+                           const ParticleMaterialResolver *materials, const ParticleMeshes *meshes) const {
   const auto start = std::chrono::steady_clock::now();
   out.clear();
   out.budget = budget_;
   out.simulationMs = simulationMs_;
+  out.meshes = meshes && meshes->set ? meshes->set : builtinParticleMeshes();
   for (const auto &[key, entry] : entries_) {
     if (!entry.active || !entry.emitter.alive()) continue;
     renderer::particles::ParticleBatch batch;
@@ -280,6 +328,18 @@ void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], re
     batch.instanceCount = static_cast<u32>(out.instances.size()) - batch.firstInstance;
     if (!batch.instanceCount) continue;
     batch.material = entry.emitter.material();
+    // G6a: a malha do lote. A do projeto, quando resolvida, vale mais que a
+    // embutida; Malha do projeto que não resolve não desenha (o renderer pula o
+    // lote) em vez de trocar a forma por outra.
+    if (entry.emitter.settings().renderMode == scene::ParticleRenderMode::Mesh) {
+      const auto &settings = entry.emitter.settings();
+      if (settings.meshAsset.valid()) {
+        u32 range = ~0u;
+        if (meshes && meshes->resolve && meshes->resolve(settings.meshAsset, range)) batch.mesh = range;
+      } else {
+        batch.mesh = static_cast<u32>(settings.meshShape);
+      }
+    }
     // Material de projeto: a imagem dele e a cor base, como o Material do
     // Particle System Renderer da Unity. A mistura segue o Surface do material.
     if (const auto &asset = entry.emitter.settings().materialAsset; asset.valid() && materials && *materials) {

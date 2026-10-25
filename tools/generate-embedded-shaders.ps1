@@ -47,6 +47,7 @@ if ($All) {
         material_fallback = @('frag')
         material_preview = @('vert', 'frag')
         particle_billboard = @('vert')
+        particle_mesh = @('vert')
         particle_material = @('frag')
         particle_material_project = @('frag')
         post_process = @('vert', 'frag')

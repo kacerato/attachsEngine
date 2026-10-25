@@ -47,7 +47,29 @@ namespace {
 // Shaders com conversor. Embutidos do Built-in: Standard (fileID 46) e
 // Standard (Specular setup) (45). URP 17, por GUID do .shader do pacote
 // com.unity.render-pipelines.universal (fileID 4800000).
-enum class UnityShader : u8 {None,Standard,StandardSpecular,UrpLit,UrpSimpleLit,UrpUnlit,UrpParticlesLit,UrpParticlesUnlit};
+enum class UnityShader : u8 {None,Standard,StandardSpecular,UrpLit,UrpSimpleLit,UrpUnlit,UrpParticlesLit,UrpParticlesUnlit,Hovl};
+// G6a: shaders de partícula do Hovl Studio (RPG VFX Bundle 5.0), pelo GUID do
+// .shader no pacote. Família, textura principal e o que o Material da Astra não
+// guarda (brilho, rolagem, ruído) vão para o Sistema de partículas.
+struct HovlShader {std::string_view guid,name,mainTexture;UnityParticleFamily family;bool approximate;};
+constexpr HovlShader hovlShaders[]{
+  {"b68b99c2e57cef4419465c63c527201b","Blend_CenterGlow","_MainTex",UnityParticleFamily::AlphaBlend,false},
+  {"bd6af5d577c618947b73aa60db554e51","Add_CenterGlow","_MainTex",UnityParticleFamily::Additive,false},
+  {"1bc9b14ff230e2242b248daff64546f6","AddTrail","_MainTexture",UnityParticleFamily::Additive,false},
+  {"56bedbcbfe68e1345a5e87fe73790dab","Blend_TwoSides","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"c6a2ded4c4b574a46babd82f68db8f4d","Blend_Normals","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"86b3f0465bcb0c941893722f46ef6eeb","Electricity","_MainTexture",UnityParticleFamily::Additive,true},
+  {"ca825309dbbb03640874997c5db5cb48","BlendDistort","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"36121c42b945b624fb938cb9637f28d0","Distortion","",UnityParticleFamily::Distortion,false},
+  {"13a43378542625f489f7c1c85ba6a4c4","Lit_CenterGlow","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"145bae762d8de8f4c8fb1b284128fae7","DissolveNoise","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"68f568f887edc9d449e3a18dafbe5027","LightGlow","_MainTex",UnityParticleFamily::Additive,true},
+  {"734ad3a5e0f9f384683a822995bcecd3","SmoothSmoke","_MainTex",UnityParticleFamily::AlphaBlend,false},
+};
+const HovlShader *hovlShader(std::string_view guid) {
+  for(const auto &shader:hovlShaders) if(shader.guid==guid) return &shader;
+  return nullptr;
+}
 UnityShader shaderFrom(std::string_view guid,std::string_view id) {
   if(guid=="0000000000000000f000000000000000"||guid.empty()) return id=="46"?UnityShader::Standard:id=="45"?UnityShader::StandardSpecular:UnityShader::None;
   if(id!="4800000") return UnityShader::None;
@@ -56,9 +78,10 @@ UnityShader shaderFrom(std::string_view guid,std::string_view id) {
   if(guid=="650dd9526735d5b46b79224bc6e94025") return UnityShader::UrpUnlit;
   if(guid=="b7839dad95683814aa64166edc107ae2") return UnityShader::UrpParticlesLit;
   if(guid=="0406db5a14f94604a8c57ccfbc9f3b46") return UnityShader::UrpParticlesUnlit;
+  if(hovlShader(guid)) return UnityShader::Hovl;
   return UnityShader::None;
 }
-bool urp(UnityShader shader) {return shader>=UnityShader::UrpLit;}
+bool urp(UnityShader shader) {return shader>=UnityShader::UrpLit&&shader<=UnityShader::UrpParticlesUnlit;}
 }
 
 bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
@@ -70,7 +93,7 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   std::map<std::string,UnityMaterialTexture> textures;
   enum class Section {None,Textures,Floats,Colors,Keywords,InvalidKeywords};Section section=Section::None;
   std::string keywords;
-  std::string current;bool material=false;UnityShader shader=UnityShader::None;bool shaderSeen=false;
+  std::string current;bool material=false;UnityShader shader=UnityShader::None;bool shaderSeen=false;std::string shaderGuid;
   std::istringstream lines{std::string(text)};std::string storage;
   const auto fail=[&](const std::string &why) {out={};out.diagnostic=why;return false;};
   while(std::getline(lines,storage)) {
@@ -82,6 +105,7 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     if(line.starts_with("m_InvalidKeywords:")) {section=Section::InvalidKeywords;continue;}
     if(line.starts_with("m_Shader:")) {
       shaderSeen=true;
+      shaderGuid=std::string(member(line,"guid"));
       shader=shaderFrom(member(line,"guid"),member(line,"fileID"));
       if(shader==UnityShader::None) result.unsupported.push_back("Shader sem conversor: "+std::string(line.substr(9)));
       continue;
@@ -124,6 +148,50 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   asset.channels.occlusionSource=scene::MaterialOcclusionNone;asset.channels.normalFlipY=scene::MaterialToggleOff;
   asset.surface.alphaMode=scene::MaterialAlphaOpaque;asset.surface.sides=scene::MaterialSidesSingle;
   const auto get=[&](const char *key,float fallback) {const auto it=floats.find(key);return it==floats.end()?fallback:it->second;};
+  if(shader==UnityShader::Hovl) {
+    // Partícula Unlit da Astra: imagem principal, cor (sem HDR: o brilho vai
+    // para o componente) e a mistura da família. Ruído, máscara e fluxo do
+    // shader viram o ruído e a rolagem do material de partícula do componente.
+    const auto &hovl=*hovlShader(shaderGuid);
+    auto &look=result.particle;look.family=hovl.family;look.shader=std::string(hovl.name);
+    auto &shading=asset.shading;shading.shader=scene::MaterialShaderParticlesUnlit;
+    asset.surface.alphaMode=scene::MaterialAlphaBlend;asset.surface.sides=scene::MaterialSidesDouble;
+    shading.blend=hovl.family==UnityParticleFamily::Additive?scene::MaterialBlendAdditive:scene::MaterialBlendAlpha;
+    asset.channels.alphaSource=scene::MaterialAlphaSourceBase;
+    asset.values.metallic=0;asset.values.roughness=1;
+    const char *colorNames[]{"_Color","_StartColor","_Maincolor"};
+    for(const char *name:colorNames) if(colors.contains(name)) {
+      const auto &c=colors[name];
+      const float peak=std::max({1.0f,c[0],c[1],c[2]});
+      for(u32 i=0;i<3;++i) asset.values.baseColor[i]=std::clamp(c[i]/peak,0.f,1.f);
+      look.emission*=peak;
+      if(c[3]<1) look.opacity*=std::clamp(c[3],0.f,1.f);
+      break;
+    }
+    if(colors.contains("_SpeedMainTexUVNoiseZW")) {
+      const auto &v=colors["_SpeedMainTexUVNoiseZW"];
+      look.scroll[0]=v[0];look.scroll[1]=v[1];look.noiseScroll[0]=v[2];look.noiseScroll[1]=v[3];
+    }
+    if(floats.contains("_Emission")) look.emission*=std::max(0.f,get("_Emission",1));
+    else if(colors.contains("_NoisespeedXYEmissonZPowerW")) look.emission*=std::max(0.f,colors["_NoisespeedXYEmissonZPowerW"][2]);
+    look.opacity*=std::clamp(get("_Opacity",1),0.f,3.f);
+    look.centerGlow=get("_Usecenterglow",0)>.5f;
+    look.soft=get("_Usedepth",0)>.5f;
+    const auto hasTexture=[&](const char *name) {return textures.contains(name)&&textures[name].unityGuid.valid();};
+    look.noise=hasTexture("_Noise")||hasTexture("_TextureNoise");
+    if(hovl.family==UnityParticleFamily::Distortion) {
+      result.approximations.push_back("Distorção (Distortion) sem consumidor: o sistema que usa este material não é desenhado.");
+    } else if(!hovl.mainTexture.empty()&&hasTexture(std::string(hovl.mainTexture).c_str())) {
+      auto texture=textures[std::string(hovl.mainTexture)];texture.binding=0;texture.sampling.uvSet=scene::MaterialUv0;
+      result.textures.push_back(texture);
+    }
+    if(look.noise) result.approximations.push_back("Textura de ruído do shader vira o ruído Nuvens da partícula, com a mesma rolagem.");
+    if(hasTexture("_Mask")||hasTexture("_Flow")) result.approximations.push_back("Máscara e fluxo (distorção de UV) do shader sem textura própria na Astra.");
+    if(hovl.approximate) result.approximations.push_back(std::string(hovl.name)+": efeito do shader (fresnel, dissolve, normais ou luz) reduzido a mistura com a imagem principal.");
+    if(look.opacity!=1) result.approximations.push_back("Opacidade do material entra no brilho do componente, não no alfa.");
+    if(!asset.valid()) return fail("Material de partícula fora do contrato nativo.");
+    out=std::move(result);return true;
+  }
   const bool isUrp=urp(shader);
   // Shader variants consume complete keyword tokens. _Mode is Inspector
   // bookkeeping; conflicting serialized state must never change appearance.

@@ -392,6 +392,37 @@ inline const CreationComponent sparks[]{{particleSystem,sparkValues}};
 inline const CreationValue sparkLightValues[]{{light,"range",3.f}};
 inline const CreationComponent sparkLight[]{{light,sparkLightValues}};
 inline const CreationChild sparkChildren[]{{"Luz modelo",sparkLight,particleSystem,"light_template",false}};
+// G6a: comportamentos de efeito, do jeito que os pacotes de VFX da Unity os
+// montam (Line Renderer + script de laser, projétil com brilho, toque que cria
+// um efeito, som que se repete).
+inline constexpr std::string_view lineType="astra.render.line",laserType="astra.effects.laser",
+  projectileType="astra.effects.projectile",collisionSpawnType="astra.effects.collision_spawn",effectSoundType="astra.audio.effect_sound";
+inline const CreationValue lineValues[]{{lineType,"world_space",false},{lineType,"point_1_z",3.f},{lineType,"width_start",.12f},
+  {lineType,"width_end",.04f},{lineType,"color_end_a",.25f}};
+inline const CreationComponent line[]{{lineType,lineValues}};
+inline const CreationValue laserLineValues[]{{lineType,"world_space",false},{lineType,"point_1_z",20.f},{lineType,"width_start",.08f},
+  {lineType,"width_end",.08f},{lineType,"color_start_r",.35f},{lineType,"color_start_g",1.f},{lineType,"color_start_b",.4f},
+  {lineType,"color_end_r",.35f},{lineType,"color_end_g",1.f},{lineType,"color_end_b",.4f},{lineType,"emission",4.f},
+  {lineType,"tile_length",.5f},{lineType,"scroll_x",-2.f}};
+inline const CreationComponent laser[]{{lineType,laserLineValues},{laserType}};
+inline const CreationValue laserHitValues[]{{particleSystem,"shape_type",u32{0}},{particleSystem,"shape_radius",.05f},
+  {particleSystem,"start_lifetime",.3f},{particleSystem,"start_speed",2.f},{particleSystem,"start_size",.1f},
+  {particleSystem,"emission_rate",60.f},{particleSystem,"material_blend",u32{1}},{particleSystem,"material_texture",u32{1}},
+  {particleSystem,"material_emission",3.f},{particleSystem,"start_color_r",.35f},{particleSystem,"start_color_g",1.f},
+  {particleSystem,"start_color_b",.4f},{particleSystem,"color_over_lifetime_enabled",true}};
+inline const CreationComponent laserHit[]{{particleSystem,laserHitValues}};
+inline const CreationChild laserChildren[]{{"Impacto",laserHit,laserType,"hit_effect"}};
+inline const CreationValue projectileGlowValues[]{{particleSystem,"simulation_space",u32{1}},{particleSystem,"start_lifetime",.25f},
+  {particleSystem,"start_speed",0.f},{particleSystem,"start_size",.35f},{particleSystem,"emission_rate",80.f},
+  {particleSystem,"material_blend",u32{1}},{particleSystem,"material_texture",u32{1}},{particleSystem,"material_emission",3.f},
+  {particleSystem,"color_over_lifetime_enabled",true},{particleSystem,"start_color_r",1.f},{particleSystem,"start_color_g",.5f},
+  {particleSystem,"start_color_b",.15f}};
+inline const CreationComponent projectile[]{{particleSystem,projectileGlowValues},{projectileType}};
+inline const CreationValue collisionDropValues[]{{particleSystem,"shape_rotation_x",-90.f},{particleSystem,"start_speed",4.f},
+  {particleSystem,"start_size",.1f},{particleSystem,"gravity_modifier",1.f},{particleSystem,"emission_rate",6.f},
+  {particleSystem,"collision_enabled",true},{particleSystem,"collision_type",u32{1}},{particleSystem,"collision_bounce",.2f}};
+inline const CreationComponent collisionSpawn[]{{particleSystem,collisionDropValues},{collisionSpawnType}};
+inline const CreationComponent effectSound[]{{"astra.audio.source"},{effectSoundType}};
 } // namespace recipe
 
 inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu","Efeitos"};
@@ -405,7 +436,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
 inline constexpr unsigned kEffectsCreationCategory=11;
-inline const std::array<EditorCreationEntry,108> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,113> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -437,6 +468,19 @@ inline const std::array<EditorCreationEntry,108> editorCreationCatalog{{
     ui::UiIcon::EffectsSparks,runtime::ObjectKind::Folder,recipe::sparks,CreationPose::ViewTarget,0.5f,{},{},
     "Sparks Trails Lights Faisca Trilha Rastro Luz Particulas",scene::PrimitiveType::Count,false,{},
     recipe::particleSystem,scene::PrimitiveType::Count,false,recipe::sparkChildren},
+  {"effect.line",EditorWidget::None,kEffectsCreationCategory,"Linha","Faixa por pontos com largura, cor e material de partícula.",
+    ui::UiIcon::ComponentLine,runtime::ObjectKind::Folder,recipe::line,CreationPose::ViewTarget,0.5f,{},{},
+    "LineRenderer Line2D Linha Raio Corda Trajetoria Faixa",scene::PrimitiveType::Count,false,{},recipe::lineType},
+  {"effect.laser",EditorWidget::None,kEffectsCreationCategory,"Laser","Raio pela frente até o primeiro colisor, com impacto no ponto.",
+    ui::UiIcon::ComponentLaser,runtime::ObjectKind::Folder,recipe::laser,CreationPose::ViewTarget,1.f,{},{},
+    "Laser Beam Raio Feixe Hovl Raycast LineRenderer",scene::PrimitiveType::Count,false,{},
+    recipe::laserType,scene::PrimitiveType::Count,false,recipe::laserChildren},
+  {"effect.projectile",EditorWidget::None,kEffectsCreationCategory,"Projétil","Brilho que anda pela frente e cria o impacto ao acertar.",
+    ui::UiIcon::ComponentProjectile,runtime::ObjectKind::Folder,recipe::projectile,CreationPose::ViewTarget,1.f,{},{},
+    "Projectile ProjectileMover Bala Tiro Magia Bola de fogo Missil",scene::PrimitiveType::Count,false,{},recipe::projectileType},
+  {"effect.collision_spawn",EditorWidget::None,kEffectsCreationCategory,"Instanciar ao colidir","Cada toque de partícula cria um prefab no ponto.",
+    ui::UiIcon::ComponentCollisionSpawn,runtime::ObjectKind::Folder,recipe::collisionSpawn,CreationPose::ViewTarget,2.f,{},{},
+    "OnParticleCollision ParticleCollisionInstance Impacto Respingo Colisao",scene::PrimitiveType::Count,false,{},recipe::collisionSpawnType},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,
@@ -551,6 +595,9 @@ inline const std::array<EditorCreationEntry,108> editorCreationCatalog{{
     runtime::ObjectKind::Folder,recipe::connectedTween,CreationPose::ViewTarget,0,"astra.tween.transform","finished_target","Tween Concluir Evento Conexao",scene::PrimitiveType::Count,false,{},"astra.tween.transform"},
   {"audio.source",EditorWidget::None,6,"Fonte sonora","Emissor real; atribua um WAV importado na Inspeção.",ui::UiIcon::AudioSource,
     runtime::ObjectKind::Folder,recipe::audioSource,CreationPose::ViewTarget,0,{},{},"AudioSource AudioStreamPlayer3D"},
+  {"audio.effect_sound",EditorWidget::None,6,"Som repetido","Toca o WAV da fonte de tempos em tempos, com volume sorteado.",
+    ui::UiIcon::AudioEffectSound,runtime::ObjectKind::Folder,recipe::effectSound,CreationPose::ViewTarget,0,{},{},
+    "EGA_EffectSound PlayOneShot InvokeRepeating Som Repetido Efeito",scene::PrimitiveType::Count,false,{},recipe::effectSoundType},
   {"audio.listener",EditorWidget::None,6,"Ouvinte","Pose de escuta espacial; prioridade seleciona um ouvinte.",ui::UiIcon::AudioListener,
     runtime::ObjectKind::Folder,recipe::audioListener,CreationPose::EditorCamera,0,{},{},"AudioListener"},
   {"audio.bus",EditorWidget::None,6,"Bus de áudio","Ganho, efeitos e envios em cadeia; saída Master por padrão.",ui::UiIcon::AudioBus,

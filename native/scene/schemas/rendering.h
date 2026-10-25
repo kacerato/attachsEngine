@@ -6,6 +6,7 @@
 #include "scene/mesh_renderer.h"
 #include "scene/skinned_mesh.h"
 #include "scene/ui_canvas.h"
+#include "scene/vfx_behaviors.h"
 #include "scene/weather.h"
 
 namespace ae::scene {

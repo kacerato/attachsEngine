@@ -1106,6 +1106,11 @@ public:
   // Projeto UMotion Pro (.asset) no personagem `owner`: clipes, alvos de IK,
   // IK de plano rotativo, Filho de, camadas e eventos (editor_umotion_import.cpp).
   bool importUMotionProject(std::string_view relative,EditorEntityId owner,struct UMotionImportReport &report,std::string &error);
+  // G6b: Weather Type ou Cloud Profile do UniStorm num pacote da Biblioteca.
+  bool uniStormAsset(const std::string &path,std::string &script) const;
+  // Converte todos os perfis do mesmo tipo do pacote (presets do Clima ou
+  // perfis de Ambiente com Nuvens); já convertidos ficam como estão.
+  bool importUniStormProfiles(const std::string &path,std::string &diagnostic);
   // Cena de exemplo do modelo "Carregar com as duas maos" (editor_carry_setup.cpp):
   // mesa, caixa com duas pegadas e ponto de carregar sobre componentes universais.
   bool addCarrySetupInTransaction(EditorEntityId character,EditorEntityId group,std::string &error);
@@ -1658,6 +1663,12 @@ private:
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
   runtime::SceneParticles previewParticles_;
+  // G6a: malhas das partículas (embutidas + as do projeto já pedidas). Refeito
+  // quando o pacote de geometria publicado muda.
+  std::shared_ptr<const renderer::particles::ParticleMeshSet> particleMeshSet_;
+  std::map<resources::AssetGuid, u32> particleMeshRanges_;
+  const void *particleMeshGeometry_ = nullptr;
+  bool particleMeshRange(const resources::AssetGuid &mesh, u32 &range);
   runtime::SceneWeather previewWeather_;
   runtime::SceneWeather::Report previewWeatherReport_;
   u32 particleBudget_ = 100000;

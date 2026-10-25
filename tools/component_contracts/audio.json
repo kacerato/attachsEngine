@@ -15,6 +15,21 @@
       "apiName": "AudioSource"
     },
     {
+      "type": "EffectSound",
+      "name": "Som repetido",
+      "description": "Toca o clipe da Fonte de áudio de tempos em tempos, com volume sorteado",
+      "requirements": {
+        "cpp": "effectSoundRequirements"
+      },
+      "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+      "capability": "audio.effect_sound",
+      "subfamily": "Reprodução",
+      "icon": "audio/effect-sound",
+      "searchTerms": "EGA_EffectSound PlayOneShot InvokeRepeating Som Repetido Loop Efeito",
+      "reference": "https://docs.unity3d.com/6000.0/Documentation/ScriptReference/AudioSource.PlayOneShot.html",
+      "apiName": "EffectSound"
+    },
+    {
       "type": "AudioListener",
       "name": "Ouvinte de áudio",
       "description": "Pose e volume de escuta escolhidos por prioridade",

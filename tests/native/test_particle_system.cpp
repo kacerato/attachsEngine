@@ -55,7 +55,7 @@ AE_TEST(particle_system_registered_with_effects_family_and_reflection) {
   AE_EXPECT_TRUE(scene::componentSchemaIdsUnique(), "ids únicos");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.simulation"), "simulação implementada");
   AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.soft"), "suave autorável (limitada pelo aparelho)");
-  AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.trails") && !core::engineCapabilityAuthorable("render.particles.mesh"), "trilhas implementadas; partícula de malha ainda planejada");
+  AE_EXPECT_TRUE(core::engineCapabilityAuthorable("render.particles.trails") && core::engineCapabilityAuthorable("render.particles.mesh"), "trilhas e partícula de malha implementadas (G6a)");
   // Toda propriedade tem consumidor declarado e capacidade autorável.
   for (const auto &p : scene::ParticleSystem::descriptor.numbers)
     AE_EXPECT_TRUE(p.presentation.hasConsumer() && !p.presentation.consumer.empty() && !p.id.empty(), "número com consumidor");
@@ -730,7 +730,7 @@ AE_TEST(particle_p2d_donut_and_rectangle_shapes_stay_in_their_volumes) {
 
 // PK-10a: Texture Sheet Animation (modo Grid da Unity) e Material de projeto.
 AE_TEST(particle_pk10a_texture_sheet_walks_the_grid_over_lifetime) {
-  AE_EXPECT_EQ(sizeof(ParticleInstance), usize(48), "instância com o quadro da folha");
+  AE_EXPECT_EQ(sizeof(ParticleInstance), usize(64), "instância com o quadro da folha e a orientação 3D (G6a)");
   scene::ParticleSystemSettings sheet;
   sheet.startLifetime = scene::particleCurveDefault(1);
   sheet.startSpeed = scene::particleCurveDefault(0);
@@ -794,8 +794,8 @@ AE_TEST(particle_pk10a_archive_v3_keeps_material_and_sheet_and_reads_v2) {
                  back.sheetRowMode == scene::ParticleSheetRowMode::Random && back.sheetCycles == 3 &&
                  back.sheetStartFrame.constantMin == 1 && back.sheetFrameOverTime.curveMax.keys.size() == 2,
                  "material e folha preservados");
-  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.version, 3u, "versão 3");
-  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.resourceBindings.size(), usize(1), "binding do Material");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.version, 4u, "versão 4 (G6a)");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.resourceBindings.size(), usize(2), "bindings do Material e da Malha");
   scene::ParticleSystem none;
   AE_EXPECT_TRUE(roundTrip(scene::ParticleSystem{}, none) && !none.materialAsset.valid(), "sem material grava '-'");
   // Um arquivo v2 não tem o token do material no fim.

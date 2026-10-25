@@ -39,7 +39,18 @@ enum class ParticleStopAction : u32 { None = 0, Disable = 1, Destroy = 2, Callba
 enum class ParticleShapeType : u32 { Sphere = 0, Hemisphere = 1, Cone = 2, Box = 3, Circle = 4, Edge = 5, Donut = 6, Rectangle = 7 };
 enum class ParticleConeEmitFrom : u32 { Base = 0, Volume = 1 };
 enum class ParticleBoxEmitFrom : u32 { Volume = 0, Shell = 1, Edge = 2 };
-enum class ParticleRenderMode : u32 { Billboard = 0, StretchedBillboard = 1 };
+// G6a: Malha desenha uma malha por partícula (Unity Render Mode Mesh); Nenhum
+// simula, acende luzes e alimenta sub-emissores sem desenhar (Unity None).
+enum class ParticleRenderMode : u32 { Billboard = 0, StretchedBillboard = 1, Mesh = 2, None = 3 };
+// Render Alignment da Unity. Facing vira Vista (a diferença só aparece com a
+// câmera muito perto); Velocidade alinha a frente ao movimento.
+enum class ParticleRenderAlignment : u32 { View = 0, World = 1, Local = 2, Velocity = 3 };
+// Malhas embutidas (as primitivas da Unity que os pacotes usam por GUID fixo).
+enum class ParticleMeshShape : u32 { Quad = 0, Cube = 1, Sphere = 2, Cylinder = 3 };
+// Scaling Mode da Unity: o que a escala do Transform faz com o sistema.
+enum class ParticleScalingMode : u32 { Hierarchy = 0, Local = 1, Shape = 2 };
+// Collision Type da Unity: planos escolhidos ou o mundo (colisores da física).
+enum class ParticleCollisionType : u32 { Planes = 0, World = 1 };
 enum class ParticleSortMode : u32 { None = 0, ByDistance = 1, OldestInFront = 2, YoungestInFront = 3 };
 enum class ParticleBlend : u32 { AlphaBlend = 0, Additive = 1 };
 // Texturas próprias, geradas pela engine (renderer/particles/particle_textures):
@@ -154,6 +165,15 @@ struct ParticleSystemSettings {
   ParticleStopAction stopAction = ParticleStopAction::None;
   bool autoRandomSeed = true;
   float randomSeed = 0;
+  // G6a: tamanho e rotação por eixo (Unity 3D Start Size / 3D Start Rotation).
+  // Com Tamanho 3D, `startSize` é o X; com Rotação 3D, `startRotation` é o Z.
+  bool size3D = false;
+  ParticleMinMaxCurve startSizeY = particleCurveDefault(1), startSizeZ = particleCurveDefault(1);
+  bool rotation3D = false;
+  ParticleMinMaxCurve startRotationX = particleCurveDefault(0), startRotationY = particleCurveDefault(0);
+  // Forma é o comportamento anterior ao G6a (partícula sem a escala do objeto):
+  // cena antiga abre igual. A importação da Unity grava o modo do pacote.
+  ParticleScalingMode scalingMode = ParticleScalingMode::Shape;
 
   // --- Emissão ------------------------------------------------------------
   bool emissionEnabled = true;
@@ -194,8 +214,12 @@ struct ParticleSystemSettings {
     value.curveMin = value.curveMax = particleLinearCurve(0, 1);
     return value;
   }();
+  bool sizeSeparateAxes = false;
+  ParticleMinMaxCurve sizeOverLifetimeY = sizeOverLifetime, sizeOverLifetimeZ = sizeOverLifetime;
   bool rotationOverLifetimeEnabled = false;
   ParticleMinMaxCurve rotationOverLifetime = particleCurveDefault(45);
+  bool rotationSeparateAxes = false;
+  ParticleMinMaxCurve rotationOverLifetimeX = particleCurveDefault(0), rotationOverLifetimeY = particleCurveDefault(0);
 
   // --- Movimento ao longo da vida (P2a) ------------------------------------
   // Velocity over Lifetime: velocidade somada à da partícula (não acumula) e
@@ -253,6 +277,8 @@ struct ParticleSystemSettings {
   // a normal, a posição dele passa pelo plano). Sem consulta à física: é o que
   // cabe em milhares de partículas por quadro no celular.
   bool collisionEnabled = false;
+  // G6a: Mundo consulta a física do Play (runtime/scene_particles.cpp).
+  ParticleCollisionType collisionType = ParticleCollisionType::Planes;
   u64 collisionPlane0 = 0, collisionPlane1 = 0;
   float collisionDampen = 0;        // fração da velocidade tangencial perdida no toque
   float collisionBounce = 1;        // fração da velocidade normal devolvida
@@ -269,6 +295,10 @@ struct ParticleSystemSettings {
 
   // --- Renderização -------------------------------------------------------
   ParticleRenderMode renderMode = ParticleRenderMode::Billboard;
+  ParticleRenderAlignment renderAlignment = ParticleRenderAlignment::View;
+  // Malha (G6a): a do projeto, quando escolhida, vale mais que a embutida.
+  ParticleMeshShape meshShape = ParticleMeshShape::Quad;
+  resources::AssetGuid meshAsset{};
   float stretchVelocityScale = 0;
   float stretchLengthScale = 2;
   ParticleSortMode sortMode = ParticleSortMode::None;
@@ -412,6 +442,28 @@ inline bool particleShapeBox(const ComponentValue &v) {
   return t == ParticleShapeType::Box || t == ParticleShapeType::Rectangle;
 }
 inline bool particleStretched(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::StretchedBillboard; }
+inline bool particleMeshMode(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::Mesh; }
+inline bool particleAlignable(const ComponentValue &v) {
+  const auto mode = particleSystem(v).renderMode;
+  return mode == ParticleRenderMode::Billboard || mode == ParticleRenderMode::Mesh;
+}
+inline bool particleSize3DOn(const ComponentValue &v) { return particleSystem(v).size3D; }
+inline bool particleRotation3DOn(const ComponentValue &v) { return particleSystem(v).rotation3D; }
+inline bool particleSizeAxesOn(const ComponentValue &v) {
+  const auto &p = particleSystem(v);
+  return p.sizeOverLifetimeEnabled && p.sizeSeparateAxes;
+}
+inline bool particleRotationAxesOn(const ComponentValue &v) {
+  const auto &p = particleSystem(v);
+  return p.rotationOverLifetimeEnabled && p.rotationSeparateAxes;
+}
+// Curva de um eixo opcional: aparece quando o eixo está ligado E o modo pede.
+template <bool (*Gate)(const ComponentValue &), ParticleMinMaxCurve ParticleSystemSettings::*M>
+bool particleGatedCurveShowsConstant(const ComponentValue &v) { return Gate(v) && particleCurveShowsConstant<M>(v); }
+template <bool (*Gate)(const ComponentValue &), ParticleMinMaxCurve ParticleSystemSettings::*M>
+bool particleGatedCurveShowsMin(const ComponentValue &v) { return Gate(v) && particleCurveShowsMin<M>(v); }
+template <bool (*Gate)(const ComponentValue &), ParticleMinMaxCurve ParticleSystemSettings::*M>
+bool particleGatedCurveShowsCurve(const ComponentValue &v) { return Gate(v) && particleCurveShowsCurve<M>(v); }
 inline bool particleNoiseOn(const ComponentValue &v) { return particleSystem(v).materialNoise != ParticleNoise::None; }
 template <usize N> bool particleBurstVisible(const ComponentValue &v) { return particleSystem(v).activeBursts() > N; }
 
@@ -430,7 +482,15 @@ inline constexpr std::array<ComponentEnumOption, 8> particleShapeOptions{{
   {0, "Esfera"}, {1, "Hemisfério"}, {2, "Cone"}, {3, "Caixa"}, {4, "Círculo"}, {5, "Aresta"}, {6, "Rosca"}, {7, "Retângulo"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleConeEmitOptions{{{0, "Base"}, {1, "Volume"}}};
 inline constexpr std::array<ComponentEnumOption, 3> particleBoxEmitOptions{{{0, "Volume"}, {1, "Casca"}, {2, "Arestas"}}};
-inline constexpr std::array<ComponentEnumOption, 2> particleRenderModeOptions{{{0, "Billboard"}, {1, "Billboard esticado"}}};
+inline constexpr std::array<ComponentEnumOption, 4> particleRenderModeOptions{{
+  {0, "Billboard"}, {1, "Billboard esticado"}, {2, "Malha"}, {3, "Nenhum"}}};
+inline constexpr std::array<ComponentEnumOption, 4> particleAlignmentOptions{{
+  {0, "Vista"}, {1, "Mundo"}, {2, "Local"}, {3, "Velocidade"}}};
+inline constexpr std::array<ComponentEnumOption, 4> particleMeshShapeOptions{{
+  {0, "Quadrado"}, {1, "Cubo"}, {2, "Esfera"}, {3, "Cilindro"}}};
+inline constexpr std::array<ComponentEnumOption, 3> particleScalingOptions{{
+  {0, "Hierarquia"}, {1, "Local"}, {2, "Forma"}}};
+inline constexpr std::array<ComponentEnumOption, 2> particleCollisionTypeOptions{{{0, "Planos"}, {1, "Mundo"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleSortOptions{{
   {0, "Nenhuma"}, {1, "Por distância"}, {2, "Mais antigas na frente"}, {3, "Mais novas na frente"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleBlendOptions{{{0, "Mistura"}, {1, "Aditivo"}}};
@@ -442,6 +502,9 @@ inline constexpr std::array<ComponentEnumOption, 4> particleMaskOptions{{
   {0, "Nenhuma"}, {1, "Radial"}, {2, "Desvanece para cima"}, {3, "Anel"}}};
 
 inline bool particleCollides(const ComponentValue &v) { return particleSystem(v).collisionEnabled; }
+inline bool particleCollidesWithPlanes(const ComponentValue &v) {
+  return particleCollides(v) && particleSystem(v).collisionType == ParticleCollisionType::Planes;
+}
 inline bool particleSheetOn(const ComponentValue &v) { return particleSystem(v).textureSheetEnabled; }
 inline bool particleLightsOn(const ComponentValue &v) { return particleSystem(v).lightsEnabled; }
 inline bool particleTrailsOn(const ComponentValue &v) { return particleSystem(v).trailsEnabled; }
@@ -472,12 +535,12 @@ inline constexpr std::array<ComponentObjectReference, 6> particleSystemReference
   {"collision_plane_0", "Plano 1", "", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).collisionPlane0; },
    [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane0 = id; },
-   {"Colisão", "", "O +Y do objeto é a normal; a partícula quica do lado de cima", particleCollides, nullptr,
+   {"Colisão", "", "O +Y do objeto é a normal; a partícula quica do lado de cima", particleCollidesWithPlanes, nullptr,
     "render.particles.collision", "renderer/particles/particle_simulation.cpp"}},
   {"collision_plane_1", "Plano 2", "", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).collisionPlane1; },
    [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane1 = id; },
-   {"Colisão", "", "Segundo plano (parede, teto)", particleCollides, nullptr,
+   {"Colisão", "", "Segundo plano (parede, teto)", particleCollidesWithPlanes, nullptr,
     "render.particles.collision", "renderer/particles/particle_simulation.cpp"}},
   {"sub_emitter_birth", "Ao nascer", "astra.effects.particle_system", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).subEmitterBirth; },
@@ -502,7 +565,8 @@ inline constexpr std::array<ComponentObjectReference, 6> particleSystemReference
 }};
 
 // Material do projeto (PK-10a). Ausente = material embutido do componente.
-inline constexpr std::array<ComponentResourceBinding, 1> particleSystemResources{{
+// Malha do projeto (G6a): no modo Malha, substitui a malha embutida.
+inline constexpr std::array<ComponentResourceBinding, 2> particleSystemResources{{
   {"material", "Material", resources::AssetType::Material, [](const ComponentValue &) -> u32 { return 1; },
    [](const ComponentValue &v, u32) { return particleSystem(v).materialAsset; },
    [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
@@ -511,7 +575,16 @@ inline constexpr std::array<ComponentResourceBinding, 1> particleSystemResources
      return true;
    },
    {"Material", "", "Material do projeto com shader Partícula: a imagem dele (e a folha de quadros) substitui a textura própria",
-    nullptr, nullptr, "render.particles.material", "platform/android/instanced_particles.inl"}}}};
+    nullptr, nullptr, "render.particles.material", "platform/android/instanced_particles.inl"}},
+  {"mesh", "Malha do projeto", resources::AssetType::Mesh, [](const ComponentValue &) -> u32 { return 1; },
+   [](const ComponentValue &v, u32) { return particleSystem(v).meshAsset; },
+   [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
+     if (slot) return false;
+     particleSystem(v).meshAsset = value;
+     return true;
+   },
+   {"Renderização", "", "Malha do projeto desenhada em cada partícula; vazia = a malha embutida acima",
+    particleMeshMode, nullptr, "render.particles.mesh", "platform/android/instanced_particles.inl + rhi/shaders/particle_mesh.vert"}}}};
 
 inline constexpr std::array<ComponentTriple, 7> particleSystemTriples{{
   {"start_color", "Cor inicial", {"start_color_r", "start_color_g", "start_color_b"}, ComponentTripleKind::LinearColor},
@@ -543,12 +616,12 @@ inline constexpr std::array<ComponentEvent, 1> particleSystemEvents{{
   {"stopped", "Parou", "O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)"}}};
 
 inline const ComponentType ParticleSystem::descriptor{
-  "astra.effects.particle_system", 3, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
+  "astra.effects.particle_system", 4, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
   particleSystemNumbers, particleSystemBooleans, particleSystemEnums, nullptr, false, particleSystemReferences, particleSystemTriples,
   particleSystemResources, {}, {}, {}, particleSystemMethods, particleSystemEvents};
 
 inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
-  static constexpr std::array<CurveSlot, 42> slots{{
+  static constexpr std::array<CurveSlot, 58> slots{{
     {"start_delay.min", &ParticleSystem::startDelay, false}, {"start_delay.max", &ParticleSystem::startDelay, true},
     {"start_lifetime.min", &ParticleSystem::startLifetime, false}, {"start_lifetime.max", &ParticleSystem::startLifetime, true},
     {"start_speed.min", &ParticleSystem::startSpeed, false}, {"start_speed.max", &ParticleSystem::startSpeed, true},
@@ -570,6 +643,17 @@ inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
     {"size_by_speed.min", &ParticleSystem::sizeBySpeed, false}, {"size_by_speed.max", &ParticleSystem::sizeBySpeed, true},
     {"rotation_by_speed.min", &ParticleSystem::rotationBySpeed, false}, {"rotation_by_speed.max", &ParticleSystem::rotationBySpeed, true},
     {"sheet_frame.min", &ParticleSystem::sheetFrameOverTime, false}, {"sheet_frame.max", &ParticleSystem::sheetFrameOverTime, true},
+    // G6a: eixos de tamanho e rotação.
+    {"start_size_y.min", &ParticleSystem::startSizeY, false}, {"start_size_y.max", &ParticleSystem::startSizeY, true},
+    {"start_size_z.min", &ParticleSystem::startSizeZ, false}, {"start_size_z.max", &ParticleSystem::startSizeZ, true},
+    {"start_rotation_x.min", &ParticleSystem::startRotationX, false}, {"start_rotation_x.max", &ParticleSystem::startRotationX, true},
+    {"start_rotation_y.min", &ParticleSystem::startRotationY, false}, {"start_rotation_y.max", &ParticleSystem::startRotationY, true},
+    {"size_over_lifetime_y.min", &ParticleSystem::sizeOverLifetimeY, false}, {"size_over_lifetime_y.max", &ParticleSystem::sizeOverLifetimeY, true},
+    {"size_over_lifetime_z.min", &ParticleSystem::sizeOverLifetimeZ, false}, {"size_over_lifetime_z.max", &ParticleSystem::sizeOverLifetimeZ, true},
+    {"rotation_over_lifetime_x.min", &ParticleSystem::rotationOverLifetimeX, false},
+    {"rotation_over_lifetime_x.max", &ParticleSystem::rotationOverLifetimeX, true},
+    {"rotation_over_lifetime_y.min", &ParticleSystem::rotationOverLifetimeY, false},
+    {"rotation_over_lifetime_y.max", &ParticleSystem::rotationOverLifetimeY, true},
   }};
   return slots;
 }
@@ -636,13 +720,17 @@ inline void ParticleSystem::write(std::ostream &out) const {
     out << ' ' << slot.id << ' ' << std::quoted(scriptGradientValue(*gradient(slot.id)));
   // v3: o Material do projeto, por identidade ("-" = material embutido).
   out << ' ' << (materialAsset.valid() ? materialAsset.text() : std::string("-"));
+  // v4: a Malha do projeto ("-" = malha embutida).
+  out << ' ' << (meshAsset.valid() ? meshAsset.text() : std::string("-"));
 }
 
 inline bool ParticleSystem::read(std::istream &in, u32 version) {
   // v2 (P2a) só acrescenta ids; um arquivo v1 lê os mesmos campos e deixa os
   // módulos novos desligados no padrão. Versão futura é recusada.
   // v3 (PK-10a) acrescenta ids e, no fim, o Material do projeto.
-  if (version < 1 || version > 3) return false;
+  // v4 (G6a) acrescenta ids (malha, alinhamento, eixos 3D, colisão Mundo) e,
+  // no fim, a Malha do projeto. Arquivo v3 abre com os módulos novos no padrão.
+  if (version < 1 || version > 4) return false;
   ParticleSystem candidate;
   std::vector<std::string> seen;
   const auto fresh = [&](const std::string &id) {
@@ -691,6 +779,11 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
     std::string material;
     if (!(in >> material)) return false;
     if (material != "-" && !resources::AssetGuid::parse(material, candidate.materialAsset)) return false;
+  }
+  if (version >= 4) {
+    std::string mesh;
+    if (!(in >> mesh)) return false;
+    if (mesh != "-" && !resources::AssetGuid::parse(mesh, candidate.meshAsset)) return false;
   }
   if (!candidate.valid()) return false;
   static_cast<ParticleSystemSettings &>(*this) = candidate;

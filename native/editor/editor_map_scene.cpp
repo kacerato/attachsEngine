@@ -414,6 +414,26 @@ bool EditorMapScene::intersectColliderMesh(std::span<const u32> slots,bool conve
 bool EditorMapScene::pickGeometry(const runtime::SceneGraph &document,EditorEntityId id,EditorPickCandidate &out) const {
   return pickSlotGeometry(document,id,0,out);
 }
+bool EditorMapScene::assetGeometry(u32 slot,std::vector<float> &positions,std::vector<float> &uvs,std::vector<u32> &indices) const {
+  positions.clear();uvs.clear();indices.clear();
+  if(!slot||slot>pickSlots_.size()||!pickGeometry_) return false;
+  const auto &draw=pickSlots_[pickSlots_[slot-1].canonical];
+  const auto &geometry=*pickGeometry_;
+  if(!draw.indexCount||u64(draw.firstIndex)+draw.indexCount>geometry.indices.size()) return false;
+  std::map<u32,u32> remap;
+  for(u32 i=0;i<draw.indexCount;++i) {
+    const long long vertex=static_cast<long long>(draw.vertexOffset)+geometry.indices[draw.firstIndex+i];
+    if(vertex<0||static_cast<usize>(vertex)*3+3>geometry.positions.size()) return false;
+    const auto [it,created]=remap.emplace(static_cast<u32>(vertex),static_cast<u32>(remap.size()));
+    if(created) {
+      positions.insert(positions.end(),geometry.positions.begin()+vertex*3,geometry.positions.begin()+vertex*3+3);
+      if(static_cast<usize>(vertex)*2+2<=geometry.uv0.size()) uvs.insert(uvs.end(),geometry.uv0.begin()+vertex*2,geometry.uv0.begin()+vertex*2+2);
+      else uvs.insert(uvs.end(),{0.0f,0.0f});
+    }
+    indices.push_back(it->second);
+  }
+  return true;
+}
 bool EditorMapScene::pickSlotGeometry(const runtime::SceneGraph &document,EditorEntityId id,u32 slot,EditorPickCandidate &out) const {
   const auto *entity=document.find(id);
   const auto *render=entity?meshRenderer(*entity):nullptr;

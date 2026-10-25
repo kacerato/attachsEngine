@@ -35,6 +35,7 @@
 #include "runtime/scene_physics2d.h"
 #include "runtime/scene_audio.h"
 #include "runtime/scene_particles.h"
+#include "runtime/scene_vfx.h"
 #include "scene/script_behavior.h"
 #include "scene/camera_follow.h"
 
@@ -106,7 +107,7 @@ public:
   void setScriptRuntime(scene::ScriptRuntimeApi api,const std::string &root) {scripts_.configure(api,root);}
   void configureAudio(runtime::SceneAudio::ClipLoader loader,runtime::SceneAudio::Output output=runtime::SceneAudio::Output::Device){audio_.configure(std::move(loader),output);}
   void configureAudioStreams(runtime::SceneAudio::StreamResolver resolver){audio_.configureStreams(std::move(resolver));}
-  void setPrefabLoader(runtime::ScriptBridge::PrefabLoader loader) {scripts_.setPrefabLoader(std::move(loader));}
+  void setPrefabLoader(runtime::ScriptBridge::PrefabLoader loader) {vfx_.setPrefabLoader(loader);scripts_.setPrefabLoader(std::move(loader));}
   void setScriptResourceAvailability(runtime::ScriptBridge::ResourceAvailability available) {
     scripts_.setResourceAvailability(std::move(available));
   }
@@ -222,7 +223,9 @@ public:
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
     navigation_.reset();
     paths_.reset();
-    particles_.reset();weather_.reset();
+    particles_.reset();weather_.reset();vfx_.reset();
+    // G6a: Colisão Mundo das partículas consulta a física deste Play.
+    particles_.setWorldCollider(&EditorPlayScene::particleRaycast,&physics_,64);
     events_.reset();
     eventConnections_.reset();
     events_.attach(runtime::ComponentEventQueue::Consumer::Connections,true);
@@ -332,7 +335,9 @@ public:
     cameraFollow_.reset();
     constraints_.reset();ik_.reset();rootMotion_.reset();
     tweens_.reset();numberTweens_.reset();sequences_.reset();queries_.reset();virtualCameras_.reset();animatorGraphs_.reset();
-    particles_.reset();weather_.reset();
+    particles_.reset();weather_.reset();vfx_.reset();
+    // G6a: Colisão Mundo das partículas consulta a física deste Play.
+    particles_.setWorldCollider(&EditorPlayScene::particleRaycast,&physics_,64);
     resources_=nullptr;
     active_=false;
     paused_=false;
@@ -478,7 +483,7 @@ private:
            stage(navigation_.advance(world_,static_cast<float>(frameElapsed)),"navegação") &&
            stage(reconcilePhysics(),"reconstrução física") && stage(physics_.advance(frameElapsed,world_,fixedStep,this,triggerEvent,contactEvent,jointBrokenEvent,characterHitEvent),"física / FixedUpdate") && drainCommands() &&
            stage(scripts_.lateUpdate(scriptElapsed),"LateUpdate") && drainCommands() && stage(reconcilePhysics(),"reconstrução final da física") && stage(queries_.advance(world_,physics_),"consultas físicas") &&
-           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(advanceWeather(static_cast<float>(frameElapsed)),"clima") && stage(advanceParticles(static_cast<float>(frameElapsed)),"partículas") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
+           stage(paths_.advance(world_,frameElapsed),"paths") && stage(sequences_.advance(world_,tweens_,frameElapsed,std::min(elapsed,.25)),"sequências de tweens") && stage(tweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"tweens") && stage(numberTweens_.advance(world_,frameElapsed,std::min(elapsed,.25)),"propriedades animadas") && drainCommands() && stage(advanceTimeOfDay(),"hora do dia") && stage(constraints_.advance(world_,frameElapsed),"constraints") && stage(advanceIk(),"IK") && stage(cameraFollow_.advance(world_,frameElapsed),"câmera") && stage(advanceVirtualCameras(),"câmeras virtuais") && stage(advanceWeather(static_cast<float>(frameElapsed)),"clima") && stage(advanceEffects(static_cast<float>(frameElapsed)),"efeitos") && stage(advanceParticles(static_cast<float>(frameElapsed)),"partículas") && stage(audio_.advance(world_,std::min(elapsed,.25)),"áudio");
   }
   // Ponto seguro: aplica a fila e avisa a física de quem deixou de existir, para
   // que nenhum corpo do Jolt continue simulando um objeto removido.
@@ -496,9 +501,32 @@ private:
   // Partículas depois de câmera e constraints: o emissor lê a pose final do
   // quadro. A ação ao parar é autoral e passa pela fila do mundo, como a de um
   // timer: desativar, destruir ou entregar o evento Parou.
+  // G6a: Colisão Mundo das partículas: o segmento do passo vira uma consulta
+  // de esfera (ou raio) à física do Play.
+  static bool particleRaycast(void *context,const float (&from)[3],const float (&to)[3],float radius,float (&point)[3],float (&normal)[3]) {
+    const auto &physics=*static_cast<const runtime::ScenePhysics *>(context);
+    const float translation[3]{to[0]-from[0],to[1]-from[1],to[2]-from[2]};
+    if(!runtime::validPhysicsQueryRay(from,translation)) return false;
+    runtime::QueryFilter filter;runtime::QueryHit hit;bool found=false;
+    if(radius>0) {
+      runtime::QueryShapeDesc shape;shape.kind=runtime::QueryShapeKind::Sphere;shape.radius=radius;
+      found=runtime::validPhysicsQueryShape(shape)&&physics.shapeCast(shape,from,translation,filter,hit);
+    } else found=physics.rayCast(from,translation,filter,hit);
+    if(!found) return false;
+    for(u32 k=0;k<3;++k){point[k]=hit.point[k];normal[k]=hit.hasNormal?hit.normal[k]:(k==1?1.0f:0.0f);}
+    return true;
+  }
+  // G6a: Projétil, Laser e Som repetido, antes das partículas (que leem a pose
+  // nova do impacto do laser no mesmo quadro).
+  bool advanceEffects(float elapsed) {
+    return vfx_.advance(world_,physics_,particles_,audio_,elapsed) && drainCommands();
+  }
+  const runtime::SceneVfx &vfx() const noexcept {return vfx_;}
   bool advanceParticles(float elapsed) {
     particleFinished_.clear();
     particles_.advance(world_.graph(),elapsed,&particleFinished_);
+    // Toques com Instanciar ao colidir viram efeitos no mesmo quadro.
+    vfx_.spawnCollisions(world_,particles_);
     for(const auto &finished:particleFinished_) {
       const auto handle=world_.handle(finished.object);
       if(!world_.alive(handle)) continue;
@@ -665,6 +693,7 @@ private:
   runtime::SceneAnimator animator_;
   runtime::SceneTimers timers_;
   runtime::SceneParticles particles_;
+  runtime::SceneVfx vfx_;
   runtime::SceneWeather weather_;
   runtime::SceneWeather::Report weatherReport_;
   std::vector<runtime::SceneParticles::Finished> particleFinished_;

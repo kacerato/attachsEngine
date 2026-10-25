@@ -12,6 +12,7 @@
 
 #include "rhi/shaders/editor_grid_spirv.h"
 #include "rhi/shaders/particle_billboard_spirv.h"
+#include "rhi/shaders/particle_mesh_spirv.h"
 #include "rhi/shaders/particle_material_spirv.h"
 #include "rhi/shaders/particle_material_project_spirv.h"
 #include "rhi/shaders/instanced_spirv.h"

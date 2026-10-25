@@ -14,6 +14,13 @@ inline constexpr u32 kParticleFlagAdditive = 1u << 1;
 inline constexpr u32 kParticleFlagSoft = 1u << 2;
 // PK-10a: a imagem vem do Material de projeto (slot bindless em stretch.w).
 inline constexpr u32 kParticleFlagProjectTexture = 1u << 3;
+// G6a: a instância traz orientação 3D (quatérnio) e altura própria; os bits 5-6
+// dizem a base do alinhamento (scene::ParticleRenderAlignment); malha desenha a
+// geometria do lote em vez do quadrado.
+inline constexpr u32 kParticleFlagOriented = 1u << 4;
+inline constexpr u32 kParticleAlignmentShift = 5;
+inline constexpr u32 kParticleFlagMesh = 1u << 7;
+inline constexpr u32 kParticleFlagLineUv = 1u << 8;
 
 struct ParticlePushConstants {
   float tint[4]{};     // rgb = tinta × emissão; w = tempo em segundos
@@ -52,7 +59,10 @@ inline ParticlePushConstants particlePushConstants(const ParticleMaterialParamet
   p.layers[3] = (m.renderMode == static_cast<u32>(scene::ParticleRenderMode::StretchedBillboard) ? kParticleFlagStretched : 0u) |
                 (m.blend == static_cast<u32>(scene::ParticleBlend::Additive) ? kParticleFlagAdditive : 0u) |
                 (softAvailable && m.softDistance > 0 ? kParticleFlagSoft : 0u) |
-                (projectSlot != ~0u ? kParticleFlagProjectTexture : 0u);
+                (projectSlot != ~0u ? kParticleFlagProjectTexture : 0u) |
+                (m.oriented ? kParticleFlagOriented : 0u) | ((m.alignment & 3u) << kParticleAlignmentShift) |
+                (m.renderMode == static_cast<u32>(scene::ParticleRenderMode::Mesh) ? kParticleFlagMesh : 0u) |
+                (m.lineUv ? kParticleFlagLineUv : 0u);
   if (projectSlot != ~0u) std::memcpy(&p.stretch[3], &projectSlot, sizeof projectSlot);
   p.sheet[0] = m.sheetTiles[0];
   p.sheet[1] = m.sheetTiles[1];

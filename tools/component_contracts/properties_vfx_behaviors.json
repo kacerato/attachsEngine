@@ -1,0 +1,2148 @@
+{
+  "format": 1,
+  "source": "native/scene/vfx_behaviors.h",
+  "tables": [
+    {
+      "name": "lineBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativa",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Linha",
+            "unit": "",
+            "help": "Desligada, a linha não é desenhada",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "world_space",
+          "label": "Pontos em mundo",
+          "member": "worldSpace",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Linha",
+            "unit": "",
+            "help": "Pontos em coordenadas da cena; desligado, seguem o objeto",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "loop",
+          "label": "Fechar",
+          "member": "loop",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Linha",
+            "unit": "",
+            "help": "Liga o último ponto ao primeiro",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
+        }
+      ]
+    },
+    {
+      "name": "lineNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "point_count",
+          "label": "Pontos",
+          "member": "pointCount",
+          "min": {
+            "cpp": "2.0f"
+          },
+          "max": {
+            "cpp": "8.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "2.0f"
+          },
+          "presentation": {
+            "group": "Linha",
+            "unit": "",
+            "help": "Quantos pontos da lista abaixo a linha usa",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_0_x",
+          "label": "Ponto 1 X",
+          "member": "points[0]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 1",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<0>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_0_y",
+          "label": "Ponto 1 Y",
+          "member": "points[1]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 1",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<0>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_0_z",
+          "label": "Ponto 1 Z",
+          "member": "points[2]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 1",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<0>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_1_x",
+          "label": "Ponto 2 X",
+          "member": "points[3]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 2",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<1>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_1_y",
+          "label": "Ponto 2 Y",
+          "member": "points[4]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 2",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<1>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_1_z",
+          "label": "Ponto 2 Z",
+          "member": "points[5]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 2",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<1>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_2_x",
+          "label": "Ponto 3 X",
+          "member": "points[6]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 3",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<2>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_2_y",
+          "label": "Ponto 3 Y",
+          "member": "points[7]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 3",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<2>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_2_z",
+          "label": "Ponto 3 Z",
+          "member": "points[8]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 3",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<2>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_3_x",
+          "label": "Ponto 4 X",
+          "member": "points[9]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 4",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<3>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_3_y",
+          "label": "Ponto 4 Y",
+          "member": "points[10]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 4",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<3>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_3_z",
+          "label": "Ponto 4 Z",
+          "member": "points[11]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 4",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<3>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_4_x",
+          "label": "Ponto 5 X",
+          "member": "points[12]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 5",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<4>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_4_y",
+          "label": "Ponto 5 Y",
+          "member": "points[13]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 5",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<4>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_4_z",
+          "label": "Ponto 5 Z",
+          "member": "points[14]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 5",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<4>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_5_x",
+          "label": "Ponto 6 X",
+          "member": "points[15]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 6",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<5>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_5_y",
+          "label": "Ponto 6 Y",
+          "member": "points[16]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 6",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<5>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_5_z",
+          "label": "Ponto 6 Z",
+          "member": "points[17]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 6",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<5>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_6_x",
+          "label": "Ponto 7 X",
+          "member": "points[18]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 7",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<6>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_6_y",
+          "label": "Ponto 7 Y",
+          "member": "points[19]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 7",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<6>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_6_z",
+          "label": "Ponto 7 Z",
+          "member": "points[20]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 7",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<6>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_7_x",
+          "label": "Ponto 8 X",
+          "member": "points[21]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 8",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<7>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_7_y",
+          "label": "Ponto 8 Y",
+          "member": "points[22]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 8",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<7>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "point_7_z",
+          "label": "Ponto 8 Z",
+          "member": "points[23]",
+          "min": {
+            "cpp": "-100000.0f"
+          },
+          "max": {
+            "cpp": "100000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Pontos",
+            "unit": "m",
+            "help": "Posição do ponto 8",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "linePointVisible<7>"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "width_start",
+          "label": "Largura inicial",
+          "member": "widthStart",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "m",
+            "help": "Largura no primeiro ponto",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "width_end",
+          "label": "Largura final",
+          "member": "widthEnd",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "m",
+            "help": "Largura no último ponto",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_start_r",
+          "label": "Cor inicial R",
+          "member": "colorStart[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_start_g",
+          "label": "Cor inicial G",
+          "member": "colorStart[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_start_b",
+          "label": "Cor inicial B",
+          "member": "colorStart[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_start_a",
+          "label": "Cor inicial A",
+          "member": "colorStart[3]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Alfa",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_end_r",
+          "label": "Cor final R",
+          "member": "colorEnd[0]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_end_g",
+          "label": "Cor final G",
+          "member": "colorEnd[1]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_end_b",
+          "label": "Cor final B",
+          "member": "colorEnd[2]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "65504.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Cor linear (HDR permitido)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "color_end_a",
+          "label": "Cor final A",
+          "member": "colorEnd[3]",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "",
+            "help": "Alfa",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "tile_length",
+          "label": "Repetir a cada",
+          "member": "tileLength",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "m",
+            "help": "Zero estica a imagem pela linha; um comprimento repete a imagem a cada trecho",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "emission",
+          "label": "Brilho",
+          "member": "emission",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "×",
+            "help": "Multiplica a cor (HDR): acima de 1 a linha brilha",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "scroll_x",
+          "label": "Rolagem ao longo",
+          "member": "scrollX",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "/s",
+            "help": "A imagem corre pela linha (repetições por segundo)",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "scroll_y",
+          "label": "Rolagem através",
+          "member": "scrollY",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Aparência",
+            "unit": "/s",
+            "help": "A imagem corre de uma borda à outra da faixa",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        }
+      ]
+    },
+    {
+      "name": "laserBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Laser",
+            "unit": "",
+            "help": "Desligado, a linha e o impacto param de seguir o raio",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Laser"
+        },
+        {
+          "id": "align_hit",
+          "label": "Impacto alinhado ao laser",
+          "member": "alignHit",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "",
+            "help": "O impacto gira com o laser; desligado, encara a superfície atingida",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Laser"
+        }
+      ]
+    },
+    {
+      "name": "laserNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "max_length",
+          "label": "Alcance",
+          "member": "maxLength",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "default": {
+            "cpp": "20.0f"
+          },
+          "presentation": {
+            "group": "Laser",
+            "unit": "m",
+            "help": "Distância máxima do raio; sem acerto, a linha termina aqui",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "Laser"
+        },
+        {
+          "id": "hit_offset",
+          "label": "Afastamento do impacto",
+          "member": "hitOffset",
+          "min": {
+            "cpp": "-10.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "m",
+            "help": "O impacto fica esta distância para fora da superfície",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Laser"
+        },
+        {
+          "id": "texture_tiling",
+          "label": "Repetições por metro",
+          "member": "textureTiling",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Laser",
+            "unit": "/m",
+            "help": "Quantas vezes a imagem da Linha se repete por metro de raio (zero estica)",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Laser"
+        }
+      ]
+    },
+    {
+      "name": "laserEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "forward_axis",
+          "label": "Frente",
+          "type": "Laser",
+          "member": "forwardAxis",
+          "options": "vfxForwardAxisOptions",
+          "presentation": {
+            "group": "Laser",
+            "unit": "",
+            "help": "+Z é a frente da Astra; −Z é a frente de um efeito importado da Unity",
+            "capability": "render.effects.laser",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "projectileBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Projétil",
+            "unit": "",
+            "help": "Desligado, o projétil para onde está",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "face_shooter",
+          "label": "Impacto virado para o atirador",
+          "member": "faceShooter",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "",
+            "help": "O impacto gira com o projétil (meia-volta); desligado, encara a superfície",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        }
+      ]
+    },
+    {
+      "name": "projectileNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "speed",
+          "label": "Velocidade",
+          "member": "speed",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "default": {
+            "cpp": "15.0f"
+          },
+          "presentation": {
+            "group": "Projétil",
+            "unit": "m/s",
+            "help": "Avança pela frente do objeto em Play",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "tweenable": true,
+          "type": "Projectile"
+        },
+        {
+          "id": "lifetime",
+          "label": "Vida",
+          "member": "lifetime",
+          "min": {
+            "cpp": "0.05f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "5.0f"
+          },
+          "presentation": {
+            "group": "Projétil",
+            "unit": "s",
+            "help": "Destruído depois deste tempo mesmo sem acertar nada",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "radius",
+          "label": "Raio",
+          "member": "radius",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Projétil",
+            "unit": "m",
+            "help": "Raio da esfera que testa o acerto contra os colisores da cena",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "hit_offset",
+          "label": "Afastamento do impacto",
+          "member": "hitOffset",
+          "min": {
+            "cpp": "-10.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "m",
+            "help": "O impacto nasce esta distância para fora da superfície",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "rotation_offset_x",
+          "label": "Giro do impacto X",
+          "member": "rotationOffset[0]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "°",
+            "help": "Diferente de zero, o impacto usa este giro fixo",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "rotation_offset_y",
+          "label": "Giro do impacto Y",
+          "member": "rotationOffset[1]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "°",
+            "help": "Diferente de zero, o impacto usa este giro fixo",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        },
+        {
+          "id": "rotation_offset_z",
+          "label": "Giro do impacto Z",
+          "member": "rotationOffset[2]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Impacto",
+            "unit": "°",
+            "help": "Diferente de zero, o impacto usa este giro fixo",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Projectile"
+        }
+      ]
+    },
+    {
+      "name": "projectileEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "forward_axis",
+          "label": "Frente",
+          "type": "Projectile",
+          "member": "forwardAxis",
+          "options": "vfxForwardAxisOptions",
+          "presentation": {
+            "group": "Projétil",
+            "unit": "",
+            "help": "+Z é a frente da Astra; −Z é a frente de um efeito importado da Unity",
+            "capability": "render.effects.projectile",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "collisionSpawnBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "",
+            "help": "Desligado, os toques não criam nada",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "world_space",
+          "label": "Solto na cena",
+          "member": "worldSpace",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "",
+            "help": "O efeito criado fica na cena; desligado, vira filho deste objeto",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "face_emitter",
+          "label": "Virado para o emissor",
+          "member": "faceEmitter",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Giro",
+            "unit": "",
+            "help": "O efeito olha para este objeto",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "rotation_offset_only",
+          "label": "Só o giro fixo",
+          "member": "rotationOffsetOnly",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Giro",
+            "unit": "",
+            "help": "Com giro fixo, usa só ele; desligado, soma o giro à direção da superfície",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "destroy_emitter",
+          "label": "Destruir este objeto",
+          "member": "destroyEmitter",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "",
+            "help": "Depois do primeiro toque, este objeto some meio segundo depois dos efeitos",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        }
+      ]
+    },
+    {
+      "name": "collisionSpawnNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "destroy_delay",
+          "label": "Duração do efeito",
+          "member": "destroyDelay",
+          "min": {
+            "cpp": "0.05f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "5.0f"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "s",
+            "help": "Cada efeito criado é destruído depois deste tempo",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "offset",
+          "label": "Afastamento",
+          "member": "offset",
+          "min": {
+            "cpp": "-10.0f"
+          },
+          "max": {
+            "cpp": "10.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "m",
+            "help": "O efeito nasce esta distância para fora da superfície",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "max_per_frame",
+          "label": "Máximo por quadro",
+          "member": "maxPerFrame",
+          "min": {
+            "cpp": "1.0f"
+          },
+          "max": {
+            "cpp": "64.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "default": {
+            "cpp": "8.0f"
+          },
+          "presentation": {
+            "group": "Ao colidir",
+            "unit": "",
+            "help": "Teto de efeitos criados num quadro (chuva de toques não trava o aparelho)",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "rotation_offset_x",
+          "label": "Giro fixo X",
+          "member": "rotationOffset[0]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Giro",
+            "unit": "°",
+            "help": "Giro do efeito criado",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "rotation_offset_y",
+          "label": "Giro fixo Y",
+          "member": "rotationOffset[1]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Giro",
+            "unit": "°",
+            "help": "Giro do efeito criado",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        },
+        {
+          "id": "rotation_offset_z",
+          "label": "Giro fixo Z",
+          "member": "rotationOffset[2]",
+          "min": {
+            "cpp": "-360.0f"
+          },
+          "max": {
+            "cpp": "360.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Giro",
+            "unit": "°",
+            "help": "Giro do efeito criado",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "ParticleCollisionSpawn"
+        }
+      ]
+    },
+    {
+      "name": "collisionSpawnEnums",
+      "kind": "Enum",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "forward_axis",
+          "label": "Frente dos efeitos",
+          "type": "ParticleCollisionSpawn",
+          "member": "forwardAxis",
+          "options": "vfxForwardAxisOptions",
+          "presentation": {
+            "group": "Giro",
+            "unit": "",
+            "help": "Eixo que aponta para a superfície: +Z nos efeitos da Astra, −Z nos importados da Unity",
+            "capability": "render.effects.collision_spawn",
+            "consumer": "runtime/scene_vfx.cpp ← runtime/scene_particles.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "effectSoundBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "",
+            "help": "Desligado, não toca nada",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "EffectSound"
+        },
+        {
+          "id": "repeating",
+          "label": "Repetir",
+          "member": "repeating",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "",
+            "help": "Toca de novo a cada intervalo",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "EffectSound"
+        },
+        {
+          "id": "random_volume",
+          "label": "Volume sorteado",
+          "member": "randomVolume",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "",
+            "help": "Cada toque sorteia o volume entre o mínimo e o máximo",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "EffectSound"
+        }
+      ]
+    },
+    {
+      "name": "effectSoundNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "interval",
+          "label": "Intervalo",
+          "member": "interval",
+          "min": {
+            "cpp": "0.05f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "2.0f"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "s",
+            "help": "Tempo entre um toque e o próximo",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "effectSoundRepeats"
+            }
+          },
+          "type": "EffectSound"
+        },
+        {
+          "id": "start_delay",
+          "label": "Atraso",
+          "member": "startDelay",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "3600.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Som",
+            "unit": "s",
+            "help": "Espera antes do primeiro toque",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "EffectSound"
+        },
+        {
+          "id": "volume_min",
+          "label": "Volume mínimo",
+          "member": "volumeMin",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.4f"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "",
+            "help": "Menor volume sorteado",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "effectSoundRandom"
+            }
+          },
+          "type": "EffectSound"
+        },
+        {
+          "id": "volume_max",
+          "label": "Volume máximo",
+          "member": "volumeMax",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Volume",
+            "unit": "",
+            "help": "Maior volume sorteado",
+            "capability": "audio.effect_sound",
+            "consumer": "runtime/scene_vfx.cpp → runtime/scene_audio.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "effectSoundRandom"
+            }
+          },
+          "type": "EffectSound"
+        }
+      ]
+    }
+  ],
+  "field_groups": [
+    {
+      "name": "vfx_behaviors_LineRenderer_fields0",
+      "type": "LineRenderer",
+      "properties": [
+        "lineBooleans/enabled",
+        "lineBooleans/world_space",
+        "lineBooleans/loop",
+        "lineNumbers/point_count",
+        "lineNumbers/width_start",
+        "lineNumbers/width_end",
+        "lineNumbers/tile_length",
+        "lineNumbers/emission",
+        "lineNumbers/scroll_x",
+        "lineNumbers/scroll_y"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_Laser_fields0",
+      "type": "Laser",
+      "properties": [
+        "laserBooleans/enabled",
+        "laserBooleans/align_hit",
+        "laserNumbers/max_length",
+        "laserNumbers/hit_offset",
+        "laserNumbers/texture_tiling"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_Projectile_fields0",
+      "type": "Projectile",
+      "properties": [
+        "projectileBooleans/enabled",
+        "projectileBooleans/face_shooter",
+        "projectileNumbers/speed",
+        "projectileNumbers/lifetime",
+        "projectileNumbers/radius",
+        "projectileNumbers/hit_offset"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_ParticleCollisionSpawn_fields0",
+      "type": "ParticleCollisionSpawn",
+      "properties": [
+        "collisionSpawnBooleans/enabled",
+        "collisionSpawnBooleans/world_space",
+        "collisionSpawnBooleans/face_emitter",
+        "collisionSpawnBooleans/rotation_offset_only",
+        "collisionSpawnBooleans/destroy_emitter",
+        "collisionSpawnNumbers/destroy_delay",
+        "collisionSpawnNumbers/offset",
+        "collisionSpawnNumbers/max_per_frame"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_EffectSound_fields0",
+      "type": "EffectSound",
+      "properties": [
+        "effectSoundBooleans/enabled",
+        "effectSoundBooleans/repeating",
+        "effectSoundBooleans/random_volume",
+        "effectSoundNumbers/interval",
+        "effectSoundNumbers/start_delay",
+        "effectSoundNumbers/volume_min",
+        "effectSoundNumbers/volume_max"
+      ]
+    }
+  ]
+}

@@ -18,6 +18,7 @@
 
 #include <functional>
 #include <map>
+#include <memory>
 #include <span>
 #include <string>
 #include <utility>
@@ -35,6 +36,16 @@ struct ParticleMaterialLook {
 // Quem conhece os recursos do projeto (o editor) resolve; falso = material
 // ausente ou sem shader Partícula, e o lote usa o material embutido.
 using ParticleMaterialResolver = std::function<bool(const resources::AssetGuid &, ParticleMaterialLook &)>;
+// G6a: malhas das partículas. `set` traz as embutidas nos intervalos 0..3 (a
+// ordem de scene::ParticleMeshShape) e as do projeto que `resolve` já
+// acrescentou; `resolve` devolve o intervalo de uma Malha do projeto. Sem
+// conjunto, o serviço usa um só com as embutidas.
+struct ParticleMeshes {
+  std::shared_ptr<const renderer::particles::ParticleMeshSet> set;
+  std::function<bool(const resources::AssetGuid &, u32 &range)> resolve;
+};
+// O conjunto só com as malhas embutidas, compartilhado (revisão 1).
+std::shared_ptr<const renderer::particles::ParticleMeshSet> builtinParticleMeshes();
 
 class SceneParticles final {
 public:
@@ -50,6 +61,19 @@ public:
     u64 instance = 0;
     scene::ParticleStopAction action = scene::ParticleStopAction::None;
   };
+  // G6a: toque de uma partícula (plano ou mundo) num sistema com ouvinte de
+  // colisão (Instanciar ao colidir), em mundo. No máximo 256 por sistema e quadro.
+  struct Collision {
+    ObjectId object = 0;
+    u64 instance = 0;
+    float position[3]{}, velocity[3]{}, normal[3]{0, 1, 0};
+  };
+  // Colisão Mundo: a consulta à física do Play e o teto de consultas por
+  // sistema e quadro. Sem consulta (prévia do editor), o tipo Mundo não colide.
+  void setWorldCollider(renderer::particles::ParticleEmitter::WorldRaycast raycast, void *context, u32 queriesPerSystem) {
+    worldRaycast_ = raycast; worldContext_ = context; worldQueries_ = queriesPerSystem;
+  }
+  const std::vector<Collision> &collisions() const noexcept { return collisions_; }
 
   void reset();
   // Teto total de partículas vivas (nível do aparelho). Repartido entre os
@@ -64,7 +88,7 @@ public:
   void advance(const SceneGraph &graph, float deltaSeconds, std::vector<Finished> *finished = nullptr);
   // Instâncias e lotes do quadro, ordenados de trás para a frente pela câmera.
   void build(const SceneGraph &graph, const float (&camera)[3], renderer::particles::ParticleFrame &out,
-             const ParticleMaterialResolver *materials = nullptr) const;
+             const ParticleMaterialResolver *materials = nullptr, const ParticleMeshes *meshes = nullptr) const;
 
   // Operação de script/editor sobre um componente. Falso quando o componente
   // não existe neste grafo.
@@ -91,8 +115,11 @@ private:
     std::string fingerprint;
     float world[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
     bool active = false, seen = false;
+    bool listens = false;  // G6a: o objeto tem Instanciar ao colidir
     float idle = 0;  // segundos parado (recomeço da prévia)
   };
+  // Escala do Modo de escala (Hierarquia: a de mundo; Local: a do objeto).
+  float sizeScale(const SceneGraph &graph, ObjectId object, const Entry &entry) const;
   void reconcile(const SceneGraph &graph);
   void distributeBudget();
   // Planos do módulo Colisão, lidos do grafo a cada quadro (o plano pode andar).
@@ -110,6 +137,10 @@ private:
   u32 budget_ = renderer::particles::particleTierBudget(renderer::particles::ParticleTier::S);
   bool previewLoop_ = false;
   float simulationMs_ = 0;
+  renderer::particles::ParticleEmitter::WorldRaycast worldRaycast_ = nullptr;
+  void *worldContext_ = nullptr;
+  u32 worldQueries_ = 0;
+  std::vector<Collision> collisions_;
 };
 
 // PK-10b: as luzes das partículas do quadro viram luzes da cena, depois das

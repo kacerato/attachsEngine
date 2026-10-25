@@ -1,4 +1,5 @@
 #include "editor/editor_session.h"
+#include "runtime/scene_lines.h"
 
 namespace ae::editor {
 
@@ -133,15 +134,55 @@ void EditorSession::updateParticles(float deltaSeconds, const float (&camera)[3]
     look.additive = material->shading.blend == scene::MaterialBlendAdditive;
     return true;
   };
+  // G6a: malhas das partículas. A Malha do projeto vem da geometria de CPU
+  // que o editor já guarda para seleção; o conjunto é refeito quando o pacote
+  // publicado muda.
+  if (!particleMeshSet_ || particleMeshGeometry_ != mapScene_.geometryIdentity()) {
+    particleMeshSet_ = runtime::builtinParticleMeshes();
+    particleMeshRanges_.clear();
+    particleMeshGeometry_ = mapScene_.geometryIdentity();
+  }
+  const runtime::ParticleMeshes meshes{particleMeshSet_, [this](const resources::AssetGuid &mesh, u32 &range) {
+    return particleMeshRange(mesh, range);
+  }};
   if (isPlaying() && playScene_.active()) {
     playScene_.particles().setBudget(particleBudget_);
-    playScene_.particles().build(playScene_.document(), camera, out, &materials);
+    playScene_.particles().build(playScene_.document(), camera, out, &materials, &meshes);
+    runtime::appendLineRenderers(playScene_.document(), camera, out, &materials);
+    out.meshes = particleMeshSet_;
     return;
   }
   previewParticles_.setPreviewLoop(true);
   previewParticles_.setBudget(particleBudget_);
   previewParticles_.advance(evaluatedEditorScene(), deltaSeconds);
-  previewParticles_.build(evaluatedEditorScene(), camera, out, &materials);
+  previewParticles_.build(evaluatedEditorScene(), camera, out, &materials, &meshes);
+  runtime::appendLineRenderers(evaluatedEditorScene(), camera, out, &materials);
+  out.meshes = particleMeshSet_;
+}
+
+// Intervalo da Malha do projeto no conjunto das partículas. Uma malha nova
+// cria um conjunto novo (cópia + revisão), porque o anterior pode estar com o
+// renderer; ausente ou grande demais fica recusada até o pacote mudar.
+bool EditorSession::particleMeshRange(const resources::AssetGuid &mesh, u32 &range) {
+  if (const auto found = particleMeshRanges_.find(mesh); found != particleMeshRanges_.end()) {
+    range = found->second;
+    return range != ~0u;
+  }
+  std::vector<float> positions, uvs;
+  std::vector<u32> indices;
+  auto next = std::make_shared<renderer::particles::ParticleMeshSet>(*particleMeshSet_);
+  const u32 slot = mapScene_.assetSlot(mesh);
+  if (!slot || !mapScene_.assetGeometry(slot, positions, uvs, indices) ||
+      !renderer::particles::appendParticleMesh(*next, positions, uvs, indices, range)) {
+    particleMeshRanges_[mesh] = ~0u;
+    return false;
+  }
+  // Revisão única no processo: um conjunto refeito nunca repete a de outro.
+  static u64 revisions = 1;
+  next->revision = ++revisions;
+  particleMeshSet_ = std::move(next);
+  particleMeshRanges_[mesh] = range;
+  return true;
 }
 
 bool EditorSession::extractMap(std::vector<renderer::MapDrawState> &out) const {

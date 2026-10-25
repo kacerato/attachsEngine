@@ -561,6 +561,41 @@ ICONS["effects/sparks"] = (
     f'<circle cx="46" cy="86" r="8" fill="{INK}"/>'
     f'<path d="M30 110h32" {stroke(5, extra='opacity=".5"')}/>')
 
+# G6a: comportamentos de efeito. Linha: faixa por pontos, o último em lima.
+ICONS["component/line"] = (
+    f'<path d="M16 94 46 52 78 76 110 30" {stroke(9, extra='opacity=".35"')}/>'
+    f'<path d="M16 94 46 52 78 76 110 30" {stroke(4)}/>'
+    f'<circle cx="16" cy="94" r="7" fill="#15191e" {stroke(4)}/>'
+    f'<circle cx="46" cy="52" r="7" fill="#15191e" {stroke(4)}/>'
+    f'<circle cx="78" cy="76" r="7" fill="#15191e" {stroke(4)}/>'
+    f'<circle cx="110" cy="30" r="8" fill="{ACCENT}" {stroke(3, ACCENT)}/>')
+# Laser: emissor à esquerda, o raio em lima até o impacto na parede.
+ICONS["component/laser"] = (
+    f'<rect x="12" y="50" width="26" height="28" rx="6" {stroke(5)}/>'
+    f'<path d="M38 64h52" {stroke(9, ACCENT, 'opacity=".35"')}/>'
+    f'<path d="M38 64h52" {stroke(4, ACCENT)}/>'
+    f'<path d="M108 22v84" {stroke(6)}/>'
+    f'<path d="M96 64h-6M94 52l-5 5M94 76l-5-5" {stroke(4, ACCENT)}/>'
+    f'<circle cx="99" cy="64" r="5" fill="{ACCENT}"/>')
+# Projétil: esfera em lima com o rastro, e o ponto de acerto à frente.
+ICONS["component/projectile"] = (
+    f'<circle cx="80" cy="60" r="16" fill="{ACCENT}" {stroke(4, ACCENT)}/>'
+    f'<path d="M14 48h34M8 60h44M18 72h30" {stroke(5, extra='opacity=".8"')}/>'
+    f'<path d="M112 26v68" {stroke(6)}/>'
+    f'<path d="M102 46l-6-4M102 74l-6 4" {stroke(4, ACCENT)}/>')
+# Instanciar ao colidir: partículas caem no chão e o toque cria um efeito (+).
+ICONS["component/collision-spawn"] = (
+    f'<circle cx="34" cy="24" r="5" fill="{INK}"/><circle cx="56" cy="40" r="5" fill="{INK}"/>'
+    f'<circle cx="44" cy="58" r="5" fill="{INK}" opacity=".7"/>'
+    f'<path d="M14 98h100" {stroke(6)}/>'
+    f'<path d="M64 98l-14-20M64 98l14-20M64 98V72M64 98l-22-6M64 98l22-6" {stroke(4, ACCENT)}/>'
+    f'<path d="M98 30h20M108 20v20" {stroke(5, ACCENT)}/>')
+# Som repetido: alto-falante e a seta de repetição em lima.
+ICONS["audio/effect-sound"] = (
+    f'<path d="M12 50h18l24-20v68L30 78H12Z" {stroke(5)}/>'
+    f'<path d="M72 46a26 26 0 1 1 0 36" {stroke(5, ACCENT)}/>'
+    f'<path d="M72 30v18h18" {stroke(5, ACCENT)}/>')
+
 def browser() -> str:
     candidates = [
         os.environ.get("ASTRA_HEADLESS_BROWSER", ""),

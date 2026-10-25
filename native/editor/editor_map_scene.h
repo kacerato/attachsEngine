@@ -138,6 +138,11 @@ public:
                              const EditorRay &ray,const float pose[16],float &distance) const;
   bool pickGeometry(const runtime::SceneGraph &document, EditorEntityId id, EditorPickCandidate &out) const;
   bool pickSlotGeometry(const runtime::SceneGraph &document, EditorEntityId id, u32 slot, EditorPickCandidate &out) const;
+  // G6a: geometria de CPU de um recurso (slot 1-based) no espaço local dele,
+  // com os vértices compactados: o que a partícula de malha desenha.
+  bool assetGeometry(u32 slot, std::vector<float> &positions, std::vector<float> &uvs, std::vector<u32> &indices) const;
+  // Muda quando o pacote de geometria publicado muda (cache das partículas).
+  const void *geometryIdentity() const noexcept { return pickGeometry_.get(); }
   // Materiais do projeto (MaterialAsset) disponíveis para resolver slots. Trocar
   // a biblioteca não toca geometria: o próximo `extract` já usa os valores.
   struct SharedMaterial {

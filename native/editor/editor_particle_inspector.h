@@ -17,17 +17,21 @@ namespace ae::editor {
 
 inline constexpr std::string_view kParticlePreviewRow = "preview";
 
-inline constexpr std::array<std::string_view, 293> particleInspectorOrder{{
+inline constexpr std::array<std::string_view, 350> particleInspectorOrder{{
   // Principal
   kParticlePreviewRow, "duration", "looping", "prewarm",
   "start_delay_mode", "start_delay", "start_delay_min",
   "start_lifetime_mode", "start_lifetime", "start_lifetime_min", "start_lifetime_multiplier", "start_lifetime.max", "start_lifetime.min",
   "start_speed_mode", "start_speed", "start_speed_min", "start_speed_multiplier", "start_speed.max", "start_speed.min",
   "start_size_mode", "start_size", "start_size_min", "start_size_multiplier", "start_size.max", "start_size.min",
+  "size_3d", "start_size_y_mode", "start_size_y", "start_size_y_min", "start_size_y_multiplier", "start_size_y.max", "start_size_y.min",
+  "start_size_z_mode", "start_size_z", "start_size_z_min", "start_size_z_multiplier", "start_size_z.max", "start_size_z.min",
   "start_rotation_mode", "start_rotation", "start_rotation_min", "start_rotation_multiplier", "start_rotation.max", "start_rotation.min",
+  "rotation_3d", "start_rotation_x_mode", "start_rotation_x", "start_rotation_x_min", "start_rotation_x_multiplier", "start_rotation_x.max", "start_rotation_x.min",
+  "start_rotation_y_mode", "start_rotation_y", "start_rotation_y_min", "start_rotation_y_multiplier", "start_rotation_y.max", "start_rotation_y.min",
   "start_color_mode", "start_color", "start_color_a", "start_color_min", "start_color_min_a", "start_color.max", "start_color.min",
   "gravity_modifier_mode", "gravity_modifier", "gravity_modifier_min", "gravity_modifier_multiplier", "gravity_modifier.max", "gravity_modifier.min",
-  "simulation_space", "simulation_speed", "play_on_awake", "max_particles", "stop_action", "auto_random_seed", "random_seed",
+  "simulation_space", "simulation_speed", "scaling_mode", "play_on_awake", "max_particles", "stop_action", "auto_random_seed", "random_seed",
   // Emissão
   "emission_enabled", "emission_rate_mode", "emission_rate", "emission_rate_min", "emission_rate_multiplier", "emission_rate.max", "emission_rate.min",
   "emission_rate_over_distance", "burst_count",
@@ -44,8 +48,12 @@ inline constexpr std::array<std::string_view, 293> particleInspectorOrder{{
   "color_over_lifetime_enabled", "color_over_lifetime_mode", "color_over_lifetime.max", "color_over_lifetime.min",
   "size_over_lifetime_enabled", "size_over_lifetime_mode", "size_over_lifetime", "size_over_lifetime_min", "size_over_lifetime_multiplier",
   "size_over_lifetime.max", "size_over_lifetime.min",
+  "size_separate_axes", "size_over_lifetime_y_mode", "size_over_lifetime_y", "size_over_lifetime_y_min", "size_over_lifetime_y_multiplier", "size_over_lifetime_y.max", "size_over_lifetime_y.min",
+  "size_over_lifetime_z_mode", "size_over_lifetime_z", "size_over_lifetime_z_min", "size_over_lifetime_z_multiplier", "size_over_lifetime_z.max", "size_over_lifetime_z.min",
   "rotation_over_lifetime_enabled", "rotation_over_lifetime_mode", "rotation_over_lifetime", "rotation_over_lifetime_min",
   "rotation_over_lifetime_multiplier", "rotation_over_lifetime.max", "rotation_over_lifetime.min",
+  "rotation_separate_axes", "rotation_over_lifetime_x_mode", "rotation_over_lifetime_x", "rotation_over_lifetime_x_min", "rotation_over_lifetime_x_multiplier", "rotation_over_lifetime_x.max", "rotation_over_lifetime_x.min",
+  "rotation_over_lifetime_y_mode", "rotation_over_lifetime_y", "rotation_over_lifetime_y_min", "rotation_over_lifetime_y_multiplier", "rotation_over_lifetime_y.max", "rotation_over_lifetime_y.min",
   // Movimento (P2a): Velocity, Limit Velocity, Force over Lifetime e Noise
   "velocity_over_lifetime_enabled", "velocity_x_mode", "velocity_x", "velocity_x_min", "velocity_x_multiplier",
   "velocity_x.max", "velocity_x.min", "velocity_y_mode", "velocity_y", "velocity_y_min", "velocity_y_multiplier",
@@ -68,7 +76,7 @@ inline constexpr std::array<std::string_view, 293> particleInspectorOrder{{
   "rotation_by_speed_multiplier", "rotation_by_speed.max", "rotation_by_speed.min", "rotation_by_speed_range_min",
   "rotation_by_speed_range_max",
   // Colisão e sub-emissores (P2b)
-  "collision_enabled", "collision_plane_0", "collision_plane_1", "collision_dampen", "collision_bounce", "collision_lifetime_loss", "collision_min_kill_speed", "collision_radius_scale",
+  "collision_enabled", "collision_type", "collision_plane_0", "collision_plane_1", "collision_dampen", "collision_bounce", "collision_lifetime_loss", "collision_min_kill_speed", "collision_radius_scale",
   "sub_emitters_enabled", "sub_emitter_birth", "sub_emitter_birth_count", "sub_emitter_collision", "sub_emitter_collision_count", "sub_emitter_death", "sub_emitter_death_count",
   // Folha de textura (PK-10a): grade, linha, quadro no tempo, início e ciclos
   "texture_sheet_enabled", "sheet_tiles_x", "sheet_tiles_y", "sheet_animation", "sheet_row_mode", "sheet_row",
@@ -81,7 +89,7 @@ inline constexpr std::array<std::string_view, 293> particleInspectorOrder{{
   "trails_enabled", "trail_ratio", "trail_lifetime", "trail_min_vertex_distance", "trail_width", "trail_width_end",
   "trail_inherit_color", "trail_fade",
   // Renderização
-  "render_mode", "stretch_velocity_scale", "stretch_length_scale", "sort_mode", "sorting_fudge", "max_particle_size",
+  "render_mode", "render_alignment", "mesh_shape", "mesh", "stretch_velocity_scale", "stretch_length_scale", "sort_mode", "sorting_fudge", "max_particle_size",
   // Material: o recurso do projeto primeiro (como o Material do Renderer da Unity)
   "material", "material_blend", "material_texture", "material_tint", "material_tint_r", "material_tint_g", "material_tint_b", "material_emission",
   "material_scroll", "material_scroll_x", "material_scroll_y", "material_noise", "material_noise_scale",
@@ -139,8 +147,8 @@ inline std::string_view particleSlotGroup(std::string_view slot) {
   const auto base = particleSlotBase(slot);
   if (base == "emission_rate") return "Emissão";
   if (base == "color_over_lifetime") return "Cor no tempo";
-  if (base == "size_over_lifetime") return "Tamanho no tempo";
-  if (base == "rotation_over_lifetime") return "Rotação no tempo";
+  if (base.starts_with("size_over_lifetime")) return "Tamanho no tempo";
+  if (base.starts_with("rotation_over_lifetime")) return "Rotação no tempo";
   if (base.starts_with("velocity_") || base == "speed_modifier") return "Velocidade no tempo";
   if (base == "limit_speed") return "Limite de velocidade";
   if (base.starts_with("force_")) return "Força no tempo";
@@ -157,6 +165,14 @@ inline const char *particleSlotName(std::string_view slot) {
   if (base == "start_lifetime") return "Vida inicial";
   if (base == "start_speed") return "Velocidade inicial";
   if (base == "start_size") return "Tamanho inicial";
+  if (base == "start_size_y") return "Tamanho inicial Y";
+  if (base == "start_size_z") return "Tamanho inicial Z";
+  if (base == "start_rotation_x") return "Rotação inicial X";
+  if (base == "start_rotation_y") return "Rotação inicial Y";
+  if (base == "size_over_lifetime_y") return "Tamanho no tempo Y";
+  if (base == "size_over_lifetime_z") return "Tamanho no tempo Z";
+  if (base == "rotation_over_lifetime_x") return "Velocidade angular X";
+  if (base == "rotation_over_lifetime_y") return "Velocidade angular Y";
   if (base == "start_rotation") return "Rotação inicial";
   if (base == "start_color") return "Cor inicial";
   if (base == "gravity_modifier") return "Gravidade";
