@@ -23,6 +23,7 @@ param(
     [string]$Simpleperf='C:/Users/donod/AppData/Local/Android/Sdk/ndk/29.0.14206865/simpleperf/bin/windows/x86_64/simpleperf.exe'
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'poco-guard.ps1')
 $serial=@(& $Adb devices | ForEach-Object { if($_ -match "^($([regex]::Escape($SerialPrefix))[^\t]*)\tdevice$") { $Matches[1] } })[0]
 if(!$serial) { throw 'Nenhum aparelho no ADB.' }
 $env:ANDROID_SERIAL=$serial
@@ -43,6 +44,7 @@ $launch=@('shell','am','start','-S','-n',"$Package/dev.aether.editor.shell.Astra
 if($Tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
 else { $launch+=@('--ef','aether.resolution_scale','1') }
 $launch+=$ExtraLaunch
+Assert-PocoFree -Adb $Adb -Package $Package -AllowLauncher
 (& $Adb @launch 2>&1 | Out-String) | Set-Content (Join-Path $out 'launch.txt')
 Start-Sleep -Seconds $SettleSeconds
 $processId=((& $Adb shell pidof $Package) | Out-String).Trim().Split(' ')[0]

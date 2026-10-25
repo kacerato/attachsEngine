@@ -58,6 +58,7 @@ param(
     [int]$MaximumCoolingMinutes=20
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'poco-guard.ps1')
 . (Join-Path $PSScriptRoot 'android-frame-profile.ps1')
 if($Seconds -lt 30) { throw 'A coleta requer ao menos 30 segundos.' }
 if($Pose.Count -notin @(0,5)) { throw 'Pose exige cinco valores: x,y,z,yaw,pitch.' }
@@ -133,6 +134,8 @@ try {
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
             else { $launch+=@('--ef','aether.resolution_scale','1') }
+            # Guarda do POCO antes do am start: Astra ou Launcher na frente, sem ligação.
+            Assert-PocoFree -Adb $Adb -Package $Package -AllowLauncher
             $started=(& $Adb @launch 2>&1 | Out-String)
             $started | Set-Content (Join-Path $run 'launch.txt')
             if($LASTEXITCODE -ne 0 -or $started -match 'Error|Exception') { throw "Launch rejeitado: $project/$tier." }
