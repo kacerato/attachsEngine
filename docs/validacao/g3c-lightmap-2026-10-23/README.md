@@ -120,3 +120,23 @@ Cena: 7 luzes pontuais Assadas com sombra (3 coloridas, diante de estandartes) +
 
 **Defeito aberto.** Objetos que recebem pelas sondas (esfera móvel, estandartes sem UV2) saem claros demais ao lado
 do entorno assado: as sondas são assadas sem a luz Assada e não acompanham a oclusão do céu do lightmap.
+
+### Rodada noturna com sondas assadas (25/10 06:17, APK lightmap-0538, commit 99aa9ce0)
+
+Mesma cena às 21 h (céu quase apagado: a luz das lanternas domina), EV100 fixo -6 (a automática bateu no
+limite; mediu -8,05). Prancha: [`prancha-sponza-noite-unity-x-poco.png`](prancha-sponza-noite-unity-x-poco.png).
+
+| Medida | Tempo real | Com lightmap + sondas |
+|---|---|---|
+| GPU por quadro | 18,58 ms | 13,18 ms (−5,4 ms, −29%) |
+| Bake no aparelho | — | 156 s (8 luzes com sombra suave, 50 sondas, 0,69 M texels, 304 M raios) |
+| Luminância média da imagem (0–255) | 64 | 34 |
+
+- Teste de host de paridade: 1 luz pontual de 1200 lm, assado × tempo real = −1,5% / +2,2% (compressão e filtro
+  ligados); plano aberto V = 1,000. Lúmen→intensidade, π e codificação estão certos.
+- As cores das luzes aparecem nas paredes nos dois lados; a esfera móvel recebe a luz assada pelas sondas (amarela,
+  não mais estourada).
+- **Ainda aberto:** à mesma exposição o assado fica com ~metade da luminância média. Não é escala (paridade de
+  host; o lightmap do aparelho chega a 0,06, a faixa esperada a ~1,5 m de 1200 lm). Candidatas não isoladas:
+  o especular GGX das luzes em tempo real (o bake não guarda especular, como na Unity), vazamento de sombra das
+  8 luzes pontuais no atlas em tempo real, e a oclusão (AO) que multiplica só a parte assada.
