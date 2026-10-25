@@ -614,8 +614,10 @@ void main() {
   // DA HORA ATUAL -- o sol não está no lightmap e o meio-dia não congela.
   // A visibilidade também oclui o reflexo do céu: debaixo do beiral e dentro
   // da arcada o céu não chega (G3a item 1, "visibilidade do céu").
-  // Modo de visão Lightmap assado: sem lightmap, cinza-escuro neutro.
-  mediump vec3 astraLightmapShown=vec3(0.02);
+  // Modo de visão Lightmap assado: sem lightmap, a luz indireta que o objeto
+  // recebe de fato (sondas de luz ou céu). Um cinza fixo saía mais claro que o
+  // próprio lightmap e estourava na exposição automática.
+  mediump vec3 astraLightmapShown=diffuseIrradiance;
   if(astraLightmapActive()) {
     highp vec4 baked=astraLightmapTexel(vUv1);
     mediump float skyVisibility=clamp(baked.a,0.0,4.0);

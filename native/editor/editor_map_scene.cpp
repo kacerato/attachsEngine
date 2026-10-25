@@ -731,9 +731,11 @@ bool EditorMapScene::collectLightmapScene(const runtime::SceneGraph &document,u3
       const auto record=renderer::applyMaterialOverride(
           source.materialIndex<materials_.size()?materials_[source.materialIndex]:renderer::MapMaterialRecord{},
           slotMaterial(*render,slot),textureBase);
-      // Transparente (decalque, vidro, véu): não bloqueia nem recebe. Um plano de
-      // decalque colado na parede tapava o céu de cada texel atrás dele.
-      if(record.flags&renderer::MapMaterialBlend) continue;
+      // Transparente (decalque, vidro, véu): recebe o lightmap como a superfície
+      // embaixo, mas não bloqueia nem rebate -- um plano de decalque colado na
+      // parede tapava o céu de cada texel atrás dele. Sem lightmap, o decalque
+      // ficava com o céu inteiro sobre uma parede escura: mancha branca.
+      const bool transparent=(record.flags&renderer::MapMaterialBlend)!=0;
       renderer::LightmapBakeMaterial material;
       std::copy(record.baseColorFactor,record.baseColorFactor+4,material.baseColor);
       for(u32 k=0;k<3;++k) material.emission[k]=record.emissiveFactorAndStrength[k]*record.emissiveFactorAndStrength[3];
@@ -756,7 +758,7 @@ bool EditorMapScene::collectLightmapScene(const runtime::SceneGraph &document,u3
       std::copy(source.model,source.model+16,relative);
       for(u32 a=0;a<3;++a) relative[12+a]-=pivot[a];
       multiply(world,relative,instance.model);
-      instance.contributes=true;
+      instance.contributes=!transparent;
       instance.receives=render->receivesLightmaps();
       instance.castsShadows=render->castShadows!=0;
       out.instances.push_back(instance);

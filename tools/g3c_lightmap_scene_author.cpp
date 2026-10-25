@@ -55,10 +55,10 @@ EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *n
   light->useColorTemperature = color == nullptr;
   light->colorTemperature = 2700;
   if (color) for (u32 k = 0; k < 3; ++k) light->color[k] = color[k];
-  // Lúmens: lanternas de 2000-2500 lm. A 8000 lm as superfícies a 1-2 m
-  // da luz estouravam e o par ficava duro (validação de 24/10).
-  light->intensity = color ? 2000.0f : 2500.0f;
-  light->range = color ? 8.0f : 7.0f;
+  // 1200 lm, o Point Light do vídeo da Unity (U1). A 8000 lm as superfícies
+  // a 1-2 m da luz estouravam e o par ficava duro (validação de 24/10).
+  light->intensity = 1200.0f;
+  light->range = 8.0f;
   light->shadowMode = 2;
   light->lightmapMode = mode;
   if (!light->valid() || !doc.applyEntityValues(id, values)) fail(std::string("lanterna recusada: ") + name);
@@ -175,6 +175,12 @@ int main(int argc, char **argv) {
   lantern(doc, lights, "Luz assada vermelha", -6.5f, 2.3f, 4.9f, 2, red);
   lantern(doc, lights, "Luz assada verde", 0.5f, 2.3f, 4.9f, 2, green);
   lantern(doc, lights, "Luz assada azul", 7.5f, 2.3f, 4.9f, 2, blue);
+  // Cenário de custo do plano: sete luzes pontuais com sombra em modo Assado e
+  // uma Mista. Em tempo real (Limpar) são oito mapas de sombra por quadro.
+  lantern(doc, lights, "Lanterna assada norte 2", -3.0f, 2.3f, 4.9f, 2);
+  lantern(doc, lights, "Lanterna assada norte 4", 4.0f, 2.3f, 4.9f, 2);
+  lantern(doc, lights, "Lanterna assada sul 1", -6.5f, 2.3f, -4.9f, 2);
+  lantern(doc, lights, "Lanterna assada sul 3", 7.5f, 2.3f, -4.9f, 2);
   lantern(doc, lights, "Lanterna mista sul", 0.5f, 2.3f, -4.9f, 1);
   const auto cloths = doc.createEntity(doc.root(), EditorEntityKind::Folder, "Estandartes (G3c)");
   banner(doc, cloths, "Estandarte vermelho", -6.5f, 2.0f, 5.5f, redCloth);
@@ -275,7 +281,7 @@ int main(int argc, char **argv) {
       std::ofstream(output / ".astra/imports" / profilePath.filename(), std::ios::binary) << resources::serializeImportProfile(profile);
       ++profiles;
     }
-  std::cout << "Static: " << statics << (generic ? " · luzes locais em Misto" : " · luzes: 3 assadas coloridas + 1 mista · estandartes: 3 · sondas: 50")
+  std::cout << "Static: " << statics << (generic ? " · luzes locais em Misto" : " · luzes: 7 assadas com sombra (3 coloridas) + 1 mista · estandartes: 3 · sondas: 50")
             << " · perfis com UV de lightmap: " << profiles
             << " · hora " << hour << '\n';
   return 0;
