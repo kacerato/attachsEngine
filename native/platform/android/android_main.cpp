@@ -5,6 +5,7 @@
 #include <cerrno>
 #include <cctype>
 #include <set>
+#include <memory>
 #include "resources/gltf_package.h"
 #include "resources/gltf_folder_source.h"
 #include "resources/model_import.h"
@@ -2222,7 +2223,12 @@ private:
 void android_main(android_app *app) {
   ae::platform::android::installExitTrace();
   const GameThreadJvmAttachment jvmAttachment(app->activity);
-  AndroidShell shell{};
+  // O shell fica no heap: na pilha ele ocupava ~900 KB da thread do
+  // native_app_glue (1 MB). O Play somava ~100 KB de quadros e batia na
+  // pagina de guarda; o SIGSEGV caia no handler do CoreCLR, que chama exit()
+  // sem tombstone (so o FORTIFY de mutex destruido nas threads do sistema).
+  const auto shellStorage=std::make_unique<AndroidShell>();
+  AndroidShell &shell=*shellStorage;
   shell.app = app;
   shell.editorSession.setAudioFocus(false);
   shell.editorSession.setAudioOutput(ae::runtime::SceneAudio::Output::Device);
