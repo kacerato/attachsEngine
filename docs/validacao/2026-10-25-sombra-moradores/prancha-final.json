@@ -1,0 +1,33 @@
+{
+ "title": "Vila Astra S (POCO F7, cortes-1426): par congelado — mapa dinâmico em 4 cascatas × atlas único, Play pausado no mesmo quadro",
+ "rows": [
+  {
+   "unity": "par-congelado-final/2-atlas-unico.png",
+   "device": "par-congelado-final/1-dinamico.png",
+   "unity_caption": "Atlas único · sombra 2,63–2,65 ms",
+   "device_caption": "Dinâmico 4 cascatas · sombra 1,37 ms",
+   "verdict": "Quadro inteiro: 0,027% dos pixels diferem >16 níveis; 1×3 e 2×4 idênticos."
+  },
+  {
+   "unity": "par-congelado-final/zoom-moradores-atlas-unico.png",
+   "device": "par-congelado-final/zoom-moradores-dinamico.png",
+   "unity_caption": "Moradores · atlas único",
+   "device_caption": "Moradores · dinâmico",
+   "verdict": "Sombras dos moradores presentes nos dois; diferença só no contorno (texel do retângulo justo)."
+  },
+  {
+   "unity": "par-congelado-final/zoom-viking-atlas-unico.png",
+   "device": "par-congelado-final/zoom-viking-dinamico.png",
+   "unity_caption": "Viking · sombra longa no gramado · atlas único",
+   "device_caption": "Viking · dinâmico",
+   "verdict": "A sombra longa do Viking, ausente no par de 04:12, aparece igual."
+  },
+  {
+   "unity": "par-congelado-final/diferenca-sobre-atlas.png",
+   "device": "par-congelado-final/diferenca-sobre-atlas.png",
+   "unity_caption": "Pixels >16 níveis (magenta)",
+   "device_caption": "Mesma máscara",
+   "verdict": "Diferenças em fios de borda das sombras dos moradores, nenhuma sombra faltando."
+  }
+ ]
+}
