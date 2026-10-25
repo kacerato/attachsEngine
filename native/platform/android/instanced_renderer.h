@@ -461,7 +461,10 @@ public:
   void setPointLightingSpecializationEnabled(bool enabled) { pointLightingSpecializationEnabled_ = enabled; }
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
-  void setShadowDirtyAll(bool enabled) { shadowDirtyAll_ = enabled; }
+  void setShadowDirtyAll(bool enabled) {
+    // Trocar o modo com o app aberto refaz as cascatas (o atlas tinha só estáticos).
+    if (shadowDirtyAll_ != enabled) {shadowDirtyAll_ = enabled;shadowDynamicValid_ = false;invalidateStaticShadowCache();}
+  }
   // Lado de cada cascata no mapa dinâmico; 0 = automático (2048 com cascata de
   // 4096, senão até 1024). Vale na próxima criação dos recursos de sombra.
   void setShadowDynamicResolution(u32 side) { shadowDynamicRequested_ = side; }

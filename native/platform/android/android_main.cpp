@@ -1,5 +1,6 @@
 #include "editor/editor_import_transaction.h"
 #include "imgui.h"
+#include <sys/system_properties.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
@@ -153,6 +154,7 @@ struct AndroidShell final {
   bool lockCamera = false;
   // Medição sem toque: entra em Play assim que o projeto termina de abrir.
   bool startPlayOnOpen = false;
+  ae::u32 debugPropertyFrame = 0;
   std::future<bool> rendererInitialization;
   std::atomic<bool> cancelRendererInitialization{false};
   bool sceneValidation = false;
@@ -2926,6 +2928,16 @@ void android_main(android_app *app) {
             !shell.projectReopening && !editorPlaying)
           shell.editorSession.setCameraPose(shell.launchCamera.position,
                                             shell.launchCamera.yaw, shell.launchCamera.pitch);
+        // Bancada (par congelado): `adb shell setprop debug.astra.play_pause 1` congela o
+        // Play e `debug.astra.shadow_dirty_all 0/1` troca o modo da sombra no mesmo quadro.
+        if (++shell.debugPropertyFrame >= 30) {
+          shell.debugPropertyFrame = 0;
+          char value[PROP_VALUE_MAX]{};
+          if (__system_property_get("debug.astra.play_pause", value) > 0 && editorPlaying)
+            shell.editorSession.setPlayPaused(value[0] == '1');
+          if (__system_property_get("debug.astra.shadow_dirty_all", value) > 0)
+            shell.instancedRenderer.setShadowDirtyAll(value[0] == '1');
+        }
         shell.editorSession.update();
         updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
         // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o

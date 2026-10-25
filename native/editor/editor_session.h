@@ -1080,6 +1080,8 @@ public:
   void setAnimatorCullingOverride(int mode) noexcept {animatorCullingOverride_=mode;}
   // Taxa de atualização da animação por tamanho na tela (ver SceneAnimatorGraphs).
   void setAnimationUpdateRate(bool enabled) noexcept {animationUpdateRate_=enabled;}
+  // Bancada: congela o Play no quadro atual (o botão de pausa do editor).
+  void setPlayPaused(bool paused) noexcept {state_.playPaused=paused;state_.playStepRequested=false;}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
