@@ -63,8 +63,32 @@ Corte no maior (animação, commit `cb97d956`): ponteiro do repouso por propried
 não escreve T, R e S (sincos/atan por osso). Corte seguinte (envio): a varredura de Lens Dirt
 (1,6%) passou a olhar só o mundo de Play e a pular quadros sem mutação.
 
+## Fechamento dos cortes 23–25/10 (G1b)
+
+Todos no POCO F7, mesmo binário por A/B, rodadas intercaladas. Pasta de cada um entre parênteses.
+
+| Corte | Cena / nível | Antes | Depois | Estado |
+|---|---|---|---|---|
+| Teto por nível (Render Scale, cascatas, AO, bloom, luzes/objeto) | Vila C | GPU 18,91 ms | **14,33 ms** | padrão (`2026-10-23-cortes`) |
+| Máscara de luzes por desenho | todos | — | ligada | padrão |
+| Repouso por ponteiro e decomposição preguiçosa na animação | Vila S | animação 42% da thread | corte nos 2 maiores itens | padrão (`cpu-vila-s`) |
+| Culling Mode do Animator | Vila S | thread 15,41 | 13,79 (Lens Dirt; moradores todos na câmera) | padrão (`2026-10-24-culling`) |
+| Personagens inteiros em jobs + taxa por tamanho na tela | Vila S | thread 13,83 / processo 14,72 | **10,00 / 12,53** | padrão (`2026-10-24-personagens-taxa`) |
+| Movimento suja só as cascatas tocadas | Vila S | 4 cascatas por quadro | só as tocadas | padrão (`2026-10-24-sombra-cascatas`) |
+| Sombra em dois mapas, dinâmico nas 4 cascatas | Vila S | sombra 2,64 / GPU 39,44 | **1,37 / 38,62** | padrão (`2026-10-25-sombra-moradores`) |
+| Split com cópia do atlas (Cached Shadows) | Vila S | sombra 2,8 | 5,7 | **descartado** (`2026-10-24-cached-shadows`) |
+| Animação paralela por propriedade, sem taxa | Vila S | processo 14,04 | 15,33 | **descartado** (`2026-10-24-animacao-paralela`) |
+
+A linha da sombra substitui a de 24/10 (`2026-10-24-sombra-dois-mapas`, sombra 0,6 ms): ali o shader
+não tinha sido embarcado (SPIR-V sem regenerar), o aparelho não lia o mapa dinâmico e os moradores
+ficavam sem sombra. O par congelado de 25/10 (Play pausado, só o modo trocando) mostra agora 0,027%
+de pixels diferentes, só em bordas.
+
+O GPU do quadro da Vila S subiu de ~31 para ~39 ms entre 24/10 e 25/10 à tarde: a base passou a ter
+clima e lightmap (G4c/G3c) e a temperatura não foi controlada entre sessões; só o A/B dentro de
+cada sessão vale.
+
 ## Pendente
 
-- Vila S antes × depois; Sponza S e C (a G3c ainda está com o Sponza numa variante de teste).
-- A/B de CPU do corte de animação no aparelho (`cortes-1722` × `cortes-1809`).
-- Rodada do C com resolução dinâmica ligada (`-DynamicResolution`).
+- Sponza S e C antes × depois e a Vila S completa (antes = `-NoQualityCeiling`) na base de 25/10.
+- Rodada do C com resolução dinâmica ligada (`-DynamicResolution`) e o split no C (2 @1024).

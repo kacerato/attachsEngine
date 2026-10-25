@@ -1,5 +1,9 @@
 # Sombra do sol em dois mapas — Vila S, POCO F7 (24/10/2026)
 
+> **Não vale como resultado (retificado em 25/10).** O commit mudou `environment_lighting.glsl` sem
+> regenerar os `*_spirv.h`: o aparelho não lia o mapa dinâmico. Medida real em
+> `../2026-10-25-sombra-moradores` (sombra 2,64 → 1,37 ms).
+
 APK cortes-2100, mesmo binário; atlas único = `aether.shadow_dirty_all=true`. Rodadas intercaladas, 42–43 °C.
 
 | Rodada | Sombra GPU (ms) | Opaco | GPU quadro | FPS interno | Thread | Processo |
