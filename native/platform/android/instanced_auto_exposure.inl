@@ -267,7 +267,9 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
   view.sceneEpoch=sceneEpoch;view.cameraEntity=cameraEntity;
   view.paused=index==0&&autoExposurePaused_;
   if(index==0) autoExposureDiagnostic_.clear();
-  if(index==0 && std::isfinite(timeSeconds) && std::abs(timeSeconds-view.lastLog)>=2.0f &&
+  // Relógio real: no editor parado o tempo da cena não anda e a leitura sumia.
+  const float wallSeconds=std::chrono::duration<float>(std::chrono::steady_clock::now().time_since_epoch()).count();
+  if(index==0 && std::abs(wallSeconds-view.lastLog)>=2.0f &&
      view.state.mappedData() && memoryAllocator_->invalidateBuffer(view.state)) {
     // Leitura de quadros anteriores (sem espera): basta para calibrar limites.
     const auto *values=static_cast<const float*>(view.state.mappedData());
@@ -277,7 +279,7 @@ bool InstancedRenderer::recordAutoExposure(u32 index,const renderer::SceneEnviro
         static_cast<double>(values[2]),static_cast<double>(values[1]),
         static_cast<double>(look.exposureLimitMin),static_cast<double>(look.exposureLimitMax),
         static_cast<double>(look.exposureCompensation));
-    view.lastLog=timeSeconds;
+    view.lastLog=wallSeconds;
   }
   return true;
 }

@@ -49,6 +49,8 @@ bool sameImportProfile(const ImportProfile &a, const ImportProfile &b) noexcept 
          a.maximumLodLevels == b.maximumLodLevels && a.optimizePolygonOrder == b.optimizePolygonOrder &&
          a.fbxDeformation==b.fbxDeformation&&a.fbxReduceWeights==b.fbxReduceWeights&&
          a.fbxApproximateSteps==b.fbxApproximateSteps&&a.fbxBakeRate==b.fbxBakeRate&&
+         a.generateLightmapUvs==b.generateLightmapUvs&&a.lightmapHardAngle==b.lightmapHardAngle&&
+         a.lightmapPackMargin==b.lightmapPackMargin&&
          sameExcludedNodes(a, b) && sameCollisionMeshes(a, b);
 }
 
@@ -79,6 +81,8 @@ bool validImportProfile(const ImportProfile &profile) noexcept {
          profile.textureStreamingPriority >= -128 && profile.textureStreamingPriority <= 127 &&
          profile.maximumLodLevels >= 2 && profile.maximumLodLevels <= 4 &&
          (profile.fbxBakeRate==30||profile.fbxBakeRate==60)&&
+         profile.lightmapHardAngle>=1 && profile.lightmapHardAngle<=180 &&
+         profile.lightmapPackMargin>=1 && profile.lightmapPackMargin<=64 &&
          profile.excludedNodes.size() <= 65536 &&
          profile.collisionMeshes.size() <= 65536 && collisionRecipesValid;
 }
@@ -103,7 +107,10 @@ std::string serializeImportProfile(const ImportProfile &profile) {
          ",\"fbxDeformation\":"+(profile.fbxDeformation?"true":"false")+
          ",\"fbxReduceWeights\":"+(profile.fbxReduceWeights?"true":"false")+
          ",\"fbxApproximateSteps\":"+(profile.fbxApproximateSteps?"true":"false")+
-         ",\"fbxBakeRate\":"+std::to_string(profile.fbxBakeRate)+",\"excludedNodes\":[" + [&] {
+         ",\"fbxBakeRate\":"+std::to_string(profile.fbxBakeRate)+
+         ",\"generateLightmapUvs\":"+(profile.generateLightmapUvs?"true":"false")+
+         ",\"lightmapHardAngle\":"+std::to_string(profile.lightmapHardAngle)+
+         ",\"lightmapPackMargin\":"+std::to_string(profile.lightmapPackMargin)+",\"excludedNodes\":[" + [&] {
            std::string list;
            for (const auto &node : profile.excludedNodes) {
              if (!list.empty()) list += ',';
@@ -205,6 +212,13 @@ bool parseImportProfile(std::string_view text, ImportProfile &out) {
     parsed.fbxDeformation=deformation->boolean;parsed.fbxReduceWeights=weights->boolean;
     parsed.fbxApproximateSteps=steps->boolean;parsed.fbxBakeRate=static_cast<u8>(rate);
   }
+  if(schema>=13) {
+    const auto *uvs=document.member(root,"generateLightmapUvs");
+    const auto angle=document.index(root,"lightmapHardAngle"),margin=document.index(root,"lightmapPackMargin");
+    if(!uvs||uvs->kind!=JsonDocument::Kind::Boolean||angle<1||angle>180||margin<1||margin>64) return false;
+    parsed.generateLightmapUvs=uvs->boolean;parsed.lightmapHardAngle=static_cast<u8>(angle);
+    parsed.lightmapPackMargin=static_cast<u8>(margin);
+  }
   if (schema >= 4) {
     const auto *excluded = document.member(root, "excludedNodes");
     if (!excluded || excluded->kind != JsonDocument::Kind::Array || excluded->childCount > 65536) return false;
@@ -262,6 +276,8 @@ GltfImportLimits applyImportProfile(GltfImportLimits limits, const ImportProfile
   limits.maximumLodLevels = profile.maximumLodLevels;
   limits.fbxDeformation=profile.fbxDeformation;limits.fbxReduceWeights=profile.fbxReduceWeights;
   limits.fbxApproximateSteps=profile.fbxApproximateSteps;limits.fbxBakeRate=profile.fbxBakeRate;
+  limits.generateLightmapUvs=profile.generateLightmapUvs;
+  limits.lightmapHardAngle=profile.lightmapHardAngle;limits.lightmapPackMargin=profile.lightmapPackMargin;
   limits.normals = profile.normals;
   limits.normalWeighting = profile.normalWeighting;
   limits.smoothingAngle = static_cast<float>(profile.smoothingAngle);

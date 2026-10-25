@@ -116,6 +116,10 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
     entry.shadow.bias = light->shadowBias;
     entry.shadow.normalBias = light->shadowNormalBias;
     entry.shadow.nearPlane = light->shadowNearPlane;
+    // G3c: Modo da luz. O Sol e a Lua da Hora do dia nunca são assados: o
+    // lightmap guarda só luz local e céu, e o astro segue direto e com sombra.
+    entry.lightmapMode = entry.celestialBody == renderer::CelestialLightBody::None ? static_cast<u8>(light->lightmapMode) : u8{0};
+    entry.filter.baked = entry.lightmapMode == 2;
     collected.push_back(entry);
   }
   out = std::move(collected);

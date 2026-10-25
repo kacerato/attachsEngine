@@ -619,6 +619,33 @@ ICONS["volume/sphere"] = (
     f'<path d="M20 64c14 12 74 12 88 0" {stroke(4, ACCENT, 'opacity=".6" stroke-dasharray="6 6"')}/>'
     f'<circle cx="64" cy="64" r="10" fill="{INK}"/>')
 
+# G3c: lightmap. A página do lightmap (grade de texels) com a luz assada
+# descendo em gradiente de um canto, e o sol de fora ainda em tempo real.
+ICONS["lighting/lightmap-baked"] = (
+    f'<rect x="14" y="14" width="100" height="100" rx="10" {stroke(6)}/>'
+    f'<path d="M14 47h100M14 81h100M47 14v100M81 14v100" {stroke(3, extra='opacity=".45"')}/>'
+    f'<rect x="17" y="17" width="27" height="27" fill="{ACCENT}"/>'
+    f'<rect x="50" y="17" width="28" height="27" fill="{ACCENT}" opacity=".6"/>'
+    f'<rect x="17" y="50" width="27" height="28" fill="{ACCENT}" opacity=".6"/>'
+    f'<rect x="50" y="50" width="28" height="28" fill="{ACCENT}" opacity=".3"/>'
+    f'<rect x="84" y="17" width="27" height="27" fill="{ACCENT}" opacity=".3"/>'
+    f'<rect x="17" y="84" width="27" height="27" fill="{ACCENT}" opacity=".3"/>')
+# Gerar iluminação (Generate Lighting): a lâmpada assando na página, com os
+# raios que rebatem e a barra de progresso embaixo.
+ICONS["lighting/generate-lighting"] = (
+    f'<path d="M50 62a22 22 0 1 1 28 0v12H50z" fill="{ACCENT}" fill-opacity=".2" {stroke(6, ACCENT)}/>'
+    f'<path d="M52 84h24" {stroke(6)}/>'
+    f'<path d="M64 10v8M30 24l6 6M98 24l-6 6M18 50h8M102 50h8" {stroke(5, ACCENT)}/>'
+    f'<rect x="16" y="100" width="96" height="14" rx="7" {stroke(5)}/>'
+    f'<rect x="20" y="104" width="56" height="6" rx="3" fill="{ACCENT}"/>')
+# UV de lightmap (Generate Lightmap UVs): ilhas de UV separadas por margem,
+# sem sobreposição, dentro do quadrado 0..1.
+ICONS["lighting/lightmap-uv"] = (
+    f'<rect x="14" y="14" width="100" height="100" rx="6" {stroke(5, extra='stroke-dasharray="8 6"')}/>'
+    f'<path d="M24 24h38v30H24z" fill="{INK}" fill-opacity=".15" {stroke(5)}/>'
+    f'<path d="M72 24h32v46L72 52z" fill="{ACCENT}" fill-opacity=".25" {stroke(5, ACCENT)}/>'
+    f'<path d="M24 64l40 0 0 40H24z" fill="{ACCENT}" fill-opacity=".25" {stroke(5, ACCENT)}/>'
+    f'<path d="M74 80h30v24H74z" fill="{INK}" fill-opacity=".15" {stroke(5)}/>')
 # PK-4: Volume Profile -- a ficha do perfil com três controles deslizantes, o
 # de cima aceso (o override marcado); e Adicionar override: a pilha de
 # overrides com o sinal de mais.

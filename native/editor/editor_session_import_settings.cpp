@@ -15,6 +15,8 @@ resources::ImportProfile EditorSession::importProfileDraft() const {
   draft.fbxDeformation=state_.importFbxDeformation;draft.fbxReduceWeights=state_.importFbxReduceWeights;
   draft.fbxApproximateSteps=state_.importFbxApproximateSteps;draft.fbxBakeRate=state_.importFbxBakeRate;
   draft.textureStreamingPriority=state_.importTextureStreamingPriority;
+  draft.generateLightmapUvs=state_.importLightmapUvs;draft.lightmapHardAngle=state_.importLightmapHardAngle;
+  draft.lightmapPackMargin=state_.importLightmapPackMargin;
   draft.excludedNodes=state_.importExcludedNodes;
   return draft;
 }
@@ -30,6 +32,8 @@ resources::ImportProfile EditorSession::importProfilePrepared() const {
   prepared.optimizePolygonOrder=state_.importPreparedOptimizeOrder;
   prepared.fbxDeformation=state_.importPreparedFbxDeformation;prepared.fbxReduceWeights=state_.importPreparedFbxReduceWeights;
   prepared.fbxApproximateSteps=state_.importPreparedFbxApproximateSteps;prepared.fbxBakeRate=state_.importPreparedFbxBakeRate;
+  prepared.generateLightmapUvs=state_.importPreparedLightmapUvs;prepared.lightmapHardAngle=state_.importPreparedLightmapHardAngle;
+  prepared.lightmapPackMargin=state_.importPreparedLightmapPackMargin;
   return prepared;
 }
 

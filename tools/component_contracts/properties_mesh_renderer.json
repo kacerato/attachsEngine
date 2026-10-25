@@ -35,6 +35,26 @@
           "animation_safe": {
             "cpp": "true"
           }
+        },
+        {
+          "id": "contribute_gi",
+          "label": "Contribuir para iluminação global",
+          "member": "contributeGlobalIllumination",
+          "presentation": {
+            "group": "Iluminação",
+            "help": "Com o objeto Static, entra no Gerar iluminação: bloqueia, rebate e pode receber lightmap",
+            "visible": {
+              "cpp": "nullptr"
+            },
+            "editable": {
+              "cpp": "nullptr"
+            },
+            "capability": "render.gi.baked",
+            "consumer": "renderer/lightmap_baker.cpp → instâncias do bake",
+            "invalidates": {
+              "cpp": "Invalidate::Probes"
+            }
+          }
         }
       ],
       "defaults": {
@@ -57,7 +77,8 @@
       "name": "mesh_renderer_MeshRenderer_fields1",
       "type": "MeshRenderer",
       "properties": [
-        "meshRendererBooleans/receive_shadows"
+        "meshRendererBooleans/receive_shadows",
+        "meshRendererBooleans/contribute_gi"
       ]
     }
   ]

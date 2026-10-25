@@ -573,6 +573,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(routing.tapped&&routing.widgetId==animator_widget::id(animator_widget::Open)) {openAnimatorEditor();return true;}
   if(routing.tapped&&navigation_widget::owns(routing.widgetId)) {handleNavigationWidget(routing.widgetId);return true;}
   if(routing.tapped&&probe_widget::owns(routing.widgetId)) {handleProbeWidget(routing.widgetId);return true;}
+  if(routing.tapped&&lightmap_widget::owns(routing.widgetId)) {handleLightmapWidget(routing.widgetId);return true;}
   if(routing.tapped&&routing.widgetId==clip_widget::id(clip_widget::Open)) {
     // Animar: abre o primeiro clipe do próprio objeto (componente Animação);
     // sem clipe, cria um e já o toca nele.
@@ -782,6 +783,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         state_.importAccept=true;state_.importReady=false;state_.importStatus="Publicando recurso…";
       }
     }
+    else if(routing.tapped && lightmap_widget::owns(routing.widgetId)) handleLightmapWidget(routing.widgetId);
     else handled=false;
     if(handled) return true;
   }

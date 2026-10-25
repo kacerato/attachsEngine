@@ -3,6 +3,7 @@
 #include "resources/gltf_codecs.h"
 #include "resources/texture_compression.h"
 #include "resources/mesh_lod_build.h"
+#include "resources/lightmap_uv_generate.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2409,6 +2410,35 @@ bool importGlb(std::span<const u8> bytes, const GltfImportLimits &limits,
   for(const auto &key:result.keys) ++keyCounts[key];
   for(usize i=0;i<result.keys.size();++i) if(keyCounts[result.keys[i]]>1)
     result.keys[i]+="@node:"+std::to_string(result.drawNodes[i]);
+  // G3c: Generate Lightmap UVs antes do LOD, que referencia os vértices
+  // finais. Desenhos deformados ficam como estão (lightmap é do que é estático).
+  if (limits.generateLightmapUvs) {
+    importer.report(.985f, "Gerando UV de lightmap");
+    std::vector<u8> deformed(result.draws.size(), 0);
+    bool anyDeformed = false;
+    for (usize d = 0; d < deformed.size(); ++d) {
+      deformed[d] = (d < result.drawSkins.size() && result.drawSkins[d] >= 0) ||
+                    (d < result.drawMorphs.size() && result.drawMorphs[d] >= 0);
+      anyDeformed = anyDeformed || deformed[d];
+    }
+    LightmapUvSettings uvSettings;
+    uvSettings.hardAngleDegrees = static_cast<float>(limits.lightmapHardAngle);
+    uvSettings.packMarginPixels = static_cast<float>(limits.lightmapPackMargin);
+    LightmapUvReport uvReport;
+    std::string uvDiagnostic;
+    if (!generateLightmapUvs(result.vertices, result.indices, result.draws, deformed, uvSettings,
+                             !anyDeformed && result.skinInfluences.empty(), uvReport, uvDiagnostic))
+      return giveUp(uvDiagnostic.c_str());
+    if (!result.skinInfluences.empty())
+      result.skinInfluences.resize(result.vertices.size() / renderer::MapVertexStride * SkinInfluenceStride, 0);
+    if (result.vertices.size() / renderer::MapVertexStride > limits.maximumVertices)
+      return giveUp("UV de lightmap passou do teto de vértices da importação; desligue Gerar UV de lightmap ou simplifique a malha.");
+    result.lightmapUvDraws = uvReport.drawsUnwrapped;
+    result.lightmapUvCharts = uvReport.charts;
+    result.lightmapUvSkipped = uvReport.drawsDeformed;
+    if (uvReport.drawsDeformed)
+      result.notes.emplace_back(std::to_string(uvReport.drawsDeformed) + " desenho(s) com skin ou blend shape ficaram sem UV de lightmap: lightmap é para malha estática.");
+  }
   // S3: ordem de índices e LOD na própria malha, depois de toda a geometria
   // (normais, tangentes, espelhamento) estar pronta.
   if (limits.generateLods || limits.optimizePolygonOrder) {

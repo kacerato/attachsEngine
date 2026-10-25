@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 76> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 77> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -73,8 +73,9 @@ inline constexpr std::array<EngineCapability, 76> engineCapabilities{{
    "renderer/punctual_lights.h (máscara por desenho) + rhi/shaders/dirt_road_vertex.glsl", ""},
   {"render.light.sun_source", "Fonte do sol explícita (Sun Source)", CapabilityState::Implemented,
    "scene/lighting_settings.h + renderer/punctual_lights.h", ""},
-  {"render.light.baked", "Luz Mista ou Assada (bake de iluminação)", CapabilityState::Planned,
-   "renderer/lightmap_baker (PK-6)", "Sem bake: toda luz é de tempo real; o modo fica gravado"},
+  {"render.light.baked", "Luz Mista ou Assada (bake de iluminação)", CapabilityState::Implemented,
+   "renderer/lightmap_baker.cpp + renderer/punctual_lights.h (luz Assada sai do tempo real nos desenhos com lightmap)",
+   "Assado: direta e rebote no lightmap; Misto: só o rebote; o sol da Hora do dia fica sempre em tempo real"},
   {"render.light.temperature", "Temperatura de cor em kelvin", CapabilityState::Implemented,
    "scene/light_units.h + runtime/scene_lights.cpp", ""},
   {"render.light.photometric", "Unidades fotométricas (lux, lumen, candela)", CapabilityState::Implemented,
@@ -98,6 +99,9 @@ inline constexpr std::array<EngineCapability, 76> engineCapabilities{{
    "Environment Lighting da janela Iluminação: sonda SH L2 do céu procedural, do HDRI, de um gradiente ou de uma cor, com Intensity Multiplier; o nível Constante usa o hemisfério céu/chão da mesma sonda"},
   {"render.ambient.specular", "Reflexo especular do ambiente", CapabilityState::Implemented,
    "renderer/environment_map.cpp", ""},
+  {"render.gi.baked", "Lightmap assado (Gerar iluminação, UV2 automática)", CapabilityState::Implemented,
+   "renderer/lightmap_baker.cpp + resources/lightmap_uv_generate.cpp + rhi/shaders/lightmap_lighting.glsl",
+   "Progressivo em CPU: direta das luzes assadas, 0–4 rebotes, emissivos e visibilidade do céu reescalada pela hora; só Não direcional"},
   {"render.gi.lightmap", "Lightmap indireto externo por submalha", CapabilityState::DeviceLimited,
    "scene/lightmap_binding.h + rhi/shaders/dirt_road_shading.glsl", "RGB linear de irradiância; UV1 autoral; exige bindless. Sem bake, unwrap ou probes"},
   {"render.probe.irradiance", "Sondas de luz (Light Probe Group, SH L2 por objeto)", CapabilityState::Implemented,

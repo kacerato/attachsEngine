@@ -1210,12 +1210,14 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
   bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   bindings[bindingCount++]={25,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G3c: páginas de lightmap (probe_lighting.glsl, astraLightmapTexel).
+  bindings[bindingCount++]={26,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   layout.bindingCount = bindingCount;
   layout.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 3u},
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 4u},
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
@@ -1406,6 +1408,12 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   probeWrites[1].pBufferInfo = nullptr;
   probeWrites[1].pImageInfo = &probeAtlas;
   vkUpdateDescriptorSets(device_, 2, probeWrites, 0, nullptr);
+  // G3c: camada vazia até o primeiro recurso de lightmap.
+  if (!createLightmapResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Lightmap] recursos de lightmap indisponíveis.");
+    return false;
+  }
+  writeLightmapDescriptors();
   return true;
 }
 
@@ -2213,6 +2221,7 @@ bool applySceneEnvironmentLook(
 
 #include "platform/android/instanced_camera_preview.inl"
 #include "platform/android/instanced_probes.inl"
+#include "platform/android/instanced_lightmaps.inl"
 
 void InstancedRenderer::createUiRenderer(AAssetManager *assets) {
   if (!createUiRenderPass()) return;
@@ -5339,6 +5348,7 @@ void InstancedRenderer::shutdown() {
   destroyParticleResources();
   destroyCameraPreview();
   destroyProbeResources();
+  destroyLightmapResources();
   if(previewRenderPass_) vkDestroyRenderPass(device_,previewRenderPass_,nullptr);
   previewRenderPass_=VK_NULL_HANDLE;pendingPreview_={};submittedPreview_={};completedPreview_={};
   // The UI owns VMA buffers and images too. Release them before its render pass
@@ -6888,7 +6898,7 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       !textureStreamingDebugView_ && !particlesBlockSceneReuse();
   const u32 sceneOptions=(editorSceneLighting_?1u:0u)|(editorSceneEffects_?2u:0u)|
       (editorSceneSky_?4u:0u)|(editorSceneFog_?8u:0u)|(editorScenePost_?16u:0u)|
-      (textureStreamingDebugView_?32u:0u);
+      (textureStreamingDebugView_?32u:0u)|(lightmapView_?64u:0u);
   const bool sceneUniformMatches=sceneCacheEligible && editorSceneCachedUniform_.size()==sizeof(DirtRoadFrameUniform) &&
       std::memcmp(editorSceneCachedUniform_.data(),environmentUniform_.mappedData(),sizeof(DirtRoadFrameUniform))==0;
   editorSceneReusedLastFrame_=sceneCacheEligible && editorSceneCacheValid_ &&

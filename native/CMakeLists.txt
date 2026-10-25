@@ -263,6 +263,15 @@ target_include_directories(aether_astcenc SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_D
 # útil dentro dele; o nosso adaptador continua com as flags do build.
 target_compile_options(aether_astcenc PRIVATE -w -fno-rtti -fno-exceptions -O2)
 
+# xatlas (G3c, Generate Lightmap UVs): parametrização de malha, MIT, vendorizado
+# com origem e hash em third_party/xatlas/VERSION.txt. Como os codecs, entra
+# antes das flags estritas, sem RTTI nem exceções, e otimizado mesmo no Debug
+# (o desembrulho do Sponza inteiro em -O0 leva minutos).
+add_library(aether_xatlas STATIC third_party/xatlas/xatlas.cpp)
+target_include_directories(aether_xatlas SYSTEM PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/third_party/xatlas)
+target_compile_options(aether_xatlas PRIVATE -w -fno-rtti -fno-exceptions -O2)
+set_target_properties(aether_xatlas PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # --- Ampliadores temporais (G6-B) --------------------------------------------
 # Arm ASR 25.06 e AMD FSR 2.2.1, vendorizados com origem, commit e licença em
 # third_party/*/VERSION.txt. Só entram no binário Android: o host não tem um
@@ -426,6 +435,8 @@ add_library(aether_renderer STATIC
   renderer/time_of_day.cpp
   renderer/light_probes.cpp
   renderer/reflection_probes.cpp
+  renderer/lightmap_baker.cpp
+  renderer/lightmap_data.cpp
   renderer/procedural_sky.cpp
   renderer/environment_ambient.cpp
   renderer/cloud_layer.cpp
@@ -532,6 +543,7 @@ add_library(aether_assets STATIC
   resources/import_profile.cpp
   resources/mesh_derived.cpp
   resources/mesh_lod_build.cpp
+  resources/lightmap_uv_generate.cpp
   resources/texture_profile.cpp
   resources/texture_asset.cpp
   resources/tiff_decode.cpp
@@ -539,12 +551,15 @@ add_library(aether_assets STATIC
   resources/glb_images.cpp
 )
 target_include_directories(aether_assets PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc aether_ufbx PUBLIC aether_audio_backend)
+target_link_libraries(aether_assets PRIVATE aether_codecs aether_astcenc aether_ufbx aether_xatlas PUBLIC aether_audio_backend)
 # aether_renderer pelo formato do pacote de mapa: a importacao produz
 # exatamente os mesmos registros de desenho e material que o cozinhador offline,
 # para que geometria importada no aparelho e geometria cozida no computador
 # percorram o MESMO caminho depois daqui.
 target_link_libraries(aether_assets PUBLIC aether_core aether_renderer)
+# G3c: desembrulho UV2 e baker de lightmap otimizados também no Debug do host:
+# em -O0 o Sponza leva dezenas de minutos e o teste do baker não cabe na rodada.
+set_source_files_properties(resources/lightmap_uv_generate.cpp renderer/lightmap_baker.cpp PROPERTIES COMPILE_OPTIONS "-O2")
 target_link_libraries(aether_assets PUBLIC aether_convex_bake)
 
 if(NOT ANDROID)
@@ -672,6 +687,7 @@ add_library(aether_editor STATIC
   editor/editor_animator_resources.cpp
   editor/editor_navigation.cpp
   editor/editor_probes.cpp
+  editor/editor_lightmaps.cpp
   editor/editor_animation_clip_resources.cpp
   editor/editor_animation_clip_preview.cpp
   editor/editor_animation_clip.cpp
@@ -964,6 +980,7 @@ if(NOT ANDROID)
     ../tests/native/test_lighting_specialization.cpp
     ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_probes_unity.cpp
+    ../tests/native/test_lightmaps_g3c.cpp
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_volume_profile.cpp
     ../tests/native/test_environment_lighting_window.cpp
     ../tests/native/test_color_grading.cpp
@@ -1202,7 +1219,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
     ../tests/native/test_environment_lighting_window.cpp ../tests/native/test_sky_celestial.cpp
     ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp
-    ../tests/native/test_night_sky.cpp ../tests/native/test_volume_profile.cpp ../tests/native/test_weather.cpp)
+    ../tests/native/test_night_sky.cpp ../tests/native/test_lightmaps_g3c.cpp ../tests/native/test_volume_profile.cpp ../tests/native/test_weather.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1219,6 +1236,11 @@ if(NOT ANDROID)
   endif()
   # PK-6: Reflection Probe e Light Probe Group, sem a suíte inteira.
   add_executable(aether_probe_family_tests ../tests/native/family_base_main.cpp ../tests/native/test_probes_unity.cpp)
+  # G3c: lightmap assado e UV2 automática, sem o catálogo inteiro.
+  add_executable(aether_lightmap_tests ../tests/native/family_base_main.cpp ../tests/native/test_lightmaps_g3c.cpp)
+  target_include_directories(aether_lightmap_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_lightmap_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
+    aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
   target_include_directories(aether_probe_family_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_compile_definitions(aether_probe_family_tests PRIVATE AETHER_REPOSITORY_ROOT="${CMAKE_SOURCE_DIR}/..")
   target_link_libraries(aether_probe_family_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
@@ -1325,6 +1347,16 @@ if(NOT ANDROID)
   target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)
     target_compile_options(v2_night_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(g3c_lightmap_host_bake EXCLUDE_FROM_ALL ../tools/g3c_lightmap_host_bake.cpp)
+  target_link_libraries(g3c_lightmap_host_bake PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(g3c_lightmap_host_bake PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(g3c_lightmap_scene_author EXCLUDE_FROM_ALL ../tools/g3c_lightmap_scene_author.cpp)
+  target_link_libraries(g3c_lightmap_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(g3c_lightmap_scene_author PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(sponza_scene_author EXCLUDE_FROM_ALL ../tools/sponza_scene_author.cpp)
   target_link_libraries(sponza_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
