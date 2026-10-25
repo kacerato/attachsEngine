@@ -39,6 +39,7 @@
 #include "platform/android/ocean_validation.h"
 #include "editor/editor_water_play.h"
 #include "platform/android/lifecycle_trace.h"
+#include "platform/android/exit_trace.h"
 #include "platform/app_lifecycle.h"
 #include "platform/camera_route.h"
 #include "platform/first_person_controller.h"
@@ -2219,6 +2220,7 @@ private:
 } // namespace
 
 void android_main(android_app *app) {
+  ae::platform::android::installExitTrace();
   const GameThreadJvmAttachment jvmAttachment(app->activity);
   AndroidShell shell{};
   shell.app = app;
