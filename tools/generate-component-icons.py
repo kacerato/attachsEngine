@@ -106,6 +106,19 @@ def lod_group() -> str:
 <path d="M30 90v16M72 90v16M108 90v16" {stroke(5, ACCENT)}/>'''
 
 
+def particle_system() -> str:
+    # Emissor em cone (traço claro) soltando partículas de tamanhos diferentes e
+    # duas faíscas esticadas em lima: o que diferencia é o que sai do emissor.
+    return f'''<path d="M44 112h40L74 80H54z" {stroke(6)}/>
+<path d="M50 96h28" {stroke(3, extra='opacity=".7"')}/>
+<circle cx="64" cy="58" r="11" {stroke(5, ACCENT)}/>
+<circle cx="40" cy="40" r="7" {stroke(4, ACCENT)}/>
+<circle cx="88" cy="34" r="8" {stroke(4, ACCENT)}/>
+<circle cx="70" cy="22" r="4" fill="{ACCENT}"/>
+<circle cx="50" cy="16" r="3" fill="{ACCENT}"/>
+<path d="M30 74L18 58M100 70l12-18" {stroke(5, ACCENT)}/>'''
+
+
 def skinned_mesh() -> str:
     # A pele (contorno) deformada pela cadeia de ossos em lima.
     return f'''<path d="M22 104c-6-12 0-24 12-30l18-10 12-20c6-10 18-16 30-12 12 4 18 16 14 28-3 9-11 15-20 17l-18 4-12 16c-8 10-24 12-36 7z" {stroke(6)}/>
@@ -322,6 +335,7 @@ ICONS: dict[str, str] = {
 <circle cx="91" cy="52" r="5" fill="{ACCENT}"/><circle cx="102" cy="64" r="5" fill="{ACCENT}"/>
 <circle cx="55" cy="72" r="7" {stroke(4)}/><circle cx="73" cy="72" r="7" {stroke(4)}/>''',
     "component/lod-group": lod_group(),
+    "component/particle-system": particle_system(),
     "component/skinned-mesh": skinned_mesh(),
     "component/camera-follow": camera_follow(),
 }
@@ -527,6 +541,25 @@ ICONS["lighting/clouds"] = (
     f'<path d="M8 58h14M4 70h12" {stroke(4, extra='opacity=".6"')}/>'
     f'<ellipse cx="64" cy="108" rx="34" ry="7" fill="{INK}" opacity=".45"/>'
     f'<path d="M20 116h88" {stroke(4, extra='opacity=".5"')}/>')
+
+# G4c: clima. Nuvem carregada (escura, como a de tempestade) com a chuva
+# inclinada pelo vento e o raio em lima -- o que diferencia do Volume de nuvens;
+# o floco à direita diz que o mesmo componente também neva.
+ICONS["lighting/weather"] = (
+    f'<path d="M28 66a16 16 0 0 1 4-31 22 22 0 0 1 42-6 17 17 0 0 1 22 18 10 10 0 0 1-2 19z" fill="#15191e" {stroke(6)}/>'
+    f'<path d="M30 82l-6 14M46 82l-6 14M38 102l-5 12M54 102l-5 12" {stroke(5, extra='opacity=".85"')}/>'
+    f'<path d="M72 70l-10 20h12l-8 26 22-32H76l8-14z" fill="{ACCENT}" {stroke(3, ACCENT)}/>'
+    f'<path d="M106 84v22M96 89l20 12M96 101l20-12" {stroke(4)}/>'
+    f'<circle cx="106" cy="95" r="3" fill="#15191e"/>')
+
+# PK-10b/c: Faíscas. Quatro faíscas saindo de um ponto, cada uma com a trilha
+# em lima afinando para trás (Trails), e o halo da luz que elas acendem (Lights).
+ICONS["effects/sparks"] = (
+    f'<circle cx="46" cy="86" r="30" fill="{ACCENT}" opacity=".12"/>'
+    f'<path d="M46 86L96 30M46 86l60 4M46 86L74 18M46 86L22 34" {stroke(4, ACCENT, 'opacity=".55"')}/>'
+    f'<path d="M84 44L96 30M92 89l14 1M68 33l6-15M27 45l-5-11" {stroke(7)}/>'
+    f'<circle cx="46" cy="86" r="8" fill="{INK}"/>'
+    f'<path d="M30 110h32" {stroke(5, extra='opacity=".5"')}/>')
 
 def browser() -> str:
     candidates = [

@@ -31,6 +31,13 @@ std::vector<std::string_view> componentGroups(const scene::ComponentValue &compo
     const auto rank=[](std::string_view group){return group=="Conexão"?0:(group=="Anchors"||group=="Âncoras")?1:2;};
     std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
   }
+  // Partículas: a ordem dos módulos da Unity, não a ordem do tipo de controle.
+  if(type.id==std::string_view{"astra.effects.particle_system"}) {
+    static constexpr std::string_view order[]{"Principal","Emissão","Forma","Velocidade no tempo","Limite de velocidade","Herdar velocidade","Força no tempo",
+      "Cor no tempo","Cor pela velocidade","Tamanho no tempo","Tamanho pela velocidade","Rotação no tempo","Rotação pela velocidade","Ruído","Colisão","Sub-emissores","Folha de textura","Luzes","Trilhas","Renderização","Material"};
+    const auto rank=[](std::string_view group){for(u32 i=0;i<std::size(order);++i) if(order[i]==group) return i;return u32(std::size(order));};
+    std::stable_sort(groups.begin(),groups.end(),[&](std::string_view a,std::string_view b){return rank(a)<rank(b);});
+  }
   // Câmera na ordem do Inspector da URP: Projection, Rendering, Environment, Output.
   if(&type==&scene::Camera::descriptor) {
     const auto rank=[](std::string_view group){return group=="Lente"?0:group=="Renderização"?1:group=="Ambiente"?2:group=="Saída"?3:4;};

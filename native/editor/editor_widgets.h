@@ -49,6 +49,9 @@ enum class EditorWidget : u32 {
   MotorBakeRegenerate=0xDB000300u,MotorBakeConfirmMapping,MotorBakeMappingBase=0xDB000320u,
   MotorBakeSettingsOpen=0xDB000360u,MotorBakeSettingsDone,MotorBakeSettingsPrevious,MotorBakeSettingsNext,
   MotorBakePoseRest,MotorBakePoseAuthored,MotorBakePoseAnimation,MotorBakeSettingsNumberBase=0xDB000370u,
+  // Inspetor do Sistema de partículas: linha de curva (+slot), de gradiente
+  // (+slot) e reiniciar a prévia da cena.
+  ParticleCurveRowBase=0xDB000500u,ParticleGradientRowBase=0xDB000520u,ParticlePreviewRestart=0xDB000530u,
   GuiHierarchyRowBase = 0xDD000000u,
   GuiHierarchyCollapseBase = 0xDE000000u,
   CreationCategoryBase=0x63000000,

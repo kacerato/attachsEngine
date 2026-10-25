@@ -137,6 +137,10 @@ struct AndroidShell final {
   ae::editor::EditorWaterPlay authoredWaterPlay;
   std::vector<ae::renderer::MapDrawState> authoredDraws;
   std::vector<ae::renderer::SceneLight> authoredLights;
+  // G5: quadro de partículas trocado com o renderer a cada quadro (sem cópia).
+  ae::renderer::particles::ParticleFrame particleFrame;
+  double particleClock = 0, particleLogClock = 0;
+  bool particleLightsPublished = false;  // PK-10b: o quadro anterior tinha luzes de partícula
   std::vector<ae::renderer::SceneEnvironmentVolume> authoredEnvironmentVolumes;
   // PK-6: sondas publicadas para o renderer e o que já foi entregue a ele.
   std::vector<ae::renderer::SceneReflectionProbe> authoredReflectionProbes;
@@ -4121,6 +4125,40 @@ void android_main(android_app *app) {
                            shell.editorSession.screen().resources,previewMaterialRevision))
           shell.instancedRenderer.requestCameraPreview(previewRequest);
         if(!preview.active() || !previewVisible) shell.instancedRenderer.closeCameraPreview();
+      }
+      if(editorActive && shell.editorMapImported) {
+        // Partículas na mesma câmera do quadro: a ordenação de trás para a frente
+        // e o tamanho máximo na tela dependem dela. Teto pelo perfil do aparelho.
+        const double particleNow=currentMonotonicNanoseconds()*1e-9;
+        const float particleDelta=shell.particleClock>0?static_cast<float>(std::clamp(particleNow-shell.particleClock,0.0,0.1)):0.0f;
+        shell.particleClock=particleNow;
+        const auto tier=static_cast<ae::renderer::particles::ParticleTier>(std::min<ae::u32>(3u,static_cast<ae::u32>(shell.renderingCapabilities.profile)));
+        shell.editorSession.setParticleBudget(ae::renderer::particles::particleTierBudget(tier));
+        shell.editorSession.updateParticles(particleDelta,sceneCamera.position,shell.particleFrame);
+        // PK-10b: luzes das partículas mudam a cada quadro. Republica as luzes
+        // da cena com elas (e uma última vez sem elas, quando apagam).
+        if(!shell.particleFrame.lights.empty() || shell.particleLightsPublished) {
+          if(shell.editorSession.extractLights(shell.authoredLights)) {
+            ae::runtime::appendParticleLights(shell.particleFrame,shell.authoredLights);
+            shell.instancedRenderer.queueSceneLights(shell.authoredLights);
+          }
+          shell.particleLightsPublished=!shell.particleFrame.lights.empty();
+        }
+        shell.instancedRenderer.queueParticles(shell.particleFrame);
+        {
+          const auto surface=shell.editorSession.weatherSurface();
+          shell.instancedRenderer.setWeatherSurface(surface.wetness,surface.puddles,surface.snow,
+                                                    surface.sunScale,surface.ambientScale);
+        }
+        // Bancada: uma linha a cada 2 s com o custo medido do quadro anterior
+        // (simulação e montagem na CPU, passe próprio na GPU por timestamps).
+        const auto &stats=shell.instancedRenderer.particleStats();
+        if(stats.alive && particleNow-shell.particleLogClock>=2.0) {
+          shell.particleLogClock=particleNow;
+          __android_log_print(ANDROID_LOG_INFO,LogTag,"[Particles] sistemas=%u vivas=%u desenhadas=%u lotes=%u teto=%u sim_ms=%.3f build_ms=%.3f gpu_ms=%.3f suave=%s",
+              stats.systems,stats.alive,stats.drawn,stats.batches,stats.budget,static_cast<double>(stats.simulationMs),
+              static_cast<double>(stats.buildMs),static_cast<double>(stats.gpuMs),stats.softAvailable?"sim":"nao");
+        }
       }
       const ae::rhi::SwapchainStatus frameStatus = shell.instancedRenderer.drawFrame(
           timeSeconds, sceneCamera, hud);

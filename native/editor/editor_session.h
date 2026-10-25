@@ -1065,6 +1065,20 @@ public:
     return runtime::collectSceneEnvironmentVolumes(
         isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,environmentProfiles_);
   }
+  // Partículas (G5): no Play, o mundo de execução (avançado pelo quadro do
+  // Play); fora dele, a prévia sobre o documento avaliado, como o GPUParticles3D
+  // da Godot emitindo na vista. Sistemas sem repetir recomeçam na prévia.
+  void updateParticles(float deltaSeconds, const float (&camera)[3], renderer::particles::ParticleFrame &out);
+  // Teto do nível do aparelho; vale para a prévia e para o Play.
+  void setParticleBudget(u32 total);
+  // Reinicia a prévia de todos os sistemas (botão do inspetor).
+  void restartParticlePreview() { previewParticles_.restartAll(); }
+  const runtime::SceneParticles &previewParticles() const noexcept { return previewParticles_; }
+  // G4c: molhado, poças e neve acumulada do quadro (Play ou prévia da edição),
+  // para o shader de superfície.
+  runtime::SceneWeather::Surface weatherSurface() const noexcept {
+    return isPlaying() && playScene_.active() ? playScene_.weatherReport().surface : previewWeatherReport_.surface;
+  }
   SceneCameraPose sceneCameraPose() const {
     return resolveSceneCamera(isPlaying()&&playScene_.active()?playScene_.document():document_);
   }
@@ -1653,6 +1667,10 @@ private:
   u64 sceneEpoch_=nextSceneEpoch();
   EditorMapScene mapScene_;
   EditorPlayScene playScene_;
+  runtime::SceneParticles previewParticles_;
+  runtime::SceneWeather previewWeather_;
+  runtime::SceneWeather::Report previewWeatherReport_;
+  u32 particleBudget_ = 100000;
   std::string reportedPhysicsConnectionDiagnostic_;
   std::string reportedEventConnectionDiagnostic_;
   double playLastSeconds_=0;
@@ -1792,6 +1810,9 @@ private:
   double curveLastTap_=-1;
   ui::UiPoint curveLastTapPoint_{};
   void openCurveEditor(u32 key,std::string_view value,std::string_view type);
+  // Alvo "partícula" dos editores de curva e gradiente (state_.curveType/gradientType).
+  static constexpr std::string_view kParticleCurveType="particle-curve";
+  static constexpr std::string_view kParticleGradientType="particle-gradient:hdr";
   void publishCurveDraft();
   u32 settleCurveSelection(u32 selected);
   void refreshPathEditorState();
@@ -1985,6 +2006,7 @@ private:
   float animatorPinchDistance_=1,animatorPinchZoom_=1;
   std::optional<EditorEntity> animatorDragOriginal_;
   bool commitCurveEditor();
+  bool commitParticleValue(bool curve);
   void saveCurveLibraries();
   // Lista de campo de script: valor autoral atual (vazio quando é o padrão do
   // código) e gravação da lista inteira como um passo de Desfazer.

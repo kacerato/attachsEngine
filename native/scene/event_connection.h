@@ -27,7 +27,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,38> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,39> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -58,8 +58,9 @@ inline constexpr std::array<EventConnectionEventKey,38> eventConnectionEventKeys
   {34,"astra.ik.interaction_system","reached"},{35,"astra.ik.interaction_system","released"},
   {36,"astra.ik.interaction_system","picked"},
   {37,"astra.ik.interaction_system","entered"},{38,"astra.ik.interaction_system","left"},
+  {39,"astra.effects.particle_system","stopped"},
 }};
-inline constexpr std::array<ComponentEnumOption,39> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,40> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -79,8 +80,9 @@ inline constexpr std::array<ComponentEnumOption,39> eventConnectionEvents{{
   {34,"Interação: mão alcançou"},{35,"Interação: mão soltou"},
   {36,"Interação: objeto levantado"},
   {37,"Interação: entrou no gatilho"},{38,"Interação: saiu do gatilho"},
+  {39,"Partículas: parou"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,35> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,40> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -116,8 +118,13 @@ inline constexpr std::array<EventConnectionMethodKey,35> eventConnectionMethodKe
   {33,"astra.ik.hit_reaction","hit_front"},
   {34,"astra.physics.character","set_vertical"},
   {35,"astra.render.reflection_probe","render_probe"},
+  {36,"astra.effects.particle_system","play"},
+  {37,"astra.effects.particle_system","stop"},
+  {38,"astra.effects.particle_system","stop_and_clear"},
+  {39,"astra.effects.particle_system","pause"},
+  {40,"astra.effects.particle_system","clear"},
 }};
-inline constexpr std::array<ComponentEnumOption,36> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,41> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -131,6 +138,7 @@ inline constexpr std::array<ComponentEnumOption,36> eventConnectionMethods{{
   {30,"Agente: parar"},{31,"Agente: retomar"},
   {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},{34,"Personagem: subir/descer"},
   {35,"Sonda de reflexo: capturar agora"},
+  {36,"Partículas: tocar"},{37,"Partículas: parar"},{38,"Partículas: parar e limpar"},{39,"Partículas: pausar"},{40,"Partículas: limpar"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},

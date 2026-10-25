@@ -41,7 +41,7 @@ namespace ae::ui { class UiDrawList; }
 #include "editor/editor_rig_screen.h"
 #include <string>
 
-namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;}
+namespace ae::runtime {class SceneTimers;class SceneTweens;class SceneTweenSequences;class ScenePhysicsQueries;class SceneVirtualCameras;class SceneAudio;class SceneAnimatorGraphs;class ScenePhysics;class GameWorld;class SceneNavigation;class SceneParticles;}
 namespace ae::editor {
 class EditorMapScene;
 struct ColliderTopology;
@@ -288,6 +288,9 @@ struct EditorScreenState final {
   const runtime::ScenePhysics *characterRuntime=nullptr;
   const runtime::GameWorld *characterWorld=nullptr;
   const runtime::SceneTweens *tweenRuntime=nullptr;
+  // Partículas da vista (prévia na edição, mundo no Play): estado e teto por sistema.
+  const runtime::SceneParticles *particleRuntime=nullptr;
+  float particleSimulationMs=0;
   const runtime::SceneTweenSequences *tweenSequenceRuntime=nullptr;
   const runtime::ScenePhysicsQueries *physicsQueryRuntime=nullptr;
   const EditorNavigationView *navigationView=nullptr;

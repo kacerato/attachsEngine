@@ -1,0 +1,30 @@
+{
+ "format": 1,
+ "family": "effects",
+ "table": "effectsSchemas",
+ "defaults": {
+  "family": {
+   "cpp": "ComponentFamily::Effects"
+  },
+  "structuralInPlay": {
+   "cpp": "PlayMutability::SafePoint"
+  }
+ },
+ "entries": [
+  {
+   "type": "ParticleSystem",
+   "name": "Sistema de partículas",
+   "description": "Emite, simula e desenha partículas: fogo, faíscas, fumaça, magia",
+   "consumer": "runtime/scene_particles.cpp → renderer/particles/particle_simulation.cpp → platform/android/instanced_particles.inl",
+   "capability": "render.particles.simulation",
+   "invalidates": {
+    "cpp": "Invalidate::Draw"
+   },
+   "subfamily": "Partículas",
+   "icon": "component/particle-system",
+   "searchTerms": "ParticleSystem Shuriken GPUParticles3D CPUParticles3D VFX Fogo Faisca Fumaca Particulas",
+   "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/ParticleSystemModules.html",
+   "apiName": "ParticleSystem"
+  }
+ ]
+}
