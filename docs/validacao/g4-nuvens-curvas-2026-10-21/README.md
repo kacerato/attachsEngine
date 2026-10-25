@@ -62,3 +62,21 @@ verde-acinzentado) e camada de 1200 m.
 | v1 (1/16 dos pixels) | 3,7 ms | 5,0 ms | +1,3 ms |
 | v3 (meia resolução, 1 de cada 2x2) | 3,7 ms | 12,8 ms | +9,1 ms (o quad inteiro paga a marcha) |
 | v4 (1/16 dos pixels) | 3,9 ms | 5,6 ms | +1,7 ms |
+| v5 (luz mais barata, temporal com rejeição) | 3,87 ms | 5,33 ms | +1,46 ms |
+
+## v5 no POCO (APK 0.3.0-dev.261025999-nuvens-0356, 25/10)
+
+`prancha-depois-v5.png`: câmera levantada para o céu no Play (arrasto na área de
+olhar), quadros em `poco-v5/` (`-1` olhando o céu; `meio-dia-2` e `grandes-3`
+girando: o acúmulo temporal não deixa rastro visível).
+
+- Meio-dia, horizonte e cúmulos grandes: base plana, topos arredondados, zênite azul.
+- Hora dourada e poente: céu laranja-avermelhado, zênite quase preto (40, 0, 0).
+  Causa: a Hora do dia já tinge e atenua o sol (2000 K no horizonte, 0,35x) e o
+  céu físico aplica a própria transmitância por cima, então o ar avermelha duas
+  vezes. A correção (sol fora da atmosfera só para o céu físico e a irradiância
+  do chão) está escrita e ainda não foi compilada nem capturada.
+- O limite de exposição das variantes estava na escala errada (o meio-dia da Astra
+  mede -0,8 EV100, não +1,5): as capturas da v5 com limite 0 e -1,2 saíram pretas.
+  As de agora usam -3,3 (hora dourada) e -4,5 (poente).
+
