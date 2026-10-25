@@ -1,0 +1,7 @@
+{"title": "Vila Astra S, Play (POCO F7): Culling Mode do Animator — Sempre animar × Fora da vista: só o tempo (forçado)",
+ "rows": [
+  {"unity": "vila-s/01-sempre/vila-astra/01-S/screen.png", "device": "vila-s/02-culling/vila-astra/01-S/screen.png",
+   "unity_caption": "Sempre animar · thread do jogo 15,41 ms · GPU 33,05 ms · 31,0 °C",
+   "device_caption": "Culling forçado (1) · thread do jogo 13,79 ms · GPU 32,28 ms · 33,7 °C",
+   "verdict": "Imagem igual: todos os moradores desta câmera estão na vista e seguem animando. simpleperf: animação 33,6% → 35,1% da thread (sem culling efetivo nesta vista); Lens Dirt 1,9% → 0,6%. A queda de 1,6 ms não é atribuível ao culling."}
+ ]}

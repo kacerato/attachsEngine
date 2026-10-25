@@ -1,0 +1,1687 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 13380
+Error Callchains: 1184, 8.849028%
+Event count: 6690000000
+
+Children  Self    Symbol
+93.89%    0.00%   __start_thread
+93.89%    0.00%   android_app_entry
+       |
+       -- android_app_entry
+          |
+           -- __pthread_start(void*)
+              __start_thread
+93.89%    0.00%   __pthread_start(void*)
+       |
+       -- __pthread_start(void*)
+          |
+           -- __start_thread
+93.70%    0.29%   android_main
+       |
+       -- android_main
+          |
+           --99.69%-- android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+58.98%    0.01%   ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+       |
+       -- ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |
+           --99.99%-- android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+49.64%    0.01%   ae::editor::EditorPlayScene::advanceFrame(double, bool)
+       |
+       -- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |
+          |--99.97%-- ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+37.53%    0.01%   ae::editor::EditorPlayScene::animate(float, float)
+       |
+       -- ae::editor::EditorPlayScene::animate(float, float)
+          |
+           --99.96%-- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+33.36%    13.36%  ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+       |
+       -- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |
+           --71.41%-- ae::editor::EditorPlayScene::animate(float, float)
+                      ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+20.71%    0.22%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+       |
+       -- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |
+          |--98.82%-- android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+7.56%     1.07%   ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+       |
+       -- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |
+           --87.62%-- ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+4.51%     3.04%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+       |
+       -- ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+          |
+          |--58.12%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |           ae::editor::EditorPlayScene::animate(float, float)
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+           --1.58%-- ae::editor::EditorPlayScene::animate(float, float)
+                     ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                     ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                     android_main
+                     android_app_entry
+                     __pthread_start(void*)
+                     __start_thread
+4.48%     0.01%   ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+       |
+       -- ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |
+          |--99.34%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+4.44%     0.04%   ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+       |
+       -- ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |
+           --99.17%-- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+4.19%     0.19%   ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+       |
+       -- ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+          |
+           --95.73%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+4.13%     0.01%   ae::rhi::VulkanSwapchain::present(unsigned int)
+       |
+       -- ae::rhi::VulkanSwapchain::present(unsigned int)
+          |
+           --99.82%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+4.13%     0.01%   vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+       |
+       -- vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |
+          |--99.64%-- ae::rhi::VulkanSwapchain::present(unsigned int)
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+4.06%     4.06%   __ioctl
+       |
+       -- __ioctl
+          |
+          |--40.70%-- android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+          |           android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+          |    |
+          |    |--46.83%-- android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+          |    |           android::SurfaceComposerClient::Transaction::apply(bool, bool)
+          |    |           android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+          |    |           android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+          |    |           android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |    |           android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |    |           android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |    |           android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |    |           vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |    |           ae::rhi::VulkanSwapchain::present(unsigned int)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--36.43%-- android::gui::BpDisplayEventConnection::requestNextVsync() (.cold.0)
+          |    |           android::Choreographer::postFrameCallbackDelayed(void (*)(long, void*), void (*)(long, void*), void (*)(AChoreographerFrameCallbackData const*, void*), void*, long, android::CallbackType)
+          |    |           android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+          |    |           android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |    |           android::Looper::pollOnce(int, int*, int*, void**)
+          |    |           ALooper_pollOnce
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--16.52%-- AIBinder_transact
+          |    |           aidl::android::os::BpHintSession::reportActualWorkDuration2(std::__1::vector<aidl::android::hardware::power::WorkDuration, std::__1::allocator<aidl::android::hardware::power::WorkDuration>> const&)
+          |    |           APerformanceHintSession::reportActualWorkDurationInternal(AWorkDuration*)
+          |    |           ae::platform::android::AndroidPerformance::reportFrameWorkDuration(long, long, long, long)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |
+           --9.30%-- !!!0000!3a4be7d9bfa8ce1de708d9937123e3!208ca19915!
+               |
+               |--75.25%-- ioctl_kgsl_gpu_command
+               |           !!!0000!8cf9cc05f436738178cf8b8b6481c7!208ca19915!
+               |           gsl_command_issueib_timeline_sync
+               |           !!!0000!264dbe589750895622faec5c2d15c8!208ca19915!
+               |           !!!0000!58a4fd6802a47cff0fc9219bfd35e5!208ca19915!
+               |           !!!0000!6a59edb2d6e4ac956ef4c608fd9c2c!208ca19915!
+               |           !!!0000!f0ff2d1e04a1ca7bef42d34f453e8a!208ca19915!
+               |           qglinternal::vkQueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+               |           vulkan::driver::QueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+               |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+               |           android_main
+               |           android_app_entry
+               |           __pthread_start(void*)
+               |           __start_thread
+               |
+                --24.75%-- ioctl_kgsl_syncobj_create
+                           !!!0000!911e660d6e6b7331f329601621db85!208ca19915!
+                           gsl_syncobj_create
+                           !!!0000!b78ad09fc24eab751708d0a80613cf!208ca19915!
+                           !!!0000!f82bbe53268c24e3e7107ea427a2ab!208ca19915!
+                           !!!0000!f0ff2d1e04a1ca7bef42d34f453e8a!208ca19915!
+                           qglinternal::vkQueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+                           vulkan::driver::QueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+                           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                           android_main
+                           android_app_entry
+                           __pthread_start(void*)
+                           __start_thread
+3.92%     3.57%   ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+       |
+       -- ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+          |
+          |--14.89%-- ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+          |    |
+          |    |--61.07%-- ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+          |    |           ae::editor::EditorSession::update()
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --38.93%-- ae::editor::EditorPlayScene::fixedStep(void*, float)
+          |                ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |                ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |                ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread
+          |
+          |--7.29%-- ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--6.69%-- ae::editor::EditorSession::lensDirtTextures()::$_1::operator()(ae::runtime::SceneGraph const&) const
+          |          ae::editor::EditorSession::lensDirtTextures()
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--5.00%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |          ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--3.70%-- ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.80%-- ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.40%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.30%-- ae::runtime::lodObjectStates(ae::runtime::SceneGraph const&, ae::runtime::LodView const&, ae::runtime::LodCrossFadeClock*, double)
+          |          ae::editor::EditorSession::applyLodGroups(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.10%-- ae::runtime::applyTimeOfDay(ae::runtime::SceneGraph const&, double, std::__ndk1::function<bool (unsigned int, ae::runtime::Transform const&)> const&)
+          |          ae::editor::EditorPlayScene::advanceTimeOfDay()
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.00%-- ae::runtime::collectSceneReflectionProbes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&)
+          |          ae::editor::EditorSession::extractReflectionProbes(std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&) const
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.80%-- ae::runtime::collectSceneEnvironmentVolumes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneEnvironmentVolume, std::__ndk1::allocator<ae::renderer::SceneEnvironmentVolume>>&, std::__ndk1::span<ae::resources::EnvironmentProfile const, 18446744073709551615ul>)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+3.92%     0.04%   android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+       |
+       -- android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |
+           --99.05%-- vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+                      ae::rhi::VulkanSwapchain::present(unsigned int)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+3.59%     0.02%   qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+       |
+       -- qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+          |
+          |--74.33%-- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |           ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--24.84%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_8::operator()(unsigned int, VkPipeline_T* const*, VkPipeline_T*, VkPipeline_T*) const
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+3.46%     0.01%   android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+       |
+       -- android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |
+           --99.57%-- android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+                      vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+                      ae::rhi::VulkanSwapchain::present(unsigned int)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+3.45%     0.33%   !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+       |
+       -- !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+          |
+          |--90.51%-- qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+          |    |
+          |    |--74.24%-- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |    |           ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --25.76%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_8::operator()(unsigned int, VkPipeline_T* const*, VkPipeline_T*, VkPipeline_T*) const
+          |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread
+3.41%     0.55%   void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+       |
+       -- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |
+           --86.20%-- ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+3.36%     2.26%   ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+       |
+       -- ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+          |
+          |--55.05%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |           ae::editor::EditorPlayScene::animate(float, float)
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--2.93%-- ae::runtime::GameWorld::worldTransform(ae::runtime::ObjectHandle const&, ae::runtime::Transform&) const
+          |    |
+          |    |--40.91%-- ae::runtime::ScriptBridge::installAccess()::$_8::__invoke(void*, unsigned long, float*)
+          |    |
+          |    |--36.36%-- ae::runtime::SceneNavigation::driveAgent(ae::runtime::GameWorld&, std::__ndk1::pair<unsigned int, unsigned long> const&, ae::runtime::SceneNavigation::Agent&, ae::scene::NavAgent const&, float)
+          |    |           ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+          |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --22.73%-- ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+          |                ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |                ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread
+          |
+          |--1.60%-- ae::runtime::ScenePhysics::synchronizePoses(ae::runtime::GameWorld&)
+          |          ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+3.36%     0.01%   android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+       |
+       -- android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+          |
+          |--47.33%-- android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+          |           android::SurfaceComposerClient::Transaction::apply(bool, bool)
+          |           android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+          |           android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+          |           android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |           android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |           android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |           android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |           vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |           ae::rhi::VulkanSwapchain::present(unsigned int)
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--35.78%-- android::gui::BpDisplayEventConnection::requestNextVsync() (.cold.0)
+          |           android::Choreographer::postFrameCallbackDelayed(void (*)(long, void*), void (*)(long, void*), void (*)(AChoreographerFrameCallbackData const*, void*), void*, long, android::CallbackType)
+          |           android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+          |           android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |           android::Looper::pollOnce(int, int*, int*, void**)
+          |           ALooper_pollOnce
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--16.44%-- AIBinder_transact
+          |           aidl::android::os::BpHintSession::reportActualWorkDuration2(std::__1::vector<aidl::android::hardware::power::WorkDuration, std::__1::allocator<aidl::android::hardware::power::WorkDuration>> const&)
+          |           APerformanceHintSession::reportActualWorkDurationInternal(AWorkDuration*)
+          |           ae::platform::android::AndroidPerformance::reportFrameWorkDuration(long, long, long, long)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+3.34%     0.01%   android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+       |
+       -- android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+          |
+           --99.55%-- android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+               |
+               |--47.20%-- android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+               |           android::SurfaceComposerClient::Transaction::apply(bool, bool)
+               |           android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+               |           android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+               |           android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+               |           android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+               |           android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+               |           android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+               |           vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+               |           ae::rhi::VulkanSwapchain::present(unsigned int)
+               |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+               |           android_main
+               |           android_app_entry
+               |           __pthread_start(void*)
+               |           __start_thread
+               |
+               |--36.02%-- android::gui::BpDisplayEventConnection::requestNextVsync() (.cold.0)
+               |           android::Choreographer::postFrameCallbackDelayed(void (*)(long, void*), void (*)(long, void*), void (*)(AChoreographerFrameCallbackData const*, void*), void*, long, android::CallbackType)
+               |           android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+               |           android::DisplayEventDispatcher::handleEvent(int, int, void*)
+               |           android::Looper::pollOnce(int, int*, int*, void**)
+               |           ALooper_pollOnce
+               |           android_main
+               |           android_app_entry
+               |           __pthread_start(void*)
+               |           __start_thread
+               |
+               |--16.55%-- AIBinder_transact
+               |           aidl::android::os::BpHintSession::reportActualWorkDuration2(std::__1::vector<aidl::android::hardware::power::WorkDuration, std::__1::allocator<aidl::android::hardware::power::WorkDuration>> const&)
+               |           APerformanceHintSession::reportActualWorkDurationInternal(AWorkDuration*)
+               |           ae::platform::android::AndroidPerformance::reportFrameWorkDuration(long, long, long, long)
+               |           android_main
+               |           android_app_entry
+               |           __pthread_start(void*)
+               |           __start_thread
+3.21%     0.00%   android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+       |
+       -- android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |
+           -- android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+              android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+              vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+              ae::rhi::VulkanSwapchain::present(unsigned int)
+              ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+              android_main
+              android_app_entry
+              __pthread_start(void*)
+              __start_thread
+3.18%     0.01%   android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+       |
+       -- android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |
+           --99.77%-- android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+                      android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+                      android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+                      vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+                      ae::rhi::VulkanSwapchain::present(unsigned int)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+3.18%     0.02%   android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+       |
+       -- android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+          |
+          |--99.07%-- android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |           android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |           android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |           android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |           vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |           ae::rhi::VulkanSwapchain::present(unsigned int)
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+3.10%     0.04%   android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+       |
+       -- android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+          |
+          |--98.57%-- android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+          |           android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |           android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |           android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |           android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |           vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |           ae::rhi::VulkanSwapchain::present(unsigned int)
+          |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+2.99%     0.00%   ALooper_pollOnce
+       |
+       -- ALooper_pollOnce
+          |
+           -- android_main
+              android_app_entry
+              __pthread_start(void*)
+              __start_thread
+2.94%     1.80%   ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+       |
+       -- ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+          |
+          |--34.70%-- ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+          |           ae::editor::EditorSession::update()
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--27.13%-- ae::editor::EditorPlayScene::fixedStep(void*, float)
+          |           ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+2.85%     2.12%   ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)::$_9::operator()(unsigned int, ae::resources::AnimationPath, unsigned int, float, std::__ndk1::span<float const, 18446744073709551615ul>, bool, std::__ndk1::span<float const, 18446744073709551615ul>, bool) const
+       |
+       -- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)::$_9::operator()(unsigned int, ae::resources::AnimationPath, unsigned int, float, std::__ndk1::span<float const, 18446744073709551615ul>, bool, std::__ndk1::span<float const, 18446744073709551615ul>, bool) const
+          |
+          |--55.87%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |           ae::editor::EditorPlayScene::animate(float, float)
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+           --1.51%-- ae::editor::EditorPlayScene::animate(float, float)
+                     ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                     ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                     android_main
+                     android_app_entry
+                     __pthread_start(void*)
+                     __start_thread
+2.62%     0.07%   ae::editor::EditorSession::update()
+       |
+       -- ae::editor::EditorSession::update()
+          |
+           --97.23%-- android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.51%     0.06%   android::SurfaceComposerClient::Transaction::apply(bool, bool)
+       |
+       -- android::SurfaceComposerClient::Transaction::apply(bool, bool)
+          |
+           --97.67%-- android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+                      android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+                      android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+                      android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+                      android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+                      android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+                      vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+                      ae::rhi::VulkanSwapchain::present(unsigned int)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.51%     0.05%   ae::rhi::VulkanSwapchain::acquireNextImage(unsigned int*)
+       |
+       -- ae::rhi::VulkanSwapchain::acquireNextImage(unsigned int*)
+          |
+          |--97.67%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+2.49%     0.08%   android::Looper::pollOnce(int, int*, int*, void**)
+       |
+       -- android::Looper::pollOnce(int, int*, int*, void**)
+          |
+           --96.80%-- ALooper_pollOnce
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.34%     0.03%   android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+       |
+       -- android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+          |
+           --98.74%-- android::SurfaceComposerClient::Transaction::apply(bool, bool)
+                      android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+                      android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+                      android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+                      android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+                      android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+                      android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+                      vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+                      ae::rhi::VulkanSwapchain::present(unsigned int)
+                      ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.31%     2.31%   ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+       |
+       -- ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+          |
+          |--32.68%-- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--11.54%-- ae::editor::EditorSession::applyLodGroups(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--5.04%-- ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+2.29%     0.08%   ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+       |
+       -- ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+          |
+           --96.54%-- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.28%     0.03%   android::DisplayEventDispatcher::handleEvent(int, int, void*)
+       |
+       -- android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |
+          |--98.06%-- android::Looper::pollOnce(int, int*, int*, void**)
+          |           ALooper_pollOnce
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+2.09%     2.09%   std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::__unordered_map_hasher<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::hash<unsigned int>, std::__ndk1::equal_to<unsigned int>, true>, std::__ndk1::__unordered_map_equal<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::equal_to<unsigned int>, std::__ndk1::hash<unsigned int>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>>>::__emplace_unique_key_args<unsigned int, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>, std::__ndk1::tuple<>>(unsigned int const&, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>&&, std::__ndk1::tuple<>&&)
+       |
+       -- std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::__unordered_map_hasher<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::hash<unsigned int>, std::__ndk1::equal_to<unsigned int>, true>, std::__ndk1::__unordered_map_equal<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::equal_to<unsigned int>, std::__ndk1::hash<unsigned int>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>>>::__emplace_unique_key_args<unsigned int, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>, std::__ndk1::tuple<>>(unsigned int const&, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>&&, std::__ndk1::tuple<>&&)
+          |
+          |--49.64%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |           ae::editor::EditorPlayScene::animate(float, float)
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+2.06%     2.06%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)::$_4::operator()(float const*) const
+       |
+       -- ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)::$_4::operator()(float const*) const
+          |
+           --50.00%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+                      ae::editor::EditorPlayScene::animate(float, float)
+                      ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+2.06%     2.06%   @plt
+       |
+       -- @plt
+          |
+          |--5.87%-- ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--3.49%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |          ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--3.12%-- ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--2.94%-- android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.83%-- android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |          android::Looper::pollOnce(int, int*, int*, void**)
+          |          ALooper_pollOnce
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.65%-- android::TransactionState::writeToParcel(android::Parcel*) const
+          |          android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+          |          android::SurfaceComposerClient::Transaction::apply(bool, bool)
+          |          android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+          |          android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+          |          android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+          |          android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+          |          android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+          |          android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+          |          vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+          |          ae::rhi::VulkanSwapchain::present(unsigned int)
+          |          ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+2.06%     1.83%   ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+       |
+       -- ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+          |
+          |--33.65%-- ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+          |           ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--7.12%-- ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+          |    |
+          |    |--35.14%-- ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+          |    |           ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--29.73%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--24.32%-- ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+          |    |    |
+          |    |    |--88.89%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |           android_main
+          |    |    |           android_app_entry
+          |    |    |           __pthread_start(void*)
+          |    |    |           __start_thread
+          |    |    |
+          |    |     --11.11%-- ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+          |    |                ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |                ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |                android_main
+          |    |                android_app_entry
+          |    |                __pthread_start(void*)
+          |    |                __start_thread
+          |    |
+          |    |--5.41%-- ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+          |    |          android_main
+          |    |          android_app_entry
+          |    |          __pthread_start(void*)
+          |    |          __start_thread
+          |    |
+          |    |--2.70%-- ae::runtime::GameWorld::worldTransform(ae::runtime::ObjectHandle const&, ae::runtime::Transform&) const
+          |    |          ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+          |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |          android_main
+          |    |          android_app_entry
+          |    |          __pthread_start(void*)
+          |    |          __start_thread
+          |    |
+          |     --2.70%-- ae::runtime::ScenePhysics::synchronizePoses(ae::runtime::GameWorld&)
+          |               ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |               ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |               ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |               android_main
+          |               android_app_entry
+          |               __pthread_start(void*)
+          |               __start_thread
+          |
+          |--6.92%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.92%-- ae::runtime::GameWorld::worldTransform(ae::runtime::ObjectHandle const&, ae::runtime::Transform&) const
+          |    |
+          |    |--70.00%-- ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+          |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --30.00%-- ae::runtime::ScriptBridge::installAccess()::$_8::__invoke(void*, unsigned long, float*)
+          |
+          |--1.54%-- ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+1.91%     0.03%   ae::physics::CharacterMotor::update(float, float, float, float)
+       |
+       -- ae::physics::CharacterMotor::update(float, float, float, float)
+          |
+          |--98.08%-- ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+1.86%     0.01%   AetherPhysics_UpdateCharacterEx
+       |
+       -- AetherPhysics_UpdateCharacterEx
+          |
+           --99.20%-- ae::physics::CharacterMotor::update(float, float, float, float)
+                      ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+                      ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+1.83%     0.07%   JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+       |
+       -- JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+          |
+          |--96.06%-- AetherPhysics_UpdateCharacterEx
+          |           ae::physics::CharacterMotor::update(float, float, float, float)
+          |           ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+1.80%     0.42%   ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+       |
+       -- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |
+          |--80.81%-- ae::editor::EditorPlayScene::animate(float, float)
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+1.73%     0.01%   JPH::CharacterVirtual::Update(float, JPH::Vec3, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+       |
+       -- JPH::CharacterVirtual::Update(float, JPH::Vec3, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+          |
+          |--99.14%-- JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+          |           AetherPhysics_UpdateCharacterEx
+          |           ae::physics::CharacterMotor::update(float, float, float, float)
+          |           ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+1.73%     0.00%   ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+       |
+       -- ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+          |
+           -- ae::editor::EditorSession::update()
+              android_main
+              android_app_entry
+              __pthread_start(void*)
+              __start_thread
+1.68%     0.00%   ae::editor::EditorPlayScene::fixedStep(void*, float)
+       |
+       -- ae::editor::EditorPlayScene::fixedStep(void*, float)
+          |
+           -- ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+              ae::editor::EditorPlayScene::advanceFrame(double, bool)
+              ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+              android_main
+              android_app_entry
+              __pthread_start(void*)
+              __start_thread
+1.63%     0.00%   ae::editor::EditorSession::lensDirtTextures()
+       |
+       -- ae::editor::EditorSession::lensDirtTextures()
+          |
+           -- android_main
+              android_app_entry
+              __pthread_start(void*)
+              __start_thread
+1.61%     0.06%   JPH::CharacterVirtual::MoveShape(JPH::Vec3&, JPH::Vec3, float, JPH::Array<JPH::CharacterContact, JPH::STLAllocator<JPH::CharacterContact>>*, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+       |
+       -- JPH::CharacterVirtual::MoveShape(JPH::Vec3&, JPH::Vec3, float, JPH::Array<JPH::CharacterContact, JPH::STLAllocator<JPH::CharacterContact>>*, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+          |
+           --96.41%-- JPH::CharacterVirtual::Update(float, JPH::Vec3, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+                      JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+                      AetherPhysics_UpdateCharacterEx
+                      ae::physics::CharacterMotor::update(float, float, float, float)
+                      ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+                      ae::editor::EditorPlayScene::advanceFrame(double, bool)
+                      ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+                      android_main
+                      android_app_entry
+                      __pthread_start(void*)
+                      __start_thread
+1.60%     1.60%   __memmove_aarch64_simd
+       |
+       -- __memmove_aarch64_simd
+          |
+          |--11.45%-- ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--10.05%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+          |
+          |--6.07%-- android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--5.61%-- !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+          |          qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+          |    |
+          |    |--87.50%-- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |    |           ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --12.50%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_8::operator()(unsigned int, VkPipeline_T* const*, VkPipeline_T*, VkPipeline_T*) const
+          |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread
+          |
+          |--4.44%-- libcoreclr.so[+24677e]
+          |    |
+          |    |--47.37%-- mono_threads_enter_gc_safe_region
+          |    |           ae::platform::android::DotNetHost::NativeRegion::NativeRegion(ae::platform::android::DotNetHost&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--47.37%-- mono_threads_enter_gc_safe_region_unbalanced
+          |    |
+          |     --5.26%-- mono_threads_detach_coop
+          |
+          |--2.34%-- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |          ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |          ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.87%-- ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+          |
+          |--1.87%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |          ae::editor::EditorPlayScene::animate(float, float)
+          |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |          android_main
+          |          android_app_entry
+          |          __pthread_start(void*)
+          |          __start_thread
+1.56%     0.99%   !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+       |
+       -- !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+          |
+          |--52.05%-- !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+          |           qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+          |    |
+          |    |--69.66%-- void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+          |    |           ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --30.34%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_8::operator()(unsigned int, VkPipeline_T* const*, VkPipeline_T*, VkPipeline_T*) const
+          |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread
+          |
+          |--7.02%-- !!!0000!d0b635c8563f6c0e6cf2954422725a!208ca19915!
+          |          qglinternal::vkCmdDraw(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, unsigned int)
+          |    |
+          |    |--33.33%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--25.00%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--20.83%-- ae::rhi::VulkanUiRenderer::record(VkCommandBuffer_T*, std::__ndk1::span<ae::ui::UiInstance const, 18446744073709551615ul>, float, float, ae::rhi::SurfaceTransform const&, bool)
+          |    |           ae::platform::android::InstancedRenderer::recordUiContents()
+          |    |           ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |    |--12.50%-- ae::platform::android::InstancedRenderer::recordFogResolve(ae::platform::FreeCameraState const&)
+          |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |           android_main
+          |    |           android_app_entry
+          |    |           __pthread_start(void*)
+          |    |           __start_thread
+          |    |
+          |     --8.33%-- ae::platform::android::InstancedRenderer::recordPostProcess(unsigned int, ae::platform::FreeCameraState const&, bool)
+          |               ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |               android_main
+          |               android_app_entry
+          |               __pthread_start(void*)
+          |               __start_thread
+          |
+           --2.05%-- qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+                     void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+                     ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+                     ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+                     android_main
+                     android_app_entry
+                     __pthread_start(void*)
+                     __start_thread
+1.54%     0.02%   android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+       |
+       -- android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+          |
+          |--98.09%-- android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |           android::Looper::pollOnce(int, int*, int*, void**)
+          |           ALooper_pollOnce
+          |           android_main
+          |           android_app_entry
+          |           __pthread_start(void*)
+          |           __start_thread
+1.52%     0.57%   scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+       |
+       -- scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+          |
+          |--53.76%-- scudo_malloc
+          |           malloc
+          |    |
+          |    |--94.00%-- operator new(unsigned long)
+          |    |    |
+          |    |    |--26.24%-- ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |    |    |           ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |           android_main
+          |    |    |           android_app_entry
+          |    |    |           __pthread_start(void*)
+          |    |    |           __start_thread
+          |    |    |
+          |    |    |--15.60%-- ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+          |    |    |    |
+          |    |    |    |--22.73%-- ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+          |    |    |    |           ae::editor::EditorPlayScene::fixedStep(void*, float)
+          |    |    |    |           ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |    |    |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--18.18%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |    |    |    |           ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--13.64%-- ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--13.64%-- ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+          |    |    |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--9.09%-- ae::runtime::collectSceneLightProbeGroups(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::runtime::SceneLightProbeGroup, std::__ndk1::allocator<ae::runtime::SceneLightProbeGroup>>&)
+          |    |    |    |          ae::editor::EditorSession::lightProbeSet() const
+          |    |    |    |          android_main
+          |    |    |    |          android_app_entry
+          |    |    |    |          __pthread_start(void*)
+          |    |    |    |          __start_thread
+          |    |    |    |
+          |    |    |    |--4.55%-- ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+          |    |    |    |          android_main
+          |    |    |    |          android_app_entry
+          |    |    |    |          __pthread_start(void*)
+          |    |    |    |          __start_thread
+          |    |    |    |
+          |    |    |    |--4.55%-- ae::runtime::applyTimeOfDay(ae::runtime::SceneGraph const&, double, std::__ndk1::function<bool (unsigned int, ae::runtime::Transform const&)> const&)
+          |    |    |    |          ae::editor::EditorPlayScene::advanceTimeOfDay()
+          |    |    |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |    |          android_main
+          |    |    |    |          android_app_entry
+          |    |    |    |          __pthread_start(void*)
+          |    |    |    |          __start_thread
+          |    |    |    |
+          |    |    |    |--4.55%-- ae::runtime::collectSceneReflectionProbes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&)
+          |    |    |    |          ae::editor::EditorSession::extractReflectionProbes(std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&) const
+          |    |    |    |          android_main
+          |    |    |    |          android_app_entry
+          |    |    |    |          __pthread_start(void*)
+          |    |    |    |          __start_thread
+          |    |    |    |
+          |    |    |    |--4.55%-- ae::runtime::collectSceneEnvironmentVolumes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneEnvironmentVolume, std::__ndk1::allocator<ae::renderer::SceneEnvironmentVolume>>&, std::__ndk1::span<ae::resources::EnvironmentProfile const, 18446744073709551615ul>)
+          |    |    |    |          android_main
+          |    |    |    |          android_app_entry
+          |    |    |    |          __pthread_start(void*)
+          |    |    |    |          __start_thread
+          |    |    |    |
+          |    |    |     --4.55%-- ae::editor::EditorSession::lensDirtTextures()::$_1::operator()(ae::runtime::SceneGraph const&) const
+          |    |    |               ae::editor::EditorSession::lensDirtTextures()
+          |    |    |               android_main
+          |    |    |               android_app_entry
+          |    |    |               __pthread_start(void*)
+          |    |    |               __start_thread
+          |    |    |
+          |    |    |--5.67%-- ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+          |    |    |          ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--4.26%-- ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+          |    |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--3.55%-- std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<unsigned long, void*>*>, bool> std::__ndk1::__hash_table<unsigned long, std::__ndk1::hash<unsigned long>, std::__ndk1::equal_to<unsigned long>, std::__ndk1::allocator<unsigned long>>::__emplace_unique_key_args<unsigned long, unsigned long>(unsigned long const&, unsigned long&&)
+          |    |    |          ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |    |    |          ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.84%-- android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+          |    |    |          android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |    |    |          android::Looper::pollOnce(int, int*, int*, void**)
+          |    |    |          ALooper_pollOnce
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.84%-- ae::runtime::SceneAnimator::PoseChannel* std::__ndk1::vector<ae::runtime::SceneAnimator::PoseChannel, std::__ndk1::allocator<ae::runtime::SceneAnimator::PoseChannel>>::__push_back_slow_path<ae::runtime::SceneAnimator::PoseChannel>(ae::runtime::SceneAnimator::PoseChannel&&)
+          |    |    |          ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+          |    |    |          ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.13%-- ae::resources::computeSkinPalette(ae::resources::SkinDefinition const&, float const*, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>>&)
+          |    |    |          ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+          |    |    |          ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.13%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_4::operator()(ae::scene::AnimatorState const&, float&, bool&, float) const
+          |    |    |          ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |    |    |          ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |          ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |          ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.13%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_2::operator()(ae::scene::AnimatorState const&, float&) const
+          |    |    |    |
+          |    |    |    |--66.67%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_7::operator()(ae::scene::AnimatorState const&, float, float) const
+          |    |    |    |           ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |    |    |    |           ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |    |           ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |    |           ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |     --33.33%-- ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_4::operator()(ae::scene::AnimatorState const&, float&, bool&, float) const
+          |    |    |                ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+          |    |    |                ae::editor::EditorPlayScene::animate(float, float)
+          |    |    |                ae::editor::EditorPlayScene::advanceFrame(double, bool)
+          |    |    |                ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+          |    |    |                android_main
+          |    |    |                android_app_entry
+          |    |    |                __pthread_start(void*)
+          |    |    |                __start_thread
+          |    |
+          |    |--4.00%-- !!!0000!e3a652ee8dfc3e8be13a2556d69df1!208ca19915!
+          |    |          !!!0000!21838a1de4f27ab7cae4bf1026e69d!208ca19915!
+          |    |    |
+          |    |    |--83.33%-- !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+          |    |    |    |
+          |    |    |    |--60.00%-- !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |    |    |           qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |    |    |
+          |    |    |    |    |--33.33%-- ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |    |--33.33%-- ae::platform::android::InstancedRenderer::recordFogResolve(ae::platform::FreeCameraState const&)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |     --33.33%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |                android_main
+          |    |    |    |                android_app_entry
+          |    |    |    |                __pthread_start(void*)
+          |    |    |    |                __start_thread
+          |    |    |    |
+          |    |    |     --40.00%-- !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |         |
+          |    |    |         |--50.00%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |         |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |         |           android_main
+          |    |    |         |           android_app_entry
+          |    |    |         |           __pthread_start(void*)
+          |    |    |         |           __start_thread
+          |    |    |         |
+          |    |    |          --50.00%-- ae::platform::android::InstancedRenderer::recordFogResolve(ae::platform::FreeCameraState const&)
+          |    |    |                     ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                     android_main
+          |    |    |                     android_app_entry
+          |    |    |                     __pthread_start(void*)
+          |    |    |                     __start_thread
+          |    |    |
+          |    |     --16.67%-- !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |                android_main
+          |    |                android_app_entry
+          |    |                __pthread_start(void*)
+          |    |                __start_thread
+          |    |
+          |     --2.00%-- android::Parcel::writeInterfaceToken(char16_t const*, unsigned long)
+          |         |
+          |         |--66.67%-- android::gui::BpDisplayEventConnection::requestNextVsync()
+          |         |           android::Choreographer::postFrameCallbackDelayed(void (*)(long, void*), void (*)(long, void*), void (*)(AChoreographerFrameCallbackData const*, void*), void*, long, android::CallbackType)
+          |         |           android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+          |         |           android::DisplayEventDispatcher::handleEvent(int, int, void*)
+          |         |           android::Looper::pollOnce(int, int*, int*, void**)
+          |         |           ALooper_pollOnce
+          |         |           android_main
+          |         |           android_app_entry
+          |         |           __pthread_start(void*)
+          |         |           __start_thread
+          |         |
+          |          --33.33%-- AIBinder_prepareTransaction
+          |                     aidl::android::os::BpHintSession::reportActualWorkDuration2(std::__1::vector<aidl::android::hardware::power::WorkDuration, std::__1::allocator<aidl::android::hardware::power::WorkDuration>> const&)
+          |                     APerformanceHintSession::reportActualWorkDurationInternal(AWorkDuration*)
+          |                     ae::platform::android::AndroidPerformance::reportFrameWorkDuration(long, long, long, long)
+          |                     android_main
+          |                     android_app_entry
+          |                     __pthread_start(void*)
+          |                     __start_thread
+          |
+          |--15.41%-- scudo_calloc
+          |           calloc
+          |    |
+          |    |--88.37%-- !!!0000!e3a652ee8dfc3e8be13a2556d69df1!208ca19915!
+          |    |    |
+          |    |    |--23.68%-- !!!0000!ff4ffdf150ca9c84d6ba431ca235e0!208ca19915!
+          |    |    |           !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+          |    |    |    |
+          |    |    |    |--66.67%-- !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |    |    |
+          |    |    |    |    |--33.33%-- ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |    |--16.67%-- ae::platform::android::InstancedRenderer::recordPostProcess(unsigned int, ae::platform::FreeCameraState const&, bool)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |    |--16.67%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |    |--16.67%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |     --16.67%-- ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |                android_main
+          |    |    |    |                android_app_entry
+          |    |    |    |                __pthread_start(void*)
+          |    |    |    |                __start_thread
+          |    |    |    |
+          |    |    |    |--22.22%-- !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |    |    |           qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |    |           ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |     --11.11%-- !!!0000!36aed065db0a6254654b9a01a208fb!208ca19915!
+          |    |    |                qglinternal::vkBeginCommandBuffer(VkCommandBuffer_T*, VkCommandBufferBeginInfo const*)
+          |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                android_main
+          |    |    |                android_app_entry
+          |    |    |                __pthread_start(void*)
+          |    |    |                __start_thread
+          |    |    |
+          |    |    |--23.68%-- !!!0000!67406828fa6995537c4310912d3d72!208ca19915!
+          |    |    |           !!!0000!a7e583e0ff589e2714283e14d018c0!208ca19915!
+          |    |    |    |
+          |    |    |    |--33.33%-- !!!0000!21838a1de4f27ab7cae4bf1026e69d!208ca19915!
+          |    |    |    |    |
+          |    |    |    |    |--66.67%-- !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+          |    |    |    |    |           !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |    |    |    |           qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |    |    |    |
+          |    |    |    |    |    |--50.00%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |    |           android_main
+          |    |    |    |    |    |           android_app_entry
+          |    |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |    |           __start_thread
+          |    |    |    |    |    |
+          |    |    |    |    |     --50.00%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |                android_main
+          |    |    |    |    |                android_app_entry
+          |    |    |    |    |                __pthread_start(void*)
+          |    |    |    |    |                __start_thread
+          |    |    |    |    |
+          |    |    |    |     --33.33%-- !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |    |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |                android_main
+          |    |    |    |                android_app_entry
+          |    |    |    |                __pthread_start(void*)
+          |    |    |    |                __start_thread
+          |    |    |    |
+          |    |    |    |--33.33%-- !!!0000!69b7650f66c1eda9af1aaa1b3d96a9!208ca19915!
+          |    |    |    |           !!!0000!0c4af68c257847bbaa7adbb6a36b67!208ca19915!
+          |    |    |    |           !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |    |    |
+          |    |    |    |    |--66.67%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |     --33.33%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |                android_main
+          |    |    |    |                android_app_entry
+          |    |    |    |                __pthread_start(void*)
+          |    |    |    |                __start_thread
+          |    |    |    |
+          |    |    |    |--11.11%-- !!!0000!e1049b82a6863007009fa24b748a24!208ca19915!
+          |    |    |    |           !!!0000!0c4af68c257847bbaa7adbb6a36b67!208ca19915!
+          |    |    |    |           !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--11.11%-- !!!0000!0c4af68c257847bbaa7adbb6a36b67!208ca19915!
+          |    |    |    |           !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |    |           ae::platform::android::InstancedRenderer::recordPostProcess(unsigned int, ae::platform::FreeCameraState const&, bool)
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |     --11.11%-- !!!0000!0d0d7a47f7d0047a5f2d0c51f7b79a!208ca19915!
+          |    |    |                !!!0000!707c7a0e369a31bd21e9e949958a27!208ca19915!
+          |    |    |                !!!0000!a8a5578ec7eb449d8c8076f2948068!208ca19915!
+          |    |    |                qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                android_main
+          |    |    |                android_app_entry
+          |    |    |                __pthread_start(void*)
+          |    |    |                __start_thread
+          |    |    |
+          |    |    |--18.42%-- !!!0000!bdf71b398a16aacf6b18af08eb6f3e!208ca19915!
+          |    |    |           !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |    |           qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |    |
+          |    |    |    |--57.14%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--14.29%-- ae::platform::android::InstancedRenderer::recordPostProcess(unsigned int, ae::platform::FreeCameraState const&, bool)
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--14.29%-- ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |     --14.29%-- ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                android_main
+          |    |    |                android_app_entry
+          |    |    |                __pthread_start(void*)
+          |    |    |                __start_thread
+          |    |    |
+          |    |    |--13.16%-- !!!0000!380aa7bd02775f42cc27534612b8f5!208ca19915!
+          |    |    |           !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+          |    |    |    |
+          |    |    |    |--60.00%-- !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |    |    |
+          |    |    |    |    |--66.67%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |    |           android_main
+          |    |    |    |    |           android_app_entry
+          |    |    |    |    |           __pthread_start(void*)
+          |    |    |    |    |           __start_thread
+          |    |    |    |    |
+          |    |    |    |     --33.33%-- ae::platform::android::InstancedRenderer::recordLocalShadowPass()
+          |    |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |                android_main
+          |    |    |    |                android_app_entry
+          |    |    |    |                __pthread_start(void*)
+          |    |    |    |                __start_thread
+          |    |    |    |
+          |    |    |     --40.00%-- !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |    |                qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |    |         |
+          |    |    |         |--50.00%-- ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+          |    |    |         |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |         |           android_main
+          |    |    |         |           android_app_entry
+          |    |    |         |           __pthread_start(void*)
+          |    |    |         |           __start_thread
+          |    |    |         |
+          |    |    |          --50.00%-- ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |    |                     ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                     android_main
+          |    |    |                     android_app_entry
+          |    |    |                     __pthread_start(void*)
+          |    |    |                     __start_thread
+          |    |    |
+          |    |    |--13.16%-- !!!0000!9bf59e3729470ccca799efbf1ccbbb!208ca19915!
+          |    |    |    |
+          |    |    |    |--60.00%-- !!!0000!91eef25db406ff2c438f12bc0099de!208ca19915!
+          |    |    |    |           !!!0000!00352dc959997f9a052663d45ad1c3!208ca19915!
+          |    |    |    |           !!!0000!e7ab4d2380bdd080c59ad1251f7ed3!208ca19915!
+          |    |    |    |           !!!0000!ee32190b451f4c50fbbb49e27f3eb6!208ca19915!
+          |    |    |    |           !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |    |--20.00%-- !!!0000!e7ab4d2380bdd080c59ad1251f7ed3!208ca19915!
+          |    |    |    |           !!!0000!ee32190b451f4c50fbbb49e27f3eb6!208ca19915!
+          |    |    |    |           !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |    |    |    |           ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |    |           android_main
+          |    |    |    |           android_app_entry
+          |    |    |    |           __pthread_start(void*)
+          |    |    |    |           __start_thread
+          |    |    |    |
+          |    |    |     --20.00%-- !!!0000!cdea4c38efb7d5ee74e7b79a374822!208ca19915!
+          |    |    |                !!!0000!98f42cf6a3c79707c7e107d864bb20!208ca19915!
+          |    |    |                !!!0000!e7ab4d2380bdd080c59ad1251f7ed3!208ca19915!
+          |    |    |                !!!0000!ee32190b451f4c50fbbb49e27f3eb6!208ca19915!
+          |    |    |                !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |    |    |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |                android_main
+          |    |    |                android_app_entry
+          |    |    |                __pthread_start(void*)
+          |    |    |                __start_thread
+          |    |    |
+          |    |    |--2.63%-- !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+          |    |    |          !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+          |    |    |          ae::platform::android::InstancedRenderer::recordUiOverlay(unsigned int)
+          |    |    |          ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |    |--2.63%-- !!!0000!7dd84c2f00d0f09ca528b1424ba553!208ca19915!
+          |    |    |          !!!0000!615ce7af35925d1ba1c8a8b4826134!208ca19915!
+          |    |    |          !!!0000!0d0d7a47f7d0047a5f2d0c51f7b79a!208ca19915!
+          |    |    |          !!!0000!0ae3d220c3b6b5a424222fdfbab7ee!208ca19915!
+          |    |    |          !!!0000!cdf0c6c7745602973542265e4c280f!208ca19915!
+          |    |    |          ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+          |    |    |          ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |    |          android_main
+          |    |    |          android_app_entry
+          |    |    |          __pthread_start(void*)
+          |    |    |          __start_thread
+          |    |    |
+          |    |     --2.63%-- !!!0000!fd86534ae9d615dd5f7e98d6c5c3cb!208ca19915!
+          |    |               !!!0000!bdf71b398a16aacf6b18af08eb6f3e!208ca19915!
+          |    |               !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+          |    |               qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+          |    |               ae::platform::android::InstancedRenderer::recordLocalShadowPass()
+          |    |               ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |    |               android_main
+          |    |               android_app_entry
+          |    |               __pthread_start(void*)
+          |    |               __start_thread
+          |    |
+          |     --11.63%-- !!!0000!e7ab4d2380bdd080c59ad1251f7ed3!208ca19915!
+          |                !!!0000!ee32190b451f4c50fbbb49e27f3eb6!208ca19915!
+          |                !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+          |                ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+          |                android_main
+          |                android_app_entry
+          |                __pthread_start(void*)
+          |                __start_thread

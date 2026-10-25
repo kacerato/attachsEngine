@@ -203,7 +203,10 @@ const char *temporalReconstructionLabel(TemporalReconstruction v) {
 }
 
 ProjectRenderingSettings withEditorDefaults(ProjectRenderingSettings settings) {
-  if(settings.dynamicResolution==FeatureOverride::Inherit) settings.dynamicResolution=FeatureOverride::Disabled;
+  // O nível C é o do celular fraco: lá a resolução dinâmica é o padrão do nível
+  // (alvo = orçamento de quadro, teto = Render Scale do nível), também no editor.
+  if(settings.dynamicResolution==FeatureOverride::Inherit&&settings.preset!=QualityPreset::C)
+    settings.dynamicResolution=FeatureOverride::Disabled;
   if(settings.maximumRenderHz==0) settings.maximumRenderHz=60;
   return settings;
 }

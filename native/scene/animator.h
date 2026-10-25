@@ -38,6 +38,10 @@ inline const char *animatorBlend2DName(AnimatorBlend2D mode) {
   return names[static_cast<u32>(mode)<=3?static_cast<u32>(mode):0];
 }
 enum class AnimatorLayerBlend : u32 {Override=0,Additive=1};
+// Culling Mode do Animator da Unity (6000.0, AnimatorCullingMode): com os
+// renderers do personagem fora da vista, Cull Update Transforms segue a máquina
+// de estados e o tempo mas não escreve a pose; Cull Completely para tudo.
+enum class AnimatorCullingMode : u32 {AlwaysAnimate=0,CullUpdateTransforms=1,CullCompletely=2};
 enum class AnimatorInterruption : u32 {None=0,Current=1,Next=2,CurrentThenNext=3,NextThenCurrent=4};
 enum class AnimatorConditionMode : u32 {If=0,IfNot=1,Greater=2,Less=3,Equals=4,NotEqual=5};
 // Manual parameters retain the v1 script contract. Bound values read the
@@ -195,6 +199,7 @@ public:
   static constexpr usize MaximumParameters=32,MaximumLayers=4,MaximumStates=24,MaximumTransitions=48,
                          MaximumMotions=8,MaximumConditions=4,MaximumEvents=8,MaximumName=63,MaximumMachines=32,MaximumDepth=16;
   bool enabled=true,unscaledTime=false;
+  AnimatorCullingMode cullingMode=AnimatorCullingMode::AlwaysAnimate;
   u64 target=0;   // raiz animada; zero: este objeto
   u64 motionSource=0; // physics owner; zero: this object, independent of the visual root
   float speed=1;
@@ -370,9 +375,12 @@ public:
       o<<' '<<l.machines.size();for(const auto &m:l.machines) o<<' '<<m.id<<' '<<m.syncOf;
       o<<' '<<l.transitions.size();for(const auto &t:l.transitions) o<<' '<<t.id<<' '<<t.syncOf;
     }
+    // v7: Culling Mode.
+    o<<' '<<static_cast<u32>(cullingMode);
   }
   bool read(std::istream &i,u32 version) override {
-    if(version<1||version>6) return false;
+    if(version<1||version>7) return false;
+    cullingMode=AnimatorCullingMode::AlwaysAnimate;
     controller={};clipOverrides.clear();
     parameters.clear();layers.clear();
     usize count=0;
@@ -459,6 +467,7 @@ public:
         for(auto &t:l.transitions) if(!(i>>id>>t.syncOf)||id!=t.id) return false;
       }
     }
+    if(version>=7) {u32 mode=0;if(!(i>>mode)||mode>2) return false;cullingMode=static_cast<AnimatorCullingMode>(mode);}
     // Versions 1-3 always evaluated the base layer at full weight.
     if(version<4&&!layers.empty()) layers[0].weight=1;
     synchronizeLayers();
@@ -469,7 +478,7 @@ inline const Animator &animator(const ComponentValue &v) {return static_cast<con
 inline Animator &animator(ComponentValue &v) {return static_cast<Animator &>(v);}
 // Replacing authoring values must never replace the collection's component ID.
 inline void replaceAnimatorData(Animator &destination,const Animator &source) {
-  destination.enabled=source.enabled;destination.unscaledTime=source.unscaledTime;destination.target=source.target;
+  destination.enabled=source.enabled;destination.unscaledTime=source.unscaledTime;destination.cullingMode=source.cullingMode;destination.target=source.target;
   destination.motionSource=source.motionSource;destination.speed=source.speed;destination.nextId=source.nextId;
   destination.parameters=source.parameters;destination.layers=source.layers;destination.controller=source.controller;
   destination.clipOverrides=source.clipOverrides;
@@ -493,6 +502,13 @@ inline constexpr std::array<ComponentBoolean,2> animatorBooleans{{
   {"unscaled_time","Ignorar escala de tempo",[](const ComponentValue &v){return animator(v).unscaledTime;},[](ComponentValue &v,bool b){animator(v).unscaledTime=b;},
    {"Animator","","Anima em tempo real mesmo com o jogo pausado por escala (menus, cutscenes)"}},
 }};
+inline constexpr std::array<ComponentEnumOption,3> animatorCullingOptions{{
+  {0,"Sempre animar"},{1,"Fora da vista: só o tempo"},{2,"Fora da vista: parado"}}};
+inline constexpr std::array<ComponentEnum,1> animatorEnums{{
+  {"culling_mode","Culling",animatorCullingOptions,
+   [](const ComponentValue &v){return static_cast<u32>(animator(v).cullingMode);},
+   [](ComponentValue &v,u32 x){animator(v).cullingMode=static_cast<AnimatorCullingMode>(std::min(x,2u));},
+   {"Animator","","Com os renderers fora da câmera: seguir animando, só avançar estados e tempo sem escrever a pose, ou parar"}}}};
 template<usize Index> constexpr ComponentObjectReference animatorMaskReference(const char *id,const char *name) {
   return {id,name,"",ObjectReferenceScope::Any,"Toda a hierarquia",
     [](const ComponentValue &v)->u64 {const auto &a=animator(v);return Index<a.layers.size()?a.layers[Index].mask:0;},
@@ -554,7 +570,7 @@ inline constexpr std::array<ComponentResourceBinding,1> animatorResources{{
    },{"Animator","","Grafo compartilhado; ausente interrompe a avaliação e expõe diagnóstico"}},
 }};
 inline const ComponentType Animator::descriptor{
-  "astra.animation.animator",6,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
-  animatorNumbers,animatorBooleans,{},nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
+  "astra.animation.animator",7,[]()->std::unique_ptr<ComponentValue>{auto a=std::make_unique<Animator>();initializeAnimator(*a);return a;},
+  animatorNumbers,animatorBooleans,animatorEnums,nullptr,false,animatorReferences,{},animatorResources,{},{},{},animatorMethods,animatorEvents};
 
 } // namespace ae::scene

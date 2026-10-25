@@ -3,6 +3,8 @@
 // O que estes testes protegem não é uma tabela de números — é a forma da política:
 // preset é um ponto, eixos são independentes, capability só reduz, térmica é
 // transitória, e toda degradação fica registrada com motivo.
+#include <cmath>
+
 #include "harness.h"
 #include "renderer/rendering_policy.h"
 #include "renderer/material_distance.h"
@@ -132,7 +134,7 @@ AE_TEST(policy_eixo_sobrescrito_nao_arrasta_os_outros) {
   settings.preset = QualityPreset::C;
   settings.shadows = ShadowQuality::UltraSoft;
   const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
-  AE_EXPECT_EQ(policy.shadows.cascadeCount, 4u, "override de sombra vale sobre o preset");
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 2u, "override de sombra vale até o teto do nível C");
   AE_EXPECT_TRUE(policy.post.dedicatedPass, "escala do preset C preserva seu upscale");
   AE_EXPECT_TRUE(!policy.post.bloom, "override de sombra nao liga bloom");
   AE_EXPECT_EQ(policy.textures.residencyMipBias, 1u, "override de sombra nao muda textura");
@@ -172,8 +174,10 @@ AE_TEST(policy_split_sum_e_independente_mas_exige_sonda_especular) {
 }
 
 AE_TEST(policy_ajustes_finos_nao_dependem_do_nome_do_preset) {
+  // Desde 23/10 o nível é teto (C: 2 cascatas, PCF 9); os ajustes finos valem
+  // dentro do teto, então a prova usa o nível S, que comporta todos eles.
   ProjectRenderingSettings settings{};
-  settings.preset = QualityPreset::C;
+  settings.preset = QualityPreset::S;
   settings.shadowCascadeCount = 3;
   settings.shadowCascadeResolution = 1792;
   settings.shadowFilterTaps = 25;
@@ -292,7 +296,7 @@ AE_TEST(policy_perfil_b_tem_budget_de_sombra_mobile_sem_limitar_overrides) {
   custom.shadowCascadeBlendRatio = 0.18f;
   custom.shadowDistanceFadeRatio = 0.24f;
   const auto overridden = resolveRenderingPolicy(custom, capabilities, ThermalPressure::None);
-  AE_EXPECT_EQ(overridden.shadows.cascadeCount, 4u, "autor pode elevar cascatas independentemente");
+  AE_EXPECT_EQ(overridden.shadows.cascadeCount, 3u, "autor eleva cascatas até o teto do nível B");
   AE_EXPECT_EQ(overridden.shadows.cascadeResolution, 2048u,
                "autor pode elevar resolucao independentemente");
   AE_EXPECT_TRUE(!overridden.shadows.staticCasterCache, "autor pode desligar cache independentemente");
@@ -766,4 +770,74 @@ AE_TEST(reference_resolution_emulates_target_pixel_count) {
   AE_EXPECT_EQ(referenceResolutionScale(1280,720,1920,1080),1.0f,"nunca amplia acima do nativo");
   AE_EXPECT_EQ(referenceResolutionScale(3840,2160,640,360),0.5f,"limite inferior da política");
   AE_EXPECT_EQ(referenceResolutionScale(0,720,1600,720),0.0f,"superfície inválida");
+}
+
+// Cortes da medição de 22-23/10/2026: o nível é teto, como o URP Asset que o
+// Quality da Unity aponta. A Vila pede 4 cascatas @4096 e PCF 5x5 no projeto.
+AE_TEST(policy_nivel_c_e_teto_para_os_eixos_autorais) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::C;
+  settings.shadows = ShadowQuality::UltraSoft;
+  settings.shadowCascadeCount = 4;
+  settings.shadowCascadeResolution = 4096;
+  settings.shadowFilterTaps = 25;
+  settings.resolutionScale = 1.0f;
+  const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 2u, "C limita a 2 cascatas");
+  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 1024u, "C limita a 1024");
+  AE_EXPECT_EQ(policy.shadows.filterTaps, 9u, "C limita o PCF a 9 buscas");
+  AE_EXPECT_TRUE(policy.shadows.farFilterTaps <= 9u, "cascata distante nunca acima da perto");
+  AE_EXPECT_TRUE(std::fabs((policy.resolutionScale) - 0.85f) < 1.0e-4f, "Render Scale do nível C é teto");
+  AE_EXPECT_TRUE(hasClamp(policy, "shadows.cascadeCount", PolicyClamp::Quality), "motivo do nível registrado");
+  AE_EXPECT_TRUE(hasClamp(policy, "resolutionScale", PolicyClamp::Quality), "escala registrada");
+  AE_EXPECT_TRUE(!hasClamp(policy, "shadows.cascadeResolution", PolicyClamp::Capability),
+                 "o teto do nível não se passa por capability");
+  AE_EXPECT_EQ(policy.lights.additionalLightsPerObject, 4u, "Per Object Limit 4 no C");
+  AE_EXPECT_TRUE(!policy.post.ambientOcclusion, "C sem SSAO");
+  AE_EXPECT_TRUE(policy.post.halfResolutionAmbientOcclusion && policy.post.bloomMipChain,
+                 "C usa AO em 1/2 e bloom em cadeia quando o projeto liga o pós");
+  AE_EXPECT_TRUE(policy.dynamicResolution.enabled, "resolução dinâmica ligada por padrão no C");
+  AE_EXPECT_TRUE(std::fabs((policy.dynamicResolution.maximumScale) - 0.85f) < 1.0e-4f, "dinâmica sobe só até o teto");
+}
+
+AE_TEST(policy_escala_abaixo_do_teto_fica_como_pedida) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::C;
+  settings.resolutionScale = 0.57f;
+  const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_TRUE(std::fabs((policy.resolutionScale) - 0.57f) < 1.0e-4f, "abaixo do teto vale o pedido");
+  AE_EXPECT_TRUE(!hasClamp(policy, "resolutionScale", PolicyClamp::Quality), "sem registro falso");
+}
+
+AE_TEST(policy_nivel_b_usa_pos_barato_e_s_mantem_o_pedido) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::B;
+  settings.shadowCascadeCount = 4;
+  settings.shadowCascadeResolution = 4096;
+  auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 3u, "B limita a 3 cascatas");
+  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 2048u, "B limita a 2048");
+  AE_EXPECT_TRUE(policy.post.ambientOcclusion && policy.post.halfResolutionAmbientOcclusion,
+                 "B mantém o AO, em 1/2");
+  AE_EXPECT_TRUE(policy.post.bloomMipChain, "B usa bloom em cadeia");
+  AE_EXPECT_EQ(policy.lights.additionalLightsPerObject, 8u, "B mantém 8 por objeto");
+  settings.preset = QualityPreset::S;
+  settings.shadowFilterTaps = 25;
+  policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 4u, "S aceita 4 cascatas");
+  AE_EXPECT_EQ(policy.shadows.cascadeResolution, 4096u, "S aceita 4096");
+  AE_EXPECT_TRUE(!policy.post.halfResolutionAmbientOcclusion && !policy.post.bloomMipChain,
+                 "S mantém AO e bloom completos");
+}
+
+AE_TEST(policy_teto_desligado_reproduz_o_antes_para_a_bancada) {
+  ProjectRenderingSettings settings{};
+  settings.preset = QualityPreset::C;
+  settings.shadowCascadeCount = 4;
+  settings.shadowCascadeResolution = 4096;
+  settings.qualityLevelCeiling = false;
+  const auto policy = resolveRenderingPolicy(settings, strongDevice(), ThermalPressure::None);
+  AE_EXPECT_EQ(policy.shadows.cascadeCount, 4u, "sem teto o eixo autoral vence");
+  AE_EXPECT_EQ(policy.lights.additionalLightsPerObject, 8u, "sem teto, 8 por objeto");
+  AE_EXPECT_TRUE(policy.post.ambientOcclusion && !policy.post.bloomMipChain, "pós de antes");
 }

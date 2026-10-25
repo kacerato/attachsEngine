@@ -1,0 +1,13 @@
+{"title": "Vila Astra, nível C (POCO F7, 1600×720 interno): antes × depois dos cortes de 23/10",
+ "rows": [
+  {"unity": "vila-c/01-antes/vila-astra/01-C/screen.png", "device": "vila-c/02-depois/vila-astra/01-C/screen.png",
+   "unity_caption": "Antes: 4 cascatas @4096 PCF 25, AO cheio, bloom antigo, 8 luzes/objeto · GPU 18,91 ms",
+   "device_caption": "Depois: teto do C (2 @1024 PCF 9, sem AO, bloom em cadeia, 4 luzes/objeto, máscara) · GPU 14,33 ms",
+   "verdict": "Composição, cor e luz da praça iguais; −4,6 ms de GPU (sombra −2,0, pós −1,9, opaco −0,5). NPCs em outra posição: Play, 20 s depois do início."},
+  {"unity": "vila-c/01-antes-recorte-sombra.png", "device": "vila-c/02-depois-recorte-sombra.png",
+   "unity_caption": "Antes: sombra do telhado em 4096 com PCF 5×5", "device_caption": "Depois: 1024 com PCF 3×3 (gather)",
+   "verdict": "Depois: borda da sombra mais borrada (penumbra ~4× mais larga) e com serrilhado leve no contorno; mesma forma e alcance. Perda visível de nitidez, coerente com 1024 px no nível do celular fraco."},
+  {"unity": "vila-c/01-antes-recorte-praca.png", "device": "vila-c/02-depois-recorte-praca.png",
+   "unity_caption": "Antes: AO do Volume ligado", "device_caption": "Depois: nível C sem SSAO",
+   "verdict": "Sem AO os cantos (bancos, base do muro) ficam um pouco mais claros; contraste geral mantido. É o recorte da URP para Low."}
+ ]}

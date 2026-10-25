@@ -8,11 +8,15 @@
 #include "scene/import_link.h"
 #include "scene/skinned_mesh.h"
 
+#include "core/job_system.h"
+
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
 #include <iterator>
 #include <span>
+#include <thread>
 #include <unordered_set>
 
 namespace ae::runtime {
@@ -162,8 +166,168 @@ struct AnimatorProperty {
 struct AnimatorPose {
   float t[3], q[4], s[3];
   bool changed = false;
+  // Bits 1 T, 2 R, 4 S escritos pela mistura. Só o que falta vem da
+  // transformação atual: um osso com T, R e S no clipe não decompõe nada.
+  u8 written = 0;
 };
 } // namespace
+
+namespace {
+// Pool da composição de animação. Próprio, e não o da física: waitIdle espera
+// a fila inteira do pool. Até 4 workers além da thread do jogo.
+// Ligado: com personagens inteiros por job e a taxa por tamanho na tela, a
+// Vila S no POCO (24/10, cortes-0444) foi de 13,83 → 10,00 ms na thread do
+// jogo e 14,72 → 12,53 ms no processo. Só a mistura em paralelo (sem taxa)
+// subia o processo; o A/B continua com aether.animation_parallel.
+std::atomic<bool> parallelAnimationEnabled{true};
+JobSystem &animationJobs() {
+  static JobSystem jobs(std::clamp(std::thread::hardware_concurrency(), 2u, 5u) - 1u);
+  return jobs;
+}
+// Divide [0, count) em blocos; a thread chamadora faz o primeiro. Abaixo de
+// dois blocos de `minimumPerChunk` roda inteiro aqui, sem custo de fila.
+template <typename Fn> void parallelAnimationRange(usize count, usize minimumPerChunk, const Fn &fn) {
+  if (!parallelAnimationEnabled.load(std::memory_order_relaxed) || count < minimumPerChunk * 2) {fn(0, count);return;}
+  auto &jobs = animationJobs();
+  const usize chunks = std::min<usize>(jobs.workerCount() + 1u, count / minimumPerChunk);
+  const usize step = (count + chunks - 1) / chunks;
+  for (usize chunk = 1; chunk < chunks; ++chunk) {
+    const usize first = chunk * step, last = std::min(count, first + step);
+    if (first < last) jobs.submit([&fn, first, last] { fn(first, last); });
+  }
+  fn(0, std::min(count, step));
+  jobs.waitIdle();
+}
+} // namespace
+
+namespace {
+// Resultado da composição de uma propriedade (bits).
+constexpr u8 ComposedOutcome = 1, ReferenceInvalidOutcome = 2, AdditiveInvalidOutcome = 4;
+struct PoseWrite {Transform transform{};u8 state = 0;};
+
+// Mistura pura de [first, last): camadas de cima para baixo, aditivas sobre o
+// resultado e o repouso no que sobra. Só lê as propriedades e o repouso; cada
+// propriedade escreve no próprio buffer, então roda em qualquer thread.
+template <typename RestT>
+void composeProperties(const AnimatorProperty *properties, RestT *const *rests, AnimationValue *restValues,
+                       AnimationValue *results, u8 *outcomes, usize first, usize last) {
+  for (usize index = first; index < last; ++index) {
+    const auto &property = properties[index];
+    const RestT &rest = *rests[index];
+    AnimationValue &restValue = restValues[index];
+    restValue.clear();
+    float restT[3], restQ[4], restS[3];
+    if (rest.decomposed) {
+      std::copy(rest.t, rest.t + 3, restT); std::copy(rest.q, rest.q + 4, restQ); std::copy(rest.s, rest.s + 3, restS);
+    } else {
+      decompose(rest.transform, restT, restQ, restS);
+    }
+    switch (property.path) {
+    case AnimationPath::Translation: restValue.assign(restT, restT + 3); break;
+    case AnimationPath::Rotation: restValue.assign(restQ, restQ + 4); break;
+    case AnimationPath::Scale: restValue.assign(restS, restS + 3); break;
+    case AnimationPath::Weights:
+      restValue.resize(property.list.front().value.size(), 0.0f);
+      for (usize i = 0; i < restValue.size() && i < rest.weights.size(); ++i) restValue[i] = rest.weights[i] / PercentPerUnit;
+      break;
+    }
+    const usize width = restValue.size();
+    AnimationValue &result = results[index];
+    result.clear();
+    result.resize(width, 0.0f);
+    u8 &outcome = outcomes[index];
+    outcome = 0;
+    const bool rotation = property.path == AnimationPath::Rotation;
+    const float *reference = nullptr;
+    const auto accumulate = [&](std::span<const float> value, float weight) {
+      if (value.size() != width || weight <= 0) return;
+      float sign = 1;
+      if (rotation) {
+        if (!reference) reference = value.data();
+        float dot = 0;
+        for (u32 i = 0; i < 4; ++i) dot += reference[i] * value[i];
+        sign = dot < 0 ? -1.0f : 1.0f;
+      }
+      for (usize i = 0; i < width; ++i) result[i] += weight * sign * value[i];
+    };
+    SmallVector<u32, 8> layers;
+    for (const auto &c : property.list) if (std::find(layers.begin(), layers.end(), c.layer) == layers.end()) layers.push_back(c.layer);
+    std::sort(layers.begin(), layers.end(), std::greater<>());
+    float remaining = 1;
+    struct AdditiveLayer {AnimationValue delta;float weight;};
+    std::vector<AdditiveLayer> additions;
+    for (const auto layer : layers) {
+      float additiveSum=0;AnimationValue delta(width,0.f);
+      for(const auto &c:property.list) if(c.layer==layer&&c.additive) {
+        if(c.weight<=0) continue;
+        std::vector<float> relative;
+        if(c.relative) relative.assign(c.value.begin(),c.value.end());
+        else if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
+          outcome|=ReferenceInvalidOutcome;continue;
+        }
+        if(rotation&&additiveSum>0) {float dot=0;for(usize i=0;i<width;++i) dot+=delta[i]*relative[i];if(dot<0) for(float &v:relative) v=-v;}
+        for(usize i=0;i<width;++i) delta[i]+=relative[i]*c.weight;
+        additiveSum+=c.weight;
+      }
+      if(additiveSum>0&&remaining>1e-6f) {
+        for(float &v:delta) v/=additiveSum;
+        additions.push_back({std::move(delta),std::min(additiveSum,1.f)*remaining});
+      }
+      float sum = 0;
+      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) sum += c.weight;
+      if (sum <= 0) continue;
+      const float take = std::min(sum, 1.0f) * remaining;
+      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) accumulate(c.value, c.weight * take / sum);
+      remaining -= take;
+      if (remaining <= 1e-6f) break;
+    }
+    if (remaining > 1e-6f) accumulate(restValue, remaining);
+    if (rotation) {
+      const float length = std::sqrt(result[0] * result[0] + result[1] * result[1] + result[2] * result[2] + result[3] * result[3]);
+      if (!(length > 1e-12f)) continue;
+      for (auto &v : result) v /= length;
+    }
+    for(auto addition=additions.rbegin();addition!=additions.rend();++addition)
+      if(!resources::applyRelativeAnimationPose(property.path,result,addition->delta,addition->weight))
+        outcome|=AdditiveInvalidOutcome;
+    outcome|=ComposedOutcome;
+  }
+}
+
+// TRS → Transform de Euler de [first, last), só lendo o grafo. state 1 escreve,
+// 2 é pose não representável, 0 não muda nada.
+void convertPoses(const SceneGraph &graph, std::pair<ObjectId, AnimatorPose> *poses, PoseWrite *writes, usize first, usize last) {
+  const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+  for (usize index = first; index < last; ++index) {
+    auto &[object, pose] = poses[index];
+    auto &out = writes[index];
+    out.state = 0;
+    if (!pose.changed) continue;
+    const auto &current = graph.find(object)->transform;
+    if (pose.written != 7) {
+      float t[3], q[4], s[3];
+      decompose(current, t, q, s);
+      if (!(pose.written & 1)) std::copy(t, t + 3, pose.t);
+      if (!(pose.written & 2)) std::copy(q, q + 4, pose.q);
+      if (!(pose.written & 4)) std::copy(s, s + 3, pose.s);
+    }
+    float local[16];
+    resources::composeTransform(pose.t, pose.q, pose.s, local);
+    // Escala negativa ou nula no clipe não cabe em TRS de Euler: o nó mantém a
+    // pose anterior em vez de receber uma decomposição inventada.
+    if (!localTransformForWorld(local, identity, out.transform)) {out.state = 2;continue;}
+    if (std::equal(current.position, current.position + 3, out.transform.position) &&
+        std::equal(current.rotationDegrees, current.rotationDegrees + 3, out.transform.rotationDegrees) &&
+        std::equal(current.scale, current.scale + 3, out.transform.scale))
+      continue;
+    out.state = 1;
+  }
+}
+} // namespace
+
+void SceneAnimator::setParallelEvaluation(bool enabled) noexcept {
+  parallelAnimationEnabled.store(enabled, std::memory_order_relaxed);
+}
 
 struct SceneAnimator::AdvanceScratch {
   std::vector<ObjectId> ids;
@@ -182,6 +346,42 @@ struct SceneAnimator::AdvanceScratch {
   std::vector<std::pair<ObjectId, AnimatorPose>> poses;
   FlatIndex poseIndex;
   std::vector<ExternalBinding> nextBindings;
+  // Repouso de cada propriedade (CPU, 23/10/2026: o lookup em rest_ por osso e
+  // quadro era 2% da thread do jogo na Vila). Nós de unordered_map não mudam de
+  // endereço; o ponteiro vale até rest_ ser limpo (geração) ou o animador mudar.
+  std::vector<std::pair<ObjectId, Rest *>> restCache;
+  // Buffers das fases da composição; mantêm a capacidade entre quadros.
+  std::vector<Rest *> restRefs;
+  std::vector<AnimationValue> restValues, results;
+  std::vector<u8> outcomes;
+  std::vector<PoseWrite> transforms;
+  // Caminho por personagem: cada Animator com as suas propriedades, índices,
+  // bindings, repouso, poses e escritas, avaliado inteiro num job.
+  struct CharacterWork {
+    ObjectId owner = kInvalidObject;
+    usize firstSample = 0, lastSample = 0, channels = 0;
+    std::vector<AnimatorProperty> properties;
+    usize count = 0;
+    FlatIndex index, bindingSeen, poseIndex;
+    std::vector<ExternalBinding> bindings;
+    std::vector<std::pair<ObjectId, Rest *>> restCache;
+    std::vector<Rest *> rests;
+    std::vector<AnimationValue> restValues, results;
+    std::vector<u8> outcomes;
+    std::vector<std::pair<ObjectId, AnimatorPose>> poses;
+    std::vector<PoseWrite> writes;
+    std::string diagnostic;
+    u32 playing = 0;
+  };
+  struct PreparedSample {bool valid = false;AnimationClipView view;usize targets = 0;};
+  std::vector<CharacterWork> characters;
+  std::vector<PreparedSample> prepared;
+  FlatIndex targetCharacter;
+  // Alvo → intervalo do Animator no quadro (taxa por tamanho na tela) e
+  // osso → interpolação ativa.
+  FlatIndex strideTargets, interpolationIndex;
+  const void *restOwner = nullptr;
+  u64 restGeneration = 0;
 };
 
 void resolveAnimationTargets(const SceneGraph &graph, ObjectId owner, const SourceAnimations &source,
@@ -254,6 +454,8 @@ void SceneAnimator::reset() {
   library_ = nullptr;
   players_.clear();
   rest_.clear();
+  ++restGeneration_;
+  interpolations_.clear();
   external_.clear();
   compositionDiagnostic_.clear();
   externalTargets_.clear();
@@ -530,6 +732,53 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   layerPoses_.clear();
   if (!scratch_) scratch_ = std::make_shared<AdvanceScratch>();
   auto &scratch = *scratch_;
+  ++frame_;
+  // Escrita de pose. Intervalo 1 escreve direto; maior guarda a pose mostrada e
+  // a avaliada e anda 1/intervalo por quadro até a próxima avaliação.
+  scratch.interpolationIndex.clear(interpolations_.size());
+  for (usize index = 0; index < interpolations_.size(); ++index) {
+    bool inserted = false;
+    scratch.interpolationIndex.insert(interpolations_[index].object, static_cast<u32>(index), inserted);
+  }
+  const auto blendWrite = [&](RateInterpolation &rate) {
+    const float alpha = static_cast<float>(rate.step) / static_cast<float>(rate.steps);
+    float t[3], q[4], s[3], dot = 0;
+    for (u32 i = 0; i < 4; ++i) dot += rate.from[3 + i] * rate.to[3 + i];
+    const float sign = dot < 0 ? -1.0f : 1.0f;
+    for (u32 i = 0; i < 3; ++i) {
+      t[i] = rate.from[i] + (rate.to[i] - rate.from[i]) * alpha;
+      s[i] = rate.from[7 + i] + (rate.to[7 + i] - rate.from[7 + i]) * alpha;
+    }
+    float length = 0;
+    for (u32 i = 0; i < 4; ++i) {q[i] = rate.from[3 + i] * (1 - alpha) + sign * rate.to[3 + i] * alpha;length += q[i] * q[i];}
+    length = std::sqrt(length);
+    if (!(length > 1e-12f)) return;
+    for (auto &v : q) v /= length;
+    float local[16];
+    resources::composeTransform(t, q, s, local);
+    const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+    Transform transform;
+    if (localTransformForWorld(local, identity, transform) && graph.setTransform(rate.object, transform)) ++posed_;
+  };
+  const auto writePose = [&](ObjectId object, const Transform &transform, u8 stride) {
+    const u32 existing = scratch.interpolationIndex.find(object);
+    if (stride <= 1) {
+      if (existing != FlatIndex::Missing) interpolations_[existing].steps = 0;  // aposentada no fim do quadro
+      if (graph.setTransform(object, transform)) ++posed_;
+      return;
+    }
+    RateInterpolation rate;
+    rate.object = object;rate.steps = stride;rate.step = 1;rate.frame = frame_;
+    decompose(graph.find(object)->transform, rate.from, rate.from + 3, rate.from + 7);
+    decompose(transform, rate.to, rate.to + 3, rate.to + 7);
+    if (existing != FlatIndex::Missing) interpolations_[existing] = rate;
+    else {
+      bool inserted = false;
+      scratch.interpolationIndex.insert(object, static_cast<u32>(interpolations_.size()), inserted);
+      interpolations_.push_back(rate);
+    }
+    blendWrite(existing != FlatIndex::Missing ? interpolations_[existing] : interpolations_.back());
+  };
 
   // Componentes vivos; um jogador cujo componente sumiu sai junto.
   auto &live = scratch.live;
@@ -722,6 +971,303 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
       nextBindings.push_back(binding);continue;
     }
   }
+  // Pose de cada camada antes das camadas de cima e do repouso, para a
+  // interrupção de transição (só existe enquanto uma transição roda).
+  const auto captureLayers = [&](const AnimatorProperty &property, const AnimationValue &restValue) {
+    const auto object = property.object;
+    const usize width = restValue.size();
+    SmallVector<std::pair<const LayerPose *, bool>, 4> emitted;
+    for(const auto &seed:property.list) if(seed.sourceOwner!=kInvalidObject&&seed.coverage>0) {
+      auto found=std::find_if(layerPoses_.begin(),layerPoses_.end(),[&](const CapturedLayer &e){return e.owner==seed.sourceOwner&&e.instance==seed.sourceInstance&&e.layer==seed.layer;});
+      if(found==layerPoses_.end()) {layerPoses_.push_back({seed.sourceOwner,seed.sourceInstance,seed.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
+      auto &channels=found->pose->channels;
+      const LayerPose *capturedPose=found->pose.get();
+      if(std::any_of(emitted.begin(),emitted.end(),[&](const auto &e){return e.first==capturedPose&&e.second==seed.additive;})) continue;
+      std::vector<float> mixed(width,0);AnimationValue first;float sum=0;
+      for(const auto &c:property.list) if(c.sourceOwner==seed.sourceOwner&&c.sourceInstance==seed.sourceInstance&&c.layer==seed.layer&&c.additive==seed.additive&&c.coverage>0) {
+        AnimationValue v=c.value;
+        if(v.size()!=width) continue;
+        if(c.additive&&!c.relative) {
+          std::vector<float> relative;
+          if(!resources::relativeAnimationPose(property.path,v,c.reference.empty()?restValue:c.reference,relative)) continue;
+          v.assign(relative.begin(),relative.end());
+        }
+        if(property.path==AnimationPath::Rotation) {
+          if(first.empty()) first=v;
+          float dot=0;for(usize k=0;k<width;++k) dot+=first[k]*v[k];if(dot<0) for(float &f:v) f=-f;
+        }
+        for(usize k=0;k<width;++k) mixed[k]+=v[k]*c.coverage;
+        sum+=c.coverage;
+      }
+      if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});emitted.push_back({capturedPose,seed.additive});}
+    }
+  };
+  // --- Personagens inteiros em paralelo -----------------------------------
+  // Como os Animation Jobs da Unity: cada job avalia Animators do começo ao fim
+  // (amostragem, contribuições, mistura e pose) nos buffers do personagem; o
+  // mundo só é escrito numa passada curta em série. Vale quando o quadro só
+  // tem amostras de Animator sem propriedades tipadas, drivers ou pose
+  // congelada, cada Animator é um bloco contíguo e os alvos não se cruzam;
+  // fora disso o laço serial abaixo dá o mesmo resultado.
+  const auto characterPath = [&]() -> bool {
+    if (!parallelAnimationEnabled.load(std::memory_order_relaxed) || scratch.propertyCount != 0 ||
+        !typedProperties.empty() || !driverRequests.empty() || external_.size() < 2) return false;
+    auto &characters = scratch.characters;
+    auto &prepared = scratch.prepared;
+    prepared.assign(external_.size(), {});
+    usize characterCount = 0, channels = 0;
+    for (usize index = 0; index < external_.size(); ++index) {
+      const auto &sample = external_[index];
+      auto &ready = prepared[index];
+      if (!(sample.weight < 0 || !std::isfinite(sample.weight) || !graph.exists(sample.owner))) {
+        if (sample.frozen) return false;
+        if (library_->findClip(sample.clip, ready.view)) {
+          if (!ready.view.clip->properties.empty() || ready.view.clip->drivers) return false;
+          auto found = std::find_if(externalTargets_.begin(), externalTargets_.end(), [&](const ExternalTargets &e) {
+            return e.owner == sample.owner && e.clip == sample.clip;
+          });
+          if (found == externalTargets_.end()) found = externalTargets_.insert(externalTargets_.end(), {sample.owner, sample.clip, {}});
+          auto &targets = found->targets;
+          bool stale = targets.size() != ready.view.source->nodes.size();
+          for (const auto target : targets) stale = stale || (target != kInvalidObject && !graph.exists(target));
+          if (stale) resolveAnimationTargets(graph, sample.owner, *ready.view.source, targets);
+          ready.targets = static_cast<usize>(found - externalTargets_.begin());
+          ready.valid = true;
+          channels += ready.view.clip->channels.size();
+        }
+      }
+      if (characterCount == 0 || characters[characterCount - 1].owner != sample.owner) {
+        for (usize other = 0; other < characterCount; ++other) if (characters[other].owner == sample.owner) return false;
+        if (characters.size() <= characterCount) characters.emplace_back();
+        auto &work = characters[characterCount++];
+        work.owner = sample.owner;work.firstSample = index;work.channels = 0;
+      }
+      characters[characterCount - 1].lastSample = index + 1;
+      if (ready.valid) characters[characterCount - 1].channels += ready.view.clip->channels.size();
+    }
+    if (characterCount < 2 || channels < 256) return false;
+    // Alvos de um personagem não podem receber contribuição de outro.
+    auto &targetCharacter = scratch.targetCharacter;
+    targetCharacter.clear(channels);
+    for (usize c = 0; c < characterCount; ++c)
+      for (usize index = characters[c].firstSample; index < characters[c].lastSample; ++index) {
+        if (!prepared[index].valid) continue;
+        for (const auto target : externalTargets_[prepared[index].targets].targets) {
+          if (target == kInvalidObject) continue;
+          bool inserted = false;
+          if (targetCharacter.insert(target, static_cast<u32>(c), inserted) != c) return false;
+        }
+      }
+
+    // P1 (paralelo): amostragem e contribuições de cada personagem.
+    const auto sampleCharacter = [&](AdvanceScratch::CharacterWork &work) {
+      work.count = 0;work.playing = 0;work.diagnostic.clear();work.bindings.clear();
+      work.index.clear(std::max<usize>(work.channels, work.properties.size()));
+      work.bindingSeen.clear(work.channels);
+      const auto contributeLocal = [&](const ExternalSample *source, ObjectId object, AnimationPath path, u32 layer, float weight,
+                                       std::span<const float> value, bool additive = false, std::span<const float> reference = {},
+                                       bool relative = false) {
+        bool inserted = false;
+        const u32 slot = work.index.insert((u64(object) << 2) | static_cast<u64>(path), static_cast<u32>(work.count), inserted);
+        if (inserted) {
+          if (work.count < work.properties.size()) {
+            auto &reused = work.properties[work.count];
+            reused.object = object; reused.path = path; reused.list.clear();
+          } else {
+            work.properties.push_back({object, path, {}});
+          }
+          ++work.count;
+        }
+        auto &entry = work.properties[slot].list.emplace_back();
+        entry.layer = layer;
+        entry.weight = source ? weight * source->layerWeight : weight;
+        entry.value = value;
+        entry.additive = additive;
+        entry.reference = reference;
+        entry.relative = relative;
+        entry.sourceOwner = source ? source->controllerOwner : kInvalidObject;
+        entry.sourceInstance = source ? source->instance : 0;
+        entry.coverage = source ? weight : 0;
+      };
+      for (usize index = work.firstSample; index < work.lastSample; ++index) {
+        const auto &ready = prepared[index];
+        if (!ready.valid) continue;
+        const auto &sample = external_[index];
+        const auto &view = ready.view;
+        std::unordered_map<u64,std::vector<float>> references;
+        if(sample.additive&&sample.referenceClip.valid()) {
+          AnimationClipView ref;
+          if(!library_->findClip(sample.referenceClip,ref)||!ref.clip||!ref.source) {
+            work.diagnostic="Pose de referência ausente: "+sample.referenceClip.text();
+          } else {
+            std::vector<ObjectId> refTargets;resolveAnimationTargets(graph,sample.owner,*ref.source,refTargets);
+            for(const auto &channel:ref.clip->channels) {
+              if(channel.node>=refTargets.size()||refTargets[channel.node]==kInvalidObject) continue;
+              AnimationValue value(channel.components());
+              if(sampleChannel(*ref.source,channel,std::clamp(sample.referenceTime,0.f,ref.clip->duration),value))
+                references.emplace((u64(refTargets[channel.node])<<2)|static_cast<u64>(channel.path),std::vector<float>(value.begin(),value.end()));
+              else work.diagnostic="Canal de referência não produz valor válido: "+sample.referenceClip.text()+" · nó "+std::to_string(channel.node);
+            }
+          }
+        }
+        const auto &targets = externalTargets_[ready.targets].targets;
+        const auto masked = [&](ObjectId object) {
+          if (sample.mask == kInvalidObject) return true;
+          for (ObjectId o = object; o != kInvalidObject; ) {
+            if (o == sample.mask) return true;
+            const auto *e = graph.find(o);
+            if (!e || o == graph.root()) break;
+            o = e->parent;
+          }
+          return false;
+        };
+        ++work.playing;
+        for (const auto &channel : view.clip->channels) {
+          if (channel.node >= targets.size() || targets[channel.node] == kInvalidObject) continue;
+          const ObjectId target = targets[channel.node];
+          if (channel.path != AnimationPath::Weights && writable && !writable(target)) continue;
+          AnimationValue value(channel.components());
+          if(!sampleChannel(*view.source,channel,sample.time,value)) {
+            work.diagnostic="Canal não produz valor válido: "+sample.clip.text()+" · nó "+std::to_string(channel.node);continue;
+          }
+          {
+            const u64 key = (((u64(sample.owner) << 32) | sample.layer) * 0x9e3779b97f4a7c15ull) ^ ((u64(target) << 2) | static_cast<u64>(channel.path));
+            bool inserted = false;
+            work.bindingSeen.insert(key, 0, inserted);
+            if (inserted || std::none_of(work.bindings.begin(), work.bindings.end(), [&](const ExternalBinding &b) {
+                  return b.owner == sample.owner && b.layer == sample.layer && b.target == target && b.path == channel.path;
+                }))
+              work.bindings.push_back({sample.owner,sample.layer,target,channel.path,value.size()});
+          }
+          if(!masked(target)) {
+            if(rest_.contains(target)) contributeLocal(&sample,target,channel.path,sample.layer,0,value);
+            continue;
+          }
+          std::span<const float> ref;
+          if(sample.additive&&sample.referenceClip.valid()) {
+            const auto foundRef=references.find((u64(target)<<2)|static_cast<u64>(channel.path));
+            if(foundRef==references.end()||foundRef->second.size()!=value.size()) {
+              if(work.diagnostic.empty()) work.diagnostic="Referência sem canal compatível: objeto "+std::to_string(target);
+              contributeLocal(&sample,target,channel.path,sample.layer,0,value);continue;
+            }
+            ref=foundRef->second;
+          }
+          contributeLocal(&sample,target,channel.path,sample.layer,sample.weight,value,sample.additive,ref);
+        }
+      }
+      // Canais aposentados de uma camada ativa voltam ao repouso (peso zero).
+      for(const auto &binding:externalBindings_) {
+        if(binding.owner!=work.owner) continue;
+        if(!graph.exists(binding.target)||!activeLayers.contains((u64(binding.owner)<<32)|binding.layer)) continue;
+        if(work.index.find((u64(binding.target)<<2)|static_cast<u64>(binding.path))!=FlatIndex::Missing) continue;
+        if(binding.path==AnimationPath::Weights||!writable||writable(binding.target))
+          contributeLocal(nullptr,binding.target,binding.path,binding.layer,0,AnimationValue(binding.width,0.f));
+      }
+    };
+    const auto forCharacters = [&](const auto &fn) {
+      parallelAnimationRange(characterCount, 1, [&](usize first, usize last) {
+        for (usize c = first; c < last; ++c) fn(characters[c]);
+      });
+    };
+    forCharacters(sampleCharacter);
+
+    // S1 (série): repouso; rest_ cresce aqui.
+    if (scratch.restOwner != &rest_ || scratch.restGeneration != restGeneration_) {
+      scratch.restCache.clear();
+      for (auto &work : characters) work.restCache.clear();
+      scratch.restOwner = &rest_;
+      scratch.restGeneration = restGeneration_;
+    }
+    for (usize c = 0; c < characterCount; ++c) {
+      auto &work = characters[c];
+      for (const auto &binding : work.bindings) nextBindings.push_back(binding);
+      playing_ += work.playing;
+      if (!work.diagnostic.empty()) compositionDiagnostic_ = work.diagnostic;
+      if (work.restCache.size() < work.count) work.restCache.resize(work.count, {kInvalidObject, nullptr});
+      work.rests.resize(work.count);
+      for (usize index = 0; index < work.count; ++index) {
+        const auto object = work.properties[index].object;
+        auto &cached = work.restCache[index];
+        if (cached.first != object || !cached.second) cached = {object, &rest_[object]};
+        auto &rest = *cached.second;
+        if (!rest.hasTransform || !rest.hasWeights) {
+          const auto *entity = graph.find(object);
+          if (!rest.hasTransform && entity) {rest.transform = entity->transform;rest.hasTransform = true;}
+          if (!rest.hasWeights && entity)
+            if (const auto *mesh = static_cast<const scene::SkinnedMesh *>(entity->components.find(scene::SkinnedMesh::descriptor))) {
+              rest.weights = mesh->blendShapeWeights;rest.hasWeights = true;
+            }
+        }
+        if (!rest.decomposed && rest.hasTransform) {decompose(rest.transform, rest.t, rest.q, rest.s);rest.decomposed = true;}
+        work.rests[index] = &rest;
+      }
+    }
+
+    // P2 (paralelo): mistura, poses do personagem e TRS → Euler.
+    forCharacters([&](AdvanceScratch::CharacterWork &work) {
+      work.restValues.resize(work.count);work.results.resize(work.count);work.outcomes.resize(work.count);
+      composeProperties(work.properties.data(), work.rests.data(), work.restValues.data(), work.results.data(),
+                        work.outcomes.data(), 0, work.count);
+      work.poses.clear();
+      work.poseIndex.clear(work.count);
+      for (usize index = 0; index < work.count; ++index) {
+        const auto &property = work.properties[index];
+        if (!(work.outcomes[index] & ComposedOutcome) || property.path == AnimationPath::Weights) continue;
+        const auto &result = work.results[index];
+        bool insertedPose = false;
+        const u32 slot = work.poseIndex.insert(property.object, static_cast<u32>(work.poses.size()), insertedPose);
+        if (insertedPose) work.poses.emplace_back(property.object, AnimatorPose{});
+        auto &pose = work.poses[slot].second;
+        if (property.path == AnimationPath::Translation) {std::copy(result.begin(), result.end(), pose.t);pose.written |= 1;}
+        else if (property.path == AnimationPath::Rotation) {std::copy(result.begin(), result.end(), pose.q);pose.written |= 2;}
+        else {std::copy(result.begin(), result.end(), pose.s);pose.written |= 4;}
+        pose.changed = true;
+      }
+      work.writes.resize(work.poses.size());
+      convertPoses(graph, work.poses.data(), work.writes.data(), 0, work.poses.size());
+    });
+
+    // S2 (série): captura de camada, diagnósticos, blend shapes e o grafo.
+    for (usize c = 0; c < characterCount; ++c) {
+      auto &work = characters[c];
+      for (usize index = 0; index < work.count; ++index) {
+        const auto &property = work.properties[index];
+        const auto object = property.object;
+        captureLayers(property, work.restValues[index]);
+        const u8 outcome = work.outcomes[index];
+        if (outcome & ReferenceInvalidOutcome)
+          compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);
+        if (!(outcome & ComposedOutcome)) continue;
+        if (outcome & AdditiveInvalidOutcome)
+          compositionDiagnostic_="Composição aditiva inválida: objeto "+std::to_string(object);
+        if (property.path != AnimationPath::Weights) continue;
+        const auto &result = work.results[index];
+        const usize width = work.restValues[index].size();
+        auto *components = graph.editComponents(object);
+        auto *mesh = components ? static_cast<scene::SkinnedMesh *>(components->edit(scene::SkinnedMesh::descriptor)) : nullptr;
+        if (!mesh) continue;
+        if (mesh->blendShapeWeights.size() < width) mesh->blendShapeWeights.resize(width, 0.0f);
+        bool changed = false;
+        for (usize i = 0; i < width; ++i) {
+          const float percent = std::clamp(result[i] * PercentPerUnit, -scene::SkinnedMesh::MaximumBlendShapeWeight,
+                                           scene::SkinnedMesh::MaximumBlendShapeWeight);
+          changed = changed || mesh->blendShapeWeights[i] != percent;
+          mesh->blendShapeWeights[i] = percent;
+        }
+        if (changed) ++posed_;
+      }
+      const u8 stride = external_[work.firstSample].updateStride;
+      for (usize index = 0; index < work.poses.size(); ++index) {
+        const auto object = work.poses[index].first;
+        const auto &out = work.writes[index];
+        if (out.state == 2) compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);
+        else if (out.state == 1 || (stride > 1 && out.state == 0 && work.poses[index].second.changed))
+          writePose(object, out.state == 1 ? out.transform : graph.find(object)->transform, stride);
+      }
+    }
+    return true;
+  };
+  if (!characterPath()) {
   // Amostras do Animator: mesmo caminho de mistura, com máscara por subárvore.
   for (const auto &sample : external_) {
     if (sample.weight < 0 || !std::isfinite(sample.weight) || !graph.exists(sample.owner)) continue;
@@ -818,6 +1364,23 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     if(binding.path==AnimationPath::Weights||!writable||writable(binding.target))
       contribute(binding.target,binding.path,binding.layer,0,AnimationValue(binding.width,0.f));
   }
+  }
+  bool anyStride = false;
+  for (const auto &sample : external_) anyStride = anyStride || sample.updateStride > 1;
+  if (anyStride) {
+    scratch.strideTargets.clear(256);
+    for (const auto &sample : external_) {
+      if (sample.updateStride <= 1) continue;
+      const auto found = std::find_if(externalTargets_.begin(), externalTargets_.end(), [&](const ExternalTargets &e) {
+        return e.owner == sample.owner && e.clip == sample.clip;
+      });
+      if (found == externalTargets_.end()) continue;
+      for (const auto target : found->targets) if (target != kInvalidObject) {
+        bool inserted = false;
+        scratch.strideTargets.insert(target, sample.updateStride, inserted);
+      }
+    }
+  }
   external_.clear();
   // Troca de buffers: os dois vetores mantêm a capacidade entre quadros.
   externalBindings_.swap(nextBindings);
@@ -842,8 +1405,18 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
   }
 
   // Repouso: a pose (e os pesos) do nó quando a animação o tocou primeiro.
-  const auto restOf = [&](ObjectId object) -> Rest & {
-    auto &rest = rest_[object];
+  if (scratch.restOwner != &rest_ || scratch.restGeneration != restGeneration_) {
+    scratch.restCache.clear();
+    scratch.restOwner = &rest_;
+    scratch.restGeneration = restGeneration_;
+  }
+  if (scratch.restCache.size() < scratch.propertyCount)
+    scratch.restCache.resize(scratch.propertyCount, {kInvalidObject, nullptr});
+  const auto restOf = [&](ObjectId object, usize slot) -> Rest & {
+    auto &cached = scratch.restCache[slot];
+    if (cached.first != object || !cached.second) cached = {object, &rest_[object]};
+    auto &rest = *cached.second;
+    if (rest.hasTransform && rest.hasWeights) return rest;
     const auto *entity = graph.find(object);
     if (!rest.hasTransform && entity) {
       rest.transform = entity->transform;
@@ -857,117 +1430,56 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     return rest;
   };
 
-  auto &poses = scratch.poses;
-  poses.clear();
-  scratch.poseIndex.clear(scratch.propertyCount);
-  for (usize propertyIndexValue = 0; propertyIndexValue < scratch.propertyCount; ++propertyIndexValue) {
-    auto &property = properties[propertyIndexValue];
-    const auto object = property.object;
-    auto &rest = restOf(object);
-    AnimationValue restValue;
+  // Composição por propriedade (CPU, 24/10/2026: 13% da thread do jogo na Vila
+  // com 11 personagens). Três fases, como os Animation Jobs da Unity avaliam
+  // Animators em paralelo e só escrevem as transformações no fim:
+  //  1. série: repouso de cada propriedade (rest_ muda de tamanho aqui);
+  //  2. paralelo: a mistura pura de camadas, aditivas e normalização, cada
+  //     propriedade no seu próprio buffer;
+  //  3. série: captura de camada para interrupção, pesos de blend shape, poses
+  //     e diagnósticos, na mesma ordem do laço único que existia antes.
+  const usize propertyCount = scratch.propertyCount;
+  auto &restRefs = scratch.restRefs;
+  restRefs.resize(propertyCount);
+  for (usize index = 0; index < propertyCount; ++index) {
+    auto &rest = restOf(properties[index].object, index);
     if (!rest.decomposed && rest.hasTransform) {
       decompose(rest.transform, rest.t, rest.q, rest.s);
       rest.decomposed = true;
     }
-    float restT[3], restQ[4], restS[3];
-    if (rest.decomposed) {
-      std::copy(rest.t, rest.t + 3, restT); std::copy(rest.q, rest.q + 4, restQ); std::copy(rest.s, rest.s + 3, restS);
-    } else {
-      decompose(rest.transform, restT, restQ, restS);
-    }
-    switch (property.path) {
-    case AnimationPath::Translation: restValue.assign(restT, restT + 3); break;
-    case AnimationPath::Rotation: restValue.assign(restQ, restQ + 4); break;
-    case AnimationPath::Scale: restValue.assign(restS, restS + 3); break;
-    case AnimationPath::Weights:
-      restValue.resize(property.list.front().value.size(), 0.0f);
-      for (usize i = 0; i < restValue.size() && i < rest.weights.size(); ++i) restValue[i] = rest.weights[i] / PercentPerUnit;
-      break;
-    }
+    restRefs[index] = &rest;
+  }
+  auto &restValues = scratch.restValues;
+  auto &results = scratch.results;
+  auto &outcomes = scratch.outcomes;
+  restValues.resize(propertyCount);
+  results.resize(propertyCount);
+  outcomes.resize(propertyCount);
+  const auto composeRange = [&](usize first, usize last) {
+    composeProperties(properties.data(), restRefs.data(), restValues.data(), results.data(), outcomes.data(), first, last);
+  };
+  parallelAnimationRange(propertyCount, 48, composeRange);
+
+  auto &poses = scratch.poses;
+  poses.clear();
+  scratch.poseIndex.clear(propertyCount);
+  for (usize propertyIndexValue = 0; propertyIndexValue < propertyCount; ++propertyIndexValue) {
+    auto &property = properties[propertyIndexValue];
+    const auto object = property.object;
+    const AnimationValue &restValue = restValues[propertyIndexValue];
     const usize width = restValue.size();
     // Cache this layer's own composition, including sparse-channel coverage,
     // before higher layers or the rest pose affect it. Frozen deltas stay deltas.
     // (objeto, caminho) é único por propriedade: basta lembrar o que esta
     // propriedade já emitiu, em vez de varrer todos os canais da camada.
-    SmallVector<std::pair<const LayerPose *, bool>, 4> emitted;
-    for(const auto &seed:property.list) if(seed.sourceOwner!=kInvalidObject&&seed.coverage>0) {
-      auto found=std::find_if(layerPoses_.begin(),layerPoses_.end(),[&](const CapturedLayer &e){return e.owner==seed.sourceOwner&&e.instance==seed.sourceInstance&&e.layer==seed.layer;});
-      if(found==layerPoses_.end()) {layerPoses_.push_back({seed.sourceOwner,seed.sourceInstance,seed.layer,std::make_shared<LayerPose>()});found=std::prev(layerPoses_.end());}
-      auto &channels=found->pose->channels;
-      const LayerPose *capturedPose=found->pose.get();
-      if(std::any_of(emitted.begin(),emitted.end(),[&](const auto &e){return e.first==capturedPose&&e.second==seed.additive;})) continue;
-      std::vector<float> mixed(width,0);AnimationValue first;float sum=0;
-      for(const auto &c:property.list) if(c.sourceOwner==seed.sourceOwner&&c.sourceInstance==seed.sourceInstance&&c.layer==seed.layer&&c.additive==seed.additive&&c.coverage>0) {
-        AnimationValue v=c.value;
-        if(v.size()!=width) continue;
-        if(c.additive&&!c.relative) {
-          std::vector<float> relative;
-          if(!resources::relativeAnimationPose(property.path,v,c.reference.empty()?restValue:c.reference,relative)) continue;
-          v.assign(relative.begin(),relative.end());
-        }
-        if(property.path==AnimationPath::Rotation) {
-          if(first.empty()) first=v;
-          float dot=0;for(usize k=0;k<width;++k) dot+=first[k]*v[k];if(dot<0) for(float &f:v) f=-f;
-        }
-        for(usize k=0;k<width;++k) mixed[k]+=v[k]*c.coverage;
-        sum+=c.coverage;
-      }
-      if(sum>0) {for(float &f:mixed) f/=sum;channels.push_back({object,property.path,std::move(mixed),sum,seed.additive});emitted.push_back({capturedPose,seed.additive});}
-    }
-    AnimationValue result(width, 0.0f);
-    const bool rotation = property.path == AnimationPath::Rotation;
-    const float *reference = nullptr;
-    const auto accumulate = [&](std::span<const float> value, float weight) {
-      if (value.size() != width || weight <= 0) return;
-      float sign = 1;
-      if (rotation) {
-        if (!reference) reference = value.data();
-        float dot = 0;
-        for (u32 i = 0; i < 4; ++i) dot += reference[i] * value[i];
-        sign = dot < 0 ? -1.0f : 1.0f;
-      }
-      for (usize i = 0; i < width; ++i) result[i] += weight * sign * value[i];
-    };
-    SmallVector<u32, 8> layers;
-    for (const auto &c : property.list) if (std::find(layers.begin(), layers.end(), c.layer) == layers.end()) layers.push_back(c.layer);
-    std::sort(layers.begin(), layers.end(), std::greater<>());
-    float remaining = 1;
-    struct AdditiveLayer {AnimationValue delta;float weight;};
-    std::vector<AdditiveLayer> additions;
-    for (const auto layer : layers) {
-      float additiveSum=0;AnimationValue delta(width,0.f);
-      for(const auto &c:property.list) if(c.layer==layer&&c.additive) {
-        if(c.weight<=0) continue;
-        std::vector<float> relative;
-        if(c.relative) relative.assign(c.value.begin(),c.value.end());
-        else if(!resources::relativeAnimationPose(property.path,c.value,c.reference.empty()?restValue:c.reference,relative)) {
-          compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);continue;
-        }
-        if(rotation&&additiveSum>0) {float dot=0;for(usize i=0;i<width;++i) dot+=delta[i]*relative[i];if(dot<0) for(float &v:relative) v=-v;}
-        for(usize i=0;i<width;++i) delta[i]+=relative[i]*c.weight;
-        additiveSum+=c.weight;
-      }
-      if(additiveSum>0&&remaining>1e-6f) {
-        for(float &v:delta) v/=additiveSum;
-        additions.push_back({std::move(delta),std::min(additiveSum,1.f)*remaining});
-      }
-      float sum = 0;
-      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) sum += c.weight;
-      if (sum <= 0) continue;
-      const float take = std::min(sum, 1.0f) * remaining;
-      for (const auto &c : property.list) if (c.layer == layer&&!c.additive) accumulate(c.value, c.weight * take / sum);
-      remaining -= take;
-      if (remaining <= 1e-6f) break;
-    }
-    if (remaining > 1e-6f) accumulate(restValue, remaining);
-    if (rotation) {
-      const float length = std::sqrt(result[0] * result[0] + result[1] * result[1] + result[2] * result[2] + result[3] * result[3]);
-      if (!(length > 1e-12f)) continue;
-      for (auto &v : result) v /= length;
-    }
-    for(auto addition=additions.rbegin();addition!=additions.rend();++addition)
-      if(!resources::applyRelativeAnimationPose(property.path,result,addition->delta,addition->weight))
-        compositionDiagnostic_="Composição aditiva inválida: objeto "+std::to_string(object);
+    captureLayers(property, restValue);
+    const u8 outcome = outcomes[propertyIndexValue];
+    if (outcome & ReferenceInvalidOutcome)
+      compositionDiagnostic_="Referência inválida (escala zero ou quaternion): objeto "+std::to_string(object);
+    if (!(outcome & ComposedOutcome)) continue;
+    if (outcome & AdditiveInvalidOutcome)
+      compositionDiagnostic_="Composição aditiva inválida: objeto "+std::to_string(object);
+    const AnimationValue &result = results[propertyIndexValue];
     if (property.path == AnimationPath::Weights) {
       auto *components = graph.editComponents(object);
       auto *mesh = components ? static_cast<scene::SkinnedMesh *>(components->edit(scene::SkinnedMesh::descriptor)) : nullptr;
@@ -985,35 +1497,34 @@ bool SceneAnimator::advance(float delta, const std::function<bool(ObjectId)> &wr
     }
     bool insertedPose = false;
     const u32 poseSlot = scratch.poseIndex.insert(object, static_cast<u32>(poses.size()), insertedPose);
-    if (insertedPose) {
-      AnimatorPose pose;
-      decompose(graph.find(object)->transform, pose.t, pose.q, pose.s);
-      poses.emplace_back(object, pose);
-    }
+    if (insertedPose) poses.emplace_back(object, AnimatorPose{});
     auto &pose = poses[poseSlot].second;
-    if (property.path == AnimationPath::Translation) std::copy(result.begin(), result.end(), pose.t);
-    else if (property.path == AnimationPath::Rotation) std::copy(result.begin(), result.end(), pose.q);
-    else std::copy(result.begin(), result.end(), pose.s);
+    if (property.path == AnimationPath::Translation) {std::copy(result.begin(), result.end(), pose.t);pose.written |= 1;}
+    else if (property.path == AnimationPath::Rotation) {std::copy(result.begin(), result.end(), pose.q);pose.written |= 2;}
+    else {std::copy(result.begin(), result.end(), pose.s);pose.written |= 4;}
     pose.changed = true;
   }
-  const float identity[16]{1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-  for (const auto &[object, pose] : poses) {
-    if (!pose.changed) continue;
-    float local[16];
-    resources::composeTransform(pose.t, pose.q, pose.s, local);
-    Transform transform;
-    // Escala negativa ou nula no clipe não cabe em TRS de Euler: o nó mantém a
-    // pose anterior em vez de receber uma decomposição inventada.
-    if (!localTransformForWorld(local, identity, transform)) {
-      compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);continue;
-    }
-    const auto &current = graph.find(object)->transform;
-    if (std::equal(current.position, current.position + 3, transform.position) &&
-        std::equal(current.rotationDegrees, current.rotationDegrees + 3, transform.rotationDegrees) &&
-        std::equal(current.scale, current.scale + 3, transform.scale))
-      continue;
-    if (graph.setTransform(object, transform)) ++posed_;
+  // TRS → Transform de Euler por osso em paralelo (só leitura do grafo); a
+  // escrita no grafo fica em série, na ordem das poses.
+  auto &transforms = scratch.transforms;
+  transforms.resize(poses.size());
+  const auto convertRange = [&](usize first, usize last) {
+    convertPoses(graph, poses.data(), transforms.data(), first, last);
+  };
+  parallelAnimationRange(poses.size(), 24, convertRange);
+  for (usize index = 0; index < poses.size(); ++index) {
+    const auto object = poses[index].first;
+    const auto &out = transforms[index];
+    const u32 found = anyStride ? scratch.strideTargets.find(object) : FlatIndex::Missing;
+    const u8 stride = found == FlatIndex::Missing ? 1 : static_cast<u8>(found);
+    if (out.state == 2) compositionDiagnostic_="Pose TRS não representável: objeto "+std::to_string(object);
+    else if (out.state == 1 || (stride > 1 && out.state == 0 && poses[index].second.changed))
+      writePose(object, out.state == 1 ? out.transform : graph.find(object)->transform, stride);
   }
+  // Quadros sem avaliação: cada osso anda mais um passo até a pose avaliada.
+  for (auto &rate : interpolations_)
+    if (rate.steps > 1 && rate.frame != frame_ && rate.step < rate.steps) {++rate.step;rate.frame = frame_;blendWrite(rate);}
+  std::erase_if(interpolations_, [](const RateInterpolation &rate) {return rate.steps <= 1 || rate.step >= rate.steps;});
   return true;
 }
 

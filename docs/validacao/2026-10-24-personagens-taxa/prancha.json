@@ -1,0 +1,10 @@
+{"title": "Vila Astra S, Play (POCO F7, cortes-0444): animação serial × personagens em paralelo + taxa por tamanho na tela",
+ "rows": [
+  {"unity": "vila-s/01-serial/vila-astra/01-S/screen.png", "device": "vila-s/03-paralelo-taxa/vila-astra/01-S/screen.png",
+   "unity_caption": "Serial, todo quadro · thread 13,83 ms · processo 14,72 ms · 32,5 °C",
+   "device_caption": "Paralelo + taxa · thread 10,00 ms · processo 12,53 ms · 35,1 °C",
+   "verdict": "Mesma cena e composição; os moradores pequenos animam a cada 2 ou 4 quadros com interpolação (até 3 quadros de atraso). Thread do jogo −3,8 ms, processo −2,2 ms."},
+  {"unity": "01-serial-recorte-moradores.png", "device": "03-paralelo-taxa-recorte-moradores.png",
+   "unity_caption": "Moradores na praça, avaliados todo quadro", "device_caption": "Os mesmos, em taxa reduzida e interpolados",
+   "verdict": "Poses coerentes e sem membros quebrados; as posições diferem porque cada captura é um instante diferente do Play (passeio dos NPCs)."}
+ ]}

@@ -1,0 +1,6 @@
+10-25 04:12:47.702 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=0 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=off dinamicos=15 desenhos dinamicos=0
+10-25 04:12:51.447 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=6 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=on dinamicos=15 desenhos dinamicos=30
+10-25 04:12:55.210 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=0 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=on dinamicos=15 desenhos dinamicos=0
+10-25 04:12:58.863 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=0 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=on dinamicos=15 desenhos dinamicos=0
+10-25 04:13:02.633 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=4 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=off dinamicos=15 desenhos dinamicos=0
+10-25 04:13:06.317 28604  8457 I Aether.Android: [ShadowCache] cascatas regravadas=0 em 120 quadros (4 cascatas); sujas por camera=0 poses=0 ossos=0 aparencia=0; dois_mapas=off dinamicos=15 desenhos dinamicos=0

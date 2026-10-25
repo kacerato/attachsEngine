@@ -292,6 +292,29 @@ bool EditorSession::extractPlayMap(std::vector<renderer::MapDrawState> &out,
   if(!playScene_.scriptDiagnostics().empty()) state_.status=playScene_.scriptDiagnostics();
   if(!playScene_.extract(mapScene_,out)) {reportProblem(EditorConsoleSeverity::Error,"Play: recurso da malha não pôde ser extraído");return false;}
   applyLodGroups(playScene_.document(),out);
+  // Culling Mode do Animator: quem tem renderer dentro da câmera do jogo neste
+  // quadro anima no próximo (a Unity também decide pelo culling do quadro anterior).
+  playScene_.animatorGraphs().setCullingOverride(animatorCullingOverride_);
+  if(const auto game=gameView();game.frustum.valid) {
+    std::vector<runtime::ObjectId> visible;visible.reserve(out.size());
+    std::vector<std::pair<runtime::ObjectId,float>> sizes;
+    const auto &frustum=game.frustum;
+    for(const auto &draw:out) {
+      if(!draw.visible||!renderer::isSphereVisible(frustum,draw.pose.draw.boundsCenter,draw.pose.draw.boundsRadius)) continue;
+      visible.push_back(static_cast<runtime::ObjectId>(draw.objectId));
+      if(!animationUpdateRate_) continue;
+      // Altura na tela em fração da imagem: diâmetro sobre a altura do
+      // frustum naquela distância (ortográfica: sobre a altura fixa).
+      const float *c=draw.pose.draw.boundsCenter;
+      const float dx=c[0]-frustum.cameraPosition[0],dy=c[1]-frustum.cameraPosition[1],dz=c[2]-frustum.cameraPosition[2];
+      const float distance=std::max(std::sqrt(dx*dx+dy*dy+dz*dz),draw.pose.draw.boundsRadius);
+      const float halfHeight=renderer::isOrthographic(frustum)?frustum.orthographicHalfHeight:distance*frustum.tangentHalfVertical;
+      sizes.push_back({static_cast<runtime::ObjectId>(draw.objectId),halfHeight>0?draw.pose.draw.boundsRadius/halfHeight:1.f});
+    }
+    playScene_.animatorGraphs().setVisibleObjects(std::move(visible));
+    playScene_.animatorGraphs().setUpdateRateEnabled(animationUpdateRate_);
+    playScene_.animatorGraphs().setScreenSizes(std::move(sizes));
+  }
   return true;
 }
 

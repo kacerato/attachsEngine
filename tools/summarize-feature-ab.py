@@ -1,6 +1,9 @@
 """Tabelas da medição de 22/10/2026: base × G0 e A/B por recurso contra os controles vizinhos.
 
 Uso: python tools/summarize-feature-ab.py <pasta-da-medição> > tabelas.md
+     python tools/summarize-feature-ab.py <pasta> cortes > tabelas.md
+O modo "cortes" (23/10/2026) lê <pasta>/<cena>-<s|c>/ab-rows.json com controle "antes"
+(measure-feature-ab.ps1 -ControlName antes) e compara cada "depois" com os vizinhos.
 Espera <pasta>/<cena>-base/rows.json (S/C/C/S) e <pasta>/<cena>-ab/ab-rows.json
 (measure-feature-ab.ps1). A linha de base do G0 vem de docs/validacao/g0-baseline-2026-10-17.
 """
@@ -105,9 +108,45 @@ def ab_table(folder, key):
     print()
 
 
+def cortes_table(folder):
+    metrics = [('internalFps', 'FPS interno')] + [m for m in METRICS if m[0] in (
+        'gpu_frame_ms', 'process_cpu_ms', 'gpu_opaque_ms', 'gpu_post_ms', 'gpu_shadow_ms', 'gpu_fsr_easu_ms')]
+    print('| Cena / nível | ' + ' | '.join('%s antes | depois | Δ' % label for _, label in metrics) + ' | Bateria °C |')
+    print('|---|' + '---|---|---|' * len(metrics) + '---|')
+    for key in ('vila', 'sponza'):
+        for tier in ('s', 'c'):
+            sub = '%s-%s' % (key, tier)
+            rows = sorted(load(os.path.join(folder, sub, 'ab-rows.json')), key=lambda r: r['step'])
+            if not rows:
+                continue
+            controls = [r for r in rows if r['configuration'] == 'antes']
+            after = [r for r in rows if r['configuration'] != 'antes']
+            cells = []
+            for metric, _ in metrics:
+                a = mean([r.get(metric) for r in controls])
+                b = mean([r.get(metric) for r in after])
+                delta = None if a is None or b is None else b - a
+                cells += [cell(a), cell(b), ('+' if delta is not None and delta >= 0.005 else '') + cell(delta)]
+            temps = [battery_celsius(os.path.join(folder, sub, '%02d-%s' % (r['step'], r['configuration'])))
+                     for r in rows]
+            temps = [t for t in temps if t is not None]
+            span = '%s–%s' % (cell(min(temps), 1), cell(max(temps), 1)) if temps else '—'
+            print('| %s %s | %s | %s |' % (SCENES[key][0], tier.upper(), ' | '.join(cells), span))
+    print()
+    for key in ('vila', 'sponza'):
+        for tier in ('s', 'c'):
+            rows = sorted(load(os.path.join(folder, '%s-%s' % (key, tier), 'ab-rows.json')), key=lambda r: r['step'])
+            if rows:
+                print('%s %s, rodadas: %s.\n' % (SCENES[key][0], tier.upper(), '; '.join('%d %s GPU %s ms, sombras %s' % (
+                    r['step'], r['configuration'], cell(r.get('gpu_frame_ms')), r.get('shadows') or '—') for r in rows)))
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     folder = sys.argv[1]
+    if len(sys.argv) > 2 and sys.argv[2] == 'cortes':
+        cortes_table(folder)
+        return
     for key in ('vila', 'sponza'):
         base_table(folder, key)
         ab_table(folder, key)

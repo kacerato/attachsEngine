@@ -64,6 +64,10 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens (G4b)
   // para nenhum offset anterior mudar. Mesmo formato de `punctualLights`.
   layout(offset=3600) vec4 punctualLightsExtra[32];
+  // Cached Shadows (instanced_renderer.cpp): retângulo do mapa dinâmico em toda
+  // cascata (escala xy, deslocamento zw no uv local) e texel do atlas dinâmico.
+  layout(offset=4752) vec4 shadowDynamicRect[4];
+  layout(offset=4816) vec4 shadowDynamicParameters;
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -76,6 +80,9 @@ layout(set=1,binding=4) uniform sampler2D environmentBrdfLut;
 layout(set=1,binding=17) uniform sampler2DShadow localShadowAtlas;
 // Mapa de nuvens repetível (renderer/cloud_layer.cpp), o mesmo do céu.
 layout(set=1,binding=18) uniform mediump sampler2D cloudMap;
+// Cached Shadows: só os projetores dinâmicos de cada cascata, num atlas
+// menor com a mesma grade; cloudShadow.y = 1 quando ele vale (instanced_renderer).
+layout(set=1,binding=19) uniform sampler2DShadow dynamicShadowAtlas;
 #include "cloud_layer.glsl"
 
 highp vec3 environmentSourceDirection(highp vec3 direction) {
@@ -185,6 +192,10 @@ highp vec3 toneMapEnvironment(highp vec3 color) {
   return astraToneMap(color,environment.scenePost.y);
 }
 
+mediump float sampleShadowKernel(sampler2DShadow atlas, highp vec2 atlasUv, highp vec2 tile, highp float grid,
+                                 highp vec2 tileMinimum, highp vec2 tileMaximum, highp float texel, highp float depth,
+                                 int cascade, int cascadeCount);
+
 mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
                                               mediump vec3 normal,
                                               int cascade,
@@ -206,6 +217,42 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
   highp vec2 tileMinimum=tile/grid+vec2(texel*0.5);
   highp vec2 tileMaximum=(tile+1.0)/grid-vec2(texel*0.5);
   atlasUv=clamp(atlasUv,tileMinimum,tileMaximum);
+  return sampleShadowKernel(shadowAtlas,atlasUv,tile,grid,tileMinimum,tileMaximum,texel,
+                            projected.z,cascade,cascadeCount);
+}
+
+// Dinâmicos (moradores): o mesmo kernel no mapa dinâmico, no retângulo deles
+// dentro da cascata do fragmento. Uma busca só, fora da mistura entre
+// cascatas: com ela dentro de sampleDirectionalShadowCascade (duas cópias
+// inlinadas) e as 4 cascatas, o compilador do Adreno (E031.47.18.49) caía em
+// vkCreateGraphicsPipelines no POCO F7 (25/10).
+mediump float sampleDynamicShadowCascade(highp vec3 worldPosition,
+                                          mediump vec3 normal,
+                                          int cascade,
+                                          int cascadeCount) {
+  highp vec4 rect=environment.shadowDynamicRect[cascade];
+  if(rect.x<=0.0) return 1.0;
+  highp vec3 offsetPosition=worldPosition+normal*
+      (environment.shadowParameters.w*environment.shadowWorldUnitsPerTexel[cascade]);
+  highp vec4 clip=environment.shadowViewProjection[cascade]*vec4(offsetPosition,1.0);
+  highp vec3 projected=clip.xyz/clip.w;
+  highp vec2 dynamicUv=(projected.xy*0.5+0.5)*rect.xy+rect.zw;
+  if(projected.z<=0.0 || projected.z>=1.0 || any(lessThan(dynamicUv,vec2(0.0))) ||
+     any(greaterThan(dynamicUv,vec2(1.0)))) return 1.0;
+  highp vec2 tile=vec2(float(cascade&1),float(cascade>>1));
+  highp float grid=cascadeCount>1?2.0:1.0;
+  highp float dynamicTexel=environment.shadowDynamicParameters.x;
+  highp vec2 dynamicMinimum=tile/grid+vec2(dynamicTexel*0.5);
+  highp vec2 dynamicMaximum=(tile+1.0)/grid-vec2(dynamicTexel*0.5);
+  highp vec2 dynamicAtlasUv=clamp((dynamicUv+tile)/grid,dynamicMinimum,dynamicMaximum);
+  return sampleShadowKernel(dynamicShadowAtlas,dynamicAtlasUv,tile,grid,dynamicMinimum,dynamicMaximum,
+                            dynamicTexel,projected.z,cascade,cascadeCount);
+}
+
+mediump float sampleShadowKernel(sampler2DShadow shadowAtlas, highp vec2 atlasUv, highp vec2 tile, highp float grid,
+                                 highp vec2 tileMinimum, highp vec2 tileMaximum, highp float texel, highp float depth,
+                                 int cascade, int cascadeCount) {
+  highp vec3 projected=vec3(0.0,0.0,depth);
   highp float cascadeRatio=cascadeCount>1?float(cascade)/float(cascadeCount-1):0.0;
   int radius=int(mix(environment.shadowFilterParameters.x,
                      environment.shadowFilterParameters.y,cascadeRatio)+0.5);
@@ -300,6 +347,9 @@ mediump float directionalCascadeShadow(highp vec3 worldPosition, mediump vec3 no
     highp float start=intervalEnd-width;
     visibility=mix(visibility,1.0,smoothstep(start,intervalEnd,viewDepth));
   }
+  // Cached Shadows: a sombra dos dinâmicos é o mínimo com a do atlas estático.
+  if(environment.cloudShadow.y>0.5)
+    visibility=min(visibility,sampleDynamicShadowCascade(worldPosition,normal,cascade,cascadeCount));
   // Força da sombra da Luz principal (Strength do Light Inspector): abaixo de
   // 1 a luz do sol vaza pelo oclusor.
   return mix(1.0,visibility,clamp(environment.shadowParameters.z,0.0,1.0));
