@@ -1405,6 +1405,11 @@ private:
   VkRenderPass shadowDynamicRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer shadowDynamicFramebuffer_ = VK_NULL_HANDLE;
   u32 shadowDynamicResolution_ = 0;
+  // Retângulo justo (escala xy, deslocamento zw no uv da cascata) e a matriz
+  // remapeada de cada cascata perto; escala zero = cascata sem dinâmicos.
+  float shadowDynamicRect_[DynamicShadowCascades][4]{};
+  float shadowDynamicViewProjection_[DynamicShadowCascades][16]{};
+  void fitDynamicShadowRects();
   bool shadowDynamicValid_ = false;
   u32 shadowDynamicDirtyMask_ = 0;
   std::vector<u8> shadowDynamic_;      // 1: pele ou já se moveu no Play

@@ -64,6 +64,10 @@ layout(set=1,binding=0,std140) uniform EnvironmentLightingBlock {
   // PK-3: segundo banco de luzes adicionais (vagas 8..15), depois das nuvens (G4b)
   // para nenhum offset anterior mudar. Mesmo formato de `punctualLights`.
   layout(offset=3600) vec4 punctualLightsExtra[32];
+  // Cached Shadows (instanced_renderer.cpp): retângulo do mapa dinâmico em cada
+  // cascata perto (escala xy, deslocamento zw no uv local) e texel do atlas dinâmico.
+  layout(offset=4752) vec4 shadowDynamicRect[2];
+  layout(offset=4784) vec4 shadowDynamicParameters;
 } environment;
 layout(set=1,binding=1) uniform sampler2D environmentMap;
 // sampler2DShadow: o compare e o filtro bilinear 2x2 saem numa unica busca de
@@ -188,9 +192,9 @@ highp vec3 toneMapEnvironment(highp vec3 color) {
   return astraToneMap(color,environment.scenePost.y);
 }
 
-mediump float sampleStaticShadowCascade(highp vec2 atlasUv, highp vec2 tile, highp float grid, highp vec2 tileMinimum,
-                                        highp vec2 tileMaximum, highp float texel, highp float depth,
-                                        int cascade, int cascadeCount);
+mediump float sampleShadowKernel(sampler2DShadow atlas, highp vec2 atlasUv, highp vec2 tile, highp float grid,
+                                 highp vec2 tileMinimum, highp vec2 tileMaximum, highp float texel, highp float depth,
+                                 int cascade, int cascadeCount);
 
 mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
                                               mediump vec3 normal,
@@ -213,17 +217,29 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
   highp vec2 tileMinimum=tile/grid+vec2(texel*0.5);
   highp vec2 tileMaximum=(tile+1.0)/grid-vec2(texel*0.5);
   atlasUv=clamp(atlasUv,tileMinimum,tileMaximum);
-  // Dinâmicos (moradores): uma busca filtrada no atlas pequeno; a sombra é o
-  // mínimo com a das cascatas, como dois mapas somados na mesma luz.
-  mediump float dynamicVisibility=1.0;
-  if(environment.cloudShadow.y>0.5 && cascade<2)
-    dynamicVisibility=texture(dynamicShadowAtlas,vec3(atlasUv,projected.z));
-  return min(dynamicVisibility,sampleStaticShadowCascade(atlasUv,tile,grid,tileMinimum,tileMaximum,texel,projected.z,cascade,cascadeCount));
+  mediump float visibility=sampleShadowKernel(shadowAtlas,atlasUv,tile,grid,tileMinimum,tileMaximum,texel,
+                                              projected.z,cascade,cascadeCount);
+  // Dinâmicos (moradores): mesmo kernel no mapa dinâmico, ajustado ao retângulo
+  // deles dentro da cascata; a sombra é o mínimo das duas.
+  if(environment.cloudShadow.y>0.5 && cascade<2) {
+    highp vec4 rect=environment.shadowDynamicRect[cascade];
+    highp vec2 dynamicUv=localUv*rect.xy+rect.zw;
+    if(rect.x>0.0 && all(greaterThanEqual(dynamicUv,vec2(0.0))) && all(lessThanEqual(dynamicUv,vec2(1.0)))) {
+      highp float dynamicTexel=environment.shadowDynamicParameters.x;
+      highp vec2 dynamicAtlasUv=(dynamicUv+tile)/grid;
+      highp vec2 dynamicMinimum=tile/grid+vec2(dynamicTexel*0.5);
+      highp vec2 dynamicMaximum=(tile+1.0)/grid-vec2(dynamicTexel*0.5);
+      dynamicAtlasUv=clamp(dynamicAtlasUv,dynamicMinimum,dynamicMaximum);
+      visibility=min(visibility,sampleShadowKernel(dynamicShadowAtlas,dynamicAtlasUv,tile,grid,dynamicMinimum,
+                                                   dynamicMaximum,dynamicTexel,projected.z,cascade,cascadeCount));
+    }
+  }
+  return visibility;
 }
 
-mediump float sampleStaticShadowCascade(highp vec2 atlasUv, highp vec2 tile, highp float grid, highp vec2 tileMinimum,
-                                        highp vec2 tileMaximum, highp float texel, highp float depth,
-                                        int cascade, int cascadeCount) {
+mediump float sampleShadowKernel(sampler2DShadow shadowAtlas, highp vec2 atlasUv, highp vec2 tile, highp float grid,
+                                 highp vec2 tileMinimum, highp vec2 tileMaximum, highp float texel, highp float depth,
+                                 int cascade, int cascadeCount) {
   highp vec3 projected=vec3(0.0,0.0,depth);
   highp float cascadeRatio=cascadeCount>1?float(cascade)/float(cascadeCount-1):0.0;
   int radius=int(mix(environment.shadowFilterParameters.x,

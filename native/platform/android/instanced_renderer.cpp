@@ -213,8 +213,14 @@ struct DirtRoadFrameUniform {
   float postDofDetail[4]{};            // amostras do bokeh, 1/aspecto, alta qualidade
   float postBloomDirt[4]{1,1,0,0};     // escala xy e deslocamento xy da sujeira
   float postBokeh[22][4]{};            // kernel de lâminas (até 43 pontos xy)
+  // Cached Shadows: retângulo do mapa dinâmico em cada cascata perto, no uv
+  // local da cascata (escala xy, deslocamento zw; escala zero = sem dinâmicos)
+  // e o texel do atlas dinâmico (x).
+  float shadowDynamicRect[2][4]{};
+  float shadowDynamicParameters[4]{};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4752);
+static_assert(sizeof(DirtRoadFrameUniform) == 4800);
+static_assert(offsetof(DirtRoadFrameUniform, shadowDynamicRect) == 4752);
 static_assert(offsetof(DirtRoadFrameUniform, postLensAxis) == 4256);
 static_assert(offsetof(DirtRoadFrameUniform, postBloomDirt) == 4384);
 static_assert(offsetof(DirtRoadFrameUniform, postBokeh) == 4400);
@@ -3045,6 +3051,59 @@ void InstancedRenderer::markShadowDynamic(u32 drawIndex, const std::array<float,
   else shadowCascadeDirtyMask_ = 0xffffffffu;
 }
 
+// Retângulo justo dos projetores dinâmicos em cada cascata perto, em espaço
+// de luz: a matriz do mapa dinâmico é este remapeamento sobre a da cascata
+// (mesma profundidade), e seus texels cobrem só a área dos moradores. A
+// sombra de um projetor cai na mesma posição xy de luz, então o retângulo
+// dos projetores (mais a folga do kernel) cobre também os receptores.
+void InstancedRenderer::fitDynamicShadowRects() {
+  for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade) {
+    float *rect = shadowDynamicRect_[cascade];
+    rect[0] = rect[1] = rect[2] = rect[3] = 0.0f;
+    if (cascade >= shadowCascadeCount_ || !dualShadowActive()) continue;
+    const auto &region = shadowCascades_[cascade];
+    const float *m = region.viewProjection;  // coluna principal: m[c*4+r]
+    float minimum[2]{1e30f, 1e30f}, maximum[2]{-1e30f, -1e30f};
+    bool any = false;
+    const auto &draws = dirtRoadResources_.draws();
+    for (u32 drawIndex = 0; drawIndex < shadowDynamic_.size() && drawIndex < draws.size(); ++drawIndex) {
+      if (!shadowDynamic_[drawIndex]) continue;
+      if (!authoredShadows_.empty() && drawIndex < authoredShadows_.size() && !authoredShadows_[drawIndex]) continue;
+      const auto &draw = draws[drawIndex];
+      if (!renderer::isShadowCasterVisible(region, draw.boundsCenter, draw.boundsRadius)) continue;
+      for (u32 axis = 0; axis < 2; ++axis) {
+        const float ndc = m[axis] * draw.boundsCenter[0] + m[4 + axis] * draw.boundsCenter[1] +
+                          m[8 + axis] * draw.boundsCenter[2] + m[12 + axis];
+        const float scale = std::sqrt(m[axis] * m[axis] + m[4 + axis] * m[4 + axis] + m[8 + axis] * m[8 + axis]);
+        const float uv = ndc * 0.5f + 0.5f, extent = draw.boundsRadius * scale * 0.5f;
+        minimum[axis] = std::min(minimum[axis], uv - extent);
+        maximum[axis] = std::max(maximum[axis], uv + extent);
+      }
+      any = true;
+    }
+    if (!any) continue;
+    // Folga do kernel (4 texels da cascata) e tamanho em passos de 1/64 do uv:
+    // o retângulo não treme a cada passo de um morador.
+    const float pad = 4.0f / static_cast<float>(std::max(1u, renderingPolicy_.shadows.cascadeResolution));
+    float viewMatrix[16];
+    std::memcpy(viewMatrix, m, sizeof(viewMatrix));
+    for (u32 axis = 0; axis < 2; ++axis) {
+      float low = std::max(0.0f, minimum[axis] - pad), high = std::min(1.0f, maximum[axis] + pad);
+      float size = std::max(high - low, 1.0f / 64.0f);
+      size = std::min(1.0f, std::ceil(size * 64.0f) / 64.0f);
+      low = std::clamp(std::floor(low * 256.0f) / 256.0f, 0.0f, 1.0f - size);
+      const float scale = 1.0f / size;
+      rect[axis] = scale;
+      rect[2 + axis] = -low * scale;
+      // uv' = uv*scale - low*scale  =>  ndc' = ndc*scale + (scale - 1 - 2*low*scale)
+      const float bias = scale - 1.0f - 2.0f * low * scale;
+      for (u32 column = 0; column < 4; ++column)
+        viewMatrix[column * 4 + axis] = m[column * 4 + axis] * scale + m[column * 4 + 3] * bias;
+    }
+    std::memcpy(shadowDynamicViewProjection_[cascade], viewMatrix, sizeof(viewMatrix));
+  }
+}
+
 bool InstancedRenderer::createShadowResources() {
   if (!dirtRoadPreview_) return true;
   shadowDepthFormat_ = chooseDepthFormat(physicalDevice_, true);
@@ -3357,7 +3416,8 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     }
     ShadowPushConstants push;
     std::memcpy(&push,prep.push.data(),sizeof(push));
-    std::memcpy(push.lightViewProjection,shadowCascades_[cascade].viewProjection,
+    std::memcpy(push.lightViewProjection,
+                casterFilter == 2 ? shadowDynamicViewProjection_[cascade] : shadowCascades_[cascade].viewProjection,
                 sizeof(push.lightViewProjection));
     vkCmdPushConstants(commandBuffer_,shadowPipelineLayout_,
                        VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT,
@@ -3416,8 +3476,11 @@ void InstancedRenderer::recordShadowPass(const platform::FreeCameraState &) {
     vkCmdBindIndexBuffer(commandBuffer_,dirtRoadResources_.indexBuffer(),0,VK_INDEX_TYPE_UINT32);
     boundGeometry = mesh;
     casterFilter = 2;
-    recordCascades(nearMask, shadowDynamicResolution_,
-                   static_cast<float>(resolution) / static_cast<float>(std::max(1u, shadowDynamicResolution_)));
+    // Mesma faixa de profundidade da cascata: o desvio é o da cascata.
+    u32 fittedMask = 0;
+    for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade)
+      if (shadowDynamicRect_[cascade][0] > 0.0f) fittedMask |= 1u << cascade;
+    recordCascades(nearMask & fittedMask, shadowDynamicResolution_, 1.0f);
     vkCmdEndRenderPass(commandBuffer_);
     shadowDynamicValid_ = true;
   }
@@ -6950,6 +7013,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade)
           if (renderer::isShadowCasterVisible(shadowCascades_[cascade], bounds.data(), bounds[3]))
             shadowCascadeDirtyMask_ |= 1u << cascade;
+      fitDynamicShadowRects();
+      for (u32 cascade = 0; cascade < DynamicShadowCascades; ++cascade)
+        std::memcpy(frame->shadowDynamicRect[cascade], shadowDynamicRect_[cascade], sizeof(shadowDynamicRect_[cascade]));
+      frame->shadowDynamicParameters[0] = shadowDynamicAtlas_.width() > 0
+                                              ? 1.0f / static_cast<float>(shadowDynamicAtlas_.width()) : 1.0f;
       for (u32 cascade = 0; cascade < shadowCascadeCount_; ++cascade) {
         std::memcpy(frame->shadowViewProjection[cascade], shadowCascades_[cascade].viewProjection,
                     sizeof(shadowCascades_[cascade].viewProjection));
