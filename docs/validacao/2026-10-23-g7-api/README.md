@@ -87,4 +87,20 @@ e “G7 n … (Flow)”). Capturas do POCO em `capturas/`.
 
 ## Validação
 
-(preenchido ao final do bloco)
+Host (24/10): suíte nativa 1670/1670 (`aether_tests`, exe das 01:00); gerenciada 529/529 (`Aether.Tests.exe`), com
+`G7GraphicsApiTests` (6) e `test_g7_graphics_api` (8, inclusive Entrada do jogador e cena gerada) e
+`g7_touch_button_drives_player_input_connection_to_volume_weight` (toque real da sessão no centro do botão).
+
+POCO F7, Astra Dev `0.3.0-dev.261024999-g7-api-0103` (pranchas em `capturas/`):
+
+| # | C# | Flow |
+|---|---|---|
+| 1 Dia acelerado | ✅ `HourChanged` a cada 5 s, pôr/nascer; noite coerente após recapturar a sonda por script e usar a Lua padrão (exposição chega a −6 EV) | ✅ sonda recapturada a cada hora |
+| 2 Perfil por área | ❌ o app cai ~2 s após a troca de perfil (`FORTIFY: pthread_mutex_lock called on a destroyed mutex`) | ❌ idem |
+| 3 Desfoque ao mirar | ❌ toque no botão “Mirar” não vira a ação no aparelho (no host passa; toque injetado na pausa funciona) | ❌ idem |
+| 4 Postes ao anoitecer | ✅ `Sunset` acende luz e emissão | ✅ pôr do sol → Ativar Postes |
+| 5 Sonda por script | ✅ cor do painel + `RenderProbe()` | ✅ Timer → capturar agora |
+| 6 Troca de material | ✅ Ouro (Lit) ↔ Neon (Unlit) | ✅ Timer → Malha: trocar material |
+
+Pendente: diagnóstico dos itens 2 e 3 com o APK `g7-api-2051` (log `[PlayToque]` e variantes 2a–2d do gerador),
+bloqueado enquanto o G4 investiga a mesma queda “mutex destruído” no Play.
