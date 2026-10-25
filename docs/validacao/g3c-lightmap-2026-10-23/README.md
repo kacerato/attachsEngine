@@ -97,3 +97,26 @@ céu. Depois dela a copa ficou com V 0,2–0,3.
 - Sponza lado a lado com e sem lightmap depois da correção dos decalques não foi recapturada: a Sponza original
   foi devolvida ao G1b.
 - Custo por quadro do lightmap (A/B com Limpar) não foi medido no profiler.
+
+### Rodada automática da Sponza (25/10, APK lightmap-0443, commits a95528c6..ae5c40f9)
+
+Roteiro `rodada2.sh` sem a sessão: 5 min sem ligação (telephony e modo de áudio) antes da trava, foco conferido a
+cada toque, vista salva "G3c arcada norte", exposição Fixa no EV100 que a automática escolheu em tempo real (-3,56)
+e reaproveitamento do quadro desligado (`aether.disable_editor_scene_reuse`) para a GPU desenhar a cena.
+Cena: 7 luzes pontuais Assadas com sombra (3 coloridas, diante de estandartes) + 1 Mista, todas a 1200 lm (U1).
+
+| Medida | Tempo real | Com lightmap |
+|---|---|---|
+| GPU por quadro (média de 6 janelas de 120 quadros) | 17,25 ms | 15,56 ms (−1,7 ms, −10%) |
+| Desenhos / triângulos | 200 / 731,8 mil | 200 / 731,8 mil |
+| Desenhos com lightmap | 0 | 307 |
+
+- Manchas brancas serrilhadas (prancha anterior) eram os decalques transparentes fora do bake: agora recebem o
+  lightmap da parede embaixo sem bloquear nem rebater; sumiram.
+- "0 desenhos · 0 triângulos" era o quadro reaproveitado com a vista parada, não o contador; a medida anterior de
+  GPU (13–14 ms dos dois lados) media esse quadro reaproveitado e não vale.
+- Com a mesma exposição a imagem assada é mais escura: o céu entra ocluído pela visibilidade assada debaixo da
+  arcada (fisicamente certo), e 1200 lm ilumina pouco perto do ambiente sem oclusão do tempo real.
+
+**Defeito aberto.** Objetos que recebem pelas sondas (esfera móvel, estandartes sem UV2) saem claros demais ao lado
+do entorno assado: as sondas são assadas sem a luz Assada e não acompanham a oclusão do céu do lightmap.
