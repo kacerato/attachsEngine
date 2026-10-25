@@ -956,6 +956,79 @@ bool bakeLightmaps(const LightmapBakeScene &scene, const LightmapBakeSettings &s
     }
   }
   if (settings.bounces == 0) std::fill(indirect.begin(), indirect.end(), V3{});
+  // --- Sondas de luz -------------------------------------------------------
+  // O Generate Lighting da Unity assa as Light Probes junto, com as mesmas
+  // luzes. Cada sonda integra a esfera inteira sobre as páginas finais (direta
+  // de todas as luzes + rebote, a mesma radiância que um texel vê) e soma a
+  // direta das luzes Assadas em forma fechada; o céu fica à parte, em L1, para
+  // a hora do dia continuar mandando (fragmento: SH/π + céu × V(n)).
+  std::vector<ShL2> probeSh(scene.probePositions.size());
+  std::vector<ProbeSkyVisibility> probeSky(scene.probePositions.size());
+  if (!scene.probePositions.empty()) {
+    setStage(LightmapBakeStage::Indirect, .88f);
+    std::vector<V3> seed(texels.size());
+    for (u32 i = 0; i < texels.size(); ++i) seed[i] = directAll[i] + indirect[i];
+    publish(seed, skyIrradiance);
+    const u32 samples = std::max<u32>(256, settings.indirectSamples);
+    const float band[9]{Pi, 2 * Pi / 3, 2 * Pi / 3, 2 * Pi / 3, Pi / 4, Pi / 4, Pi / 4, Pi / 4, Pi / 4};
+    if (!workers.parallelFor(scene.probePositions.size(), 1, progress.cancel, [&](u64 begin, u64 end) {
+          u64 traced = 0;
+          for (u64 i = begin; i < end; ++i) {
+            const V3 origin(scene.probePositions[i].data());
+            float local[9][3]{}, sky[4]{};
+            const float r = hashFloat(static_cast<u32>(i) * 2246822519u + 7u);
+            for (u32 s = 0; s < samples; ++s) {
+              // Esfera uniforme (Hammersley girado por sonda).
+              const float z = 1 - 2 * (s + .5f) / samples, ring = std::sqrt(std::max(0.0f, 1 - z * z));
+              const float phi = 2 * Pi * (radicalInverse(s) + r);
+              const V3 direction(ring * std::cos(phi), z, ring * std::sin(phi));
+              float y[9];
+              const float d[3]{direction[0], direction[1], direction[2]};
+              shL2Basis(d, y);
+              ++traced;
+              Hit hit;
+              V3 radiance{};
+              float skyRadiance = 0;
+              if (!world.trace(origin, direction, 1e30f, false, hit)) skyRadiance = 1;
+              else if (!hit.back) {
+                V3 albedo, previousLocal;
+                float alpha, previousSky;
+                world.surface(hit.triangle, hit.u, hit.v, albedo, alpha);
+                previousAt(hit, previousLocal, previousSky, traced);
+                const auto &instance = scene.instances[world.triangles[hit.triangle].instance];
+                V3 emission{};
+                if (instance.material < scene.materials.size()) emission = V3(scene.materials[instance.material].emission);
+                radiance = mul(albedo, previousLocal) * (1.0f / Pi) + emission;
+                skyRadiance = luminance(albedo) * previousSky * (1.0f / Pi);
+              }
+              for (u32 b = 0; b < 9; ++b) for (u32 k = 0; k < 3; ++k) local[b][k] += radiance[k] * y[b];
+              for (u32 b = 0; b < 4; ++b) sky[b] += skyRadiance * y[b];
+            }
+            const float weight = 4 * Pi / samples;
+            auto &sh = probeSh[i];
+            for (u32 b = 0; b < 9; ++b) for (u32 k = 0; k < 3; ++k) sh.c[b][k] = local[b][k] * weight * band[b];
+            // Direta das Assadas: luz pontual é um delta, E_lm = A_l · E · Y_lm(l).
+            for (const auto &light : scene.lights) {
+              if (!light.bakeDirect) continue;
+              V3 toLight, lightRadiance3;
+              float distance;
+              lightRadiance(light, origin, toLight, distance, lightRadiance3);
+              if (luminance(lightRadiance3) <= 0) continue;
+              Hit blocked;
+              ++traced;
+              if (light.castsShadows && world.trace(origin, toLight, distance - bias * 2, true, blocked)) continue;
+              float y[9];
+              const float d[3]{toLight[0], toLight[1], toLight[2]};
+              shL2Basis(d, y);
+              for (u32 b = 0; b < 9; ++b) for (u32 k = 0; k < 3; ++k) sh.c[b][k] += band[b] * lightRadiance3[k] * y[b];
+            }
+            // Céu: V(n) = E_céu(n)/π; 1 numa sonda em campo aberto.
+            for (u32 b = 0; b < 4; ++b) probeSky[i][b] = sky[b] * weight * band[b] / Pi * settings.indirectIntensity;
+          }
+          rays.fetch_add(traced);
+        }, [](u64) {}))
+      return cancelled(), false;
+  }
   stats.rays = rays.load();
 
   // --- Denoise, dilatação e codificação -----------------------------------
@@ -1127,6 +1200,8 @@ bool bakeLightmaps(const LightmapBakeScene &scene, const LightmapBakeSettings &s
   result.bakeSeconds = std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
   if (!result.valid()) { error = "Resultado do bake inválido"; return false; }
   setStage(LightmapBakeStage::Done, 1.0f);
+  result.probeSh = std::move(probeSh);
+  result.probeSky = std::move(probeSky);
   out = std::move(result);
   return true;
 }

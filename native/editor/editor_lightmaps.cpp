@@ -35,6 +35,7 @@ struct EditorSession::LightmapBakeJob {
   std::vector<renderer::SharedAuthoringTexture> sources; // uma por textura da cena
   renderer::LightmapBakeProgress progress;
   renderer::LightmapData result;
+  std::vector<runtime::SceneLightProbeGroup> probeGroups; // na ordem de scene.probePositions
   std::string error;
   bool success = false;
   std::atomic<bool> done{false};
@@ -180,6 +181,14 @@ bool EditorSession::generateLighting() {
   }
   std::vector<renderer::SceneLight> lights;
   if (extractLights(lights)) bakeLightsFrom(lights, job->scene.lights);
+  // As sondas de luz entram no mesmo bake, com as mesmas luzes (Unity).
+  if (runtime::collectSceneLightProbeGroups(evaluatedEditorScene(), job->probeGroups)) {
+    usize points = 0;
+    for (const auto &group : job->probeGroups) points += group.positions.size();
+    if (points > renderer::MaximumLightProbes) job->probeGroups.clear();
+    for (const auto &group : job->probeGroups)
+      for (const auto &p : group.positions) job->scene.probePositions.push_back(p);
+  }
   for (u32 published : textureSources) {
     const u32 local = published >= bakeTextureBase_ ? published - bakeTextureBase_ : ~0u;
     job->sources.push_back(local < bakeTextures_.size() ? bakeTextures_[local] : nullptr);
@@ -273,13 +282,11 @@ void EditorSession::pumpLightmapBake() {
   state_.status = text;
   lightmapView_.lastResult = text;
   reportProblem(EditorConsoleSeverity::Info, std::string(text) + " · " + path);
-  // O Generate Lighting da Unity assa as sondas de luz junto: os objetos que se
-  // movem recebem a luz assada (lanternas, rebote) pelas sondas do PK-6, que
-  // agora capturam a cena com os lightmaps no lugar.
-  std::vector<runtime::SceneLightProbeGroup> groups;
-  if (runtime::collectSceneLightProbeGroups(evaluatedEditorScene(), groups) && !groups.empty() && !probeBaking()) {
-    pendingProbeBakeAfterLightmap_ = true;
-  }
+  // O Generate Lighting da Unity assa as sondas de luz junto, com as mesmas
+  // luzes: os objetos que se movem (e o Static sem lightmap) recebem a luz
+  // assada e a oclusão do céu pelas sondas do PK-6.
+  if (!job->probeGroups.empty() && data->probeSh.size() == job->scene.probePositions.size())
+    commitLightProbesFromLightmap(job->probeGroups, *data);
 }
 
 bool EditorSession::clearBakedLighting() {

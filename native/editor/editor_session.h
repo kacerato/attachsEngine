@@ -30,6 +30,7 @@
 #include "resources/curve3d.h"
 #include "resources/convex_bake.h"
 #include "runtime/scene_lights.h"
+#include "runtime/scene_probes.h"
 #include "runtime/scene_environment.h"
 #include "runtime/lod_groups.h"
 #include "runtime/prefab.h"
@@ -1824,6 +1825,7 @@ private:
                        const std::vector<u8> &bytes,usize maximum);
   bool commitReflectionBake(ProbeBakeJob &job,renderer::ReflectionProbeTexture texture);
   bool commitLightProbeBake(ProbeBakeJob &job);
+  bool commitLightProbesFromLightmap(const std::vector<runtime::SceneLightProbeGroup> &groups,const renderer::LightmapData &data);
   bool clearProbeBake(EditorEntityId entity,u64 instance);
   std::vector<std::shared_ptr<const renderer::ReflectionProbeTexture>> reflectionProbeTextures_;
   u64 reflectionProbeTexturesRevision_=1;

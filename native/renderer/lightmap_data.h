@@ -26,6 +26,7 @@
 //              https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Renderer-lightmapScaleOffset.html
 //              https://docs.godotengine.org/en/4.5/tutorials/3d/global_illumination/using_lightmap_gi.html
 #include "core/base.h"
+#include "renderer/light_probes.h"      // sondas assadas junto (não vão no .aelightmap)
 #include "renderer/reflection_probes.h" // floatToHalf/halfToFloat do PK-6
 
 #include <array>
@@ -97,6 +98,11 @@ struct LightmapStats {
 struct LightmapData {
   static constexpr u32 Version = 1;
   static constexpr usize MaximumBytes = 512ull << 20;
+  // Sondas de luz assadas no mesmo bake (posições de LightmapBakeScene::
+  // probePositions): SH só da luz local e visibilidade do céu. Saem para o
+  // .aelightprobes de cada grupo; não são serializadas aqui.
+  std::vector<ShL2> probeSh;
+  std::vector<ProbeSkyVisibility> probeSky;
   u64 guidHigh = 0, guidLow = 0;
   u64 sourceHash = 0;
   float bakeSeconds = 0;

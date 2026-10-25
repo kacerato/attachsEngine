@@ -8,6 +8,7 @@
 #include "core/engine_capability.h"
 #include "renderer/lightmap_baker.h"
 #include "renderer/lightmap_data.h"
+#include "renderer/light_probes.h"
 #include "renderer/punctual_lights.h"
 #include "resources/import_profile.h"
 #include "resources/lightmap_uv_generate.h"
@@ -16,6 +17,7 @@
 #include "scene/lightmap_uv.h"
 #include "scene/mesh_renderer.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -205,6 +207,95 @@ AE_TEST(g3c_lightmap_resource_round_trips_both_formats) {
     broken.pop_back();
     AE_EXPECT_TRUE(!renderer::LightmapData::deserialize(broken, back), "truncado recusado");
   }
+}
+
+AE_TEST(g3c_baked_1200_lumen_point_light_matches_real_time_within_5_percent) {
+  // Paridade de energia: 1 luz pontual de 1200 lm (Point Light do vídeo da
+  // Unity) a 2 m de um plano. O tempo real ilumina com cor×intensidade
+  // convertida (lm → cd → linear, scene/light_units.h), janela de alcance e
+  // cosθ/d² (punctualLighting); o lightmap tem de guardar a mesma irradiância,
+  // já passada pela compressão RGBA8 e pelo filtro, e o céu de um plano aberto
+  // tem de chegar inteiro (V = 1: o mesmo ambiente do tempo real).
+  renderer::LightmapBakeScene scene;
+  scene.meshes.push_back(quad(4));
+  scene.materials.resize(1);
+  for (u32 k = 0; k < 3; ++k) scene.materials[0].baseColor[k] = 0; // só a direta
+  scene.instances.push_back(placed(0, 0, 0, 0, true));
+  const float intensity = scene::lightIntensityForShader(scene::LightKind::Point, scene::LightUnit::LuxLumen, 1200, 0, 0);
+  renderer::LightmapBakeLight light;
+  light.kind = 1;
+  light.position[1] = 2;
+  for (u32 k = 0; k < 3; ++k) light.radiance[k] = intensity;
+  light.range = 8;
+  light.bakeDirect = true;
+  scene.lights.push_back(light);
+  auto settings = quickSettings();
+  settings.bounces = 1;
+  settings.compress = true;
+  settings.denoise = true;
+  renderer::LightmapBakeProgress progress;
+  renderer::LightmapData data;
+  std::string error;
+  AE_EXPECT_TRUE(renderer::bakeLightmaps(scene, settings, {2, false}, progress, data, error), error.c_str());
+  // Mesma conta do fragmento de tempo real, ponto a ponto.
+  const auto realTime = [&](float x, float z) {
+    const float d2 = x * x + 4 + z * z, ratio = d2 / (light.range * light.range);
+    float window = std::clamp(1 - ratio * ratio, 0.0f, 1.0f);
+    window *= window;
+    return intensity * window / d2 * (2 / std::sqrt(d2));
+  };
+  const float points[][2]{{.5f, .5f}, {.7f, .5f}, {.5f, .3f}};
+  for (const auto &p : points) {
+    float rgb[3], v;
+    AE_EXPECT_TRUE(sampleEntry(data, 100, p[0], p[1], rgb, v), "entrada do plano");
+    const float expected = realTime((p[0] - .5f) * 8, (p[1] - .5f) * 8);
+    std::printf("  1200 lm: assado %.5f x tempo real %.5f (%.1f%%), V %.3f\n", rgb[1], expected,
+                100 * (rgb[1] - expected) / expected, v);
+    AE_EXPECT_TRUE(std::abs(rgb[1] - expected) <= .05f * expected, "irradiância assada = tempo real (5%)");
+    AE_EXPECT_TRUE(std::abs(v - 1) <= .05f, "plano aberto: céu inteiro, como o ambiente do tempo real");
+  }
+}
+
+AE_TEST(g3c_light_probes_bake_with_the_lightmap_lights_and_sky_visibility) {
+  // Generate Lighting assa as sondas junto: sonda a 1 m de um chão aberto, luz
+  // Assada 1 m acima dela. Para cima, a direta da luz (I/d²) e o céu inteiro;
+  // para baixo, o chão tapa o céu (só volta o rebote dele).
+  renderer::LightmapBakeScene scene;
+  scene.meshes.push_back(quad(6));
+  scene.materials.resize(1);
+  for (u32 k = 0; k < 3; ++k) scene.materials[0].baseColor[k] = .5f;
+  scene.instances.push_back(placed(0, 0, 0, 0, true));
+  renderer::LightmapBakeLight light;
+  light.kind = 1;
+  light.position[1] = 2;
+  for (u32 k = 0; k < 3; ++k) light.radiance[k] = 1;
+  light.range = 50;
+  light.bakeDirect = true;
+  scene.lights.push_back(light);
+  scene.probePositions.push_back({0, 1, 0});
+  renderer::LightmapBakeProgress progress;
+  renderer::LightmapData data;
+  std::string error;
+  AE_EXPECT_TRUE(renderer::bakeLightmaps(scene, quickSettings(), {2, false}, progress, data, error), error.c_str());
+  AE_EXPECT_TRUE(data.probeSh.size() == 1 && data.probeSky.size() == 1, "uma sonda assada");
+  const float up[3]{0, 1, 0}, down[3]{0, -1, 0};
+  float e[3];
+  renderer::evaluateShIrradiance(data.probeSh[0], up, e);
+  std::printf("  sonda: E para cima %.3f (direta 1/1² = 1), V cima %.2f, V baixo %.2f\n", e[1],
+              renderer::evaluateProbeSky(data.probeSky[0], up), renderer::evaluateProbeSky(data.probeSky[0], down));
+  AE_EXPECT_TRUE(std::abs(e[1] - 1) < .2f, "a direta da luz Assada entra na sonda");
+  AE_EXPECT_TRUE(renderer::evaluateProbeSky(data.probeSky[0], up) > .85f, "para cima, o céu inteiro");
+  AE_EXPECT_TRUE(renderer::evaluateProbeSky(data.probeSky[0], down) < .6f, "para baixo, o chão tapa o céu");
+  // .aelightprobes v2 com a visibilidade do céu, ida e volta.
+  renderer::LightProbeBakeData bake;
+  bake.pointIds = {7};
+  bake.positions = {{0, 1, 0}};
+  bake.sh = data.probeSh;
+  bake.skyVisibility = data.probeSky;
+  renderer::LightProbeBakeData back;
+  const auto bytes = bake.serialize();
+  AE_EXPECT_TRUE(renderer::LightProbeBakeData::deserialize(bytes, back) && back.skyVisibility.size() == 1 &&
+                 back.skyVisibility[0] == bake.skyVisibility[0], "recurso v2 guarda a visibilidade do céu");
 }
 
 AE_TEST(g3c_baked_point_light_matches_inverse_square_and_shadows) {

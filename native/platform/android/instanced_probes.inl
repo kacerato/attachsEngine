@@ -788,10 +788,13 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
       entry.reflection[0] = renderer::encodeReflectionProbeBlend(blend);
       cache.layerRevision = probeLayerRevision_;
     }
-    if (lightDirty) {
+    if (lightDirty || lightmapDirty) {
       // Como na Unity, as sondas de luz iluminam o que se move; o que é Static
       // recebe a luz indireta assada (aqui, sem lightmap, o ambiente do céu).
-      if (lightProbes && key.lightProbes != 0 && !key.isStatic) {
+      // Depois do Gerar iluminação, o Static que ficou sem lightmap (sem UV2,
+      // Receber = Sondas) também recebe pelas sondas assadas junto.
+      const bool probeReceiver = !key.isStatic || (lightmaps && key.lightmapPage == 0 && set && set->skySeparated());
+      if (lightProbes && key.lightProbes != 0 && probeReceiver) {
         const auto where = renderer::locateProbes(*set, draw.boundsCenter, cache.lightRevision == lightProbeRevision_ ? cache.tetrahedron : -1);
         const auto sh = renderer::interpolateProbes(*set, where);
         cache.tetrahedron = where.tetrahedron;
@@ -800,6 +803,12 @@ bool InstancedRenderer::prepareProbes(const platform::FreeCameraState &camera) {
           entry.sh[c][3] = 0;
         }
         entry.sh[0][3] = where.count ? 1.0f : 0.0f;
+        // G3c: SH só local + visibilidade do céu L1 (sh[1..4].w), aviso em sh[5].w.
+        if (set->skySeparated()) {
+          const auto sky = renderer::interpolateProbeSky(*set, where);
+          for (u32 i = 0; i < 4; ++i) entry.sh[1 + i][3] = sky[i];
+          entry.sh[5][3] = 1.0f;
+        }
       } else {
         entry.sh[0][3] = 0;
         cache.tetrahedron = -1;

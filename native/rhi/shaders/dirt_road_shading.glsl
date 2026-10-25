@@ -605,9 +605,19 @@ void main() {
   // difuso vem do SH interpolado no tetraedro do objeto (E/π), no lugar do céu.
   // A mesma força do ambiente que escala o céu escala a sonda: uma sonda em
   // campo aberto devolve exatamente o ambiente do céu que ela substitui.
-  mediump vec3 diffuseIrradiance=(astraLightProbesActive()?
-      astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
-      environmentAmbientDiffuse(n))*occlusion;
+  mediump vec3 diffuseIrradiance;
+  if(astraLightProbesActive() && astraProbes.draws[vDrawIndex].sh[5].w>0.5) {
+    // G3c: sondas assadas com o lightmap -- SH da luz local (E/π) mais o céu
+    // DA HORA vezes a visibilidade L1 da sonda, a mesma regra do lightmap.
+    mediump vec4 sky=vec4(astraProbes.draws[vDrawIndex].sh[1].w,astraProbes.draws[vDrawIndex].sh[2].w,
+                          astraProbes.draws[vDrawIndex].sh[3].w,astraProbes.draws[vDrawIndex].sh[4].w);
+    mediump float skyVisibility=max(sky.x*0.2820947918+0.4886025119*dot(sky.yzw,vec3(n.y,n.z,n.x)),0.0);
+    diffuseIrradiance=(astraLightProbeIrradiance(n)*0.31830988618+environmentAmbientDiffuse(n)*skyVisibility)*occlusion;
+  } else {
+    diffuseIrradiance=(astraLightProbesActive()?
+        astraLightProbeIrradiance(n)*(environment.ambientColorStrength.w*0.31830988618):
+        environmentAmbientDiffuse(n))*occlusion;
+  }
   // G3c: lightmap assado (Receive GI = Lightmaps). O RGB é a irradiância das
   // luzes locais assadas (direta das Assadas, rebote das Assadas e Mistas,
   // emissivos); o alfa é a visibilidade do céu, que escala o ambiente do céu

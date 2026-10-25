@@ -82,6 +82,9 @@ struct LightmapBakeScene {
   std::vector<LightmapBakeTexture> textures;
   std::vector<LightmapBakeInstance> instances;
   std::vector<LightmapBakeLight> lights;
+  // Sondas de luz da cena (Light Probe Groups), assadas no mesmo Generate
+  // Lighting com as mesmas luzes, como na Unity.
+  std::vector<std::array<float, 3>> probePositions;
 };
 
 enum class LightmapBakeStage : u32 { Preparing = 0, Bvh, Layout, Direct, Indirect, Filtering, Encoding, Done };
