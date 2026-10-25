@@ -1,12 +1,15 @@
-// G4d: Volumetric Clouds (HDRP 17). O raymarch (rhi/shaders/cloud_volume.frag)
-// roda num alvo de 1/4 da resolução em cada eixo — 1/16 dos pixels da tela,
-// como o modo de desempenho do HDRP — antes do passe da cena. O próprio
-// fragmento mistura a amostra nova com o histórico reprojetado; o resultado é
-// copiado para o histórico e o céu o lê (binding 19) já integrado.
+// G4d: Volumetric Clouds (HDRP 17), antes do passe da cena, em dois passes:
+//  1. raymarch (rhi/shaders/cloud_volume.frag) num alvo de 1/4 da resolução em
+//     cada eixo — 1/16 dos pixels, todos marchando — com o raio num dos 4
+//     subpixels do bloco 2x2 da meia resolução a cada quadro (binding 23);
+//  2. reconstrução em meia resolução (rhi/shaders/cloud_resolve.frag): a
+//     amostra nova vai ao subpixel dela, os outros seguem o histórico
+//     reprojetado e contido pela vizinhança (HZD, 1/16 por quadro). O
+//     resultado é copiado para o histórico (20) e o céu o lê (19).
 //
-// Imagens fixas, descritores fixos: alvo (19) e histórico (20) nunca trocam de
-// papel, então o conjunto de ambiente é escrito uma vez. Há um quadro em voo
-// (ver instanced_color_grading.inl), o que torna a cópia segura.
+// Imagens fixas, descritores fixos: nenhuma troca de papel, então o conjunto
+// de ambiente é escrito uma vez. Há um quadro em voo (ver
+// instanced_color_grading.inl), o que torna a cópia segura.
 
 bool InstancedRenderer::createVolumetricCloudResources() {
   if (cloudVolumeTarget_.isReady()) return true;
@@ -18,7 +21,10 @@ bool InstancedRenderer::createVolumetricCloudResources() {
   target.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   target.memoryClass = rhi::MemoryClass::RenderTarget;
   if (!memoryAllocator_->createImage(target, &cloudVolumeTarget_)) return false;
-  rhi::ImageDesc history = target;
+  rhi::ImageDesc resolve = target;
+  resolve.width = std::max(1u, renderWidth() / 2u); resolve.height = std::max(1u, renderHeight() / 2u);
+  if (!memoryAllocator_->createImage(resolve, &cloudResolveTarget_)) return false;
+  rhi::ImageDesc history = resolve;
   history.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   history.memoryClass = rhi::MemoryClass::Texture;
   if (!memoryAllocator_->createImage(history, &cloudVolumeHistory_)) return false;
@@ -102,17 +108,24 @@ bool InstancedRenderer::createVolumetricCloudResources() {
   framebuffer.attachmentCount = 1; framebuffer.pAttachments = &view;
   framebuffer.width = width; framebuffer.height = height; framebuffer.layers = 1;
   if (vkCreateFramebuffer(device_, &framebuffer, nullptr, &cloudVolumeFramebuffer_) != VK_SUCCESS) return false;
-  __android_log_print(ANDROID_LOG_INFO, LogTag, "[Clouds] volumétricas: alvo %ux%u (1/16 dos pixels), ruído %u³ + %u³ com mips.",
-                      width, height, renderer::CloudShapeNoiseSize, renderer::CloudErosionNoiseSize);
+  const VkImageView resolveView = cloudResolveTarget_.view();
+  framebuffer.pAttachments = &resolveView;
+  framebuffer.width = resolve.width; framebuffer.height = resolve.height;
+  if (vkCreateFramebuffer(device_, &framebuffer, nullptr, &cloudResolveFramebuffer_) != VK_SUCCESS) return false;
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+                      "[Clouds] volumétricas: marcha %ux%u (1/16 dos pixels), reconstrução %ux%u, ruído %u³ + %u³ com mips.",
+                      width, height, resolve.width, resolve.height, renderer::CloudShapeNoiseSize,
+                      renderer::CloudErosionNoiseSize);
   return true;
 }
 
 bool InstancedRenderer::createVolumetricCloudPipeline() {
   if (!dirtRoadPreview_ || cloudVolumeRenderPass_ == VK_NULL_HANDLE || skyPipelineLayout_ == VK_NULL_HANDLE) return true;
+  // Os dois passes usam o vértice do céu (direção por pixel) e o mesmo layout.
+  const auto build = [&](const auto &code, auto size, VkPipeline *out) {
   VkShaderModule vert = createShaderModule(device_, rhi::shaders::kDirt_Road_SkyVertSpirv,
                                            rhi::shaders::kDirt_Road_SkyVertSpirvSize);
-  VkShaderModule frag = createShaderModule(device_, rhi::shaders::kCloud_VolumeFragSpirv,
-                                           rhi::shaders::kCloud_VolumeFragSpirvSize);
+  VkShaderModule frag = createShaderModule(device_, code, size);
   if (vert == VK_NULL_HANDLE || frag == VK_NULL_HANDLE) {
     if (vert != VK_NULL_HANDLE) vkDestroyShaderModule(device_, vert, nullptr);
     if (frag != VK_NULL_HANDLE) vkDestroyShaderModule(device_, frag, nullptr);
@@ -155,26 +168,33 @@ bool InstancedRenderer::createVolumetricCloudPipeline() {
   pipeline.pDepthStencilState = &depth; pipeline.pColorBlendState = &blend;
   pipeline.pDynamicState = &dynamic; pipeline.layout = skyPipelineLayout_;
   pipeline.renderPass = cloudVolumeRenderPass_; pipeline.subpass = 0;
-  const bool ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &cloudVolumePipeline_) == VK_SUCCESS;
+  const bool ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, out) == VK_SUCCESS;
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
   return ok;
+  };
+  return build(rhi::shaders::kCloud_VolumeFragSpirv, rhi::shaders::kCloud_VolumeFragSpirvSize, &cloudVolumePipeline_) &&
+         build(rhi::shaders::kCloud_ResolveFragSpirv, rhi::shaders::kCloud_ResolveFragSpirvSize, &cloudResolvePipeline_);
 }
 
 void InstancedRenderer::destroyVolumetricCloudResources() {
   if (cloudVolumePipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, cloudVolumePipeline_, nullptr);
+  if (cloudResolvePipeline_ != VK_NULL_HANDLE) vkDestroyPipeline(device_, cloudResolvePipeline_, nullptr);
   if (cloudVolumeFramebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, cloudVolumeFramebuffer_, nullptr);
+  if (cloudResolveFramebuffer_ != VK_NULL_HANDLE) vkDestroyFramebuffer(device_, cloudResolveFramebuffer_, nullptr);
   if (cloudVolumeRenderPass_ != VK_NULL_HANDLE) vkDestroyRenderPass(device_, cloudVolumeRenderPass_, nullptr);
-  cloudVolumePipeline_ = VK_NULL_HANDLE; cloudVolumeFramebuffer_ = VK_NULL_HANDLE; cloudVolumeRenderPass_ = VK_NULL_HANDLE;
+  cloudVolumePipeline_ = VK_NULL_HANDLE; cloudResolvePipeline_ = VK_NULL_HANDLE;
+  cloudVolumeFramebuffer_ = VK_NULL_HANDLE; cloudResolveFramebuffer_ = VK_NULL_HANDLE; cloudVolumeRenderPass_ = VK_NULL_HANDLE;
   cloudVolumeSampler_.shutdown(); cloudNoiseSampler_.shutdown();
-  cloudVolumeTarget_.reset(); cloudVolumeHistory_.reset();
+  cloudVolumeTarget_.reset(); cloudResolveTarget_.reset(); cloudVolumeHistory_.reset();
   cloudShapeNoise_.reset(); cloudErosionNoise_.reset();
   cloudShapeStaging_.reset(); cloudErosionStaging_.reset();
   cloudNoiseUploaded_ = false; cloudHistoryValid_ = false; cloudImagesInitialized_ = false;
 }
 
 bool InstancedRenderer::volumetricCloudsReady() const {
-  return cloudVolumePipeline_ != VK_NULL_HANDLE && cloudVolumeTarget_.isReady();
+  return cloudVolumePipeline_ != VK_NULL_HANDLE && cloudResolvePipeline_ != VK_NULL_HANDLE &&
+         cloudVolumeTarget_.isReady() && cloudResolveTarget_.isReady();
 }
 
 void InstancedRenderer::recordVolumetricClouds(const platform::FreeCameraState &camera, float timeSeconds) {
@@ -242,17 +262,6 @@ void InstancedRenderer::recordVolumetricClouds(const platform::FreeCameraState &
     cloudImagesInitialized_ = true;
   }
 
-  const u32 width = cloudVolumeTarget_.width(), height = cloudVolumeTarget_.height();
-  VkRenderPassBeginInfo begin{};
-  begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-  begin.renderPass = cloudVolumeRenderPass_;
-  begin.framebuffer = cloudVolumeFramebuffer_;
-  begin.renderArea.extent = {width, height};
-  vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
-  const VkViewport viewport{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
-  const VkRect2D scissor{{0, 0}, {width, height}};
-  vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
-  vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
   // Mesmo push do céu: o vértice reconstrói a direção de cada pixel igual.
   const rhi::SurfaceTransform &surfaceTransform = swapchain_->surfaceTransform();
   DirtRoadPushConstants push{};
@@ -267,27 +276,49 @@ void InstancedRenderer::recordVolumetricClouds(const platform::FreeCameraState &
   push.surfaceTransform[1] = surfaceTransform.xy;
   push.surfaceTransform[2] = surfaceTransform.yx;
   push.surfaceTransform[3] = surfaceTransform.yy;
-  vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, cloudVolumePipeline_);
-  vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_, 0, 1, &environmentSet_, 0, nullptr);
-  vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
-                     0, sizeof(push), &push);
-  vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
-  vkCmdEndRenderPass(commandBuffer_);
+  const auto fullScreen = [&](VkFramebuffer target, VkPipeline pipeline, u32 width, u32 height) {
+    VkRenderPassBeginInfo begin{};
+    begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    begin.renderPass = cloudVolumeRenderPass_;
+    begin.framebuffer = target;
+    begin.renderArea.extent = {width, height};
+    vkCmdBeginRenderPass(commandBuffer_, &begin, VK_SUBPASS_CONTENTS_INLINE);
+    const VkViewport viewport{0, 0, static_cast<float>(width), static_cast<float>(height), 0, 1};
+    const VkRect2D scissor{{0, 0}, {width, height}};
+    vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
+    vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
+    vkCmdBindPipeline(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+    vkCmdBindDescriptorSets(commandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, skyPipelineLayout_, 0, 1, &environmentSet_, 0, nullptr);
+    vkCmdPushConstants(commandBuffer_, skyPipelineLayout_, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+                       0, sizeof(push), &push);
+    vkCmdDraw(commandBuffer_, 3, 1, 0, 0);
+    vkCmdEndRenderPass(commandBuffer_);
+  };
 
-  // O alvo vira o histórico do próximo quadro e fica amostrável para o céu.
+  // 1. Marcha em 1/16 dos pixels; fica amostrável para a reconstrução.
+  fullScreen(cloudVolumeFramebuffer_, cloudVolumePipeline_, cloudVolumeTarget_.width(), cloudVolumeTarget_.height());
+  imageBarrier(cloudVolumeTarget_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+               VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+               VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+  // 2. Reconstrução em meia resolução com o histórico do quadro anterior.
+  const u32 width = cloudResolveTarget_.width(), height = cloudResolveTarget_.height();
+  fullScreen(cloudResolveFramebuffer_, cloudResolvePipeline_, width, height);
+
+  // 3. A reconstrução vira o histórico do próximo quadro e fica amostrável para o céu.
   imageBarrier(cloudVolumeHistory_.handle(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                VK_ACCESS_SHADER_READ_BIT, VK_ACCESS_TRANSFER_WRITE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
                VK_PIPELINE_STAGE_TRANSFER_BIT);
   VkImageCopy copy{};
   copy.srcSubresource = copy.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
   copy.extent = {width, height, 1};
-  vkCmdCopyImage(commandBuffer_, cloudVolumeTarget_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+  vkCmdCopyImage(commandBuffer_, cloudResolveTarget_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
                  cloudVolumeHistory_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
   imageBarrier(cloudVolumeHistory_.handle(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                VK_ACCESS_TRANSFER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
-  imageBarrier(cloudVolumeTarget_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  imageBarrier(cloudResolveTarget_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                VK_ACCESS_TRANSFER_READ_BIT, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
   cloudHistoryValid_ = true;
+  ++cloudFrameIndex_;
 }

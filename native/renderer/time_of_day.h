@@ -28,6 +28,11 @@ struct TimeOfDayState {
   float elevation = 1.0f;      // seno da elevação: 1 zênite, 0 horizonte, <0 abaixo
   float sunColor[3]{1, 1, 1};  // multiplicador linear sobre a cor autoral da luz
   float sunIntensity = 1.0f;   // multiplicador sobre a intensidade autoral (0 à noite)
+  // A parte de sunColor/sunIntensity que faz as vezes do ar entre o sol e o chão
+  // (cor relativa a 5800 K e o 0,35..1 da massa de ar). O céu físico integra a
+  // própria transmitância e precisa do sol fora da atmosfera: divide por estes.
+  float atmosphereTint[3]{1, 1, 1};
+  float atmosphereDimming = 1.0f;
   float moonPhase = 0.5f;      // 0 nova, 0.5 cheia
 };
 

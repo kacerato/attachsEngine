@@ -88,6 +88,8 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
         const auto sun = renderer::evaluateTimeOfDay(input);
         for (u32 axis = 0; axis < 3; ++axis) entry.color[axis] *= sun.sunColor[axis];
         entry.intensity *= sun.sunIntensity;
+        std::copy_n(sun.atmosphereTint, 3, entry.atmosphereTint);
+        entry.atmosphereDimming = sun.atmosphereDimming;
         entry.moonPhase = sun.moonPhase;
         entry.celestialBody = renderer::CelestialLightBody::Sun;
         std::copy_n(sun.toSun, 3, entry.celestialToSun);

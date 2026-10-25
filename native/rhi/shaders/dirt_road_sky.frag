@@ -39,6 +39,9 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=4176) vec4 skyMoon;
   layout(offset=4192) vec4 skyStarRotation[3];
   layout(offset=4240) vec4 skyNight; // rgb brilho do céu ao luar
+  // G4d: desfaz a cor e a atenuação que a Hora do dia pôs no sol; só o céu
+  // físico usa (DirtRoadFrameUniform::skySunExtraterrestrial).
+  layout(offset=4768) vec4 skySunExtraterrestrial;
 } environment;
 // O céu segue o sol verdadeiro; à noite a luz principal pode ser a Lua.
 vec3 skySunDirection() {
@@ -183,10 +186,11 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
   vec3 betaRayleigh=vec3(0.005802,0.013558,0.033100)*airDensity;
   vec3 betaAerosol=vec3(0.021000)*aerosolDensity;
   vec3 betaAerosolExtinction=betaAerosol*1.10;
-  float sunIntensity=max(skySunIntensity(),0.0);
+  // O ar já está na integral abaixo: o sol entra como fora da atmosfera.
+  float sunIntensity=max(skySunIntensity(),0.0)*environment.skySunExtraterrestrial.w;
   if(sunIntensity<=0.0) return vec3(0.0);
   vec3 sunDirection=skySunDirection();
-  vec3 sunColor=max(environment.sunColorAngularRadius.rgb,vec3(0.0));
+  vec3 sunColor=max(environment.sunColorAngularRadius.rgb*environment.skySunExtraterrestrial.rgb,vec3(0.0));
   vec2 viewDepth;
   vec3 scattered=integrateSingleScattering(origin,viewDirection,viewDistance,
       viewSteps,lightSteps,planetRadius,atmosphereRadius,scaleHeights,
@@ -325,7 +329,9 @@ void main() {
       // Volumetric Clouds: os fatores do passe próprio viram cor com as mesmas
       // radiâncias da camada 2D; longe a nuvem se perde na névoa do horizonte.
       float distanceKm=volume.b/volume.a;
-      float fade=mix(1.0,0.25,1.0-exp(-distanceKm/120.0))*smoothstep(-0.002,0.03,visibleDirection.y)*
+      // A camada vai até a linha do horizonte (Unity, 95OOpQPJKU0 0:03): só o
+      // último ~0,7° some, e a névoa pela distância faz o resto.
+      float fade=mix(1.0,0.25,1.0-exp(-distanceKm/120.0))*smoothstep(-0.002,0.012,visibleDirection.y)*
                  environment.cloudParameters.x;
       // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
       // cor de base e de topo interpoladas pela altura): topo com o céu, base

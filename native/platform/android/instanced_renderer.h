@@ -1470,8 +1470,10 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
-  // G4d: alvo de 1/16 dos pixels, histórico e ruídos 3D das Volumetric Clouds.
+  // G4d: marcha em 1/16 dos pixels, reconstrução em meia resolução e o
+  // histórico dela, e ruídos 3D das Volumetric Clouds.
   rhi::VulkanImage cloudVolumeTarget_{};
+  rhi::VulkanImage cloudResolveTarget_{};
   rhi::VulkanImage cloudVolumeHistory_{};
   rhi::VulkanImage cloudShapeNoise_{};
   rhi::VulkanImage cloudErosionNoise_{};
@@ -1481,7 +1483,11 @@ private:
   rhi::VulkanSampler cloudNoiseSampler_{};
   VkRenderPass cloudVolumeRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer cloudVolumeFramebuffer_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudResolveFramebuffer_ = VK_NULL_HANDLE;
   VkPipeline cloudVolumePipeline_ = VK_NULL_HANDLE;
+  VkPipeline cloudResolvePipeline_ = VK_NULL_HANDLE;
+  // Fase do subpixel da marcha (0..3), um passo por quadro integrado.
+  u32 cloudFrameIndex_ = 0;
   bool cloudNoiseUploaded_ = false;
   bool cloudHistoryValid_ = false;
   bool cloudImagesInitialized_ = false;

@@ -117,3 +117,21 @@ AE_TEST(time_of_day_component_round_trips_and_requires_a_light) {
   const auto *schema = scene::findComponentSchema(scene::TimeOfDay::descriptor);
   AE_EXPECT_TRUE(schema && !schema->requirements.empty(), "exige Luz no objeto");
 }
+
+// G4d: o céu físico integra a própria transmitância. A Hora do dia precisa
+// dizer quanto do tom e da queda do sol já fazem as vezes do ar, para o céu
+// não avermelhar duas vezes (o zênite do poente ia a (40,0,0) no POCO).
+AE_TEST(time_of_day_reports_the_air_it_put_in_the_sun_for_the_physical_sky) {
+  const auto noon = at(12.0f);
+  for (u32 i = 0; i < 3; ++i)
+    AE_EXPECT_TRUE(std::abs(noon.atmosphereTint[i] - 1.0f) < 1e-4f, "meio-dia alto: o sol já é o de fora do ar");
+  AE_EXPECT_TRUE(std::abs(noon.atmosphereDimming - 1.0f) < 1e-4f, "meio-dia alto: sem queda pela massa de ar");
+  const auto low = at(17.7f);
+  AE_EXPECT_TRUE(low.elevation > 0.0f && low.elevation < 0.1f, "fim de tarde com o sol a poucos graus");
+  AE_EXPECT_TRUE(low.atmosphereTint[2] < 0.2f && low.atmosphereTint[0] > 0.9f, "o tom do poente é o ar: azul some");
+  AE_EXPECT_TRUE(low.atmosphereDimming < 0.6f, "a massa de ar já baixou a intensidade");
+  // Dividido pelo que a Hora do dia pôs, o sol volta à cor do meio-dia.
+  for (u32 i = 0; i < 3; ++i)
+    AE_EXPECT_TRUE(std::abs(low.sunColor[i] / low.atmosphereTint[i] - noon.sunColor[i]) < 1e-3f,
+                   "cor do sol fora do ar igual à do meio-dia");
+}

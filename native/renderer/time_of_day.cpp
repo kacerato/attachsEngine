@@ -60,7 +60,11 @@ TimeOfDayState evaluateTimeOfDay(const TimeOfDayInput &input) noexcept {
   kelvinToLinear(mix(2000.0f, 5800.0f, high), state.sunColor);
   // Intensidade some suave entre +3° e -4° (o disco cruza o horizonte, depois o
   // crepúsculo civil); de dia sobe com a massa de ar menor.
-  state.sunIntensity = smoothstep(-0.07f, 0.05f, state.elevation) * mix(0.35f, 1.0f, high);
+  state.atmosphereDimming = mix(0.35f, 1.0f, high);
+  state.sunIntensity = smoothstep(-0.07f, 0.05f, state.elevation) * state.atmosphereDimming;
+  float noon[3];
+  kelvinToLinear(5800.0f, noon);
+  for (u32 i = 0; i < 3; ++i) state.atmosphereTint[i] = state.sunColor[i] / std::max(noon[i], 1e-4f);
 
   const float lunation = 29.530589f;
   // Lua nova de referência em 6 jan (dia 6); fase em fração do ciclo.

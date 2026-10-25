@@ -10,8 +10,10 @@
 //  * luz do sol por marcha curta rumo ao sol, Beer + Powder e fase
 //    Henyey-Greenstein de dois lóbulos; ambiente por altura;
 //  * névoa do horizonte pela distância.
-// Roda em 1/4 da resolução em cada eixo (1/16 dos pixels) e acumula no tempo
-// com reprojeção pela rotação da câmera, como o modo de desempenho do HDRP.
+// Roda em 1/4 da resolução em cada eixo (1/16 dos pixels), todos marchando.
+// A cada quadro o raio sai de um dos 4 subpixels do bloco 2x2 da meia
+// resolução (cloudVolume.w); cloud_resolve.frag põe a amostra no lugar e
+// reconstrói a meia resolução com o histórico, como o HZD (1/16 por quadro).
 // Saída pré-multiplicada: rgb = luz da nuvem, a = cobertura; o céu compõe.
 #include "dirt_road_frame.glsl"
 const float PI=3.141592653589793;
@@ -41,7 +43,7 @@ layout(set=0,binding=0,std140) uniform CloudFrameBlock {
   layout(offset=3552) vec4 cloudShape;      // 1/tamanho, altitude, vento x, z
   layout(offset=3568) vec4 cloudTint;       // tom*2^EV, luz do céu
   layout(offset=3584) vec4 cloudShadow;     // sombra, espessura, tipo, passos
-  layout(offset=4752) vec4 cloudVolume;     // fator de forma, erosão, histórico válido
+  layout(offset=4752) vec4 cloudVolume;     // fator de forma, erosão, histórico válido, fase do subpixel
 } environment;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
 layout(set=0,binding=20) uniform mediump sampler2D cloudHistory;
@@ -93,24 +95,31 @@ float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap
   float base=mix(1.0,shape,environment.cloudVolume.x)*profile;
   float cloud=clamp(remapValue(base,1.0-coverage,1.0,0.0,1.0),0.0,1.0)*coverage;
   if(cloud<=0.0 || cheap) return cloud;
-  // Erosão por Worley 10x mais fino só na borda: o recorte cai a zero no miolo.
-  vec3 e3=textureLod(cloudErosionNoise,q*10.0,noiseLod+4.32).rgb;
+  // Erosão por Worley 12x mais fino só na borda: o recorte cai a zero no miolo.
+  // log2(12 * 64/32) = 4,58 mips de diferença entre os dois ruídos.
+  vec3 e3=textureLod(cloudErosionNoise,q*12.0,noiseLod+4.58).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
   erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
   // Mais forte no topo (couve-flor), mais fraca na base (fiapos finos).
-  float threshold=erosion*environment.cloudVolume.y*mix(0.9,2.2,height)*(1.0-clamp(cloud*2.5,0.0,1.0));
+  // A borda recortada da Unity: limiar maior e só a última faixa de densidade
+  // protegida (cloud*2 em vez de *2,5), para os fiapos finos aparecerem.
+  float threshold=erosion*environment.cloudVolume.y*mix(1.25,2.6,height)*(1.0-clamp(cloud*2.0,0.0,1.0));
   return clamp(remapValue(cloud,threshold,1.0,0.0,1.0),0.0,1.0);
 }
 
 void main() {
-  vec3 viewDirection=normalize(vDirection);
+  // Subpixel deste quadro dentro do bloco 2x2 da meia resolução: +-1/4 do
+  // pixel deste alvo. A direção é linear na tela (triângulo de tela cheia).
+  int phase=int(environment.cloudVolume.w+0.5)&3;
+  vec2 subpixel=(vec2(float(phase&1),float(phase>>1))-0.5)*0.5;
+  vec3 viewDirection=normalize(vDirection+dFdx(vDirection)*subpixel.x+dFdy(vDirection)*subpixel.y);
   // Saída sem unidade, somada pela opacidade de cada amostra: r = luz do sol
   // (transmitância rumo ao sol x fase), g = altura (topo 1, base 0), b =
   // distância (km), a = cobertura. O céu converte em cor com as mesmas
   // radiâncias da camada 2D.
   // Alvo de 1/4 da resolução em cada eixo (1/16 dos pixels), todos marchando:
   // um padrão de pixels alternados dentro do mesmo quad faz a GPU pagar a
-  // marcha no quad inteiro. A nitidez vem do acúmulo temporal.
+  // marcha no quad inteiro. A nitidez vem da reconstrução (cloud_resolve.frag).
   float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
   vec4 result=vec4(0.0);
   if(viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
@@ -131,7 +140,8 @@ void main() {
     float extinction=mix(8.0,48.0,environment.cloudParameters.w);   // por km com densidade 1
     float cosine=dot(viewDirection,toSun);
     float phase=mix(henyeyGreenstein(cosine,0.8),henyeyGreenstein(cosine,-0.3),0.35)*4.0*PI;
-    // Mip do mapa pela área do pixel neste alvo, como a camada 2D faz.
+    // Mip do mapa pela área do pixel da meia resolução (o histórico), como a
+    // camada 2D faz: é a resolução que a reconstrução entrega ao céu.
     float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
     float pixelAngle=2.0/(focal*float(textureSize(cloudHistory,0).y));
     float texelKm=1.0/(environment.cloudShape.x*1000.0*256.0);
@@ -145,18 +155,21 @@ void main() {
       float height=(cloudPointHeightKm(p)-baseKm)/thicknessKm;
       if(height<0.0 || height>1.0) continue;
       float lod=clamp(log2(max(t*pixelAngle,1e-6)/texelKm)-1.0,0.0,2.0);
-      float noiseLod=max(log2(max(t*pixelAngle,1e-6)/noiseTexelKm),0.0);
+      // Limitado a 2 mips: perto do horizonte o mip pela área do pixel virava a
+      // média do ruído (~0,5), abaixo do limiar da cobertura, e a camada sumia
+      // na metade do céu. O serrilhado longe some no acúmulo temporal.
+      float noiseLod=clamp(log2(max(t*pixelAngle,1e-6)/noiseTexelKm),0.0,2.0);
       float density=cloudVolumeDensity(p,height,lod,noiseLod,false);
       if(density<=0.003) continue;
-      // Marcha de luz: 4 passos crescentes rumo ao sol, sem erosão.
+      // Marcha de luz rumo ao sol, sem erosão: 2 passos crescentes (custo da
+      // reconstrução), que cobrem a mesma espessura que os 3 de antes.
       float optical=0.0;
-      // 3 passos crescentes (custo); cobrem a mesma espessura que os 4 de antes.
-      for(int j=0;j<3;++j) {
-        float d=thicknessKm*(0.08+0.2*float(j));
+      for(int j=0;j<2;++j) {
+        float d=thicknessKm*(0.1+0.3*float(j));
         vec3 lp=p+toSun*d;
         float lh=(cloudPointHeightKm(lp)-baseKm)/thicknessKm;
         if(lh>1.0) break;
-        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.19;
+        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.285;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
       float od=optical*extinction*2.6;
@@ -174,32 +187,6 @@ void main() {
     }
     result=vec4(sums,1.0-transmittance);
   }
-  // Acúmulo temporal: o mesmo ponto do céu no quadro anterior, pela rotação da
-  // câmera (as nuvens estão longe; a translação não muda a direção).
-  if(environment.cloudVolume.z>0.5) {
-    vec3 far=viewDirection*50000.0;
-    vec3 current=vec3(dot(environment.temporalCurrentView[0].xyz,far),dot(environment.temporalCurrentView[1].xyz,far),
-                      dot(environment.temporalCurrentView[2].xyz,far));
-    vec3 previous=vec3(dot(environment.temporalPreviousView[0].xyz,far),dot(environment.temporalPreviousView[1].xyz,far),
-                       dot(environment.temporalPreviousView[2].xyz,far));
-    float focal=environment.temporalProjection.x;
-    vec2 currentXy=vec2(current.x*focal/environment.temporalProjection.y,-current.y*focal);
-    vec2 previousXy=vec2(previous.x*focal/environment.temporalProjection.y,-previous.y*focal);
-    vec2 currentNdc=vec2(dot(environment.temporalSurface.xy,currentXy),dot(environment.temporalSurface.zw,currentXy))/max(current.z,1e-3);
-    vec2 previousNdc=vec2(dot(environment.temporalSurface.xy,previousXy),dot(environment.temporalSurface.zw,previousXy))/max(previous.z,1e-3);
-    vec2 uv=gl_FragCoord.xy/vec2(textureSize(cloudHistory,0));
-    vec2 previousUv=uv+(previousNdc-currentNdc)*0.5;
-    if(previous.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
-      vec4 history=textureLod(cloudHistory,previousUv,0.0);
-      // Rejeição do histórico: cobertura ou distância da nuvem que mudaram
-      // muito (borda que passou, céu que abriu) não arrastam o quadro velho —
-      // é o rastro vertical que a reprojeção deixava.
-      float coverageChange=abs(history.a-result.a);
-      float currentKm=result.b/max(result.a,1e-3),historyKm=history.b/max(history.a,1e-3);
-      float depthChange=(result.a>0.05&&history.a>0.05)?abs(currentKm-historyKm)/max(currentKm,1.0):0.0;
-      float keep=0.85*(1.0-smoothstep(0.12,0.35,coverageChange))*(1.0-smoothstep(0.15,0.4,depthChange));
-      result=mix(result,history,keep);
-    }
-  }
+  // O acúmulo temporal e o subpixel no lugar ficam em cloud_resolve.frag.
   outCloud=result;
 }
