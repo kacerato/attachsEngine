@@ -140,3 +140,31 @@ limite; mediu -8,05). Prancha: [`prancha-sponza-noite-unity-x-poco.png`](prancha
   host; o lightmap do aparelho chega a 0,06, a faixa esperada a ~1,5 m de 1200 lm). Candidatas não isoladas:
   o especular GGX das luzes em tempo real (o bake não guarda especular, como na Unity), vazamento de sombra das
   8 luzes pontuais no atlas em tempo real, e a oclusão (AO) que multiplica só a parte assada.
+
+### A/B de paridade no host (25/10, commit f64861d6)
+
+`g3c_lightmap_host_bake` lança 117×100 raios pela vista "G3c arcada norte" sobre a geometria da Sponza (21 h,
+7 Assadas + 1 Mista a 1200 lm) e soma, por pixel, o que cada caminho entrega. Uma variável por vez:
+
+| Variável | Efeito |
+|---|---|
+| Assado (lightmap + direta da Mista) ÷ direta difusa de tempo real com sombra | 2,29× (o assado soma o rebote) |
+| Sombras das pontuais desligadas no tempo real | +7% |
+| Especular GGX das luzes no tempo real (rugosidade 0,6) | +5% |
+| AO no assado | nenhum: os 28 materiais da Sponza não têm occlusionTexture |
+| Difuso Burley do shader ÷ Lambert do lightmap (rugosidade 0,8) | 0,85× (escurece o tempo real) |
+| Parede esquerda, canal verde: tempo real × assado | 0,0051 × 0,0086 |
+
+Nenhuma variável do material ou da luz deixa o tempo real mais claro que o assado: a cor verde e o rebote
+estão no bake. A metade de luminância vista no aparelho à noite vem do céu: com a exposição no limite (EV100 −6)
+o pouco céu noturno pesa, e no tempo real ele entra sem oclusão debaixo da arcada, enquanto o assado o multiplica
+pela visibilidade (0,03–0,07 no chão da arcada). A prova no aparelho com o ambiente zerado nos dois lados
+(`ambiente=0`) foi interrompida pela queda do adb às 07:02 e fica pendente.
+
+### Fechamento
+
+- Base 818433ca mesclada (4f513f12): atlas de ícones reempacotado (414), SPIR-V regenerado, 77 capacidades.
+- `aether_tests` 1714/1714, `aether_environment_authoring_tests` 100/100, `aether_lightmap_tests` 15/15
+  (executáveis de 25/10 08:18).
+- Roteiro do aparelho: guarda de ligação (telephony e modo de áudio) e primeiro plano antes de cada toque; a trava só
+  sai com a Sponza conferida por md5.
