@@ -209,6 +209,9 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
   highp float cascadeRatio=cascadeCount>1?float(cascade)/float(cascadeCount-1):0.0;
   int radius=int(mix(environment.shadowFilterParameters.x,
                      environment.shadowFilterParameters.y,cascadeRatio)+0.5);
+  // Raios a partir de 8: A/B do G1, kernel largo pelas nove buscas filtradas.
+  bool nineTaps=radius>=8;
+  if(nineTaps) radius-=8;
   // Nenhum laco de contagem dinamica, e nenhum grid 5x5 com `continue`.
   //
   // O corpo anterior percorria 25 iteracoes para tomar 9 amostras na cascata
@@ -237,6 +240,13 @@ mediump float sampleDirectionalShadowCascade(highp vec3 worldPosition,
   // somam (1-f, 1, 1, f). Quatro textureGather com comparacao devolvem esses
   // 16 resultados -- 4 buscas no lugar de 9, mesmo valor final. Medido na Vila
   // em S (POCO F7): a busca da sombra direcional era 20% do passe opaco.
+  if(nineTaps) {
+    mediump float taps=0.0;
+    for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x)
+      taps+=texture(shadowAtlas,vec3(clamp(atlasUv+vec2(x,y)*texel,
+                                         tileMinimum,tileMaximum),projected.z));
+    return taps*(1.0/9.0);
+  }
   highp float atlasSize=1.0/texel;
   highp vec2 texelPosition=atlasUv*atlasSize-0.5;
   highp vec2 base=floor(texelPosition);

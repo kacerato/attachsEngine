@@ -5,6 +5,7 @@
 
 #include "scene/component_properties.h"
 #include "scene/environment.h"
+#include "renderer/volume_parameters.h"
 
 #include <algorithm>
 #include <chrono>
@@ -575,6 +576,7 @@ bool EditorSession::commitProfileBatch(const std::vector<resources::EnvironmentP
 bool EditorSession::openProfileInspector(const resources::AssetGuid &guid) {
   if(!findEnvironmentProfile(guid)) return false;
   state_.profileInspector=guid;state_.profileGroup=0;state_.profileUse=0;state_.propertyPage=0;
+  state_.profileInspectorScroll=0;state_.profileVolumeMenu=0;state_.profileAddMenu=false;
   state_.environmentInspector={};state_.materialInspector={};state_.textureInspector=false;state_.textureManager=false;
   closeTextureViewer();
   state_.compactPanel=EditorScreenState::CompactPanel::Inspector;
@@ -582,82 +584,115 @@ bool EditorSession::openProfileInspector(const resources::AssetGuid &guid) {
   return true;
 }
 
-// Unity 6000.0 Volume Profile: o perfil sozinho, com os mesmos controles do
-// componente que o usa, só o que ele guarda.
+/// Unity 6000.0 Volume Profile: o perfil sozinho, com os mesmos controles do
+// componente que o usa, só o que ele guarda. PK-4 (V-06): em vez de abas
+// paginadas ("< 1/5 >"), um cartão recolhível por override do perfil, cada um
+// com o interruptor, ALL/NONE e a caixa de cada parâmetro, numa coluna que rola;
+// no fim, Adicionar override. O Material do céu (PK-2) não tem overrides:
+// só os cartões do céu, sem caixas.
 void EditorSession::refreshProfileInspector() {
   const auto *profile=findEnvironmentProfile(state_.profileInspector);
   const auto *record=assets_.find(state_.profileInspector);
   if(!profile || !record) {state_.profileInspector={};state_.status="O perfil aberto não existe mais no projeto";return;}
   state_.profileInspectorName=profile->name;state_.profileInspectorPath=record->path;state_.profileInspectorRevision=profile->revision;
+  state_.profileSkybox=profile->skybox;
+  std::copy(std::begin(profile->values.curves),std::end(profile->values.curves),std::begin(state_.profileCurves));
   state_.profileObjects.clear();
   std::vector<EditorEntityId> ids;document_.collectSubtree(document_.root(),ids);
   for(const auto id:ids) if(const auto *entity=document_.find(id))
     if(const auto *environment=static_cast<const scene::Environment *>(entity->components.find(scene::Environment::descriptor));
-       environment && environment->profile==profile->guid) state_.profileObjects.push_back(id);
-  scene::Environment proxy;proxy.values=profile->values;
+       environment && (environment->profile==profile->guid||(profile->skybox&&environment->values.skybox==profile->guid)))
+      state_.profileObjects.push_back(id);
+  scene::Environment proxy;proxy.values=profile->values;proxy.setVolumeOverrides(profile->overrides);
+  const auto &overrides=profile->overrides;
   const auto &schema=profileSchema(profile->skybox);
-  // Grupos na ordem em que aparecem no esquema.
-  auto &groups=state_.profileGroups;groups.clear();
-  const auto group=[&](std::string_view name) {
-    const std::string value(name.empty()?std::string_view("Geral"):name);
-    if(std::find(groups.begin(),groups.end(),value)==groups.end()) groups.push_back(value);
-  };
-  // Ordem do esquema: os números (com os canais das cores) definem a sequência
-  // dos grupos, como nas abas do cartão do componente; depois opções e chaves.
-  for(const auto &p:scene::Environment::descriptor.numbers) {
-    bool profile=std::find(schema.numbers.begin(),schema.numbers.end(),&p)!=schema.numbers.end();
-    for(const auto *t:schema.triples) for(const auto &c:t->channels) profile|=c==p.id;
-    if(profile) group(p.presentation.group);
-  }
-  for(const auto *p:schema.enums) group(p->presentation.group);
-  for(const auto *p:schema.booleans) group(p->presentation.group);
-  if(schema.environmentMap) group("Céu");
-  state_.profileGroup=std::min<u32>(state_.profileGroup,groups.empty()?0:static_cast<u32>(groups.size()-1));
-  const std::string current=groups.empty()?std::string():groups[state_.profileGroup];
-  const auto in=[&](std::string_view name){return (name.empty()?std::string_view("Geral"):name)==current;};
-  auto &rows=state_.profileRows;rows.clear();
   using Row=EditorScreenState::ProfileRow;
   const auto usable=[&](const scene::PropertyPresentation &p){return p.isEditable(proxy) && p.hasConsumer();};
-  for(const auto *p:schema.booleans) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
-    Row row;row.kind=Row::Kind::Boolean;row.id=p->id;row.label=p->name;row.on=p->read(proxy);row.editable=usable(p->presentation);
+  const auto parameterOf=[&](std::string_view id)->u32{return profile->skybox?~0u:renderer::volumeParameterIndex(id);};
+  const auto inGroup=[&](std::string_view id,renderer::VolumeGroup group) {
+    const u32 parameter=renderer::volumeParameterIndex(id);
+    return parameter!=~0u&&renderer::volumeParameters()[parameter].group==group;
+  };
+  auto &rows=state_.profileRows;rows.clear();state_.profileGroups.clear();
+  const auto withOverride=[&](Row row) {
+    row.parameter=parameterOf(row.id);
+    row.overridden=row.parameter==~0u||overrides.overridden(row.parameter);
     rows.push_back(std::move(row));
+  };
+  for(u32 vg=0;vg<renderer::VolumeGroupCount;++vg) {
+    const auto group=static_cast<renderer::VolumeGroup>(vg);
+    if(!profile->skybox&&!overrides.hasGroup(group)) continue;
+    std::vector<Row> body;
+    for(const auto *p:schema.booleans) if(inGroup(p->id,group) && p->presentation.isVisible(proxy)) {
+      Row row;row.kind=Row::Kind::Boolean;row.id=p->id;row.label=p->name;row.on=p->read(proxy);row.editable=usable(p->presentation);
+      body.push_back(std::move(row));
+    }
+    for(const auto *p:schema.enums) if(inGroup(p->id,group) && p->presentation.isVisible(proxy)) {
+      Row row;row.kind=Row::Kind::Enum;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
+      const u32 value=p->read(proxy);
+      for(const auto &option:p->options) if(option.value==value) row.value=option.name;
+      body.push_back(std::move(row));
+    }
+    for(const auto *t:schema.triples) {
+      const auto *first=numberById(t->channels[0]);
+      if(!first || !inGroup(t->id,group) || !first->presentation.isVisible(proxy)) continue;
+      Row row;row.kind=Row::Kind::Triple;row.id=t->id;row.label=t->name;row.editable=usable(first->presentation);
+      row.color=scene::componentTripleIsColor(t->kind);
+      char text[64];
+      for(u32 axis=0;axis<t->dimensions();++axis) if(const auto *c=numberById(t->channels[axis])) row.rgb[axis]=c->read(proxy);
+      if(t->dimensions()==2) std::snprintf(text,sizeof text,"%.3g  %.3g",static_cast<double>(row.rgb[0]),static_cast<double>(row.rgb[1]));
+      else std::snprintf(text,sizeof text,"%.3g  %.3g  %.3g",static_cast<double>(row.rgb[0]),static_cast<double>(row.rgb[1]),static_cast<double>(row.rgb[2]));
+      row.value=text;body.push_back(std::move(row));
+    }
+    for(const auto *p:schema.numbers) if(inGroup(p->id,group) && p->presentation.isVisible(proxy)) {
+      Row row;row.kind=Row::Kind::Number;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
+      char text[48];std::snprintf(text,sizeof text,"%.4g",static_cast<double>(p->read(proxy)));
+      row.value=std::string(text)+(p->presentation.unit.empty()?std::string():" "+std::string(p->presentation.unit));
+      body.push_back(std::move(row));
+    }
+    if(schema.environmentMap && group==renderer::VolumeGroup::Sky) {
+      Row row;row.kind=Row::Kind::EnvironmentMap;row.id="environment_map";row.label="Mapa HDRI";
+      const auto *map=proxy.values.environmentMap.valid()?assets_.find(proxy.values.environmentMap):nullptr;
+      row.value=map?map->path.substr(map->path.rfind('/')+1):proxy.values.environmentMap.valid()?std::string("Mapa ausente"):std::string("Ambiente padrão");
+      body.push_back(std::move(row));
+    }
+    if(group==renderer::VolumeGroup::ColorCurves&&!profile->skybox)
+      for(u32 channel=0;channel<renderer::ColorCurveCount;++channel) {
+        Row row;row.kind=Row::Kind::Curve;row.id=renderer::colorCurveParameterId(channel);row.curve=channel;
+        row.label=renderer::colorCurveName(channel);row.value=renderer::colorCurveUnityName(channel);
+        row.on=!renderer::colorCurveNeutral(channel,profile->values.curves[channel]);
+        body.push_back(std::move(row));
+      }
+    if(body.empty()&&profile->skybox) continue;
+    const bool open=!(state_.profileSectionsCollapsed&(1u<<vg));
+    Row header;header.kind=Row::Kind::Header;header.group=vg;header.label=renderer::volumeGroupInfo(group).name;
+    header.on=overrides.groupActive(group);header.overridden=open;
+    header.value=profile->skybox?std::string():std::to_string(overrides.overriddenInGroup(group))+"/"+
+        std::to_string(overrides.parametersInGroup(group));
+    rows.push_back(std::move(header));
+    if(!profile->skybox&&state_.profileVolumeMenu==vg+1) {Row actions;actions.kind=Row::Kind::Actions;actions.group=vg;rows.push_back(actions);}
+    if(!open) continue;
+    if(!profile->skybox) {Row line;line.kind=Row::Kind::AllNone;line.group=vg;line.on=overrides.groupActive(group);rows.push_back(line);}
+    for(auto &row:body) {row.group=vg;withOverride(std::move(row));}
   }
-  for(const auto *p:schema.enums) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
-    Row row;row.kind=Row::Kind::Enum;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
-    const u32 value=p->read(proxy);
-    for(const auto &option:p->options) if(option.value==value) row.value=option.name;
-    rows.push_back(std::move(row));
-  }
-  for(const auto *t:schema.triples) {
-    const auto *first=numberById(t->channels[0]);
-    if(!first || !in(first->presentation.group) || !first->presentation.isVisible(proxy)) continue;
-    Row row;row.kind=Row::Kind::Triple;row.id=t->id;row.label=t->name;row.editable=usable(first->presentation);
-    row.color=scene::componentTripleIsColor(t->kind);
-    char text[64];
-    for(u32 axis=0;axis<3;++axis) if(const auto *c=numberById(t->channels[axis])) row.rgb[axis]=c->read(proxy);
-    std::snprintf(text,sizeof text,"%.3g  %.3g  %.3g",static_cast<double>(row.rgb[0]),static_cast<double>(row.rgb[1]),static_cast<double>(row.rgb[2]));
-    row.value=text;rows.push_back(std::move(row));
-  }
-  for(const auto *p:schema.numbers) if(in(p->presentation.group) && p->presentation.isVisible(proxy)) {
-    Row row;row.kind=Row::Kind::Number;row.id=p->id;row.label=p->name;row.editable=usable(p->presentation);
-    char text[48];std::snprintf(text,sizeof text,"%.4g",static_cast<double>(p->read(proxy)));
-    row.value=std::string(text)+(p->presentation.unit.empty()?std::string():" "+std::string(p->presentation.unit));
-    rows.push_back(std::move(row));
-  }
-  if(schema.environmentMap && current=="Céu") {
-    Row row;row.kind=Row::Kind::EnvironmentMap;row.label="Mapa HDRI";
-    const auto *map=proxy.values.environmentMap.valid()?assets_.find(proxy.values.environmentMap):nullptr;
-    row.value=map?map->path.substr(map->path.rfind('/')+1):proxy.values.environmentMap.valid()?std::string("Mapa ausente"):std::string("Ambiente padrão");
-    rows.push_back(std::move(row));
+  if(!profile->skybox&&overrides.added!=renderer::VolumeGroupsAll) {
+    Row add;add.kind=Row::Kind::AddOverride;add.on=state_.profileAddMenu;rows.push_back(add);
+    if(state_.profileAddMenu) for(u32 vg=0;vg<renderer::VolumeGroupCount;++vg)
+      if(!overrides.hasGroup(static_cast<renderer::VolumeGroup>(vg))) {
+        Row choice;choice.kind=Row::Kind::AddChoice;choice.group=vg;
+        choice.label=renderer::volumeGroupInfo(static_cast<renderer::VolumeGroup>(vg)).name;
+        choice.value=renderer::volumeGroupInfo(static_cast<renderer::VolumeGroup>(vg)).category;
+        rows.push_back(std::move(choice));
+      }
   }
   if(!previewSecondary_ && multiProfiles_.size()>1) for(auto &row:rows) {
+    if(row.kind>EditorScreenState::ProfileRow::Kind::EnvironmentMap) continue;
     const auto value=profileRowText(*profile,row);
     for(const auto &guid:multiProfiles_) if(const auto *other=findEnvironmentProfile(guid)) {
       row.mixed|=profileRowText(*other,row)!=value;
       row.editable&=profileRowAvailable(*other,row);
     }
   }
-
 }
 
 bool EditorSession::editProfileProperty(const EditorScreenState::ProfileRow &row,const scene::ComponentPropertyValue &value,

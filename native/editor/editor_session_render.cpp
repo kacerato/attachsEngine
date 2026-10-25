@@ -114,6 +114,36 @@ bool EditorSession::loadAssets(std::string_view text) {
   return true;
 }
 
+void EditorSession::setParticleBudget(u32 total) {
+  particleBudget_ = total ? total : 1;
+  previewParticles_.setBudget(particleBudget_);
+  playScene_.particles().setBudget(particleBudget_);
+}
+
+void EditorSession::updateParticles(float deltaSeconds, const float (&camera)[3], renderer::particles::ParticleFrame &out) {
+  // PK-10a: Material do projeto com shader Partícula -> textura publicada e cor
+  // base. A textura de todo Material do projeto já sobe com a biblioteca
+  // (collectUsedTextures), então aqui só se resolve o índice.
+  const runtime::ParticleMaterialResolver materials = [this](const resources::AssetGuid &guid, runtime::ParticleMaterialLook &look) {
+    const auto *material = findMaterialAsset(guid);
+    if (!material || !scene::materialShaderIsParticle(material->shading.shader)) return false;
+    const u32 texture = mapScene_.resolveTexture(material->textures[0], 0, EditorMapScene::samplerFlags(material->sampling[0]));
+    look.texture = texture == scene::MaterialTextureKeep || texture == renderer::InvalidMapTexture ? ~0u : texture;
+    std::copy(material->values.baseColor, material->values.baseColor + 3, look.color);
+    look.additive = material->shading.blend == scene::MaterialBlendAdditive;
+    return true;
+  };
+  if (isPlaying() && playScene_.active()) {
+    playScene_.particles().setBudget(particleBudget_);
+    playScene_.particles().build(playScene_.document(), camera, out, &materials);
+    return;
+  }
+  previewParticles_.setPreviewLoop(true);
+  previewParticles_.setBudget(particleBudget_);
+  previewParticles_.advance(evaluatedEditorScene(), deltaSeconds);
+  previewParticles_.build(evaluatedEditorScene(), camera, out, &materials);
+}
+
 bool EditorSession::extractMap(std::vector<renderer::MapDrawState> &out) const {
   const auto &graph=evaluatedEditorScene();
   if(!mapScene_.extract(graph, out)) return false;

@@ -1,0 +1,26 @@
+{
+  "title": "PK-5 · Profundidade de campo (Gaussian e Bokeh)",
+  "rows": [
+    {
+      "unity": "referencia-unity/urp-dof-7od2j4s85ww-08m30s-perto-em-foco.jpg",
+      "device": "poco/02-dof-gauss-q1.jpg",
+      "unity_caption": "Game Dev Guide · youtu.be/7od2j4s85ww · 08:30",
+      "device_caption": "POCO · pos-0949 · Gaussian, início 6 m, fim 25 m, raio 1",
+      "verdict": "Só o fundo desfoca entre Início e Fim; o primeiro plano fica nítido, como na URP. O vídeo usa Bokeh, por isso desfoca mais."
+    },
+    {
+      "unity": "referencia-unity/urp-dof-7od2j4s85ww-04m30s-inspector-bokeh.jpg",
+      "device": "poco/04-dof-bokeh-q1.jpg",
+      "unity_caption": "Game Dev Guide · youtu.be/7od2j4s85ww · 04:30",
+      "device_caption": "POCO · pos-0949 · Bokeh Medium, foco 5 m, 100 mm, f/2,8",
+      "verdict": "Frente e fundo desfocam pelo CoC físico (foco, focal, abertura). O vídeo foca a 2,9 m numa sala e desfoca muito mais; na praça a 5 m o desfoque é menor."
+    },
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-06m15s-dof-bokeh-inspector.jpg",
+      "device": "poco/05-dof-bokeh-q2.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 06:15",
+      "device_caption": "POCO · pos-0949 · Bokeh High (43 leituras)",
+      "verdict": "High alisa o disco (43 leituras, +0,3 ms sobre Medium); Low (8 leituras) desfoca menos."
+    }
+  ]
+}

@@ -98,6 +98,19 @@ FrameAttachmentPolicy resolveFrameAttachmentPolicy(const FrameGraphInputs &input
     graph.addPass(post);
   }
 
+  if (inputs.particleDepthEnabled) {
+    PassDesc particles;
+    particles.name = "Particles";
+    particles.extentWidth = inputs.width;
+    particles.extentHeight = inputs.height;
+    particles.reads.push_back(read(depth));
+    particles.reads.push_back(read(color));
+    const ResourceId output = graph.addResource(
+        ResourceDesc{"Particles.Output", /*imported=*/true, /*isDepth=*/false, 0});
+    particles.writes.push_back(fullWrite(output));
+    graph.addPass(particles);
+  }
+
   rendergraph::CompileError error{};
   const auto compiled = graph.compile(&error);
   if (!compiled.has_value()) return policy;

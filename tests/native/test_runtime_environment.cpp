@@ -46,7 +46,7 @@ AE_TEST(scene_environment_has_one_authoring_contract_and_archive_identity) {
   AE_EXPECT_TRUE(id!=0,"ambiente criado");
   auto values=*document.find(id);
   auto *environment=static_cast<scene::Environment*>(values.components.edit(scene::Environment::descriptor));
-  environment->values.ambientOcclusion=true;environment->values.ambientOcclusionRadius=2.25f;
+  environment->values.ambientOcclusion=true;environment->values.ambientOcclusionIntensity=.5f;environment->values.ambientOcclusionRadius=2.25f;
   environment->values.filmGrain=true;environment->values.filmGrainIntensity=.22f;
   environment->values.sky=renderer::SkyModel::PhysicalAtmosphere;
   environment->values.toneMapper=renderer::ToneMapper::AgX;
@@ -111,7 +111,7 @@ AE_TEST(scene_environment_has_one_authoring_contract_and_archive_identity) {
 AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_override) {
   resources::EnvironmentProfile profile;profile.guid=resources::assetGuidFromSeed("ambiente-compartilhado");
   profile.name="Caverna úmida";profile.values.active=true;profile.values.post=true;
-  profile.values.ambientOcclusion=true;profile.values.ambientOcclusionRadius=2.5f;
+  profile.values.ambientOcclusion=true;profile.values.ambientOcclusionIntensity=.5f;profile.values.ambientOcclusionRadius=2.5f;
   profile.values.filmGrain=true;profile.values.filmGrainIntensity=.17f;
   profile.values.sky=renderer::SkyModel::PhysicalAtmosphere;
   profile.values.toneMapper=renderer::ToneMapper::AgX;
@@ -170,9 +170,12 @@ AE_TEST(environment_profile_round_trips_and_local_values_form_an_explicit_overri
   values=*document.find(id);environment=static_cast<scene::Environment*>(
       values.components.edit(scene::Environment::descriptor));
   environment->values.exposureCompensation=1.25f;
-  AE_EXPECT_TRUE(document.applyEntityValues(id,values),"override local editado");
+  AE_EXPECT_TRUE(document.applyEntityValues(id,values),"cópia local editada");
+  // PK-4: o perfil é o recurso compartilhado da Unity; a edição no Inspector
+  // vai ao perfil (EditorSession::reconcileEnvironmentProfiles), e o runtime
+  // nunca deixa a cópia da instância passar à frente dele.
   AE_EXPECT_TRUE(runtime::collectSceneEnvironmentVolumes(document,volumes,std::span{&profile,usize{1}})&&
-                 volumes[0].environment.exposureCompensation==1.25f,"diferença local explícita vence o perfil");
+                 volumes[0].environment.exposureCompensation==profile.values.exposureCompensation,"o perfil compartilhado vale");
 }
 
 AE_TEST(auto_exposure_properties_reject_invalid_pairs_without_mutation) {
@@ -208,7 +211,7 @@ AE_TEST(scene_environment_v6_archive_keeps_physical_atmosphere_defaults) {
      <<static_cast<u32>(source.values.sky)<<' '<<static_cast<u32>(source.values.toneMapper)<<' '
      <<source.values.ambientOcclusion<<' '<<static_cast<u32>(source.shape)<<' '
      <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
-     <<source.layer<<" - "<<source.overrideIndirect;
+     <<0<<" - "<<source.overrideIndirect;
   for(const auto &property:scene::Environment::descriptor.numbers) {
     if(property.id.starts_with("hdri_")||legacyExposureNumber(property.id)||
        property.id=="fog_base_height"||property.id=="fog_height_falloff"||
@@ -293,7 +296,7 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
   base.environment.fogLightEnergy=1.0f;
   local.environment.fogBaseHeight=40;local.environment.fogHeightFalloff=.08f;
   local.environment.fogLightEnergy=101.0f;
-  local.overrides=renderer::EnvironmentOverrideFog;
+  local.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideFog);
   std::array volumes{base,local};const float camera[3]{};
   auto result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.environmentMap==base.environment.environmentMap&&result.hdriRotationDegrees==30&&
@@ -301,7 +304,7 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
   AE_EXPECT_TRUE(result.fogBaseHeight==30&&std::abs(result.fogHeightFalloff-.06f)<1e-6f&&
                  result.fogLightEnergy==76.0f,
                  "override de neblina mistura base e decaimento por altura");
-  volumes[1].overrides=renderer::EnvironmentOverrideSky;
+  volumes[1].overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideSky);
   result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.environmentMap==local.environment.environmentMap&&result.hdriRotationDegrees==-70&&
                  result.hdriExposureEv==-1,"panorama troca com sua orientação e exposição");
@@ -317,7 +320,7 @@ AE_TEST(hdri_volume_selection_keeps_resource_rotation_and_exposure_together) {
 // Campos de cena v13 (gradação) e v14 (sol, lua e estrelas): um arquivo antigo não os tem.
 static bool newerThanV12(std::string_view id) {
   return id.starts_with("grading_")||id.starts_with("cloud_")||id=="sun_glare"||id.starts_with("moon_")||id=="star_intensity"||
-         scene::environmentNumberSinceV17(id)||scene::environmentNumberSinceV18(id);
+         scene::environmentNumberSinceV17(id)||scene::environmentNumberSinceV18(id)||scene::environmentNumberSinceV19(id);
 }
 
 AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
@@ -328,7 +331,7 @@ AE_TEST(environment_v7_migrates_hdri_without_consuming_old_numeric_fields) {
         <<static_cast<u32>(source.values.sky)<<' '<<static_cast<u32>(source.values.toneMapper)<<' '
         <<source.values.ambientOcclusion<<' '<<static_cast<u32>(source.shape)<<' '
         <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
-        <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality;
+        <<0<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality;
   for(const auto &property:scene::Environment::descriptor.numbers) {
     if(property.id.starts_with("hdri_")||legacyExposureNumber(property.id)||
        property.id=="fog_base_height"||property.id=="fog_height_falloff"||
@@ -354,7 +357,7 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
      <<static_cast<u32>(source.values.sky)<<' '<<static_cast<u32>(source.values.toneMapper)<<' '
      <<source.values.ambientOcclusion<<' '<<static_cast<u32>(source.shape)<<' '
      <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
-     <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
+     <<0<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" -";
   for(const auto &property:scene::Environment::descriptor.numbers)
     if(!legacyExposureNumber(property.id)&&property.id!="fog_light_energy"&&!newerThanV12(property.id))
@@ -378,7 +381,7 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   resources::EnvironmentProfile profile;
   profile.guid=resources::assetGuidFromSeed("perfil-exposicao-legado");
   profile.name="Legado";profile.values.exposureMode=renderer::ExposureMode::AutomaticHistogram;
-  std::istringstream profileTokens(profile.serialize());
+  std::istringstream profileTokens(environment_legacy::profileAsV13(profile.serialize()));
   std::vector<std::string> fields;
   for(std::string field;profileTokens>>field;) fields.push_back(field);
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
@@ -411,11 +414,11 @@ AE_TEST(auto_exposure_v15_scene_migrates_to_hdrp_histogram_in_ev100) {
      <<static_cast<u32>(source.values.sky)<<' '<<static_cast<u32>(source.values.toneMapper)<<' '
      <<source.values.ambientOcclusion<<' '<<static_cast<u32>(source.shape)<<' '
      <<source.overrideSky<<' '<<source.overrideFog<<' '<<source.overridePost<<' '
-     <<source.layer<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
+     <<0<<" - "<<source.overrideIndirect<<' '<<source.values.physicalAtmosphereHighQuality
      <<" - 1 1";
   for(const auto &property:scene::Environment::descriptor.numbers)
     if(property.id!="exposure_fixed"&&!property.id.starts_with("cloud_")&&!scene::environmentNumberSinceV17(property.id)&&
-       !scene::environmentNumberSinceV18(property.id))
+       !scene::environmentNumberSinceV18(property.id)&&!scene::environmentNumberSinceV19(property.id))
       old<<' '<<property.read(source);
   scene::Environment restored;
   std::istringstream input(old.str());
@@ -471,18 +474,18 @@ AE_TEST(exposure_override_unchecked_inherits_from_lower_priority_volume) {
   auto local=global;local.stableId=2;local.environment.priority=5;
   local.environment.exposureMode=renderer::ExposureMode::Fixed;local.environment.exposureLimitMin=-9;
   local.environment.bloomIntensity=1.0f;
-  local.overrides=renderer::EnvironmentOverrideAll&~renderer::EnvironmentOverrideExposure;
+  local.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideAll&~renderer::EnvironmentOverrideExposure);
   std::array volumes{global,local};const float camera[3]{};
   auto result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::AutomaticHistogram&&result.exposureLimitMin==-3,
                  "exposição herdada do volume global");
   AE_EXPECT_EQ(result.bloomIntensity,1.0f,"bloom marcado vem do volume local");
-  volumes[1].overrides=renderer::EnvironmentOverrideExposure;
+  volumes[1].overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideExposure);
   result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::Fixed&&result.exposureLimitMin==-9&&
                  result.bloomIntensity==.2f,"só a Exposure marcada troca; o bloom volta a herdar");
   // Sem nenhum volume decidindo a exposição, vale o padrão do mundo (Automatic).
-  volumes[0].overrides=renderer::EnvironmentOverrideBloom;volumes[1].overrides=renderer::EnvironmentOverrideBloom;
+  volumes[0].overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideBloom);volumes[1].overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideBloom);
   result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.exposureMode==renderer::ExposureMode::Automatic&&
                  result.exposureLimitMin==renderer::SceneEnvironment{}.exposureLimitMin,
@@ -598,7 +601,7 @@ AE_TEST(scene_environment_volume_layers_and_group_overrides_are_camera_scoped) {
   auto values=*document.find(local);
   auto *environment=static_cast<scene::Environment*>(values.components.edit(scene::Environment::descriptor));
   environment->shape=renderer::EnvironmentVolumeShape::Sphere;environment->sphereRadius=3;
-  environment->layer=3;environment->overrideSky=false;environment->overrideFog=false;
+  values.layer=3;environment->overrideSky=false;environment->overrideFog=false;
   environment->values.skyZenith[0]=1;environment->values.fog=true;environment->values.fogDensity=.8f;
   AE_EXPECT_TRUE(document.applyEntityValues(local,values),"camada e overrides configurados");
   std::vector<renderer::SceneEnvironmentVolume> volumes;
@@ -675,13 +678,13 @@ AE_TEST(color_adjustments_and_bloom_detail_round_trip_blend_and_migrate) {
   auto look=base;look.stableId=2;look.environment.priority=1;look.weight=.5f;
   look.environment.postExposure=2;look.environment.hueShift=90;look.environment.colorFilter[0]=0;
   look.environment.bloomScatter=.1f;look.environment.bloomTint[2]=0;
-  look.overrides=renderer::EnvironmentOverrideColorAdjustments;
+  look.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideColorAdjustments);
   std::array volumes{base,look};const float camera[3]{};
   auto result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.postExposure==1&&result.hueShift==45&&result.colorFilter[0]==.5f&&
                  result.bloomScatter==world.bloomScatter&&result.bloomTint[2]==1,
                  "Color Adjustments mistura pelo peso; o Bloom desmarcado herda");
-  volumes[1].overrides=renderer::EnvironmentOverrideBloom;
+  volumes[1].overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideBloom);
   result=renderer::resolveSceneEnvironment(volumes,camera);
   AE_EXPECT_TRUE(result.postExposure==0&&std::abs(result.bloomScatter-.4f)<1e-6f&&result.bloomTint[2]==.5f,
                  "Bloom mistura espalhamento e tom; os ajustes de cor herdam");

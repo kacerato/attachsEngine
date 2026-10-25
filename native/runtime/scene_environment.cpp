@@ -21,14 +21,23 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
     if(!graph.activeInHierarchy(id)) continue;
     renderer::SceneEnvironmentVolume volume;
     volume.environment=component->values;
+    volume.overrides=component->volumeOverrides();
     if(component->profile.valid()) {
       const auto found=std::find_if(profiles.begin(),profiles.end(),[&](const auto &profile) {
-        return profile.guid==component->profile;
+        return !profile.skybox&&profile.guid==component->profile;
       });
-      // Referência ausente conserva a cópia autoral da instância. O GUID não é
-      // apagado: quando o recurso reaparecer, volta a resolver sem remapeamento.
-      if(found!=profiles.end()&&resources::sameEnvironmentAppearance(component->values,*found))
+      // PK-4 (V-01): o perfil é o Volume Profile compartilhado, lido do
+      // recurso a cada coleta: editar o perfil muda todo volume que o usa.
+      // Recurso ausente conserva a cópia gravada na instância; o GUID fica, e
+      // quando o recurso reaparecer volta a resolver sem remapeamento. Uma
+      // cena anterior à v19 cuja cópia divergia do perfil (o "Atualizar
+      // perfil" pendente) continua com a cópia até o editor clonar o perfil.
+      const bool divergedLegacy=found!=profiles.end()&&component->legacyProfileCopy&&
+          !resources::sameEnvironmentProfileData(component->values,volume.overrides,*found);
+      if(found!=profiles.end()&&!divergedLegacy) {
         volume.environment=resources::applyEnvironmentProfile(component->values,*found);
+        volume.overrides=found->overrides;
+      }
     }
     // PK-2: Material do céu compartilhado, lido do recurso a cada coleta (editar
     // o material muda todo Ambiente que o usa). Ausente: o céu da instância.
@@ -39,19 +48,8 @@ bool collectSceneEnvironmentVolumes(const SceneGraph &graph,
       if(found!=profiles.end()) volume.environment=resources::applySkyboxMaterial(volume.environment,*found);
     }
     volume.shape=component->shape;
-    volume.overrides=(component->overrideSky?renderer::EnvironmentOverrideSky:0u)|
-                     (component->overrideFog?renderer::EnvironmentOverrideFog:0u)|
-                     (component->overridePost?renderer::EnvironmentOverridePost:0u)|
-                     (component->overrideIndirect?renderer::EnvironmentOverrideIndirect:0u)|
-                     (component->overrideExposure?renderer::EnvironmentOverrideExposure:0u)|
-                     (component->overrideBloom?renderer::EnvironmentOverrideBloom:0u)|
-                     (component->overrideVignette?renderer::EnvironmentOverrideVignette:0u)|
-                     (component->overrideColorAdjustments?renderer::EnvironmentOverrideColorAdjustments:0u)|
-                     (component->overrideColorGrading?renderer::EnvironmentOverrideColorGrading:0u)|
-                     (component->overrideFilmGrain?renderer::EnvironmentOverrideFilmGrain:0u)|
-                     (component->overrideAmbientOcclusion?renderer::EnvironmentOverrideAmbientOcclusion:0u)|
-                     (component->overrideClouds?renderer::EnvironmentOverrideClouds:0u);
-    volume.layer=component->layer;volume.stableId=id;volume.weight=component->weight;
+    // PK-4 (V-04): a camada é a do objeto, como o GameObject.layer do Volume.
+    volume.layer=object->layer;volume.stableId=id;volume.weight=component->weight;
     volume.blendDistance=component->blendDistance;volume.sphereRadius=component->sphereRadius;
     std::copy(component->boxSize,component->boxSize+3,volume.boxSize);
     if(!worldMatrix(graph,id,volume.localToWorld)) return false;

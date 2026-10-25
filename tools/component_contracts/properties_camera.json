@@ -505,14 +505,14 @@
         },
         {
           "id": "environment_mask",
-          "label": "Volumes",
+          "label": "Máscara de volume",
           "type": "Camera",
           "member": "environmentMask",
-          "options": "cameraEnvironmentMaskOptions",
+          "options": "objectLayerOptions",
           "presentation": {
             "group": "Ambiente",
             "unit": "",
-            "help": "Volumes que esta câmera consulta",
+            "help": "Volume Mask: só volumes em objetos destas camadas afetam esta câmera",
             "visible": {
               "cpp": "nullptr"
             },
@@ -524,7 +524,8 @@
             "invalidates": {
               "cpp": "Invalidate::Draw"
             }
-          }
+          },
+          "flags": true
         },
         {
           "id": "background_type",

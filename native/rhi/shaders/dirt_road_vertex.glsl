@@ -171,6 +171,7 @@ void main() {
     }
   }
   highp vec3 worldPosition=(inModel*vec4(modelPosition,1)).xyz;
+  highp vec3 snowOffset=vec3(0.0);
   highp mat3 linear=mat3(inModel);
   highp mat3 normalMatrix=mat3(inNormalColumn0.xyz,inNormalColumn1.xyz,inNormalColumn2.xyz);
   if((frame.materialFlags.x&MATERIAL_WATER)!=0u) {
@@ -318,6 +319,19 @@ void main() {
   } else {
     vNormal=normalize(normalMatrix*modelNormal);
     vTangent=vec4(normalize(linear*modelTangent),inTangent.w*inNormalColumn0.w);
+    // G4c: espessura da neve (o deslocamento dos snow shaders da Unity). As
+    // faces voltadas para cima sobem até 7 cm com a cobertura, para cima e
+    // não pela normal: arestas de malha low-poly com normais separadas não
+    // abrem fresta. O pré-passe de cobertura usa este mesmo vértice, então a
+    // profundidade bate; o movimento desconta o deslocamento (sem rastro no TAA).
+    highp float snowPacked=environment.materialDistanceParameters.w;
+    highp float snowAmount=floor(snowPacked)*0.01;
+    if(snowAmount>0.0 && !impostor) {
+      highp float up=clamp(vNormal.y,0.0,1.0);
+      highp float slope=smoothstep(0.85-0.45*snowAmount,1.0-0.3*snowAmount,up);
+      snowOffset=vec3(0.0,0.07*slope*smoothstep(0.0,0.6,snowAmount),0.0);
+      worldPosition+=snowOffset;
+    }
   }
   vPosition=worldPosition;
   vUv0=resolvedUv0; vUv1=resolvedUv1; vColor=inColor*inTint;
@@ -329,9 +343,9 @@ void main() {
 #ifdef AETHER_SKINNED_MOTION
   // Skin: a posição anterior já é a deformada pela paleta anterior, no espaço
   // do desenho; o modelo anterior leva ao mundo do quadro anterior.
-  vMotionWorldDelta=worldPosition-(inPreviousModel*vec4(inTangent.xyz,1)).xyz;
+  vMotionWorldDelta=worldPosition-snowOffset-(inPreviousModel*vec4(inTangent.xyz,1)).xyz;
 #else
-  vMotionWorldDelta=worldPosition-(inPreviousModel*vec4(modelPosition,1)).xyz;
+  vMotionWorldDelta=worldPosition-snowOffset-(inPreviousModel*vec4(modelPosition,1)).xyz;
 #endif
   highp vec3 relative=worldPosition-frame.cameraPositionNear.xyz;
   highp vec3 view=vec3(dot(environment.worldToViewRow0.xyz,relative),

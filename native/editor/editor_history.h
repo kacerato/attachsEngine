@@ -120,6 +120,10 @@ public:
   // objeto, e Desfazer precisa voltar todas de uma vez. Recusa passos de
   // recurso (têm reexecução própria) e transação aberta.
   bool mergeLast(u32 count, std::string_view label);
+  // PK-4: o último passo é só edição de valores de `id` (sem recurso, sem
+  // estrutura). Usado para transformar a edição de um Ambiente com perfil
+  // compartilhado num passo do perfil (Volume Profile da Unity).
+  bool lastIsValuesOf(EditorEntityId id) const;
   std::string describe(u32 index) const;
 
   void clear() noexcept;

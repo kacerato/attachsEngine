@@ -1,5 +1,6 @@
 #include "runtime/environment_migration.h"
 
+#include "scene/camera.h"
 #include "scene/environment.h"
 #include "scene/light.h"
 #include "scene/lighting_settings.h"
@@ -114,6 +115,67 @@ EnvironmentMigrationReport migrateLegacyEnvironmentLighting(SceneGraph &graph) {
     graph.applyEntityValues(graph.root(), values);
   }
   return report;
+}
+
+u32 migrateLegacyVolumeLayers(SceneGraph &graph) {
+  std::vector<ObjectId> ids;
+  graph.collectSubtree(graph.root(), ids);
+  struct Volume { ObjectId id; u32 legacy; };
+  std::vector<Volume> volumes;
+  std::vector<ObjectId> cameras;
+  for (const auto id : ids) {
+    const auto *object = graph.find(id);
+    if (!object) continue;
+    if (const auto *environment = static_cast<const scene::Environment *>(
+            object->components.find(scene::Environment::descriptor)); environment)
+      volumes.push_back({id, environment->legacyLayer});
+    if (const auto *camera = static_cast<const scene::Camera *>(object->components.find(scene::Camera::descriptor));
+        camera && camera->legacyEnvironmentMask) cameras.push_back(id);
+  }
+  const bool layered = std::any_of(volumes.begin(), volumes.end(), [](const Volume &v) { return v.legacy != 0; });
+  if (!layered && cameras.empty()) return 0;
+  auto layers = graph.layers();
+  // "Ambiente N" -> camada de objeto: a que já tem esse nome, senão a primeira
+  // vaga sem nome (a 0, "Padrão", nunca é usada para isso).
+  u32 mapped[32];
+  for (u32 legacy = 0; legacy < 32; ++legacy) mapped[legacy] = ~0u;
+  const auto layerFor = [&](u32 legacy) -> u32 {
+    if (mapped[legacy] != ~0u) return mapped[legacy];
+    const std::string name = "Ambiente " + std::to_string(legacy);
+    for (u32 layer = 1; layer < GameplayLayers::kCount; ++layer)
+      if (layers.name(layer) == name) return mapped[legacy] = layer;
+    for (u32 layer = 1; layer < GameplayLayers::kCount; ++layer)
+      if (!layers.named(layer) && layers.setName(layer, name)) return mapped[legacy] = layer;
+    return mapped[legacy] = 0; // sem vaga: o volume fica na camada em que já está
+  };
+  u32 changed = 0;
+  // Camadas de objeto ocupadas pelos volumes de cada "Ambiente N" antigo.
+  u32 reach[32]{};
+  for (const auto &volume : volumes) {
+    auto values = *graph.find(volume.id);
+    const u32 before = values.layer;
+    if (volume.legacy != 0) {
+      const u32 layer = layerFor(volume.legacy);
+      if (layer != 0 && values.layer != layer) values.layer = layer;
+    }
+    reach[volume.legacy] |= 1u << std::min(values.layer, 31u);
+    if (const auto *environment = values.components.find(scene::Environment::descriptor))
+      if (auto *edit = static_cast<scene::Environment *>(values.components.editInstance(environment->instanceId())))
+        edit->legacyLayer = 0;
+    if (graph.applyEntityValues(volume.id, values) && (volume.legacy != 0 || before != values.layer)) ++changed;
+  }
+  for (const auto id : cameras) {
+    auto values = *graph.find(id);
+    const auto *found = values.components.find(scene::Camera::descriptor);
+    auto *camera = found ? static_cast<scene::Camera *>(values.components.editInstance(found->instanceId())) : nullptr;
+    if (!camera) continue;
+    u32 mask = 0;
+    for (u32 legacy = 0; legacy < 32; ++legacy) if (camera->environmentMask & (1u << legacy)) mask |= reach[legacy];
+    camera->environmentMask = mask;camera->legacyEnvironmentMask = false;
+    if (graph.applyEntityValues(id, values)) ++changed;
+  }
+  graph.setLayers(layers);
+  return changed;
 }
 
 } // namespace ae::runtime

@@ -556,6 +556,15 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
   if(handleRigTool(routing)) return true;
   if(state_.colorField) return handleColorWindow(event,routing);
   if(state_.gradientField) return handleGradientEditor(event,routing);
+  // PK-4 (V-06): a coluna do Inspector de Perfil rola ao arrastar em qualquer linha.
+  if(!state_.numericField && state_.profileInspector.valid() && routing.dragging &&
+     ((routing.widgetId>=widgetId(EditorWidget::ProfileInspectorClose) && routing.widgetId<widgetId(EditorWidget::ProfileRowBase)+0x10000u) ||
+      (routing.widgetId>=widgetId(EditorWidget::ProfileOverrideBase) && routing.widgetId<widgetId(EditorWidget::ProfileSectionBase)+0x10000u) ||
+      (routing.widgetId>=widgetId(EditorWidget::VolumeAddChoiceBase) && routing.widgetId<widgetId(EditorWidget::VolumeProfileNewBase)))) {
+    const float limit=std::max(0.0f,layout_.profileInspectorContent-layout_.profileInspectorWindow);
+    state_.profileInspectorScroll=std::clamp(state_.profileInspectorScroll-routing.stepDelta.y,0.0f,limit);
+    return true;
+  }
   // PK-9: Inspector do Material por shader (campos, seções, lista, rolagem).
   if(!state_.numericField && state_.materialInspector.valid() && !state_.texturePicker && !isPlaying() &&
      (isMaterialFieldWidget(routing.widgetId) ||
@@ -1546,6 +1555,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     // Perfil de ambiente do projeto em Propriedades.
     if(state_.profileInspector.valid()) {
+      if(handleProfileVolumeWidget(key)) return true;
       if(key==widgetId(EditorWidget::ProfileInspectorClose)) {state_.profileInspector={};state_.selectedFile.clear();state_.selectedFiles.clear();return true;}
       if(key==widgetId(EditorWidget::ProfileInspectorUses)) {
         const auto &users=state_.profileObjects;
@@ -2007,6 +2017,13 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
       return true;
     }
+    // PK-4/PK-5: Volume no Inspector (caixa por parâmetro, cabeçalho do
+    // override, Adicionar override, Novo/Clonar, curvas de cor).
+    if(key>=widgetId(EditorWidget::VolumeParameterBase)&&key<widgetId(EditorWidget::ProfileOverrideBase)&&
+       !(state_.profileInspector.valid()&&state_.profileAddMenu&&key>=widgetId(EditorWidget::VolumeAddChoiceBase)&&
+         key<widgetId(EditorWidget::VolumeAddChoiceBase)+0x10000u)&&
+       !(state_.profileInspector.valid()&&state_.profileVolumeMenu&&(key==widgetId(EditorWidget::VolumeGroupReset)||
+         key==widgetId(EditorWidget::VolumeGroupRemove)))&&handleVolumeWidget(key)) return true;
     // PK-2: janela Iluminação. Material do céu novo (do céu atual), editar o
     // escolhido, e criar o Ambiente da cena quando ela só tem o padrão.
     if(key==widgetId(EditorWidget::LightingCreateSkybox)) {
@@ -2030,8 +2047,8 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     if(key==widgetId(EditorWidget::EnvironmentProfileCreate)||key==widgetId(EditorWidget::EnvironmentProfileUpdate)) {
       std::string diagnostic;
       const bool created=key==widgetId(EditorWidget::EnvironmentProfileCreate);
-      const bool ok=created?createEnvironmentProfile(state_.selection,state_.resourceInstance,diagnostic).valid():
-                            updateEnvironmentProfile(state_.selection,state_.resourceInstance,diagnostic);
+      // PK-4: Novo (vazio com perfil; com os valores sem perfil) e Clonar.
+      const bool ok=createVolumeProfile(state_.selection,state_.resourceInstance,!created,diagnostic).valid();
       state_.status=diagnostic;if(ok) {state_.meshPicker=false;state_.resourceInstance=0;state_.resourceProperty.clear();}
       return true;
     }
@@ -2163,6 +2180,34 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         if(collider && fitEditorCollider(mapScene_,document_,entity->id,*collider) && history_.applyValues(document_,entity->id,value))
           state_.status="Colisor ajustado pela geometria; forma e centro continuam editáveis";
         else state_.status="Não foi possível ajustar: geometria ausente, escala ou dimensões incompatíveis";
+      }
+      return true;
+    }
+    if(key>=widgetId(EditorWidget::ParticleCurveRowBase)&&key<=widgetId(EditorWidget::ParticlePreviewRestart)) {
+      const auto *entity=document_.find(state_.selection);
+      const auto *value=entity?entity->components.find(scene::ParticleSystem::descriptor):nullptr;
+      if(!value) return true;
+      if(key==widgetId(EditorWidget::ParticlePreviewRestart)) {
+        restartParticlePreview();state_.status="Prévia de partículas reiniciada";return true;
+      }
+      if(isPlaying()||history_.isOpen()) {state_.status="Curvas e gradientes de partícula são editados fora do Play";return true;}
+      const auto &system=scene::particleSystem(*value);
+      if(key<widgetId(EditorWidget::ParticleGradientRowBase)) {
+        const u32 index=key-widgetId(EditorWidget::ParticleCurveRowBase);
+        const auto slots=scene::ParticleSystem::curveSlots();
+        if(index<slots.size()) {
+          state_.curveEntity=entity->id;state_.curveInstance=value->instanceId();
+          state_.curveProperty=std::string(slots[index].id);state_.curveElement=0;
+          openCurveEditor(key,scene::scriptCurveValue(*system.curve(slots[index].id)),kParticleCurveType);
+        }
+      } else {
+        const u32 index=key-widgetId(EditorWidget::ParticleGradientRowBase);
+        const auto slots=scene::ParticleSystem::gradientSlots();
+        if(index<slots.size()) {
+          state_.gradientEntity=entity->id;state_.gradientInstance=value->instanceId();
+          state_.gradientProperty=std::string(slots[index].id);state_.gradientElement=0;
+          openGradientEditor(key,scene::scriptGradientValue(*system.gradient(slots[index].id)),kParticleGradientType);
+        }
       }
       return true;
     }

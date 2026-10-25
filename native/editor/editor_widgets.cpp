@@ -48,7 +48,17 @@ inline constexpr WidgetRange widgetRanges[]{
   {EditorWidget::CurveBase,kRange},{EditorWidget::LodBar,kRange},{EditorWidget::ReferenceModeToggle,kRange},
   {EditorWidget::InspectorLock,kRange},{EditorWidget::UndoHistoryClose,kRange},{EditorWidget::SceneLayersOpen,kRange},{EditorWidget::GlobalSearchOpen,kRange},{EditorWidget::LayoutsOpen,kRange},{EditorWidget::StatusConsole,kRange},{EditorWidget::MaterialInspectorClose,kRange},{EditorWidget::HierarchyMultiToggle,kRange},{EditorWidget::HierarchyPickBase,kRange},{EditorWidget::HierarchyActiveBase,kRange},{EditorWidget::ContextMenuBase,kRange},{EditorWidget::FilesMultiToggle,kRange},
   {EditorWidget::PropertyTweenPick,kRange},{EditorWidget::PropertyTweenChoiceBase,kRange},{EditorWidget::PropertyTweenPickerClose,kRange},
-  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange},{EditorWidget::AnimatorBase,kRange},{EditorWidget::NavigationBase,kRange},{EditorWidget::ProbeBase,kRange},{EditorWidget::LightmapBase,kRange}};
+  {EditorWidget::PhysicsMaterialInspectorClose,kRange},{EditorWidget::PhysicsMaterialStepBase,kRange},{EditorWidget::AnimatorBase,kRange},{EditorWidget::NavigationBase,kRange},{EditorWidget::ProbeBase,kRange},{EditorWidget::LightmapBase,kRange},
+  {EditorWidget::VolumeParameterBase,0x0001'0000u},{EditorWidget::VolumeGroupActiveBase,0x0001'0000u},
+  {EditorWidget::VolumeGroupAllBase,0x0001'0000u},{EditorWidget::VolumeGroupNoneBase,0x0001'0000u},
+  {EditorWidget::VolumeGroupMenuBase,0x0001'0000u},{EditorWidget::VolumeAddOverrideBase,0x0001'0000u},
+  {EditorWidget::VolumeAddChoiceBase,0x0001'0000u},{EditorWidget::VolumeMenuClose,0x0001'0000u},
+  {EditorWidget::VolumeProfileNewBase,0x0001'0000u},{EditorWidget::VolumeProfileCloneBase,0x0001'0000u},
+  {EditorWidget::VolumeCurveBase,0x0001'0000u},{EditorWidget::ProfileOverrideBase,0x0001'0000u},
+  {EditorWidget::ProfileGroupActiveBase,0x0001'0000u},{EditorWidget::ProfileGroupAllBase,0x0001'0000u},
+  {EditorWidget::ProfileGroupNoneBase,0x0001'0000u},{EditorWidget::ProfileGroupMenuBase,0x0001'0000u},
+  {EditorWidget::ProfileAddOverride,0x0001'0000u},{EditorWidget::ProfileInspectorScroll,0x0001'0000u},
+  {EditorWidget::ProfileCurveBase,0x0001'0000u},{EditorWidget::ProfileSectionBase,0x0001'0000u}};
 inline constexpr bool widgetRangesDisjoint() {
   for(const auto &a:widgetRanges) for(const auto &b:widgetRanges) {
     if(&a==&b) continue;

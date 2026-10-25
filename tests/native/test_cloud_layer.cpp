@@ -128,8 +128,8 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 18u, "Ambiente v18");
-  AE_EXPECT_TRUE(reread.read(in, 18), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 19u, "Ambiente v19");
+  AE_EXPECT_TRUE(reread.read(in, 19), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
@@ -180,7 +180,7 @@ AE_TEST(cloud_volume_overrides_only_the_clouds_like_a_unity_cloud_layer_override
   renderer::SceneEnvironmentVolume cloudy;
   cloudy.environment.active = true;cloudy.environment.priority = 1.0f;cloudy.stableId = 2;
   cloudy.environment.clouds.enabled = true;cloudy.environment.clouds.coverage = 0.9f;
-  cloudy.overrides = renderer::EnvironmentOverrideClouds;
+  cloudy.overrides = renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideClouds);
   const float camera[3]{0, 0, 0};
   const renderer::SceneEnvironmentVolume both[]{base, cloudy};
   auto look = renderer::resolveSceneEnvironment(both, camera);
@@ -193,13 +193,13 @@ AE_TEST(cloud_volume_overrides_only_the_clouds_like_a_unity_cloud_layer_override
   look = renderer::resolveSceneEnvironment(halfPair, camera);
   AE_EXPECT_TRUE(std::abs(look.clouds.opacity - 0.5f) < 1e-5f && look.clouds.coverage == 0.9f, "meia influência, meia opacidade");
   // Sem o override, o volume não participa das nuvens.
-  renderer::SceneEnvironmentVolume skyOnly = cloudy;skyOnly.overrides = renderer::EnvironmentOverrideSky;
+  renderer::SceneEnvironmentVolume skyOnly = cloudy;skyOnly.overrides = renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideSky);
   const renderer::SceneEnvironmentVolume skyPair[]{base, skyOnly};
   AE_EXPECT_TRUE(!renderer::resolveSceneEnvironment(skyPair, camera).clouds.enabled, "override Cloud Layer desmarcado");
   // Um volume local sem nuvens por cima limpa o céu ao entrar nele.
   renderer::SceneEnvironmentVolume clear;
   clear.environment.active = true;clear.environment.priority = 2.0f;clear.stableId = 3;
-  clear.overrides = renderer::EnvironmentOverrideClouds;
+  clear.overrides = renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideClouds);
   const renderer::SceneEnvironmentVolume three[]{base, cloudy, clear};
   look = renderer::resolveSceneEnvironment(three, camera);
   AE_EXPECT_TRUE(!look.clouds.enabled && look.clouds.opacity == 0.0f, "volume limpo vence");

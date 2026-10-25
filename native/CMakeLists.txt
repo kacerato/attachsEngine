@@ -430,6 +430,7 @@ add_library(aether_renderer STATIC
   renderer/dynamic_resolution.cpp
   renderer/environment_map.cpp
   renderer/scene_environment.cpp
+  renderer/volume_parameters.cpp
   renderer/color_grading.cpp
   renderer/time_of_day.cpp
   renderer/light_probes.cpp
@@ -467,6 +468,8 @@ add_library(aether_renderer STATIC
   renderer/water_fft.cpp
   renderer/water_spectrum.cpp
   renderer/water_cascades.cpp
+  renderer/particles/particle_simulation.cpp
+  renderer/particles/particle_textures.cpp
 )
 target_include_directories(aether_renderer PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 # O render graph deixa de ser alvo apenas de teste: a politica de anexos do
@@ -562,7 +565,8 @@ target_link_libraries(aether_assets PUBLIC aether_convex_bake)
 if(NOT ANDROID)
   # Only descriptors and GUID/archive primitives: regenerating the scripting API
   # must not rebuild/link the renderer, editor, physics or the full test runner.
-  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp scene/collision_recipe.cpp)
+  add_executable(aether_component_contract_probe ../tools/component_contract_probe.cpp resources/asset_registry.cpp scene/collision_recipe.cpp
+    renderer/volume_parameters.cpp renderer/scene_environment.cpp)
   target_include_directories(aether_component_contract_probe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   add_dependencies(aether_component_contract_probe aether_component_codegen_check)
   if(MINGW)
@@ -592,6 +596,8 @@ add_library(aether_runtime STATIC
   runtime/scene_lights.cpp
   runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
+  runtime/scene_particles.cpp
+  runtime/scene_weather.cpp
   runtime/scene_environment.cpp
   runtime/environment_migration.cpp
   runtime/scene_physics.cpp
@@ -664,6 +670,7 @@ add_library(aether_editor STATIC
   editor/editor_prefab_overrides.cpp
   editor/editor_play_edit.cpp
   editor/editor_environment_assets.cpp
+  editor/editor_volume_profile.cpp
   editor/editor_physics_materials.cpp
   editor/editor_texture_assets.cpp
   editor/editor_texture_publication.cpp
@@ -937,6 +944,7 @@ if(NOT ANDROID)
     ../tests/native/test_frustum_visibility.cpp
     ../tests/native/test_gpu_draw_compaction.cpp
     ../tests/native/test_runtime_world.cpp
+    ../tests/native/test_particle_system.cpp
     ../tests/native/test_primitives.cpp
     ../tests/native/test_prefab.cpp
     ../tests/native/test_runtime_physics_access.cpp
@@ -973,11 +981,12 @@ if(NOT ANDROID)
     ../tests/native/test_light_renderer_unity.cpp
     ../tests/native/test_probes_unity.cpp
     ../tests/native/test_lightmaps_g3c.cpp
-    ../tests/native/test_runtime_environment.cpp
+    ../tests/native/test_runtime_environment.cpp ../tests/native/test_volume_profile.cpp
     ../tests/native/test_environment_lighting_window.cpp
     ../tests/native/test_color_grading.cpp
     ../tests/native/test_cloud_layer.cpp
     ../tests/native/test_night_sky.cpp
+    ../tests/native/test_weather.cpp
     ../tests/native/test_runtime_rendering_state.cpp
     ../tests/native/test_asset_registry.cpp
     ../tests/native/test_gltf_import.cpp
@@ -1176,6 +1185,13 @@ if(NOT ANDROID)
   add_executable(aether_telemetry_tests ../tests/native/family_base_main.cpp ../tests/native/test_telemetry_window.cpp ../tests/native/test_telemetry_recorder.cpp)
   target_include_directories(aether_telemetry_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_telemetry_tests PRIVATE aether_core)
+  # G5 partículas: componente, simulação, mundo da cena e texturas, sem editor nem Vulkan.
+  add_executable(aether_particle_tests ../tests/native/family_base_main.cpp ../tests/native/test_particle_system.cpp)
+  target_include_directories(aether_particle_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
+  target_link_libraries(aether_particle_tests PRIVATE aether_core aether_renderer aether_runtime aether_resources)
+  if(MINGW)
+    target_compile_options(aether_particle_tests PRIVATE -Wa,-mbig-obj -g1)
+  endif()
   # Curve/resource invariants do not need Vulkan, physics or a full editor link.
   # The same cases are also part of aether_tests for integration builds.
   add_executable(aether_animation_clip_resource_tests ../tests/native/family_base_main.cpp
@@ -1203,7 +1219,7 @@ if(NOT ANDROID)
     ../tests/native/test_runtime_environment.cpp ../tests/native/test_color_grading.cpp
     ../tests/native/test_environment_lighting_window.cpp ../tests/native/test_sky_celestial.cpp
     ../tests/native/test_time_of_day.cpp ../tests/native/test_cloud_layer.cpp
-    ../tests/native/test_night_sky.cpp ../tests/native/test_lightmaps_g3c.cpp)
+    ../tests/native/test_night_sky.cpp ../tests/native/test_lightmaps_g3c.cpp ../tests/native/test_volume_profile.cpp ../tests/native/test_weather.cpp)
   target_include_directories(aether_environment_authoring_tests PRIVATE ${CMAKE_SOURCE_DIR}/../tests/native)
   target_link_libraries(aether_environment_authoring_tests PRIVATE aether_core aether_platform aether_rendergraph aether_renderer aether_rhi
     aether_ui aether_editor aether_physics aether_water_runtime aether_transform aether_resources aether_codecs aether_astcenc)
@@ -1322,6 +1338,11 @@ if(NOT ANDROID)
     target_compile_options(pk6_probe_scene_author PRIVATE -Wa,-mbig-obj)
   endif()
   # V-2: variante noturna da Vila (Hora do dia + Lua) para a prancha da noite.
+  add_executable(pk5_post_scene_author EXCLUDE_FROM_ALL ../tools/pk5_post_scene_author.cpp)
+  target_link_libraries(pk5_post_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(pk5_post_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
   add_executable(v2_night_scene_author EXCLUDE_FROM_ALL ../tools/v2_night_scene_author.cpp)
   target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)

@@ -1,0 +1,26 @@
+{
+  "title": "PK-5 · Desfoque de movimento e curvas de cor",
+  "rows": [
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-07m10s-motion-blur-quality.jpg",
+      "device": "poco/07-movimento-q2.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 07:10",
+      "device_caption": "POCO · pos-0949 · Motion Blur High, intensidade 1, limite 0,05, câmera girando",
+      "verdict": "O rastro segue o giro da câmera, limitado a 5 % da tela por quadro; a 24 fps o limite aparece antes que a 60 fps."
+    },
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-03m19s-color-curves.jpg",
+      "device": "poco/11-curvas-q1.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 03:19",
+      "device_caption": "POCO · pos-0949 · Master em S e Hue vs Sat no verde",
+      "verdict": "S de contraste no Master e Hue vs Sat tirando saturação da grama, sem mexer no telhado. Sem custo: as curvas entram na LUT 32³."
+    },
+    {
+      "unity": "referencia-unity/urp-todos-efeitos-xxM6AUHqTMA-00m38s-criar-volume.jpg",
+      "device": "poco/12-tudo-q1.jpg",
+      "unity_caption": "Sasquatch B Studios · youtu.be/xxM6AUHqTMA · 00:38",
+      "device_caption": "POCO · pos-0949 · todos os efeitos juntos",
+      "verdict": "Os efeitos somam na ordem da URP (lente, aberração, DoF, movimento, bloom, cor) sem artefato entre eles."
+    }
+  ]
+}

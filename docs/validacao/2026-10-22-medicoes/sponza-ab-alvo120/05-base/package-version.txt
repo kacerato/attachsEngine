@@ -1,0 +1,2 @@
+    versionCode=261023999 minSdk=26 targetSdk=35
+    versionName=0.3.0-dev.261023999-medicao-0833

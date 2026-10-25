@@ -43,7 +43,7 @@ AE_TEST(camera_v3_scene_opens_with_unity_defaults) {
   AE_EXPECT_TRUE(camera.viewportX==0 && camera.viewportY==0 && camera.viewportWidth==1 && camera.viewportHeight==1,"tela inteira");
   AE_EXPECT_TRUE(camera.postProcessing && camera.renderShadows && camera.hdr && !camera.physicalCamera,"pós, sombras e HDR ligados");
   AE_EXPECT_TRUE(camera.valid(),"valor migrado é válido");
-  AE_EXPECT_EQ(scene::Camera::descriptor.version,4u,"formato da câmera sobe para v4");
+  AE_EXPECT_EQ(scene::Camera::descriptor.version,5u,"formato da câmera sobe para v5 (Volume Mask por camadas)");
 }
 
 AE_TEST(camera_v4_round_trip_keeps_every_field) {

@@ -29,12 +29,25 @@ struct ColorGradingLook final {
   ColorGrading grading{};
   float contrast = 1.0f;
   float saturation = 1.0f;
-  bool operator==(const ColorGradingLook &) const = default;
+  // PK-5: Color Curves da URP (ColorCurveChannel). Neutras não acendem a LUT.
+  ColorCurve curves[ColorCurveCount]{colorCurveDiagonal(), colorCurveDiagonal(), colorCurveDiagonal(),
+                                     colorCurveDiagonal(), {}, {}, {}, {}};
+  bool operator==(const ColorGradingLook &other) const {
+    if (!(grading == other.grading) || contrast != other.contrast || saturation != other.saturation) return false;
+    for (u32 i = 0; i < ColorCurveCount; ++i) if (!(curves[i] == other.curves[i])) return false;
+    return true;
+  }
+  bool curvesNeutral() const noexcept {
+    for (u32 i = 0; i < ColorCurveCount; ++i) if (!colorCurveNeutral(i, curves[i])) return false;
+    return true;
+  }
 };
 
 ColorGradingLook colorGradingLook(const SceneEnvironment &environment) noexcept;
 // Neutro (padrão e cenas antigas): o pós segue sem LUT, com o custo de antes.
-inline bool colorGradingUsesLut(const ColorGradingLook &look) noexcept { return !look.grading.neutral(); }
+inline bool colorGradingUsesLut(const ColorGradingLook &look) noexcept {
+  return !look.grading.neutral() || !look.curvesNeutral();
+}
 
 // A função que a LUT tabela, para um texel. Entrada e saída em RGB linear do
 // monitor; a saída pode ficar abaixo de zero com contraste alto, como no

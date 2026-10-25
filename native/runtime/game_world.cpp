@@ -994,6 +994,7 @@ WorldStatus GameWorld::setResource(const ComponentHandle &component, std::string
     auto &environment=static_cast<scene::Environment&>(*candidate);
     environment.values=environmentProfile->skybox?resources::applySkyboxMaterial(environment.values,*environmentProfile):
         resources::applyEnvironmentProfile(environment.values,*environmentProfile);
+    if(!environmentProfile->skybox) {environment.setVolumeOverrides(environmentProfile->overrides);environment.legacyProfileCopy=false;}
   }
   if(!candidate->valid()) return WorldStatus::Rejected;
   // Mesmo limpar um override pode revelar um material/textura herdado. O
