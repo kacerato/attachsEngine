@@ -1834,6 +1834,15 @@ void publishNightSky(DirtRoadFrameUniform &frame,std::span<const renderer::Scene
     float direction[3];renderer::detail::normalized(moon->direction,direction);
     for(u32 axis=0;axis<3;++axis) frame.skyMoon[axis]=-direction[axis];
     frame.skyMoon[3]=1.0f;
+  } else {
+    // Sem direcional Lua, o disco segue a efeméride do sol da Hora do dia, e
+    // não a conta antiga do shader (lua no plano vertical do sol).
+    for(const auto &light:lights) {
+      const float *m=light.celestialToMoon;
+      if(light.celestialBody!=renderer::CelestialLightBody::Sun||m[0]*m[0]+m[1]*m[1]+m[2]*m[2]<0.25f) continue;
+      std::copy_n(m,3,frame.skyMoon);frame.skyMoon[3]=1.0f;
+      break;
+    }
   }
   for(const auto &light:lights) {
     if(light.celestialBody==renderer::CelestialLightBody::None) continue;

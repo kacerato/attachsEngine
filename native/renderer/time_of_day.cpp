@@ -74,23 +74,39 @@ TimeOfDayState evaluateTimeOfDay(const TimeOfDayInput &input) noexcept {
   return state;
 }
 
-MoonState evaluateMoon(const TimeOfDayState &sun) noexcept {
+MoonState evaluateMoon(const TimeOfDayInput &input, const TimeOfDayState &sun) noexcept {
   MoonState moon{};
-  const float *s = sun.toSun;
-  // eixo = normalize(cross(toSun, up)); cross(a, (0,1,0)) = (-a.z, 0, a.x).
-  float axis[3]{-s[2], 0.0f, s[0]};
-  float length = std::sqrt(axis[0] * axis[0] + axis[2] * axis[2]);
-  if (length < 1e-3f) { axis[0] = 1.0f; axis[2] = 0.0f; length = 1.0f; }
-  axis[0] /= length; axis[2] /= length;
-  const float angle = 2.0f * Pi * sun.moonPhase;
-  const float c = std::cos(angle), sn = std::sin(angle);
-  const float turned[3]{axis[1] * s[2] - axis[2] * s[1], axis[2] * s[0] - axis[0] * s[2],
-                        axis[0] * s[1] - axis[1] * s[0]};
-  for (u32 i = 0; i < 3; ++i) moon.toMoon[i] = s[i] * c + turned[i] * sn;
-  const float norm = std::sqrt(moon.toMoon[0] * moon.toMoon[0] + moon.toMoon[1] * moon.toMoon[1] +
-                               moon.toMoon[2] * moon.toMoon[2]);
-  if (norm > 1e-6f) for (float &v : moon.toMoon) v /= norm;
+  // Antes a lua era o sol girado pela fase em torno do eixo horizontal
+  // perpendicular a ele: andava no plano vertical do sol, e à noite (sol perto
+  // do nadir) o eixo degenerava; a lua nascia tarde e sumia em 2-3 h.
+  const float hour = std::isfinite(input.hour) ? input.hour : 12.0f;
+  const float day = std::isfinite(input.dayOfYear) ? input.dayOfYear : 172.0f;
+  const float latitude = std::clamp(std::isfinite(input.latitude) ? input.latitude : 0.0f, -90.0f, 90.0f) * Radians;
+  constexpr float obliquity = 23.44f * Radians;
+  // Longitude do sol coerente com a declinação de Cooper usada para o sol.
+  const float sunLongitude = 2.0f * Pi * (284.0f + day) / 365.0f;
+  const float moonLongitude = sunLongitude + 2.0f * Pi * sun.moonPhase;
+  const auto rightAscension = [&](float longitude) {
+    return std::atan2(std::cos(obliquity) * std::sin(longitude), std::cos(longitude));
+  };
+  const float declination = std::asin(std::sin(obliquity) * std::sin(moonLongitude));
+  // A lua atravessa o meridiano depois do sol pela diferença de ascensão reta.
+  const float hourAngle = (hour - 12.0f) * 15.0f * Radians -
+                          (rightAscension(moonLongitude) - rightAscension(sunLongitude));
+  const float sinElevation = std::sin(latitude) * std::sin(declination) +
+                             std::cos(latitude) * std::cos(declination) * std::cos(hourAngle);
+  const float elevation = std::asin(std::clamp(sinElevation, -1.0f, 1.0f));
+  const float cosAzimuth = (std::sin(declination) - std::sin(elevation) * std::sin(latitude)) /
+                           std::max(std::cos(elevation) * std::cos(latitude), 1e-5f);
+  float azimuth = std::acos(std::clamp(cosAzimuth, -1.0f, 1.0f));
+  if (std::sin(hourAngle) > 0.0f) azimuth = 2.0f * Pi - azimuth; // depois do meridiano: oeste
+  azimuth += (std::isfinite(input.northDegrees) ? input.northDegrees : 0.0f) * Radians;
+  const float horizontal = std::cos(elevation);
+  moon.toMoon[0] = horizontal * std::sin(azimuth);
+  moon.toMoon[1] = std::sin(elevation);
+  moon.toMoon[2] = -horizontal * std::cos(azimuth);
   moon.elevation = moon.toMoon[1];
+  const float c = std::cos(2.0f * Pi * sun.moonPhase);
   moon.illuminated = 0.5f * (1.0f - c);
   const float above = smoothstep(-0.04f, 0.06f, moon.elevation);
   const float sunDown = 1.0f - smoothstep(-0.10f, 0.02f, sun.elevation);

@@ -19,6 +19,7 @@
 #include <cmath>
 #include <locale>
 #include <sstream>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -35,20 +36,48 @@ constexpr float kFullMoonDay = 6.0f + 14.765f;
 
 AE_TEST(moon_rises_opposite_the_sun_and_fades_with_phase_and_daylight) {
   const auto midnight = renderer::evaluateTimeOfDay(input(0.0f, kFullMoonDay));
-  const auto moon = renderer::evaluateMoon(midnight);
+  const auto moon = renderer::evaluateMoon(input(0.0f, kFullMoonDay), midnight);
   AE_EXPECT_TRUE(moon.illuminated > 0.99f, "lua cheia acesa por inteiro");
   float dot = 0;for (u32 i = 0; i < 3; ++i) dot += moon.toMoon[i] * midnight.toSun[i];
   AE_EXPECT_TRUE(dot < -0.99f, "lua cheia oposta ao sol");
   AE_EXPECT_TRUE(moon.elevation > 0.5f && moon.intensity > 0.9f, "meia-noite de lua cheia: alta e com brilho cheio");
-  const auto noon = renderer::evaluateMoon(renderer::evaluateTimeOfDay(input(12.0f, kFullMoonDay)));
+  const auto noon = renderer::evaluateMoon(input(12.0f, kFullMoonDay), renderer::evaluateTimeOfDay(input(12.0f, kFullMoonDay)));
   AE_EXPECT_TRUE(noon.intensity == 0.0f, "de dia a Lua apaga (abaixo do horizonte e sol alto)");
-  const auto newMoon = renderer::evaluateMoon(renderer::evaluateTimeOfDay(input(0.0f, 6.0f)));
+  const auto newMoon = renderer::evaluateMoon(input(0.0f, 6.0f), renderer::evaluateTimeOfDay(input(0.0f, 6.0f)));
   AE_EXPECT_TRUE(newMoon.intensity < 1e-4f, "lua nova não ilumina");
   // Quarto crescente: metade acesa, ~1/8 do brilho da cheia (curva de fase).
   const auto quarterSun = renderer::evaluateTimeOfDay(input(20.0f, 6.0f + 7.38f));
-  const auto quarter = renderer::evaluateMoon(quarterSun);
+  const auto quarter = renderer::evaluateMoon(input(20.0f, 6.0f + 7.38f), quarterSun);
   AE_EXPECT_TRUE(std::abs(quarter.illuminated - 0.5f) < 0.02f, "quarto: metade acesa");
   AE_EXPECT_TRUE(quarter.intensity <= 0.126f, "quarto: no máximo ~1/8 da lua cheia");
+}
+
+// A lua segue a própria órbita: a cheia nasce perto do pôr do sol e fica a
+// noite inteira no céu (antes andava no plano vertical do sol, nascia às 20 h e
+// sumia 2-3 h depois); um dia depois ela nasce ~50 min mais tarde.
+AE_TEST(full_moon_stays_up_from_dusk_to_dawn_and_rises_later_each_day) {
+  const auto moonAt = [](float hour, float day) {
+    return renderer::evaluateMoon(input(hour, day), renderer::evaluateTimeOfDay(input(hour, day)));
+  };
+  for (float hour : {19.0f, 21.0f, 23.0f, 0.5f, 2.0f, 4.0f, 5.0f}) {
+    const float day = hour < 12.0f ? kFullMoonDay + 1.0f : kFullMoonDay;
+    AE_EXPECT_TRUE(moonAt(hour, day).elevation > 0.0f, ("lua cheia acima do horizonte às " + std::to_string(hour) + " h").c_str());
+  }
+  AE_EXPECT_TRUE(moonAt(12.0f, kFullMoonDay).elevation < -0.5f, "ao meio-dia a lua cheia está embaixo");
+  // Hora em que a lua cruza o horizonte subindo, de 0,1 em 0,1 h.
+  const auto rise = [&](float day) {
+    float previous = moonAt(12.0f, day).elevation;
+    for (float hour = 12.1f; hour < 36.0f; hour += 0.1f) {
+      const float h = std::fmod(hour, 24.0f), d = day + (hour >= 24.0f ? 1.0f : 0.0f);
+      const float e = moonAt(h, d).elevation;
+      if (previous <= 0.0f && e > 0.0f) return hour;
+      previous = e;
+    }
+    return -1.0f;
+  };
+  const float today = rise(kFullMoonDay), tomorrow = rise(kFullMoonDay + 1.0f);
+  AE_EXPECT_TRUE(today > 16.5f && today < 19.5f, "a lua cheia nasce perto do pôr do sol");
+  AE_EXPECT_TRUE(tomorrow - today > 0.5f && tomorrow - today < 1.3f, "no dia seguinte ela nasce ~50 min depois");
 }
 
 AE_TEST(celestial_sphere_holds_the_sun_still_while_the_sky_turns) {
@@ -103,7 +132,7 @@ AE_TEST(moon_light_turns_with_the_sun_and_takes_the_shadow_at_night) {
   const auto write = [&](runtime::ObjectId object, const runtime::Transform &t) {return doc.setTransform(object, t);};
   AE_EXPECT_EQ(runtime::applyTimeOfDay(doc, 0.0, write), 2u, "sol e lua girados");
   float world[16];AE_EXPECT_TRUE(runtime::worldMatrix(doc, moonId, world), "matriz da Lua");
-  const auto moon = renderer::evaluateMoon(renderer::evaluateTimeOfDay(input(0.0f, kFullMoonDay)));
+  const auto moon = renderer::evaluateMoon(input(0.0f, kFullMoonDay), renderer::evaluateTimeOfDay(input(0.0f, kFullMoonDay)));
   float alignment = 0;for (u32 a = 0; a < 3; ++a) alignment += world[8 + a] * -moon.toMoon[a];
   AE_EXPECT_TRUE(alignment > 0.999f, "a Lua emite para longe da lua");
 
