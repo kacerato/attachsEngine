@@ -63,6 +63,7 @@ verde-acinzentado) e camada de 1200 m.
 | v3 (meia resolução, 1 de cada 2x2) | 3,7 ms | 12,8 ms | +9,1 ms (o quad inteiro paga a marcha) |
 | v4 (1/16 dos pixels) | 3,9 ms | 5,6 ms | +1,7 ms |
 | v5 (luz mais barata, temporal com rejeição) | 3,87 ms | 5,33 ms | +1,46 ms |
+| v7 (reconstrução em meia resolução, forma do emulador) | 4,36 ms | 5,83 ms | +1,48 ms |
 
 ## v5 no POCO (APK 0.3.0-dev.261025999-nuvens-0356, 25/10)
 
@@ -95,4 +96,19 @@ girando: o acúmulo temporal não deixa rastro visível).
 - Horizonte: ruído limitado a 2 mips e corte do céu a ~0,7°. Na captura ainda
   há poucos cúmulos pequenos perto do horizonte; não melhorou de forma visível.
 - Custo: o A/B não rodou (o adb caiu no fim da rodada).
+
+## v7 no POCO (APK 0.3.0-dev.261025999-nuvens-2154, 25/10)
+
+Forma ajustada no emulador de CPU do shader (`emulador-v7-unity.png`, variante J)
+antes de gastar o aparelho; `prancha-depois-v7.png`, quadros em `poco-v7/`.
+
+- Causa do aspecto de blob: o mip da erosão estava 2 níveis borrado demais
+  (+4,58 em vez de +2,58; o texel da erosão é 6x menor que o da forma).
+- Meio-dia: cúmulos com topo em couve-flor e sombra interna.
+- Horizonte: dezenas de cúmulos pequenos até a linha do horizonte.
+- Cobertura 0,68: nuvens separadas com céu azul entre elas.
+- Regressão: na hora dourada e no poente a nuvem inteira fica laranja
+  saturado (na v6, aprovada, era pêssego). A base mais escura (0,45x) e o od
+  menor deixaram a luz do sol dominar a cor.
+- Custo: +1,48 ms (meta 1,5 ms).
 
