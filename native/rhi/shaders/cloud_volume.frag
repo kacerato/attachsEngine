@@ -172,13 +172,17 @@ void main() {
       if(density<=0.003) continue;
       // Marcha de luz rumo ao sol, sem erosão: 2 passos crescentes (custo da
       // reconstrução), que cobrem a mesma espessura que os 3 de antes.
+      // Sol baixo: a luz atravessa o cúmulo quase na horizontal, por um caminho
+      // bem mais longo que a espessura. Os passos esticam até 3x, e o lado
+      // oposto ao sol escurece (Unity 0:52: pêssego de um lado, cinza do outro).
       float optical=0.0;
+      float lowSunStretch=mix(3.0,1.0,smoothstep(0.08,0.4,toSun.y));
       for(int j=0;j<2;++j) {
-        float d=thicknessKm*(0.1+0.3*float(j));
+        float d=thicknessKm*(0.1+0.3*float(j))*lowSunStretch;
         vec3 lp=p+toSun*d;
         float lh=(cloudPointHeightKm(lp)-baseKm)/thicknessKm;
         if(lh>1.0) break;
-        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.285;
+        optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.285*lowSunStretch;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
       // 1,6 (era 2,6): o lado do sol fica claro e o miolo guarda a sombra

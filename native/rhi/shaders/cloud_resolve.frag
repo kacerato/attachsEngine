@@ -8,8 +8,10 @@
 //  * o pixel daquela fase recebe a amostra nova, misturada ao histórico para
 //    tirar o ruído do passo;
 //  * os outros três seguem o histórico reprojetado pela rotação da câmera,
-//    contido entre o mínimo e o máximo da vizinhança 3x3 da marcha (sem
-//    rastro quando a nuvem passa ou o céu abre);
+//    contido entre o mínimo e o máximo dos 4 texels da marcha em volta (a
+//    vizinhança 3x3 cobria 6x6 pixels daqui e deixava a borda antiga viva:
+//    eram as estrias verticais ao girar) e com peso menor quanto mais a
+//    câmera girou;
 //  * sem histórico, upsample bilateral da marcha: os vizinhos com cobertura
 //    parecida com a do texel mais próximo pesam mais, e a borda não borra.
 // Em 4 quadros a meia resolução inteira foi marchada.
@@ -53,10 +55,11 @@ void main() {
   ivec2 subpixel=pixel-marchTexel*2;
   bool fresh=subpixel.x==(phase&1) && subpixel.y==(phase>>1);
   vec4 current=texelFetch(cloudMarch,marchTexel,0);
+  // Os 4 texels da marcha que cercam este pixel (os mesmos do upsample).
+  ivec2 corner=ivec2(floor(gl_FragCoord.xy*0.5-0.5));
   vec4 low=current,high=current;
-  for(int y=-1;y<=1;++y) for(int x=-1;x<=1;++x) {
-    if(x==0&&y==0) continue;
-    vec4 value=texelFetch(cloudMarch,clamp(marchTexel+ivec2(x,y),ivec2(0),marchSize-1),0);
+  for(int y=0;y<2;++y) for(int x=0;x<2;++x) {
+    vec4 value=texelFetch(cloudMarch,clamp(corner+ivec2(x,y),ivec2(0),marchSize-1),0);
     low=min(low,value);high=max(high,value);
   }
   vec4 upsampled=bilateralUpsample(gl_FragCoord.xy*0.5,marchSize,current.a);
@@ -79,12 +82,16 @@ void main() {
     if(before.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       // A vizinhança da marcha contém o histórico; uma folga pequena guarda o
       // detalhe de meia resolução que só o histórico tem.
-      vec4 margin=(high-low)*0.1+vec4(0.002);
+      vec4 margin=(high-low)*0.05+vec4(0.001);
       vec4 history=clamp(textureLod(cloudHistory,previousUv,0.0),low-margin,high+margin);
+      // Rejeição por movimento: deslocamento da reprojeção em pixels daqui.
+      // Parada, a câmera acumula; girando, o upsample da marcha atual manda.
+      float motion=length((previousUv-uv)*vec2(textureSize(cloudHistory,0)));
+      float trust=1.0-smoothstep(0.75,3.0,motion);
       // Amostra nova: metade do histórico tira o ruído do passo. Os outros
       // subpixels seguem o histórico e puxam um pouco do upsample para nunca
       // ficarem presos num quadro antigo.
-      result=fresh?mix(current,history,0.5):mix(history,upsampled,0.12);
+      result=fresh?mix(current,history,0.5*trust):mix(upsampled,history,0.88*trust);
     }
   }
   outCloud=result;

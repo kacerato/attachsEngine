@@ -344,6 +344,11 @@ void main() {
       vec3 ambientTop=mix(vec3(ambientLuminance),skyAmbient,0.7)*0.85;
       // Base mais escura (0,45x): a sombra embaixo do cúmulo da Unity em 0:13.
       vec3 ambientBottom=ambientLuminance*vec3(0.46,0.53,0.64)*0.45;
+      // Hora dourada e poente: o lado da sombra e a base ficam cinza-arroxeados
+      // (o céu oposto ao sol), só o lado iluminado esquenta (Unity 0:52/0:54).
+      float lowSun=1.0-smoothstep(0.06,0.35,toSun.y);
+      ambientTop=mix(ambientTop,ambientLuminance*vec3(0.70,0.64,0.82),lowSun);
+      ambientBottom=mix(ambientBottom,ambientLuminance*vec3(0.50,0.46,0.64)*0.55,lowSun);
       vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
                  environment.cloudTint.rgb;
       color=color*(1.0-volume.a*fade)+cloud*fade;
