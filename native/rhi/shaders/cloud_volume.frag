@@ -63,10 +63,15 @@ float henyeyGreenstein(float cosine,float g) {
 
 // Mancha de cobertura do mapa 2D. O mapa da camada 2D tem ruas ao longo de z;
 // a média com uma cópia girada 60° (e noutra escala) deixa as manchas redondas.
+// A cobertura do Ambiente entra comprimida (0,15 + 0,6c) no limiar da mancha:
+// com 0,68 a curva da camada 2D cobria quase o céu inteiro e as nuvens viravam
+// um manto; aqui ficam cúmulos separados com céu azul entre eles (HDRP 0:46).
 float cloudVolumePatch(vec2 weatherUv,float lod) {
   vec2 rotated=vec2(weatherUv.x*0.5-weatherUv.y*0.866,weatherUv.x*0.866+weatherUv.y*0.5)*0.77+vec2(0.31);
   float m=(textureLod(cloudMap,weatherUv,lod).r+textureLod(cloudMap,rotated,lod).r)*0.5;
-  return cloudCumulusFromMap(vec3(0.5+(m-0.5)*1.6,0.0,0.5));
+  float coverage=environment.cloudParameters.y;
+  float threshold=0.9-1.2*(0.15+0.6*coverage);
+  return smoothstep(threshold,threshold+0.3,0.5+(m-0.5)*1.6)*smoothstep(0.0,0.06,coverage);
 }
 
 // Densidade (0..1) num ponto a `p` km do observador, com altura relativa
@@ -78,14 +83,16 @@ float cloudVolumePatch(vec2 weatherUv,float lod) {
 // cúmulo com base plana e topo arredondado, e erosão de alta frequência só na
 // borda (recortes e fiapos), sem borrar o miolo.
 float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap) {
-  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0)*0.5,lod);
+  // Mapa a 0,8x: manchas menores, dezenas de cúmulos até o horizonte (Unity 0:03).
+  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0)*0.8,lod);
   if(patchValue<=0.0) return 0.0;
-  float coverage=patchValue*(0.2+0.45*environment.cloudParameters.y);
+  float coverage=patchValue*(0.28+0.5*environment.cloudParameters.y);
   // Cúmulo do HZD: sobe de 0 a 8% da camada (base plana) e cai de 55% a 100%.
   float profile=smoothstep(0.0,0.08,height)*smoothstep(1.0,0.55,height);
   if(profile<=0.0) return 0.0;
   vec3 world=vec3(p.x*1000.0-environment.cloudShape.z,p.y*1000.0,p.z*1000.0-environment.cloudShape.w);
-  vec3 q=world*environment.cloudShape.x*vec3(0.7,2.5,0.7);
+  // Ruído de forma a 1x na horizontal (era 0,7x): células de cúmulo menores.
+  vec3 q=world*environment.cloudShape.x*vec3(1.0,2.5,1.0);
   vec4 n=textureLod(cloudShapeNoise,q,noiseLod);
   float fbm=n.g*0.625+n.b*0.25+n.a*0.125;
   float shape=clamp(remapValue(n.r,fbm-1.0,1.0,0.0,1.0),0.0,1.0);
@@ -96,8 +103,10 @@ float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap
   float cloud=clamp(remapValue(base,1.0-coverage,1.0,0.0,1.0),0.0,1.0)*coverage;
   if(cloud<=0.0 || cheap) return cloud;
   // Erosão por Worley 12x mais fino só na borda: o recorte cai a zero no miolo.
-  // log2(12 * 64/32) = 4,58 mips de diferença entre os dois ruídos.
-  vec3 e3=textureLod(cloudErosionNoise,q*12.0,noiseLod+4.58).rgb;
+  // O texel da erosão é 12*32/64 = 6x menor que o da forma: log2(6) = 2,58
+  // mips a mais. Antes somava 4,58 (2 mips borrados) e a borda não tinha
+  // recorte nenhum: era o aspecto de blob.
+  vec3 e3=textureLod(cloudErosionNoise,q*12.0,noiseLod+2.58).rgb;
   float erosion=e3.r*0.625+e3.g*0.25+e3.b*0.125;
   erosion=mix(1.0-erosion,erosion,clamp(height*4.0,0.0,1.0));
   // Mais forte no topo (couve-flor), mais fraca na base (fiapos finos).
@@ -145,7 +154,7 @@ void main() {
     float focal=frame.materialFactors.w>0.0?frame.materialFactors.w:1.732050808;
     float pixelAngle=2.0/(focal*float(textureSize(cloudHistory,0).y));
     float texelKm=1.0/(environment.cloudShape.x*1000.0*256.0);
-    float noiseTexelKm=1.0/(environment.cloudShape.x*1000.0*0.7*64.0);
+    float noiseTexelKm=1.0/(environment.cloudShape.x*1000.0*64.0);
     float transmittance=1.0;
     vec3 sums=vec3(0.0);
     for(int i=0;i<64;++i) {
@@ -172,7 +181,9 @@ void main() {
         optical+=cloudVolumeDensity(lp,clamp(lh,0.0,1.0),lod+1.0,noiseLod+1.0,true)*thicknessKm*0.285;
       }
       // Beer com espalhamento múltiplo (três oitavas, Wrenninge) e Powder suave.
-      float od=optical*extinction*2.6;
+      // 1,6 (era 2,6): o lado do sol fica claro e o miolo guarda a sombra
+      // interna da couve-flor, em vez de tudo no mesmo cinza (emulador × 0:13).
+      float od=optical*extinction*1.6;
       float beer=exp(-od)+0.5*exp(-od*0.25)+0.25*exp(-od*0.0625);
       // Powder mais forte contra o sol: bordas finas claras, miolo escuro.
       float powder=1.0-exp(-density*extinction*0.12-0.03);

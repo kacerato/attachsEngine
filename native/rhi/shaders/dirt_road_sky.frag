@@ -341,7 +341,8 @@ void main() {
       // lado escuro não herda o amarelo do céu, só o lado iluminado esquenta.
       float ambientLuminance=dot(skyAmbient,vec3(0.2126,0.7152,0.0722));
       vec3 ambientTop=mix(vec3(ambientLuminance),skyAmbient,0.7)*0.85;
-      vec3 ambientBottom=ambientLuminance*vec3(0.46,0.53,0.64);
+      // Base mais escura (0,45x): a sombra embaixo do cúmulo da Unity em 0:13.
+      vec3 ambientBottom=ambientLuminance*vec3(0.46,0.53,0.64)*0.45;
       vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
                  environment.cloudTint.rgb;
       color=color*(1.0-volume.a*fade)+cloud*fade;
