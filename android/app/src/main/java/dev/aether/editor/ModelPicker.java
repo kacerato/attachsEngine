@@ -122,7 +122,12 @@ public final class ModelPicker {
         openToken = token;
         if (pickFolder(token)) {
             try {
-                activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), REQUEST_TREE);
+                Intent tree = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
+                // Abre já em Astra/Pacotes, onde os pacotes do usuário ficam. É
+                // só uma dica: sem a pasta, o seletor abre onde abriria.
+                tree.putExtra(DocumentsContract.EXTRA_INITIAL_URI, DocumentsContract.buildDocumentUri(
+                        "com.android.externalstorage.documents", "primary:Astra/Pacotes"));
+                activity.startActivityForResult(tree, REQUEST_TREE);
             } catch (RuntimeException error) {
                 submitFolder(token, null, null, null, null, null, encode("Nenhum aplicativo de arquivos oferece escolha de pasta."));
                 openToken = 0;

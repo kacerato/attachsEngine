@@ -6,6 +6,12 @@ Os relatórios por prefab ficaram fora do repositório.
 
 ## Cobertura no host (`aether_unity_coverage`)
 
+Cada prefab é convertido, gravado como prefab Astra e relido com o registro de
+componentes, como o editor faz ao abrir. Só conta como aberto o que volta da
+gravação. Em 26/10 essa ida e volta revelou 108 prefabs que convertiam mas não
+reabriam: os comportamentos de efeito perdiam a identidade da instância na
+leitura. A medição abaixo já inclui a correção.
+
 | Pacote | Prefabs | Abrem | Suportados | Sem perda visível | Parciais | Recusados | Razão sem perda |
 |---|---|---|---|---|---|---|---|
 | RPG VFX Bundle 5.0.0 | 217 | 217 | 30 | 187 | 0 | 0 | **100%** (meta ≥ 95%) |
@@ -31,7 +37,7 @@ Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 
 ## Testes
 
-`aether_particle_tests`: 36/36, incluindo os cenários G6:
+`aether_particle_tests`: 37/37, incluindo os cenários G6:
 
 - arquivo v4;
 - malha;
@@ -44,6 +50,7 @@ Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 - órbita/radial;
 - forma Malha;
 - Girar e oito sub-emissores;
+- comportamentos de efeito mantendo a identidade numa lista gravada;
 - Distorção.
 
 A suíte inteira roda no fechamento do bloco.

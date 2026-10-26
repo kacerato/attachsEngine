@@ -17,6 +17,9 @@
 #include "resources/unity_prefab_import.h"
 #include "resources/unity_yaml.h"
 #include "runtime/unity_prefab.h"
+#include "scene/component_schema.h"
+#include "scene/import_link.h"
+#include "scene/prefab_link.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -140,6 +143,25 @@ int main(int argc, char **argv) {
       ++refused;
       detail << "RECUSADO " << relative << " :: " << error << "\n";
       continue;
+    }
+    // O editor grava o prefab Astra e o relê com o registro de esquemas: o que
+    // não volta da gravação não abre no aparelho.
+    {
+      static const auto registry = [] {
+        std::vector<const scene::ComponentType *> types;
+        for (const auto &schema : scene::componentSchemas) types.push_back(schema.type);
+        types.push_back(&scene::ImportLink::descriptor);
+        types.push_back(&scene::PrefabLink::descriptor);
+        return types;
+      }();
+      const auto written = prefab.write();
+      runtime::Prefab back;
+      std::string readError;
+      if (written.empty() || !back.read(written, registry, readError)) {
+        ++refused;
+        detail << "RECUSADO NA RELEITURA " << relative << " :: " << (written.empty() ? "gravação vazia (objeto acima de 256 KiB ou prefab acima de 32 MiB)" : readError) << "\n";
+        continue;
+      }
     }
     ++opened;
     systems += imported.coverage.particleSystems;

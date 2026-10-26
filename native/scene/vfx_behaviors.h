@@ -123,6 +123,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     LineRenderer candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }
@@ -146,6 +148,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     Laser candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }
@@ -170,6 +174,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     Projectile candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }
@@ -192,6 +198,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     ParticleCollisionSpawn candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }
@@ -209,6 +217,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     EffectSound candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }
@@ -229,6 +239,8 @@ public:
   bool read(std::istream &in, u32 version) override {
     Rotator candidate;
     if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // A base (identidade da instância) é do objeto lido, não do temporário.
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
     return true;
   }

@@ -499,3 +499,25 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
   resources::UniStormWeather notWeather;
   AE_EXPECT_TRUE(!resources::readUniStormWeather(cloudDocument, notWeather, error), "Cloud Profile não é Weather Type");
 }
+
+AE_TEST(g6a_vfx_components_keep_their_identity_in_a_saved_list) {
+  // Cena e prefab gravam a lista com identidades; o read de cada comportamento
+  // não pode trocar a identidade pela do temporário (zero).
+  scene::Components list;
+  for (const auto *type : {&scene::LineRenderer::descriptor, &scene::Laser::descriptor, &scene::Projectile::descriptor,
+                           &scene::ParticleCollisionSpawn::descriptor, &scene::EffectSound::descriptor, &scene::Rotator::descriptor})
+    AE_EXPECT_TRUE(list.add(*type) != nullptr, std::string(type->id).c_str());
+  std::vector<const scene::ComponentType *> registry;
+  for (const auto &schema : scene::componentSchemas) registry.push_back(schema.type);
+  std::ostringstream out;
+  out.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(list.write(out, true), "lista gravada com identidades");
+  std::istringstream in(out.str());
+  in.imbue(std::locale::classic());
+  scene::Components back;
+  AE_EXPECT_TRUE(back.read(in, registry, scene::UnknownComponentPolicy::Reject, true) && back.valid() && back.size() == 6,
+                 "lista relida e válida");
+  bool same = true;
+  for (usize k = 0; k < back.size(); ++k) same = same && back.at(k)->instanceId() == list.at(k)->instanceId() && back.at(k)->instanceId() != 0;
+  AE_EXPECT_TRUE(same, "cada comportamento mantém a identidade gravada");
+}
