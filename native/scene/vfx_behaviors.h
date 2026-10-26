@@ -13,6 +13,8 @@
 //    partícula cria um prefab no ponto.
 //  - Som repetido — AudioSource.PlayOneShot em InvokeRepeating, com volume
 //    sorteado (ScriptReference/AudioSource.PlayOneShot.html).
+//  - Girar — Transform.Rotate (ScriptReference/Transform.Rotate.html) em graus
+//    por segundo, no espaço local.
 // A referência autoriza estudar o comportamento; o código é da Astra. Nada
 // aqui roda fora do Play, exceto a Linha, que também é desenhada na edição.
 // O runtime está em runtime/scene_vfx.cpp e runtime/scene_lines.cpp.
@@ -211,6 +213,27 @@ public:
     return true;
   }
 };
+// --- Girar -----------------------------------------------------------------
+// Velocidade constante em graus por segundo, somada ao giro local do objeto a
+// cada quadro do Play (o Rotator dos pacotes de VFX: Transform.Rotate em
+// InvokeRepeating). Os filhos giram junto, como na Unity.
+class Rotator final : public ComponentValue {
+public:
+#include "scene/generated/vfx_behaviors_Rotator_fields0.inc"
+  float speed[3]{0, 0, 0};
+  static const ComponentType descriptor;
+  const ComponentType &type() const override { return descriptor; }
+  std::unique_ptr<ComponentValue> clone() const override { return std::make_unique<Rotator>(*this); }
+  bool valid() const override { return detail::validVfxTables(*this); }
+  void write(std::ostream &out) const override { detail::writeVfxTables(*this, out); }
+  bool read(std::istream &in, u32 version) override {
+    Rotator candidate;
+    if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    *this = candidate;
+    return true;
+  }
+};
+
 inline bool effectSoundRepeats(const ComponentValue &v) { return static_cast<const EffectSound &>(v).repeating; }
 inline bool effectSoundRandom(const ComponentValue &v) { return static_cast<const EffectSound &>(v).randomVolume; }
 
@@ -227,6 +250,8 @@ inline bool effectSoundRandom(const ComponentValue &v) { return static_cast<cons
 #include "scene/generated/vfx_behaviors_collisionSpawnEnums.inc"
 #include "scene/generated/vfx_behaviors_effectSoundNumbers.inc"
 #include "scene/generated/vfx_behaviors_effectSoundBooleans.inc"
+#include "scene/generated/vfx_behaviors_rotatorNumbers.inc"
+#include "scene/generated/vfx_behaviors_rotatorBooleans.inc"
 
 inline constexpr std::array<ComponentTriple, 10> lineTriples{{
   {"point_0", "Ponto 1", {"point_0_x", "point_0_y", "point_0_z"}},
@@ -318,5 +343,11 @@ inline const ComponentType ParticleCollisionSpawn::descriptor{
 inline const ComponentType EffectSound::descriptor{
   "astra.audio.effect_sound", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<EffectSound>(); },
   effectSoundNumbers, effectSoundBooleans};
+
+inline constexpr std::array<ComponentTriple, 1> rotatorTriples{{
+  {"speed", "Velocidade", {"speed_x", "speed_y", "speed_z"}}}};
+inline const ComponentType Rotator::descriptor{
+  "astra.effects.rotator", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Rotator>(); },
+  rotatorNumbers, rotatorBooleans, {}, nullptr, false, {}, rotatorTriples};
 
 } // namespace ae::scene

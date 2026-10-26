@@ -260,6 +260,19 @@ bool SceneVfx::advance(GameWorld &world, const ScenePhysics &physics, SceneParti
         }
       }
     }
+    // --- Girar -------------------------------------------------------------
+    if (const auto *value = object->components.find(scene::Rotator::descriptor)) {
+      const auto &rotator = static_cast<const scene::Rotator &>(*value);
+      Transform local;
+      if (rotator.enabled && dt > 0 && world.localTransform(handle, local) == WorldStatus::Ok) {
+        for (u32 k = 0; k < 3; ++k) {
+          const float turned = std::fmod(local.rotationDegrees[k] + rotator.speed[k] * dt, 360.0f);
+          local.rotationDegrees[k] = turned > 180.0f ? turned - 360.0f : turned < -180.0f ? turned + 360.0f : turned;
+        }
+        world.setLocalTransform(handle, local);
+        ++report_.rotators;
+      }
+    }
     // --- Som repetido -----------------------------------------------------
     if (const auto *value = object->components.find(scene::EffectSound::descriptor)) {
       const auto sound = static_cast<const scene::EffectSound &>(*value);

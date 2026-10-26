@@ -249,6 +249,12 @@ void SceneParticles::advance(const SceneGraph &graph, float deltaSeconds, std::v
     preparePlanes(graph, entry);
     entry.emitter.setWorldCollider(worldRaycast_, worldContext_, worldQueries_);
     entry.emitter.setSizeScale(sizeScale(graph, key.object, entry));
+    if (const auto &s = entry.emitter.settings(); s.shapeType == scene::ParticleShapeType::Mesh) {
+      std::shared_ptr<const renderer::particles::ParticleMeshSet> set;
+      u32 range = ~0u;
+      if (s.shapeMeshAsset.valid() && shapeMeshes_ && shapeMeshes_(s.shapeMeshAsset, set, range)) entry.emitter.setShapeMesh(std::move(set), range);
+      else entry.emitter.setShapeMesh(nullptr, ~0u);
+    }
     work.push_back(&entry);
     alive += entry.emitter.alive();
   }

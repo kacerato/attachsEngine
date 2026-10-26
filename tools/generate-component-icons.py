@@ -590,6 +590,13 @@ ICONS["component/collision-spawn"] = (
     f'<path d="M14 98h100" {stroke(6)}/>'
     f'<path d="M64 98l-14-20M64 98l14-20M64 98V72M64 98l-22-6M64 98l22-6" {stroke(4, ACCENT)}/>'
     f'<path d="M98 30h20M108 20v20" {stroke(5, ACCENT)}/>')
+# Girar: disco visto de lado com a seta de giro em lima em volta do eixo.
+ICONS["component/rotator"] = (
+    f'<path d="M64 14v100" {stroke(5, extra='opacity=".5"')}/>'
+    f'<ellipse cx="64" cy="64" rx="40" ry="14" {stroke(6)}/>'
+    f'<path d="M30 40a40 14 0 0 1 68 0" {stroke(5, ACCENT)}/>'
+    f'<path d="M98 40l-14-4M98 40l-4 13" {stroke(5, ACCENT)}/>'
+    f'<circle cx="64" cy="64" r="6" fill="{ACCENT}"/>')
 # Som repetido: alto-falante e a seta de repetição em lima.
 ICONS["audio/effect-sound"] = (
     f'<path d="M12 50h18l24-20v68L30 78H12Z" {stroke(5)}/>'

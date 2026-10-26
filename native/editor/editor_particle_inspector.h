@@ -17,7 +17,7 @@ namespace ae::editor {
 
 inline constexpr std::string_view kParticlePreviewRow = "preview";
 
-inline constexpr std::array<std::string_view, 383> particleInspectorOrder{{
+inline constexpr std::array<std::string_view, 395> particleInspectorOrder{{
   // Principal
   kParticlePreviewRow, "duration", "looping", "prewarm",
   "start_delay_mode", "start_delay", "start_delay_min",
@@ -40,7 +40,7 @@ inline constexpr std::array<std::string_view, 383> particleInspectorOrder{{
   "burst_2_time", "burst_2_count_min", "burst_2_count_max", "burst_2_cycles", "burst_2_interval", "burst_2_probability",
   "burst_3_time", "burst_3_count_min", "burst_3_count_max", "burst_3_cycles", "burst_3_interval", "burst_3_probability",
   // Forma
-  "shape_enabled", "shape_type", "shape_radius", "shape_radius_thickness", "shape_angle", "shape_arc", "shape_donut_radius", "shape_cone_emit_from",
+  "shape_enabled", "shape_type", "shape_mesh", "shape_mesh_placement", "shape_mesh_scale", "shape_radius", "shape_radius_thickness", "shape_angle", "shape_arc", "shape_donut_radius", "shape_cone_emit_from",
   "shape_length", "shape_box_emit_from", "shape_box", "shape_box_x", "shape_box_y", "shape_box_z",
   "shape_position", "shape_position_x", "shape_position_y", "shape_position_z",
   "shape_rotation", "shape_rotation_x", "shape_rotation_y", "shape_rotation_z", "shape_random_direction", "shape_spherize_direction",
@@ -83,7 +83,13 @@ inline constexpr std::array<std::string_view, 383> particleInspectorOrder{{
   // Colisão e sub-emissores (P2b)
   "collision_enabled", "collision_type", "collision_plane_0", "collision_plane_1", "collision_dampen", "collision_bounce", "collision_lifetime_loss", "collision_min_kill_speed", "collision_radius_scale",
   "sub_emitters_enabled", "sub_emitter_birth", "sub_emitter_birth_count", "sub_emitter_collision", "sub_emitter_collision_count", "sub_emitter_death", "sub_emitter_death_count",
-  "sub_emitter_extra_0", "sub_emitter_extra_0_type", "sub_emitter_extra_1", "sub_emitter_extra_1_type", "sub_emitter_extra_2", "sub_emitter_extra_2_type",
+  "sub_emitter_extra_0", "sub_emitter_extra_0_type",
+  "sub_emitter_extra_1", "sub_emitter_extra_1_type",
+  "sub_emitter_extra_2", "sub_emitter_extra_2_type",
+  "sub_emitter_extra_3", "sub_emitter_extra_3_type",
+  "sub_emitter_extra_4", "sub_emitter_extra_4_type",
+  "sub_emitter_extra_5", "sub_emitter_extra_5_type",
+  "sub_emitter_extra_6", "sub_emitter_extra_6_type",
   // Folha de textura (PK-10a): grade, linha, quadro no tempo, início e ciclos
   "texture_sheet_enabled", "sheet_tiles_x", "sheet_tiles_y", "sheet_animation", "sheet_row_mode", "sheet_row",
   "sheet_frame_mode", "sheet_frame", "sheet_frame_min", "sheet_frame_multiplier", "sheet_frame.max", "sheet_frame.min",

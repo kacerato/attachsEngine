@@ -3703,6 +3703,31 @@
           }
         },
         {
+          "id": "shape_mesh_scale",
+          "label": "Escala da malha",
+          "type": "ParticleSystem",
+          "member": "shapeMeshScale",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Forma",
+            "unit": "×",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Multiplica a malha da forma",
+            "visible": {
+              "cpp": "particleShapeMesh"
+            }
+          }
+        },
+        {
           "id": "sheet_tiles_x",
           "label": "Colunas",
           "type": "ParticleSystem",
@@ -5712,6 +5737,23 @@
           }
         },
         {
+          "id": "shape_mesh_placement",
+          "label": "Nasce em",
+          "type": "ParticleSystem",
+          "member": "shapeMeshPlacement",
+          "options": "particleShapeMeshPlacementOptions",
+          "presentation": {
+            "group": "Forma",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Vértice sorteado ou ponto da superfície, para a normal do triângulo",
+            "visible": {
+              "cpp": "particleShapeMesh"
+            }
+          }
+        },
+        {
           "id": "shape_cone_emit_from",
           "label": "Emitir do",
           "type": "ParticleSystem",
@@ -6414,7 +6456,7 @@
             "consumer": "runtime/scene_particles.cpp",
             "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
             "visible": {
-              "cpp": "particleHasSubEmitters"
+              "cpp": "particleExtraSubEmitterShows<0>"
             }
           }
         },
@@ -6431,7 +6473,7 @@
             "consumer": "runtime/scene_particles.cpp",
             "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
             "visible": {
-              "cpp": "particleHasSubEmitters"
+              "cpp": "particleExtraSubEmitterShows<1>"
             }
           }
         },
@@ -6448,7 +6490,75 @@
             "consumer": "runtime/scene_particles.cpp",
             "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
             "visible": {
-              "cpp": "particleHasSubEmitters"
+              "cpp": "particleExtraSubEmitterShows<2>"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_3_type",
+          "label": "Extra 4 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[3]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleExtraSubEmitterShows<3>"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_4_type",
+          "label": "Extra 5 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[4]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleExtraSubEmitterShows<4>"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_5_type",
+          "label": "Extra 6 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[5]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleExtraSubEmitterShows<5>"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_6_type",
+          "label": "Extra 7 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[6]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleExtraSubEmitterShows<6>"
             }
           }
         }

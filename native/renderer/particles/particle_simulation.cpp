@@ -488,6 +488,33 @@ void ParticleEmitter::kill(u32 index) {
   }
 }
 
+void ParticleEmitter::setShapeMesh(std::shared_ptr<const ParticleMeshSet> set, u32 range) {
+  if (set == shapeMesh_ && range == shapeRange_) return;
+  shapeMesh_.reset();
+  shapeRange_ = ~0u;
+  shapeAreas_.clear();
+  if (!set || range >= set->ranges.size()) return;
+  const auto &r = set->ranges[range];
+  if (r.indexCount < 3 || static_cast<u64>(r.firstIndex) + r.indexCount > set->indices.size()) return;
+  float total = 0;
+  for (u32 t = 0; t + 2 < r.indexCount; t += 3) {
+    float corner[3][3];
+    for (u32 c = 0; c < 3; ++c) {
+      const i64 index = static_cast<i64>(set->indices[r.firstIndex + t + c]) + r.vertexOffset;
+      if (index < 0 || static_cast<u64>(index) >= set->vertices.size()) return;
+      std::copy(set->vertices[static_cast<usize>(index)].position, set->vertices[static_cast<usize>(index)].position + 3, corner[c]);
+    }
+    const float a[3]{corner[1][0] - corner[0][0], corner[1][1] - corner[0][1], corner[1][2] - corner[0][2]};
+    const float b[3]{corner[2][0] - corner[0][0], corner[2][1] - corner[0][1], corner[2][2] - corner[0][2]};
+    const float n[3]{a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+    total += 0.5f * length3(n);
+    shapeAreas_.push_back(total);
+  }
+  if (total <= 0) { shapeAreas_.clear(); return; }
+  shapeMesh_ = std::move(set);
+  shapeRange_ = range;
+}
+
 // Formas na convenção da Unity: cone, caixa e "forma desligada" emitem para +Z;
 // aresta emite para +Y; círculo e esfera para fora do centro.
 void ParticleEmitter::sampleShape(Pcg32 &rng, float (&position)[3], float (&direction)[3]) const {
@@ -577,6 +604,41 @@ void ParticleEmitter::sampleShape(Pcg32 &rng, float (&position)[3], float (&dire
     position[0] = (rng.unit() * 2 - 1) * s.shapeRadius;
     direction[0] = 0; direction[1] = 1; direction[2] = 0;
     break;
+  case scene::ParticleShapeType::Mesh: {
+    // Sem malha: nasce no centro, para a frente (como a forma desligada).
+    if (!shapeMesh_ || shapeAreas_.empty()) break;
+    const auto &set = *shapeMesh_;
+    const auto &r = set.ranges[shapeRange_];
+    // Triângulo sorteado pela área (busca binária na área acumulada).
+    const float pick = rng.unit() * shapeAreas_.back();
+    const usize triangle = std::min<usize>(static_cast<usize>(std::upper_bound(shapeAreas_.begin(), shapeAreas_.end(), pick) -
+                                                              shapeAreas_.begin()), shapeAreas_.size() - 1);
+    float corner[3][3];
+    for (u32 c = 0; c < 3; ++c) {
+      const auto index = static_cast<usize>(static_cast<i64>(set.indices[r.firstIndex + triangle * 3 + c]) + r.vertexOffset);
+      std::copy(set.vertices[index].position, set.vertices[index].position + 3, corner[c]);
+    }
+    const float a[3]{corner[1][0] - corner[0][0], corner[1][1] - corner[0][1], corner[1][2] - corner[0][2]};
+    const float b[3]{corner[2][0] - corner[0][0], corner[2][1] - corner[0][1], corner[2][2] - corner[0][2]};
+    float normal[3]{a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]};
+    const float fallback[3]{0, 0, 1};
+    normalize3(normal, fallback);
+    float u = rng.unit(), v = rng.unit();
+    if (s.shapeMeshPlacement == scene::ParticleShapeMeshPlacement::Vertex) {
+      const u32 c = std::min(2u, static_cast<u32>(u * 3));
+      u = c == 1 ? 1.0f : 0.0f;
+      v = c == 2 ? 1.0f : 0.0f;
+    } else if (u + v > 1) {
+      u = 1 - u;
+      v = 1 - v;
+    }
+    const float scale = std::max(0.0f, s.shapeMeshScale);
+    for (u32 k = 0; k < 3; ++k) {
+      position[k] = (corner[0][k] + a[k] * u + b[k] * v) * scale;
+      direction[k] = normal[k];
+    }
+    break;
+  }
   }
   if (s.shapeSpherizeDirection > 0) {
     float out[3]{position[0], position[1], position[2]};

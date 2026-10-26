@@ -217,7 +217,7 @@ void unityEulerQuaternion(const float (&degrees)[3], float (&q)[4]) {
   mul(qy, t, q);
 }
 
-void convertShape(const Node *shape, scene::ParticleSystemSettings &s, Notes &notes) {
+void convertShape(const Node *shape, scene::ParticleSystemSettings &s, UnityObjectReference &shapeMesh, Notes &notes) {
   // A Astra emite para +Z da forma; o objeto refletido em Z pede −Z. Meia-volta
   // em X junto da rotação da forma (refletida: x e y do quatérnio negados).
   float rotation[3]{0, 0, 0};
@@ -296,8 +296,27 @@ void convertShape(const Node *shape, scene::ParticleSystemSettings &s, Notes &no
     for (u32 c = 0; c < 3; ++c) s.shapeBox[c] = std::abs(scale[c]);
     break;
   }
+  case 6:
+    if (const auto *mesh = shape->get("m_Mesh"); mesh && unityObjectReference(*mesh, shapeMesh) && shapeMesh.external() &&
+                                                   shapeMesh.fileId && shapeMesh.guid.text() != "0000000000000000e000000000000000") {
+      // Malha do pacote: a conversão do modelo já a traz para o espaço da
+      // Astra, então a forma fica só com o giro refletido, sem a meia-volta.
+      s.shapeType = scene::ParticleShapeType::Mesh;
+      const i64 placement = integer(*shape, "placementMode", 2);
+      s.shapeMeshPlacement = placement == 0 ? scene::ParticleShapeMeshPlacement::Vertex : scene::ParticleShapeMeshPlacement::Surface;
+      if (placement == 1) notes.approximate("Forma Malha em Arestas nasce na superfície dos triângulos.");
+      s.shapeMeshScale = (std::abs(scale[0]) + std::abs(scale[1]) + std::abs(scale[2])) / 3.0f;
+      if (!uniform) notes.approximate("Escala não uniforme da forma vira a média nos três eixos.");
+      float meshEuler[3]{0, 0, 0};
+      rotationEulerXYZ(q, meshEuler);
+      std::copy(meshEuler, meshEuler + 3, s.shapeRotation);
+      if (flag(*shape, "m_UseMeshColors", false)) notes.approximate("Cor dos vértices da malha da forma não tinge as partículas.");
+      break;
+    }
+    shapeMesh = {};
+    [[fallthrough]];
   default:
-    // Malha, Mesh Renderer, Skinned Mesh e Sprite: a Astra não emite da superfície.
+    // Mesh Renderer, Skinned Mesh, Sprite e malha embutida: a Astra não emite da superfície deles.
     s.shapeType = scene::ParticleShapeType::Sphere;
     s.shapeRadius = .5f;
     notes.loss("Forma de malha/sprite (tipo " + std::to_string(type) + ") emite de uma esfera de 0,5 m.");
@@ -381,7 +400,7 @@ bool convertUnityParticleSystem(const Node &system, const Node *renderer, UnityP
     s.gravityModifier = minMax(initial->get("gravityModifier"), 1, s.gravityModifier);
   }
 
-  convertShape(system.get("ShapeModule"), s, notes);
+  convertShape(system.get("ShapeModule"), s, result.shapeMesh, notes);
 
   // --- Emissão --------------------------------------------------------------
   if (const auto *emission = system.get("EmissionModule")) {
@@ -582,7 +601,7 @@ bool convertUnityParticleSystem(const Node &system, const Node *renderer, UnityP
         // Mais um do mesmo acontecimento: vai para os extras.
         for (auto &extra : result.extraSubEmitters)
           if (!extra.first) { extra = {emitter, static_cast<u32>(type)}; return; }
-        notes.loss("Mais de quatro sub-emissores no sistema: os seguintes são ignorados.");
+        notes.loss("Mais de oito sub-emissores no sistema: os seguintes são ignorados.");
         return;
       }
       *slot = emitter;

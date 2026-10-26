@@ -195,6 +195,9 @@ public:
   // segmento em mundo e devolve ponto e normal do primeiro toque.
   using WorldRaycast = bool (*)(void *context, const float (&from)[3], const float (&to)[3], float radius,
                                 float (&point)[3], float (&normal)[3]);
+  // G6a: malha da forma Malha (um intervalo do conjunto). Áreas acumuladas
+  // calculadas aqui, uma vez por malha; sem malha, a forma nasce no centro.
+  void setShapeMesh(std::shared_ptr<const ParticleMeshSet> set, u32 range);
   void setWorldCollider(WorldRaycast raycast, void *context, u32 maximumQueries) {
     worldRaycast_ = raycast; worldContext_ = context; worldQueries_ = maximumQueries;
   }
@@ -275,6 +278,9 @@ private:
   bool hasLastOrigin_ = false;
   BakedMinMaxGradient startColor_, colorOverLifetime_;
   float shapeMatrix_[12]{1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0};  // rotação 3x3 (colunas) + posição
+  std::shared_ptr<const ParticleMeshSet> shapeMesh_;
+  u32 shapeRange_ = ~0u;
+  std::vector<float> shapeAreas_;  // área acumulada por triângulo do intervalo
 
   // SoA. Posição e velocidade no espaço da simulação (local do objeto ou mundo).
   std::vector<float> px_, py_, pz_, vx_, vy_, vz_;

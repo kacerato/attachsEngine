@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 83> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 84> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -273,6 +273,8 @@ inline constexpr std::array<EngineCapability, 83> engineCapabilities{{
    "Em Play: raio da física pela frente do objeto até o Alcance, Linha do objeto do início ao ponto, efeito de impacto levado ao ponto e partículas dele tocando só com acerto"},
   {"render.effects.projectile", "Projétil", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
    "Em Play: avança pela frente com consulta esférica à física, cria Disparo e Impacto (prefabs destruídos ao fim das partículas), solta os filhos marcados e some; Vida máxima"},
+  {"render.effects.rotator", "Girar", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
+   "Em Play: soma a velocidade (graus por segundo em X, Y e Z) ao giro local do objeto a cada quadro; os filhos giram junto"},
   {"render.effects.collision_spawn", "Instanciar ao colidir", CapabilityState::Implemented, "runtime/scene_vfx.cpp",
    "Em Play: cada toque de partícula (planos ou mundo) cria até 4 prefabs no ponto, soltos ou filhos, com giro fixo ou pela superfície, teto por quadro e duração"},
   {"audio.effect_sound", "Som repetido", CapabilityState::Implemented, "runtime/scene_vfx.cpp + runtime/scene_audio.cpp",

@@ -36,7 +36,10 @@ enum class ParticleCurveMode : u32 { Constant = 0, Curve = 1, TwoConstants = 2, 
 enum class ParticleGradientMode : u32 { Color = 0, Gradient = 1, TwoColors = 2, TwoGradients = 3, RandomColor = 4 };
 enum class ParticleSimulationSpace : u32 { Local = 0, World = 1 };
 enum class ParticleStopAction : u32 { None = 0, Disable = 1, Destroy = 2, Callback = 3 };
-enum class ParticleShapeType : u32 { Sphere = 0, Hemisphere = 1, Cone = 2, Box = 3, Circle = 4, Edge = 5, Donut = 6, Rectangle = 7 };
+enum class ParticleShapeType : u32 { Sphere = 0, Hemisphere = 1, Cone = 2, Box = 3, Circle = 4, Edge = 5, Donut = 6, Rectangle = 7, Mesh = 8 };
+// G6a: forma Malha — nasce num vértice ou num ponto da superfície (por área),
+// para a normal do triângulo (Unity Shape Mesh, Vertex/Triangle).
+enum class ParticleShapeMeshPlacement : u32 { Vertex = 0, Surface = 1 };
 enum class ParticleConeEmitFrom : u32 { Base = 0, Volume = 1 };
 enum class ParticleBoxEmitFrom : u32 { Volume = 0, Shell = 1, Edge = 2 };
 // G6a: Malha desenha uma malha por partícula (Unity Render Mode Mesh); Nenhum
@@ -193,6 +196,8 @@ struct ParticleSystemSettings {
   float shapeArc = 360;
   float shapeLength = 5;
   float shapeDonutRadius = 0.2f;  // raio do tubo da Rosca (Unity Donut Radius)
+  ParticleShapeMeshPlacement shapeMeshPlacement = ParticleShapeMeshPlacement::Surface;
+  float shapeMeshScale = 1;
   ParticleConeEmitFrom shapeConeEmitFrom = ParticleConeEmitFrom::Base;
   ParticleBoxEmitFrom shapeBoxEmitFrom = ParticleBoxEmitFrom::Volume;
   float shapeBox[3]{1, 1, 1};
@@ -303,7 +308,7 @@ struct ParticleSystemSettings {
   float subEmitterBirthCount = 1, subEmitterCollisionCount = 3, subEmitterDeathCount = 5;
   // G6a: até três sub-sistemas a mais, cada um com o seu acontecimento. Como na
   // Unity, cada um emite as próprias rajadas no ponto (ao menos uma partícula).
-  static constexpr usize kExtraSubEmitters = 3;
+  static constexpr usize kExtraSubEmitters = 7;
   std::array<u64, kExtraSubEmitters> subEmitterExtra{};
   std::array<u32, kExtraSubEmitters> subEmitterExtraType{};  // 0 nascer, 1 colidir, 2 morrer
 
@@ -313,6 +318,8 @@ struct ParticleSystemSettings {
   // Malha (G6a): a do projeto, quando escolhida, vale mais que a embutida.
   ParticleMeshShape meshShape = ParticleMeshShape::Quad;
   resources::AssetGuid meshAsset{};
+  // G6a (v5): Malha do projeto da forma Malha.
+  resources::AssetGuid shapeMeshAsset{};
   float stretchVelocityScale = 0;
   float stretchLengthScale = 2;
   ParticleSortMode sortMode = ParticleSortMode::None;
@@ -460,6 +467,9 @@ inline bool particleShapeBox(const ComponentValue &v) {
 inline bool particleStretched(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::StretchedBillboard; }
 inline bool particleMeshMode(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::Mesh; }
 inline bool particleDistorts(const ComponentValue &v) { return particleSystem(v).materialBlend == ParticleBlend::Distortion; }
+inline bool particleShapeMesh(const ComponentValue &v) {
+  return particleSystem(v).shapeEnabled && particleSystem(v).shapeType == ParticleShapeType::Mesh;
+}
 inline bool particleAlignable(const ComponentValue &v) {
   const auto mode = particleSystem(v).renderMode;
   return mode == ParticleRenderMode::Billboard || mode == ParticleRenderMode::Mesh;
@@ -496,8 +506,10 @@ inline constexpr std::array<ComponentEnumOption, 2> particleLifetimeGradientMode
 inline constexpr std::array<ComponentEnumOption, 2> particleSpaceOptions{{{0, "Local"}, {1, "Mundo"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleStopActionOptions{{
   {0, "Nenhuma"}, {1, "Desativar objeto"}, {2, "Destruir objeto"}, {3, "Evento Parou"}}};
-inline constexpr std::array<ComponentEnumOption, 8> particleShapeOptions{{
-  {0, "Esfera"}, {1, "Hemisfério"}, {2, "Cone"}, {3, "Caixa"}, {4, "Círculo"}, {5, "Aresta"}, {6, "Rosca"}, {7, "Retângulo"}}};
+inline constexpr std::array<ComponentEnumOption, 9> particleShapeOptions{{
+  {0, "Esfera"}, {1, "Hemisfério"}, {2, "Cone"}, {3, "Caixa"}, {4, "Círculo"}, {5, "Aresta"}, {6, "Rosca"}, {7, "Retângulo"},
+  {8, "Malha"}}};
+inline constexpr std::array<ComponentEnumOption, 2> particleShapeMeshPlacementOptions{{{0, "Vértice"}, {1, "Superfície"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleConeEmitOptions{{{0, "Base"}, {1, "Volume"}}};
 inline constexpr std::array<ComponentEnumOption, 3> particleBoxEmitOptions{{{0, "Volume"}, {1, "Casca"}, {2, "Arestas"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleRenderModeOptions{{
@@ -545,20 +557,29 @@ template <ParticleMinMaxCurve ParticleSystemSettings::*M> bool particleSheetCurv
 inline constexpr std::array<ComponentEnumOption, 2> particleSheetAnimationOptions{{{0, "Folha inteira"}, {1, "Uma linha"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleSheetRowModeOptions{{{0, "Escolhida"}, {1, "Sorteada"}}};
 inline bool particleHasSubEmitters(const ComponentValue &v) { return particleSystem(v).subEmittersEnabled; }
+// Extra N aparece quando o anterior está em uso (ou ele mesmo): a lista cresce
+// conforme o autor preenche, sem sete linhas vazias de saída.
+template <usize N> inline bool particleExtraSubEmitterShows(const ComponentValue &v) {
+  const auto &s = particleSystem(v);
+  return particleHasSubEmitters(v) && (N == 0 || s.subEmitterExtra[N] != 0 || s.subEmitterExtra[N - 1] != 0);
+}
 #include "scene/generated/particle_system_particleSystemNumbers.inc"
 #include "scene/generated/particle_system_particleSystemBooleans.inc"
 #include "scene/generated/particle_system_particleSystemEnums.inc"
 // Planos e sub-sistemas são objetos da cena, com referência persistente
 // remapeada por clone e prefab como qualquer outra.
+inline constexpr const char *kParticleExtraSubEmitterIds[]{"sub_emitter_extra_0", "sub_emitter_extra_1", "sub_emitter_extra_2",
+                                                            "sub_emitter_extra_3", "sub_emitter_extra_4", "sub_emitter_extra_5",
+                                                            "sub_emitter_extra_6"};
 template <usize N> constexpr ComponentObjectReference particleExtraSubEmitter(const char *name) {
-  return {N == 0 ? "sub_emitter_extra_0" : N == 1 ? "sub_emitter_extra_1" : "sub_emitter_extra_2", name, "astra.effects.particle_system",
+  return {kParticleExtraSubEmitterIds[N], name, "astra.effects.particle_system",
           ObjectReferenceScope::Other, "Nenhum",
           [](const ComponentValue &v) { return particleSystem(v).subEmitterExtra[N]; },
           [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterExtra[N] = id; },
-          {"Sub-emissores", "", "Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele", particleHasSubEmitters,
+          {"Sub-emissores", "", "Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele", particleExtraSubEmitterShows<N>,
            nullptr, "render.particles.sub_emitters", "runtime/scene_particles.cpp"}};
 }
-inline constexpr std::array<ComponentObjectReference, 9> particleSystemReferences{{
+inline constexpr std::array<ComponentObjectReference, 13> particleSystemReferences{{
   {"collision_plane_0", "Plano 1", "", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).collisionPlane0; },
    [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane0 = id; },
@@ -590,11 +611,13 @@ inline constexpr std::array<ComponentObjectReference, 9> particleSystemReference
    {"Luzes", "", "Objeto com Luz pontual ou spot: cor, intensidade, alcance e unidade copiados (pode ficar inativo)",
     particleLightsOn, nullptr, "render.particles.lights", "runtime/scene_particles.cpp"}},
   particleExtraSubEmitter<0>("Extra 1"), particleExtraSubEmitter<1>("Extra 2"), particleExtraSubEmitter<2>("Extra 3"),
+  particleExtraSubEmitter<3>("Extra 4"), particleExtraSubEmitter<4>("Extra 5"), particleExtraSubEmitter<5>("Extra 6"),
+  particleExtraSubEmitter<6>("Extra 7"),
 }};
 
 // Material do projeto (PK-10a). Ausente = material embutido do componente.
 // Malha do projeto (G6a): no modo Malha, substitui a malha embutida.
-inline constexpr std::array<ComponentResourceBinding, 2> particleSystemResources{{
+inline constexpr std::array<ComponentResourceBinding, 3> particleSystemResources{{
   {"material", "Material", resources::AssetType::Material, [](const ComponentValue &) -> u32 { return 1; },
    [](const ComponentValue &v, u32) { return particleSystem(v).materialAsset; },
    [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
@@ -612,7 +635,16 @@ inline constexpr std::array<ComponentResourceBinding, 2> particleSystemResources
      return true;
    },
    {"Renderização", "", "Malha do projeto desenhada em cada partícula; vazia = a malha embutida acima",
-    particleMeshMode, nullptr, "render.particles.mesh", "platform/android/instanced_particles.inl + rhi/shaders/particle_mesh.vert"}}}};
+    particleMeshMode, nullptr, "render.particles.mesh", "platform/android/instanced_particles.inl + rhi/shaders/particle_mesh.vert"}},
+  {"shape_mesh", "Malha da forma", resources::AssetType::Mesh, [](const ComponentValue &) -> u32 { return 1; },
+   [](const ComponentValue &v, u32) { return particleSystem(v).shapeMeshAsset; },
+   [](ComponentValue &v, u32 slot, resources::AssetGuid value) {
+     if (slot) return false;
+     particleSystem(v).shapeMeshAsset = value;
+     return true;
+   },
+   {"Forma", "", "Malha do projeto de onde as partículas nascem; vazia, nascem no centro", particleShapeMesh, nullptr,
+    "render.particles.simulation", "renderer/particles/particle_simulation.cpp"}}}};
 
 inline constexpr std::array<ComponentTriple, 7> particleSystemTriples{{
   {"start_color", "Cor inicial", {"start_color_r", "start_color_g", "start_color_b"}, ComponentTripleKind::LinearColor},
@@ -644,7 +676,7 @@ inline constexpr std::array<ComponentEvent, 1> particleSystemEvents{{
   {"stopped", "Parou", "O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)"}}};
 
 inline const ComponentType ParticleSystem::descriptor{
-  "astra.effects.particle_system", 4, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
+  "astra.effects.particle_system", 5, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<ParticleSystem>(); },
   particleSystemNumbers, particleSystemBooleans, particleSystemEnums, nullptr, false, particleSystemReferences, particleSystemTriples,
   particleSystemResources, {}, {}, {}, particleSystemMethods, particleSystemEvents};
 
@@ -754,6 +786,8 @@ inline void ParticleSystem::write(std::ostream &out) const {
   out << ' ' << (materialAsset.valid() ? materialAsset.text() : std::string("-"));
   // v4: a Malha do projeto ("-" = malha embutida).
   out << ' ' << (meshAsset.valid() ? meshAsset.text() : std::string("-"));
+  // v5: a Malha da forma ("-" = nenhuma).
+  out << ' ' << (shapeMeshAsset.valid() ? shapeMeshAsset.text() : std::string("-"));
 }
 
 inline bool ParticleSystem::read(std::istream &in, u32 version) {
@@ -762,7 +796,8 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
   // v3 (PK-10a) acrescenta ids e, no fim, o Material do projeto.
   // v4 (G6a) acrescenta ids (malha, alinhamento, eixos 3D, colisão Mundo) e,
   // no fim, a Malha do projeto. Arquivo v3 abre com os módulos novos no padrão.
-  if (version < 1 || version > 4) return false;
+  // v5 (G6a) acrescenta a forma Malha e, no fim, a Malha da forma.
+  if (version < 1 || version > 5) return false;
   ParticleSystem candidate;
   std::vector<std::string> seen;
   const auto fresh = [&](const std::string &id) {
@@ -816,6 +851,11 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
     std::string mesh;
     if (!(in >> mesh)) return false;
     if (mesh != "-" && !resources::AssetGuid::parse(mesh, candidate.meshAsset)) return false;
+  }
+  if (version >= 5) {
+    std::string mesh;
+    if (!(in >> mesh)) return false;
+    if (mesh != "-" && !resources::AssetGuid::parse(mesh, candidate.shapeMeshAsset)) return false;
   }
   if (!candidate.valid()) return false;
   static_cast<ParticleSystemSettings &>(*this) = candidate;

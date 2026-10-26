@@ -149,6 +149,7 @@ constexpr const char *kNames[] = {
     "component/root-motion",
     "component/rotation-constraint",
     "component/rotation-limit",
+    "component/rotator",
     "component/scale-constraint",
     "component/shapecast",
     "component/skinned-mesh",

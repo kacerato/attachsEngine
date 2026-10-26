@@ -8,7 +8,7 @@ Os relatórios por prefab ficaram fora do repositório.
 
 | Pacote | Prefabs | Abrem | Suportados | Sem perda visível | Parciais | Recusados | Razão sem perda |
 |---|---|---|---|---|---|---|---|
-| RPG VFX Bundle 5.0.0 | 217 | 217 | 30 | 181 | 6 | 0 | **97,2%** (meta ≥ 95%) |
+| RPG VFX Bundle 5.0.0 | 217 | 217 | 30 | 187 | 0 | 0 | **100%** (meta ≥ 95%) |
 | UniStorm (prefabs de partícula) | 27 | 18 | 2 | 14 | 2 | 9 | 59,3% |
 
 UniStorm (dados): 33 Weather Types e 3 perfis de nuvem convertidos, 0 recusados.
@@ -20,19 +20,18 @@ scripts mapeados (AutoDestroyPS, ProjectileMover, ParticleCollisionInstance,
 EGA_EffectSound, Hovl_Laser).
 
 Evolução da razão sem perda visível no RPG: 45% → 75% → 87,6% (órbita/radial,
-sub-emissores extras, máscara Hovl) → 97,2% (Distorção).
+sub-emissores extras, máscara Hovl) → 97,2% (Distorção) → 100% (forma Malha,
+até 8 sub-emissores por sistema e o componente Girar).
 
-Perdas restantes no RPG (6 prefabs):
-
-- forma de malha/sprite emitindo de esfera (2);
-- mais de quatro sub-emissores num sistema (3);
-- script Rotator sem equivalente (1).
+Nenhuma perda visível listada no RPG. Continuam as aproximações declaradas no
+JSON (por exemplo, a Distorção não inclui na cópia as partículas de trás e
+Girar em vários eixos soma Euler XYZ).
 
 Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 
 ## Testes
 
-`aether_particle_tests`: 34/34, incluindo os cenários G6:
+`aether_particle_tests`: 36/36, incluindo os cenários G6:
 
 - arquivo v4;
 - malha;
@@ -43,6 +42,8 @@ Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 - prefab com scripts;
 - UniStorm;
 - órbita/radial;
+- forma Malha;
+- Girar e oito sub-emissores;
 - Distorção.
 
 A suíte inteira roda no fechamento do bloco.
@@ -66,7 +67,8 @@ prévias do pacote saem vazias para partículas.
   - colisão Mundo;
   - órbita/radial;
   - sub-emissores extras;
-  - Linha, Laser, Projétil, Colisão gera e Som de efeito;
+  - Linha, Laser, Projétil, Colisão gera, Som de efeito e Girar;
+  - forma Malha (vértice ou superfície) e até 8 sub-emissores;
   - mistura Distorção, com cópia da cena em meia resolução e mapa normal do Material;
   - importadores do RPG e do UniStorm.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.

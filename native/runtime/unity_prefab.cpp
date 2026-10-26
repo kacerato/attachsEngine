@@ -83,6 +83,12 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
       if(meshResolver(source.mesh,resources::AssetType::Mesh,meshes,error)&&!meshes.empty())system->meshAsset=meshes.front();
       else note("Malha de partícula sem conversão ("+object.name+"): o sistema não desenha. "+error);
     }
+    if(source.shapeMesh.external()&&source.shapeMesh.fileId) {
+      std::vector<resources::AssetGuid> meshes;std::string error;
+      const auto &meshResolver=services&&services->particleMesh?services->particleMesh:resolve;
+      if(meshResolver(source.shapeMesh,resources::AssetType::Mesh,meshes,error)&&!meshes.empty())system->shapeMeshAsset=meshes.front();
+      else note("Malha da forma sem conversão ("+object.name+"): as partículas nascem no centro. "+error);
+    }
     if(!system->valid())return fail("Sistema de partículas convertido inválido: "+object.name);
   }
   if(object.light) {
@@ -206,6 +212,10 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
       spawn->worldSpace=source.worldSpace;spawn->rotationOffsetOnly=source.rotationOffsetOnly;spawn->faceEmitter=source.faceEmitter;
       spawn->destroyEmitter=source.destroyEmitter;spawn->forwardAxis=scene::VfxForwardAxis::NegativeZ;
     }
+  }
+  if(object.rotator) {
+    auto *rotator=static_cast<scene::Rotator*>(add(scene::Rotator::descriptor));if(!rotator)return false;
+    for(u32 k=0;k<3;++k)rotator->speed[k]=std::clamp((*object.rotator)[k],-36000.0f,36000.0f);
   }
   if(object.effectSound) {
     const auto &source=*object.effectSound;

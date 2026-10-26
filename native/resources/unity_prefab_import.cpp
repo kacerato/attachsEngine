@@ -354,6 +354,13 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
         value.laser=laser;
         if(!value.line)loss("Hovl_Laser sem Line Renderer no objeto.");
         approximate("Laser: a rolagem do ruído pelo comprimento (NoiseTextureLength) segue a da imagem principal.");
+      } else if(name=="Rotator") {
+        // x/y/z graus somados ao localEulerAngles a cada 0,0167 s (InvokeRepeating).
+        // Velocidade angular é pseudovetor: na reflexão em Z, X e Y trocam de sinal.
+        constexpr float kTicksPerSecond=1.0f/.0167f;
+        value.rotator=std::array<float,3>{-num(node,"x",0)*kTicksPerSecond,-num(node,"y",0)*kTicksPerSecond,num(node,"z",0)*kTicksPerSecond};
+        const int axes=(num(node,"x",0)!=0)+(num(node,"y",0)!=0)+(num(node,"z",0)!=0);
+        if(axes>1)approximate("Girar em mais de um eixo soma os ângulos de Euler da Astra (XYZ), não os da Unity (ZXY).");
       } else if(name.find("Demo")!=std::string::npos) {
         // Script da cena de demonstração do pacote (teclas, troca de efeito):
         // não faz parte da aparência do efeito.

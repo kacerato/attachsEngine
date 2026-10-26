@@ -27,6 +27,8 @@ struct UnityParticleImport {
   // Material do renderer (slot 0) e o da trilha (slot 1, a Astra desenha a
   // trilha com o do sistema). Malha do Render Mode Mesh quando não é embutida.
   UnityObjectReference material, trailMaterial, mesh;
+  // Malha da forma (Shape Mesh), quando é uma malha do pacote.
+  UnityObjectReference shapeMesh;
   // Referências locais do prefab, por fileID, resolvidas pelo conversor de
   // prefab: Transform dos planos de colisão, ParticleSystem dos sub-emissores,
   // Light da luz modelo.

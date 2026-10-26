@@ -126,7 +126,7 @@ AE_TEST(particle_system_archive_rejects_unknown_ids_versions_and_ranges) {
   auto text = serialize(source);
   {
     std::istringstream in(text);
-    AE_EXPECT_TRUE(!target.read(in, 5), "versão futura recusada");
+    AE_EXPECT_TRUE(!target.read(in, 6), "versão futura recusada");
   }
   {
     auto bad = text;
@@ -794,8 +794,8 @@ AE_TEST(particle_pk10a_archive_v3_keeps_material_and_sheet_and_reads_v2) {
                  back.sheetRowMode == scene::ParticleSheetRowMode::Random && back.sheetCycles == 3 &&
                  back.sheetStartFrame.constantMin == 1 && back.sheetFrameOverTime.curveMax.keys.size() == 2,
                  "material e folha preservados");
-  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.version, 4u, "versão 4 (G6a)");
-  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.resourceBindings.size(), usize(2), "bindings do Material e da Malha");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.version, 5u, "versão 5 (G6a, forma Malha)");
+  AE_EXPECT_EQ(scene::ParticleSystem::descriptor.resourceBindings.size(), usize(3), "bindings do Material, da Malha e da Malha da forma");
   scene::ParticleSystem none;
   AE_EXPECT_TRUE(roundTrip(scene::ParticleSystem{}, none) && !none.materialAsset.valid(), "sem material grava '-'");
   // Um arquivo v2 não tem o token do material no fim.

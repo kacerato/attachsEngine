@@ -74,6 +74,11 @@ public:
     worldRaycast_ = raycast; worldContext_ = context; worldQueries_ = queriesPerSystem;
   }
   const std::vector<Collision> &collisions() const noexcept { return collisions_; }
+  // G6a: Malha do projeto da forma Malha -> conjunto e intervalo. Consultado a
+  // cada avanço (o conjunto cresce quando o editor publica uma malha nova).
+  using ShapeMeshResolver =
+      std::function<bool(const resources::AssetGuid &, std::shared_ptr<const renderer::particles::ParticleMeshSet> &, u32 &)>;
+  void setShapeMeshResolver(ShapeMeshResolver resolver) { shapeMeshes_ = std::move(resolver); }
 
   void reset();
   // Teto total de partículas vivas (nível do aparelho). Repartido entre os
@@ -138,6 +143,7 @@ private:
   bool previewLoop_ = false;
   float simulationMs_ = 0;
   renderer::particles::ParticleEmitter::WorldRaycast worldRaycast_ = nullptr;
+  ShapeMeshResolver shapeMeshes_;
   void *worldContext_ = nullptr;
   u32 worldQueries_ = 0;
   std::vector<Collision> collisions_;

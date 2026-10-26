@@ -2563,6 +2563,12 @@
       "name": "effect-sound",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/rotator": {
+      "category": "component",
+      "name": "rotator",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

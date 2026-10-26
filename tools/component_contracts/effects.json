@@ -60,6 +60,21 @@
    "apiName": "Projectile"
   },
   {
+   "type": "Rotator",
+   "name": "Girar",
+   "description": "Gira o objeto e os filhos numa velocidade constante, no espaço local",
+   "consumer": "runtime/scene_vfx.cpp → giro local do objeto",
+   "capability": "render.effects.rotator",
+   "invalidates": {
+    "cpp": "Invalidate::Draw"
+   },
+   "subfamily": "Comportamentos",
+   "icon": "component/rotator",
+   "searchTerms": "Rotator Rotate Girar Rodar Spin Transform.Rotate Círculo mágico",
+   "reference": "https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Transform.Rotate.html",
+   "apiName": "Rotator"
+  },
+  {
    "type": "ParticleCollisionSpawn",
    "name": "Instanciar ao colidir",
    "description": "Cada toque de partícula cria um prefab no ponto (respingo, faísca, explosão)",

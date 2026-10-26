@@ -1,6 +1,6 @@
 #pragma once
 // Comportamentos de efeito em Play (G6a): Projétil, Laser, Instanciar ao
-// colidir e Som repetido (scene/vfx_behaviors.h). Tudo passa pelo mundo do Play
+// colidir, Girar e Som repetido (scene/vfx_behaviors.h). Tudo passa pelo mundo do Play
 // como um script passaria: pose pelo caminho de transform, prefabs pelo
 // instanciar do mundo, destruição adiada pela fila, áudio pelos comandos da
 // Fonte. Nada fica escondido: os pontos da Linha que o Laser escreve aparecem
@@ -22,7 +22,7 @@ class SceneVfx final {
 public:
   using PrefabLoader = std::function<bool(resources::AssetGuid, Prefab &, std::string &)>;
   struct Report {
-    u32 projectiles = 0, lasers = 0, sounds = 0, spawned = 0, refused = 0;
+    u32 projectiles = 0, lasers = 0, sounds = 0, rotators = 0, spawned = 0, refused = 0;
     std::string lastError;
   };
   void reset();

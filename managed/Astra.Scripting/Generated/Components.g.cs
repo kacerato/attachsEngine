@@ -13606,6 +13606,13 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetFloat("shape_donut_radius");
         set => Component.SetFloat("shape_donut_radius", value);
     }
+    /// <summary>Escala da malha (×). Multiplica a malha da forma</summary>
+    /// <remarks>Faixa válida: 0 a 1000.</remarks>
+    public float ShapeMeshScale
+    {
+        get => Component.GetFloat("shape_mesh_scale");
+        set => Component.SetFloat("shape_mesh_scale", value);
+    }
     /// <summary>Colunas. Quadros na horizontal da imagem (Tiles X)</summary>
     /// <remarks>Faixa válida: 1 a 64.</remarks>
     public float SheetTilesX
@@ -14328,12 +14335,24 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         Aresta = 5,
         Rosca = 6,
         Retangulo = 7,
+        Malha = 8,
     }
     /// <summary>Forma</summary>
     public ShapeTypeOption ShapeType
     {
         get => (ShapeTypeOption)Component.GetEnum("shape_type");
         set => Component.SetEnum("shape_type", (uint)value);
+    }
+    public enum ShapeMeshPlacementOption : uint
+    {
+        Vertice = 0,
+        Superficie = 1,
+    }
+    /// <summary>Nasce em. Vértice sorteado ou ponto da superfície, para a normal do triângulo</summary>
+    public ShapeMeshPlacementOption ShapeMeshPlacement
+    {
+        get => (ShapeMeshPlacementOption)Component.GetEnum("shape_mesh_placement");
+        set => Component.SetEnum("shape_mesh_placement", (uint)value);
     }
     public enum ShapeConeEmitFromOption : uint
     {
@@ -14939,6 +14958,54 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => (SubEmitterExtra2TypeOption)Component.GetEnum("sub_emitter_extra_2_type");
         set => Component.SetEnum("sub_emitter_extra_2_type", (uint)value);
     }
+    public enum SubEmitterExtra3TypeOption : uint
+    {
+        AoNascer = 0,
+        AoColidir = 1,
+        AoMorrer = 2,
+    }
+    /// <summary>Extra 4 · quando. Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)</summary>
+    public SubEmitterExtra3TypeOption SubEmitterExtra3Type
+    {
+        get => (SubEmitterExtra3TypeOption)Component.GetEnum("sub_emitter_extra_3_type");
+        set => Component.SetEnum("sub_emitter_extra_3_type", (uint)value);
+    }
+    public enum SubEmitterExtra4TypeOption : uint
+    {
+        AoNascer = 0,
+        AoColidir = 1,
+        AoMorrer = 2,
+    }
+    /// <summary>Extra 5 · quando. Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)</summary>
+    public SubEmitterExtra4TypeOption SubEmitterExtra4Type
+    {
+        get => (SubEmitterExtra4TypeOption)Component.GetEnum("sub_emitter_extra_4_type");
+        set => Component.SetEnum("sub_emitter_extra_4_type", (uint)value);
+    }
+    public enum SubEmitterExtra5TypeOption : uint
+    {
+        AoNascer = 0,
+        AoColidir = 1,
+        AoMorrer = 2,
+    }
+    /// <summary>Extra 6 · quando. Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)</summary>
+    public SubEmitterExtra5TypeOption SubEmitterExtra5Type
+    {
+        get => (SubEmitterExtra5TypeOption)Component.GetEnum("sub_emitter_extra_5_type");
+        set => Component.SetEnum("sub_emitter_extra_5_type", (uint)value);
+    }
+    public enum SubEmitterExtra6TypeOption : uint
+    {
+        AoNascer = 0,
+        AoColidir = 1,
+        AoMorrer = 2,
+    }
+    /// <summary>Extra 7 · quando. Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)</summary>
+    public SubEmitterExtra6TypeOption SubEmitterExtra6Type
+    {
+        get => (SubEmitterExtra6TypeOption)Component.GetEnum("sub_emitter_extra_6_type");
+        set => Component.SetEnum("sub_emitter_extra_6_type", (uint)value);
+    }
     /// <summary>Plano 1. O +Y do objeto é a normal; a partícula quica do lado de cima</summary>
     public ObjectReference CollisionPlane0
     {
@@ -14993,12 +15060,39 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
         get => Component.GetReference("sub_emitter_extra_2");
         set => Component.SetReference("sub_emitter_extra_2", value);
     }
+    /// <summary>Extra 4. Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele</summary>
+    public ObjectReference SubEmitterExtra3
+    {
+        get => Component.GetReference("sub_emitter_extra_3");
+        set => Component.SetReference("sub_emitter_extra_3", value);
+    }
+    /// <summary>Extra 5. Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele</summary>
+    public ObjectReference SubEmitterExtra4
+    {
+        get => Component.GetReference("sub_emitter_extra_4");
+        set => Component.SetReference("sub_emitter_extra_4", value);
+    }
+    /// <summary>Extra 6. Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele</summary>
+    public ObjectReference SubEmitterExtra5
+    {
+        get => Component.GetReference("sub_emitter_extra_5");
+        set => Component.SetReference("sub_emitter_extra_5", value);
+    }
+    /// <summary>Extra 7. Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele</summary>
+    public ObjectReference SubEmitterExtra6
+    {
+        get => Component.GetReference("sub_emitter_extra_6");
+        set => Component.SetReference("sub_emitter_extra_6", value);
+    }
     /// <summary>Material. Recurso do projeto por slot</summary>
     public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
     public void SetMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("material", value, slot);
     /// <summary>Malha do projeto. Recurso do projeto por slot</summary>
     public AssetGuid GetMesh(uint slot = 0) => Component.GetResource("mesh", slot);
     public void SetMesh(AssetGuid value, uint slot = 0) => Component.SetResource("mesh", value, slot);
+    /// <summary>Malha da forma. Recurso do projeto por slot</summary>
+    public AssetGuid GetShapeMesh(uint slot = 0) => Component.GetResource("shape_mesh", slot);
+    public void SetShapeMesh(AssetGuid value, uint slot = 0) => Component.SetResource("shape_mesh", value, slot);
     /// <summary>Tocar. Inicia ou retoma a simulação e a emissão</summary>
     /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
     public void Play() => Component.Invoke("play");
@@ -15203,6 +15297,37 @@ public readonly struct Projectile : IComponentFacade<Projectile>
     /// <summary>Disparo. Recurso do projeto por slot</summary>
     public AssetGuid GetMuzzle(uint slot = 0) => Component.GetResource("muzzle", slot);
     public void SetMuzzle(AssetGuid value, uint slot = 0) => Component.SetResource("muzzle", value, slot);
+}
+
+/// <summary>Girar: Gira o objeto e os filhos numa velocidade constante, no espaço local. Família Efeitos · Comportamentos.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Transform.Rotate.html</remarks>
+public readonly struct Rotator : IComponentFacade<Rotator>
+{
+    public static string TypeId => "astra.effects.rotator";
+    public static Rotator Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public Rotator(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Velocidade</summary>
+    public Vector3 Speed
+    {
+        get => new(Component.GetFloat("speed_x"), Component.GetFloat("speed_y"), Component.GetFloat("speed_z"));
+        set => Component.SetVector3("speed", value);
+    }
+    /// <summary>Ativo. Desligado, o objeto fica parado</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
 }
 
 /// <summary>Instanciar ao colidir: Cada toque de partícula cria um prefab no ponto (respingo, faísca, explosão). Família Efeitos · Comportamentos.</summary>

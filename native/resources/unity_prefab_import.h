@@ -87,6 +87,8 @@ struct UnityPrefabObject {
   std::optional<UnityPrefabCollisionSpawn> collisionSpawn;
   std::optional<UnityPrefabEffectSound> effectSound;
   std::optional<UnityPrefabLaser> laser;
+  // Girar: graus por segundo, já refletidos para a Astra.
+  std::optional<std::array<float, 3>> rotator;
 };
 // Cobertura de um prefab (G6a, relatório por prefab). Suportado: nada ficou
 // de fora. Parcial: abre, com perdas visíveis ou aproximações listadas.

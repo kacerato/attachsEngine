@@ -273,6 +273,73 @@ AE_TEST(g6a_line_renderer_draws_stretched_segments_through_the_particle_pass) {
                  projectileBack.detach[1] == 7 && projectileBack.forwardAxis == scene::VfxForwardAxis::NegativeZ, "Projétil ida e volta");
 }
 
+AE_TEST(g6a_mesh_shape_emits_from_the_triangles_along_their_normal) {
+  // Um quadrado de 2 m no plano XY, normal +Z, escalado por 0,5.
+  auto set = std::make_shared<renderer::particles::ParticleMeshSet>();
+  const float positions[]{-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0};
+  const float uvs[]{0, 0, 1, 0, 1, 1, 0, 1};
+  const u32 indices[]{0, 1, 2, 0, 2, 3};
+  u32 range = ~0u;
+  AE_EXPECT_TRUE(renderer::particles::appendParticleMesh(*set, positions, uvs, indices, range), "malha da forma");
+  scene::ParticleSystemSettings s;
+  s.startLifetime = scene::particleCurveDefault(5);
+  s.startSpeed = scene::particleCurveDefault(1);
+  s.emissionRate = scene::particleCurveDefault(0);
+  s.shapeType = scene::ParticleShapeType::Mesh;
+  s.shapeRotation[0] = s.shapeRotation[1] = s.shapeRotation[2] = 0;
+  s.shapeMeshScale = .5f;
+  ParticleEmitter emitter;
+  emitter.configure(s, 64);
+  emitter.setShapeMesh(set, range);
+  emitter.play();
+  emitter.emit(64, kIdentity);
+  std::vector<ParticleInstance> out;
+  emitter.build(kIdentity, kCamera, out);
+  bool inside = out.size() == 64;
+  float spread = 0;
+  for (const auto &p : out) {
+    inside = inside && std::abs(p.position[0]) <= .5f + 1e-4f && std::abs(p.position[1]) <= .5f + 1e-4f && std::abs(p.position[2]) < 1e-4f &&
+             p.velocity[2] > .99f;
+    spread = std::max(spread, std::abs(p.position[0]));
+  }
+  AE_EXPECT_TRUE(inside && spread > .2f, "nascem sobre a malha escalada, para a normal");
+  // Vértice: só os quatro cantos.
+  s.shapeMeshPlacement = scene::ParticleShapeMeshPlacement::Vertex;
+  ParticleEmitter corners_;
+  corners_.configure(s, 32);
+  corners_.setShapeMesh(set, range);
+  corners_.play();
+  corners_.emit(32, kIdentity);
+  out.clear();
+  corners_.build(kIdentity, kCamera, out);
+  bool corners = !out.empty();
+  for (const auto &p : out) corners = corners && std::abs(std::abs(p.position[0]) - .5f) < 1e-4f && std::abs(std::abs(p.position[1]) - .5f) < 1e-4f;
+  AE_EXPECT_TRUE(corners, "Vértice nasce nos cantos");
+  // Arquivo v5 guarda a Malha da forma.
+  scene::ParticleSystem source;
+  source.shapeType = scene::ParticleShapeType::Mesh;
+  source.shapeMeshAsset = resources::assetGuidFromSeed("g6-shape-mesh");
+  scene::ParticleSystem back;
+  AE_EXPECT_TRUE(roundTrip(source, back) && back.shapeType == scene::ParticleShapeType::Mesh && back.shapeMeshAsset == source.shapeMeshAsset,
+                 "forma Malha na ida e volta");
+}
+
+AE_TEST(g6a_rotator_and_eight_sub_emitters) {
+  scene::Rotator rotator;
+  rotator.speed[1] = 90;
+  scene::Rotator back;
+  AE_EXPECT_TRUE(roundTrip(rotator, back) && back.speed[1] == 90 && back.enabled, "Girar na ida e volta");
+  scene::ParticleSystemSettings s;
+  s.subEmittersEnabled = true;
+  s.subEmitterBirth = 3;
+  for (usize k = 0; k < scene::ParticleSystemSettings::kExtraSubEmitters; ++k) { s.subEmitterExtra[k] = 10 + k; s.subEmitterExtraType[k] = 0; }
+  scene::ParticleSystem system;
+  static_cast<scene::ParticleSystemSettings &>(system) = s;
+  scene::ParticleSystem copy;
+  AE_EXPECT_TRUE(scene::ParticleSystemSettings::kExtraSubEmitters == 7 && roundTrip(system, copy) && copy.subEmitterExtra[6] == 16,
+                 "oito sub-emissores de nascimento");
+}
+
 AE_TEST(g6a_distortion_blend_reaches_the_batch_with_its_strength) {
   scene::ParticleSystem source;
   source.materialBlend = scene::ParticleBlend::Distortion;

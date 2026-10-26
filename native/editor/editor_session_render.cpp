@@ -145,6 +145,16 @@ void EditorSession::updateParticles(float deltaSeconds, const float (&camera)[3]
   const runtime::ParticleMeshes meshes{particleMeshSet_, [this](const resources::AssetGuid &mesh, u32 &range) {
     return particleMeshRange(mesh, range);
   }};
+  // G6a: forma Malha — a mesma resolução das malhas desenhadas, com o conjunto
+  // atual (o Play avança antes deste quadro desenhar).
+  const runtime::SceneParticles::ShapeMeshResolver shapeMeshes =
+      [this](const resources::AssetGuid &mesh, std::shared_ptr<const renderer::particles::ParticleMeshSet> &set, u32 &range) {
+        if (!particleMeshRange(mesh, range)) return false;
+        set = particleMeshSet_;
+        return true;
+      };
+  previewParticles_.setShapeMeshResolver(shapeMeshes);
+  playScene_.particles().setShapeMeshResolver(shapeMeshes);
   if (isPlaying() && playScene_.active()) {
     playScene_.particles().setBudget(particleBudget_);
     playScene_.particles().build(playScene_.document(), camera, out, &materials, &meshes);

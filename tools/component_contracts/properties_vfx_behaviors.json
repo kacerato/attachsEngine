@@ -2075,6 +2075,116 @@
           "type": "EffectSound"
         }
       ]
+    },
+    {
+      "name": "rotatorBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Girar",
+            "unit": "",
+            "help": "Desligado, o objeto fica parado",
+            "capability": "render.effects.rotator",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Rotator"
+        }
+      ]
+    },
+    {
+      "name": "rotatorNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "speed_x",
+          "label": "Velocidade X",
+          "member": "speed[0]",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Girar",
+            "unit": "°/s",
+            "help": "Giro por segundo em torno do X local",
+            "capability": "render.effects.rotator",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Rotator"
+        },
+        {
+          "id": "speed_y",
+          "label": "Velocidade Y",
+          "member": "speed[1]",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Girar",
+            "unit": "°/s",
+            "help": "Giro por segundo em torno do Y local",
+            "capability": "render.effects.rotator",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Rotator"
+        },
+        {
+          "id": "speed_z",
+          "label": "Velocidade Z",
+          "member": "speed[2]",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Girar",
+            "unit": "°/s",
+            "help": "Giro por segundo em torno do Z local",
+            "capability": "render.effects.rotator",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "Rotator"
+        }
+      ]
     }
   ],
   "field_groups": [
@@ -2142,6 +2252,13 @@
         "effectSoundNumbers/start_delay",
         "effectSoundNumbers/volume_min",
         "effectSoundNumbers/volume_max"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_Rotator_fields0",
+      "type": "Rotator",
+      "properties": [
+        "rotatorBooleans/enabled"
       ]
     }
   ]
