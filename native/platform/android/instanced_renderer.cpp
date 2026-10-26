@@ -7149,9 +7149,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         frame->shadowWorldUnitsPerTexel[cascade] = shadowCascades_[cascade].worldUnitsPerTexel;
       }
       frame->shadowParameters[1] = static_cast<float>(shadowCascadeCount_);
-      // Cached Shadows: o shader soma a leitura do atlas dinâmico.
-      frame->cloudShadow[1] = dualShadowActive() && shadowDynamicValid_ ? 1.0f : 0.0f;
-      shadowDynamicFlagWritten_ = frame->cloudShadow[1];
+      // Cached Shadows: o shader soma a leitura do atlas dinâmico. O flag mora
+      // em shadowDynamicParameters.y: cloudShadow.y é a espessura das nuvens
+      // (renderer/cloud_layer.cpp), e o flag 0/1 ali achatava a camada em 200 m.
+      frame->shadowDynamicParameters[1] = dualShadowActive() && shadowDynamicValid_ ? 1.0f : 0.0f;
+      shadowDynamicFlagWritten_ = frame->shadowDynamicParameters[1];
     }
     if (!memoryAllocator_->flushBuffer(environmentUniform_))
       return rhi::SwapchainStatus::FatalError;

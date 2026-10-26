@@ -1478,7 +1478,7 @@ private:
   std::vector<std::array<float, 4>> shadowStaticStaleBounds_;
   u32 shadowDynamicDrawsWindow_ = 0;
   // Os dois mapas valem quando há dinâmicos e o atlas pequeno existe; o
-  // shader só lê o dinâmico então (cloudShadow.y do bloco de ambiente).
+  // shader só lê o dinâmico então (shadowDynamicParameters.y do bloco de ambiente).
   bool dualShadowActive() const noexcept {
     return shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ && shadowDynamicAtlas_.isReady();
   }

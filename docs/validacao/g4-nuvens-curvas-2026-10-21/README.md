@@ -130,3 +130,27 @@ três cenas sem crash (buffer de crash vazio, sem [Exit]).
 - Custo: não medido nesta rodada (as mudanças só valem com sol baixo e no
   histórico; a v7 mediu +1,48 ms).
 
+## v9 no POCO (APK 0.3.0-dev.261026999-nuvens-0941, 26/10) — fechamento
+
+`prancha-depois-v9.png` (cinco pares; o horizonte é da rodada da v7, anterior à
+colisão abaixo), quadros em `poco-v9/`. Play aberto nas quatro cenas sem crash.
+
+- Causa das nuvens chapadas da v8: o Cached Shadows do G1b gravava o flag do
+  atlas dinâmico em `cloudShadow.y`, que nesta branch é a espessura da camada
+  (Ambiente v20). Com o flag em 0/1 a camada caía para 200 m: sem volume, sem
+  couve-flor, sem autossombra. Na base sozinha o campo estava livre; a colisão
+  só existe no merge. O flag passou para `shadowDynamicParameters.y` (do próprio
+  G1b), lido em `environment_lighting.glsl`; teste de host
+  `cached_shadow_flag_keeps_the_cloud_thickness`.
+- Hora dourada: lado do sol dourado, lado oposto e base cinza-arroxeados,
+  com volume (Unity 0:52). Poente: lado iluminado amarelo-dourado, sombra
+  malva-acinzentada (0:54). Exposição medida: −2,63 EV100 com limite −2,3;
+  poente −4,48 com limite −3,5; meio-dia −0,65 (limites livres).
+- Cúmulos grandes e meio-dia: couve-flor com sombreamento interno, como a v7.
+- Estrias na borda ao girar: resolvidas na v8 (`poco-v8/riscos-v7-x-v8.jpg`).
+- Custo: o da v7, +1,48 ms; a v8/v9 não mudou a marcha ao meio-dia (a marcha
+  esticada só vale com o sol baixo) e acrescentou só leituras ao histórico.
+
+Pendência registrada: a sombra das nuvens no chão usa o alfa da camada 2D na
+escala dela, não a mancha volumétrica; não casa exatamente com as nuvens.
+

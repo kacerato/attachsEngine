@@ -12,6 +12,8 @@
 #include "environment_legacy_lines.h"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <locale>
 #include <sstream>
@@ -321,4 +323,35 @@ AE_TEST(volumetric_clouds_noise_tiles_and_v19_scenes_keep_the_2d_layer) {
   bool typeEnum = false;
   for (const auto &item : scene::environmentEnums) if (item.id == std::string_view("cloud_type")) typeEnum = true;
   AE_EXPECT_TRUE(typeEnum, "Inspector: Tipo Camada 2D / Volumétricas");
+}
+
+// Cached Shadows (G1b) e nuvens dividem o bloco de ambiente. O G1b gravava o
+// flag do atlas dinâmico em cloudShadow.y, que é a espessura da camada: a cada
+// quadro com sombra dinâmica a camada caía de 1200 m para max(1, 200) m e as
+// nuvens viravam recortes chapados, sem volume nem autossombra. O flag mora em
+// shadowDynamicParameters.y; a espessura empacotada é a que chega ao shader.
+AE_TEST(cached_shadow_flag_keeps_the_cloud_thickness) {
+  renderer::CloudLayer clouds;
+  clouds.enabled = true;
+  clouds.type = 1;
+  clouds.thicknessMeters = 1200.0f;
+  const auto rows = renderer::packCloudLayer(clouds, true, 10.0);
+  AE_EXPECT_EQ(rows.shadow[1], 1200.0f, "a espessura vai em cloudShadow.y");
+#ifdef AETHER_REPOSITORY_ROOT
+  const auto text = [](const char *relative) {
+    std::ifstream in(std::filesystem::path(AETHER_REPOSITORY_ROOT) / relative, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), {});
+  };
+  const auto renderer = text("native/platform/android/instanced_renderer.cpp");
+  const auto lighting = text("native/rhi/shaders/environment_lighting.glsl");
+  AE_EXPECT_TRUE(!renderer.empty() && !lighting.empty(), "fontes do renderer e do shader");
+  AE_EXPECT_TRUE(renderer.find("cloudShadow[1] =") == std::string::npos &&
+                 renderer.find("cloudShadow[1]=") == std::string::npos,
+                 "o renderer não grava nada por cima da espessura");
+  AE_EXPECT_TRUE(renderer.find("frame->shadowDynamicParameters[1] =") != std::string::npos,
+                 "o flag do atlas dinâmico vai em shadowDynamicParameters.y");
+  AE_EXPECT_TRUE(lighting.find("cloudShadow.y>0.5") == std::string::npos &&
+                 lighting.find("shadowDynamicParameters.y>0.5") != std::string::npos,
+                 "a sombra lê o flag no lugar dele");
+#endif
 }
