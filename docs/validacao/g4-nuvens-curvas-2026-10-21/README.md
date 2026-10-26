@@ -154,3 +154,28 @@ colisão abaixo), quadros em `poco-v9/`. Play aberto nas quatro cenas sem crash.
 Pendência registrada: a sombra das nuvens no chão usa o alfa da camada 2D na
 escala dela, não a mancha volumétrica; não casa exatamente com as nuvens.
 
+## v10 no POCO (26/10): trepidação e lua
+
+APK de controle 0.3.0-dev.261026999-nuvens-1136 (o binário novo com os SPIR-V
+das nuvens de cad5805c, as mesmas nuvens do 0941) × 0.3.0-dev.261026999-nuvens-1121.
+Quadros em `poco-v10/`.
+
+- Trepidação, câmera parada olhando o céu, vento zero, quadros seguidos (níveis
+  de 8 bits, desvio padrão por pixel na faixa do céu):
+  - antes (51 quadros válidos; do 52º em diante a imagem inteira mudou, a
+    câmera saiu do lugar, e esses foram descartados): média 0,23, p95 0,81,
+    p99 3,29; só nas nuvens 0,47 (p99 2,81);
+  - depois (60 quadros): média 0,14, p95 0,48, p99 1,85; só nas nuvens 0,25
+    (p99 1,84).
+  Queda de ~40-50%. A screencap pega ~1 quadro por segundo: mede o ruído de
+  quadro a quadro, mas não reproduz o tremor de 30 fps visto ao olho.
+- Lua (mesma noite de lua cheia, dia 168/169, com uma direcional Lua ligada ao
+  Sol como na receita Dia/Noite): o disco aparece às 4 h, baixo no oeste
+  (`poco-v10/lua-4h-disco.jpg`). Às 20 h e às 0 h o giro da câmera (olhar
+  erguido ~20°) não enquadrou o disco: à meia-noite a lua cheia passa a ~8°
+  do zênite e às 20 h está baixa no leste, atrás das casas e das nuvens. A
+  luz quase não muda entre as três horas: a exposição automática leva a noite
+  a ~0,6 EV100 e a Lua (0,35) pesa pouco perto do céu noturno. O movimento da
+  lua está provado no host (teste da lua cheia de 19 h a 5 h e ~50 min de
+  atraso por dia), não ainda numa prancha do aparelho.
+
