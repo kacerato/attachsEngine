@@ -1,0 +1,13 @@
+{"title": "Vila Astra S, Play (POCO F7, cortes-2100): sombra do sol em atlas único × dois mapas (estático em cache + dinâmico pequeno)",
+ "rows": [
+  {"unity": "vila-s/01-atlas-unico/vila-astra/01-S/screen.png", "device": "vila-s/02-dois-mapas/vila-astra/01-S/screen.png",
+   "unity_caption": "Atlas único: 4 cascatas regravadas a cada quadro · sombra 2,77 ms · GPU 31,32 ms",
+   "device_caption": "Dois mapas: estático em cache, só moradores no dinâmico · sombra 0,66 ms · GPU 29,85 ms",
+   "verdict": "Mesma cena e luz; sombra na GPU −2,1 ms (−77%), GPU do quadro −1,6 ms, FPS 28,6 → 30,3. Moradores em outra posição: instantes diferentes do Play."},
+  {"unity": "01-atlas-unico-recorte-moradores.png", "device": "02-dois-mapas-recorte-moradores.png",
+   "unity_caption": "Moradores perto: sombra no mapa da cascata (4096)", "device_caption": "Moradores perto: sombra no mapa dinâmico (1024)",
+   "verdict": "Perda visível: as sombras dos moradores no chão ficam mais fracas e menos marcadas (mapa dinâmico de 1024 px, uma busca filtrada). A ajustar: busca 2×2 ou 2048 no dinâmico."},
+  {"unity": "01-atlas-unico-recorte-sombra.png", "device": "02-dois-mapas-recorte-sombra.png",
+   "unity_caption": "Sombra estática (telhados, postes)", "device_caption": "A mesma sombra, servida do cache",
+   "verdict": "A sombra estática é a mesma (mesmo mapa e PCF); só deixou de ser regravada a cada quadro."}
+ ]}

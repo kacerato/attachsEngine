@@ -479,6 +479,21 @@ bool EditorSession::handleProfileVolumeWidget(u32 key) {
 // como sujeira, decodificadas da fonte do projeto e reamostradas para o
 // quadrado que o pós lê. Ficam em cache pelo GUID e pelo conteúdo.
 const std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> &EditorSession::lensDirtTextures() {
+  // CPU, 23/10/2026: esta varredura era 1,6% da thread do jogo na Vila (duas
+  // passadas por ~1300 objetos a cada quadro). Em Play só o mundo de Play é
+  // desenhado; sem mutação desde a última varredura, nada mudou.
+  const bool playing=isPlaying()&&playScene_.active();
+  const runtime::SceneGraph &scanned=playing?playScene_.document():document_;
+  // Perfis entram pelo GUID da sujeira de cada um; o registro, pelo tamanho.
+  u64 profiles=environmentProfiles_.size()*0x9e3779b97f4a7c15ull^static_cast<u64>(assets_.size());
+  for(const auto &profile:environmentProfiles_) profiles=profiles*1099511628211ull^resources::AssetGuidHash{}(profile.values.bloomDirt);
+  const u64 key[4]{playing?1ull:0ull,scanned.identity(),scanned.revision(),profiles};
+  if(lensDirtScanned_&&std::equal(key,key+4,lensDirtScanKey_)&&
+     std::all_of(lensDirtTextures_.begin(),lensDirtTextures_.end(),[&](const auto &entry){
+       const auto *record=assets_.find(entry.first);
+       return record&&lensDirtHashes_[static_cast<usize>(&entry-lensDirtTextures_.data())]==record->contentHash;}))
+    return lensDirtTextures_;
+  std::copy(key,key+4,lensDirtScanKey_);lensDirtScanned_=true;
   std::vector<resources::AssetGuid> wanted;
   const auto collect=[&](const runtime::SceneGraph &graph) {
     std::vector<EditorEntityId> ids;graph.collectSubtree(graph.root(),ids);
@@ -490,8 +505,7 @@ const std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> &Edi
         if(guid.valid()&&std::find(wanted.begin(),wanted.end(),guid)==wanted.end()) wanted.push_back(guid);
       }
   };
-  collect(document_);
-  if(isPlaying()&&playScene_.active()) collect(playScene_.document());
+  collect(scanned);
   for(const auto &profile:environmentProfiles_)
     if(profile.values.bloomDirt.valid()&&std::find(wanted.begin(),wanted.end(),profile.values.bloomDirt)==wanted.end())
       wanted.push_back(profile.values.bloomDirt);

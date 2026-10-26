@@ -1,0 +1,58 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 13295
+Event count: 6647500000
+
+Overhead  Shared Object                                                                                                       Symbol
+10.06%    /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+6.33%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __ioctl
+3.63%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+3.51%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+2.27%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+1128b1c]
+2.26%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+2.23%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.75%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      syscall
+1.62%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+1.62%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+10b0590]
+1.56%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __close
+1.52%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __memmove_aarch64_simd
+1.20%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __epoll_pwait
+1.14%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  @plt
+0.93%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+0.93%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::rotationArc(float const*, float const*, double&, double*, double*)
+0.86%     /vendor/lib64/hw/vulkan.adreno.so                                                                                   !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+0.82%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __memset_aarch64
+0.80%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+0.76%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __ppoll
+0.75%     /apex/com.android.runtime/lib64/bionic/libm.so                                                                      sincosf
+0.74%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::renderer::buildNormalMatrix(float const*, float*)
+0.73%     /apex/com.android.runtime/lib64/bionic/libm.so                                                                      atan
+0.70%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneAnimator::syncStates(ae::runtime::SceneAnimator::Player&)
+0.69%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      scudo::HybridMutex::tryLock()
+0.68%     /apex/com.android.runtime/lib64/bionic/libm.so                                                                      atan2
+0.62%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      __aarch64_ldadd4_rel
+0.61%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::resources::skinnedLocalBounds(ae::resources::SkinDefinition const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, float*, float&)
+0.56%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneTweens::advance(ae::runtime::GameWorld&, double, double)
+0.55%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::renderer::applyMaterialOverride(ae::renderer::MapMaterialRecord const&, ae::scene::MaterialParameters const&, unsigned int)
+0.53%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+0.52%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneGraph::find(unsigned int) const
+0.52%     /vendor/lib64/hw/vulkan.adreno.so                                                                                   !!!0000!65bb4f16e1c4caf7a56f18c58bd23d!208ca19915!
+0.50%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneGraph::exists(unsigned int) const
+0.48%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::editor::EditorMapScene::findClip(ae::resources::AssetGuid const&, ae::runtime::AnimationClipView&) const
+0.47%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+0.46%     /apex/com.android.runtime/lib64/bionic/libc.so                                                                      pthread_getspecific
+0.44%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+10b05a0]
+0.44%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+10b0ec4]
+0.41%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+0.41%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+10af820]
+0.41%     /vendor/lib64/hw/vulkan.adreno.so                                                                                   !!!0000!7aa204b0e62a6c0dd629283b470dd9!208ca19915!
+0.39%     /data/data/dev.aether.editor.u07/files/dotnet/shared/Microsoft.NETCore.App/8.0.27/libcoreclr.so                     libcoreclr.so[+3492a4]
+0.37%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::resources::computeSkinPalette(ae::resources::SkinDefinition const&, float const*, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>>&)
+0.37%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::GameWorld::handle(unsigned int) const
+0.36%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::runtime::SceneAnimator::player(unsigned int, unsigned long, ae::runtime::AnimationCommandStatus&)
+0.35%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::editor::EditorMapScene::slotMaterial(ae::scene::MeshRenderer const&, unsigned int) const
+0.35%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+1027428]
+0.32%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  libaether_android.so[+10b5bb4]
+0.31%     /vendor/lib64/hw/vulkan.adreno.so                                                                                   !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+0.30%     /data/app/~~CNs2mdHoX8vJ29v0FJoOPw==/dev.aether.editor.u07-nJPHIrh1WwNwCJ1OGIYONg==/lib/arm64/libaether_android.so  ae::scene::ImportLink::type() const

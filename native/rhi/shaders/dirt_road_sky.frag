@@ -41,7 +41,7 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=4240) vec4 skyNight; // rgb brilho do céu ao luar
   // G4d: desfaz a cor e a atenuação que a Hora do dia pôs no sol; só o céu
   // físico usa (DirtRoadFrameUniform::skySunExtraterrestrial).
-  layout(offset=4768) vec4 skySunExtraterrestrial;
+  layout(offset=4848) vec4 skySunExtraterrestrial;
 } environment;
 // O céu segue o sol verdadeiro; à noite a luz principal pode ser a Lua.
 vec3 skySunDirection() {
@@ -55,7 +55,8 @@ float skySunIntensity() {
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
 // Volumetric Clouds já integradas (rgb pré-multiplicado, a = cobertura).
-layout(set=0,binding=19) uniform mediump sampler2D cloudVolumeImage;
+// G4d: reconstrução das Volumetric Clouds (27; o 19 é a sombra dinâmica das cascatas).
+layout(set=0,binding=27) uniform mediump sampler2D cloudVolumeImage;
 layout(location=0) in vec3 vDirection;
 layout(location=1) in vec2 vScreen;
 layout(location=0) out vec4 outColor;

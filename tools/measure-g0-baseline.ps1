@@ -35,12 +35,32 @@ param(
     # G2: LUT de gradação forçada mesmo no Neutro (aether.post_grading_force):
     # mede o custo da leitura 3D por pixel e a diferença de imagem contra o caminho sem LUT.
     [switch]$GradingLut,
+    # Cortes de 23/10: o APK decide máscara de luzes, AO em 1/2 e bloom em cadeia pelo
+    # nível; com esta chave o coletor não envia as opções e mede o padrão do produto.
+    [switch]$ProductDefaults,
+    # "Antes" dos cortes no mesmo binário: desliga o teto por nível (aether.quality_ceiling=false).
+    [switch]$NoQualityCeiling,
+    # Resolução dinâmica do nível (C) em vez de travada; a escala de cada quadro entra no log.
+    [switch]$DynamicResolution,
+    # Culling Mode forçado em todos os Animators (-1 respeita a cena; 1 só o tempo, 2 parado).
+    [ValidateRange(-1,2)][int]$AnimatorCulling=-1,
+    # Composição de animação na thread do jogo (aether.animation_parallel=false) para o A/B do pool.
+    [switch]$SerialAnimation,
+    # Liga a composição paralela (desligada por padrão desde 24/10).
+    [switch]$ParallelAnimation,
+    # Taxa da animação por tamanho na tela com interpolação (aether.animation_rate).
+    [switch]$AnimationRate,
+    # Sombra: movimento suja as 4 cascatas, como antes de 24/10 (aether.shadow_dirty_all).
+    [switch]$ShadowDirtyAll,
+    # Lado da cascata no mapa dinâmico da sombra (0 = automático do APK).
+    [int]$ShadowDynamicResolution=0,
     # Bateria acima disso antes de uma rodada: esperar esfriar (décimos de °C não;
     # graus). Clocks caem sem a API térmica acusar; ver baseline de 17/10/2026.
     [double]$MaximumStartBatteryCelsius=38.0,
     [int]$MaximumCoolingMinutes=20
 )
 $ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'poco-guard.ps1')
 . (Join-Path $PSScriptRoot 'android-frame-profile.ps1')
 if($Seconds -lt 30) { throw 'A coleta requer ao menos 30 segundos.' }
 if($Pose.Count -notin @(0,5)) { throw 'Pose exige cinco valores: x,y,z,yaw,pitch.' }
@@ -84,7 +104,7 @@ try {
             & $Adb logcat -c
             $launch=@('shell','am','start','-S','-n',$shellActivity,
                 '--es','astra.open_project',"'$project'",'--ez','aether.profile_frames','true',
-                '--ez','aether.disable_dynamic_resolution','true',
+                '--ez','aether.disable_dynamic_resolution',$(if($DynamicResolution){'false'}else{'true'}),
                 '--ez','aether.lock_rendering_quality','true',
                 '--es','aether.quality_preset',$tier.ToLowerInvariant(),
                 '--ef','aether.target_fps',$TargetFps.ToString($culture))
@@ -101,13 +121,24 @@ try {
             if($PostIsolation) { $launch+=@('--ei','aether.post_isolation',[string]$PostIsolation) }
             if($GpuIsolation) { $launch+=@('--ei','aether.gpu_isolation',[string]$GpuIsolation) }
             $launch+=@('--ez','aether.post_fog_resolve',$(if($FogResolve){'true'}else{'false'}))
-            $launch+=@('--ez','aether.punctual_light_mask',$(if($LightMask){'true'}else{'false'}))
             $launch+=@('--ez','aether.shadow_gather',$(if($NoShadowGather){'false'}else{'true'}))
-            $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
-            $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
+            if(!$ProductDefaults) {
+                $launch+=@('--ez','aether.punctual_light_mask',$(if($LightMask){'true'}else{'false'}))
+                $launch+=@('--ez','aether.post_bloom_chain',$(if($BloomChain){'true'}else{'false'}))
+                $launch+=@('--ez','aether.post_half_ao',$(if($HalfAo){'true'}else{'false'}))
+            }
+            if($NoQualityCeiling) { $launch+=@('--ez','aether.quality_ceiling','false') }
+            if($SerialAnimation) { $launch+=@('--ez','aether.animation_parallel','false') }
+            if($ParallelAnimation) { $launch+=@('--ez','aether.animation_parallel','true') }
+            if($AnimationRate) { $launch+=@('--ez','aether.animation_rate','true') }
+            if($ShadowDirtyAll) { $launch+=@('--ez','aether.shadow_dirty_all','true') }
+            if($ShadowDynamicResolution -gt 0) { $launch+=@('--ei','aether.shadow_dynamic_resolution',[string]$ShadowDynamicResolution) }
+            if($AnimatorCulling -ge 0) { $launch+=@('--ei','aether.animator_culling',[string]$AnimatorCulling) }
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
             if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
             else { $launch+=@('--ef','aether.resolution_scale','1') }
+            # Guarda do POCO antes do am start: Astra ou Launcher na frente, sem ligação.
+            Assert-PocoFree -Adb $Adb -Package $Package -AllowLauncher
             $started=(& $Adb @launch 2>&1 | Out-String)
             $started | Set-Content (Join-Path $run 'launch.txt')
             if($LASTEXITCODE -ne 0 -or $started -match 'Error|Exception') { throw "Launch rejeitado: $project/$tier." }
@@ -133,7 +164,7 @@ try {
             }
             & $Adb logcat -d -s Aether.Android:I | Set-Content (Join-Path $run 'profile.log')
             $logText=Get-Content (Join-Path $run 'profile.log') -Raw
-            $policy=[regex]::Matches($logText,'\[(RenderPolicy|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask|ShadowGather|ColorGrading)\][^\r\n]*') | ForEach-Object Value
+            $policy=[regex]::Matches($logText,'\[(RenderPolicy|AnimatorCulling|ReferenceResolution|RuntimeControls|PostIsolation|PostFogResolve|PostChain|PunctualLightMask|ShadowGather|ColorGrading)\][^\r\n]*') | ForEach-Object Value
             $policy | Set-Content (Join-Path $run 'policy.txt')
             if($PostIsolation -and !($policy -match "\[PostIsolation\] mask=$PostIsolation ")) {
                 throw "A máscara de pós $PostIsolation não foi aplicada ($project/$tier)."
@@ -168,17 +199,27 @@ try {
             $gathered=[bool]($policy -match '\[ShadowGather\] gather')
             if($gathered -eq [bool]$NoShadowGather) { throw "Gather de sombra=$gathered difere do pedido ($project/$tier)." }
             $lightMasked=[bool]($policy -match '\[PunctualLightMask\] por desenho')
-            if($lightMasked -ne [bool]$LightMask) { throw "Máscara de luzes=$lightMasked difere do pedido ($project/$tier)." }
+            if($lightMasked -ne ([bool]$LightMask -or [bool]$ProductDefaults)) { throw "Máscara de luzes=$lightMasked difere do pedido ($project/$tier)." }
             # A última linha vale: a LUT pode ligar e desligar durante a carga da cena.
             $gradingLines=@($policy | Where-Object { $_ -match '^\[ColorGrading\]' })
             $gradingRan=$gradingLines.Count -gt 0 -and [bool]($gradingLines[-1] -match 'por pixel')
             if($gradingRan -ne [bool]$GradingLut) { throw "LUT de gradação=$gradingRan difere do pedido ($project/$tier)." }
             $bloomChained=[bool]($policy -match '\[PostChain\] bloom em cadeia=1')
             $halfAoRan=[bool]($policy -match '\[PostChain\] .*AO em meia resolucao=1')
-            if($bloomChained -ne [bool]$BloomChain -or $halfAoRan -ne [bool]$HalfAo) {
+            # No padrão do produto o nível decide; a linha "[RenderPolicy] nivel" e o row registram o que rodou.
+            if(!$ProductDefaults -and ($bloomChained -ne [bool]$BloomChain -or $halfAoRan -ne [bool]$HalfAo)) {
                 throw "Caminho do pós (bloom=$bloomChained, AO=$halfAoRan) difere do pedido ($project/$tier)."
             }
+            $levelLine=@($policy | Where-Object { $_ -match '^\[RenderPolicy\] nivel ' }) | Select-Object -Last 1
+            if($levelLine -and (($levelLine -match 'teto=on') -eq [bool]$NoQualityCeiling)) {
+                throw "Teto por nível ($levelLine) difere do pedido ($project/$tier)."
+            }
+            # Cena do projeto recusada abre vazia: a rodada mediria céu e chão.
+            if($logText -match '\[Editor\] Cena salva invalida') { throw "Cena do projeto recusada pelo APK ($project/$tier)." }
+            $shadowLine=@($policy | Where-Object { $_ -match '^\[RenderPolicy\] preset=' }) | Select-Object -Last 1
             $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;gpuIsolation=$GpuIsolation;fogResolve=$fogResolved;gradingLut=$gradingRan
+                lightMask=$lightMasked;bloomChain=$bloomChained;halfAo=$halfAoRan;level=$levelLine
+                shadows=if($shadowLine -match 'sombras=([^)]*\))'){$Matches[1]}else{$null}
                 displayedFps=if($summary){$summary.displayedFps}else{$null}
                 continuous=$state.continuous;internalFps=$capture.presentFps
                 width=$capture.context.width;height=$capture.context.height

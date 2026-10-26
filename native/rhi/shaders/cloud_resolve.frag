@@ -19,7 +19,7 @@ layout(set=0,binding=0,std140) uniform CloudResolveBlock {
   layout(offset=3376) vec4 temporalPreviousView[3];
   layout(offset=3424) vec4 temporalProjection;
   layout(offset=3456) vec4 temporalSurface;
-  layout(offset=4752) vec4 cloudVolume;     // fator de forma, erosão, histórico válido, fase do subpixel
+  layout(offset=4832) vec4 cloudVolume;     // fator de forma, erosão, histórico válido, fase do subpixel
 } environment;
 layout(set=0,binding=20) uniform mediump sampler2D cloudHistory;
 layout(set=0,binding=23) uniform mediump sampler2D cloudMarch;

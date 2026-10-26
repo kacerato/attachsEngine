@@ -5,6 +5,10 @@
 # Cada item de -Configurations é "nome=argumentos", com os argumentos do coletor do G0
 # separados por espaço, por exemplo "sem-gather=-NoShadowGather" ou
 # "sem-ao=-PostIsolation 2". "base" (sem argumentos) é o controle.
+#
+# Cortes de 23/10: -ControlName antes -ControlArguments "-NoQualityCeiling" com
+# -Configurations "depois=-ProductDefaults" mede antes × depois no mesmo binário, e
+# -Tier C repete o mesmo A/B no nível C (referência 1600x720).
 param(
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
     [Parameter(Mandatory=$true)][string]$Project,
@@ -16,6 +20,9 @@ param(
     [float]$TargetFps=60,
     [switch]$Edit,
     [float[]]$Pose=@(),
+    [ValidateSet('S','C')][string]$Tier='S',
+    [string]$ControlName='base',
+    [string]$ControlArguments='',
     [double]$MaximumStartBatteryCelsius=40.0,
     [int]$MaximumCoolingMinutes=25
 )
@@ -24,10 +31,11 @@ $collector=Join-Path $PSScriptRoot 'measure-g0-baseline.ps1'
 $Adb='C:/Users/donod/AppData/Local/Android/Sdk/platform-tools/adb.exe'
 $env:ANDROID_SERIAL=@(& $Adb devices | ForEach-Object { if($_ -match "^(adb-53e1eb7[^\t]*)\tdevice$") { $Matches[1] } })[0]
 $plan=New-Object System.Collections.Generic.List[string]
-$plan.Add('base=')
+$control="$ControlName=$ControlArguments"
+$plan.Add($control)
 for($index=0;$index -lt $Configurations.Count;++$index) {
     $plan.Add($Configurations[$index])
-    if((($index+1) % $ControlEvery) -eq 0 -or $index -eq $Configurations.Count-1) { $plan.Add('base=') }
+    if((($index+1) % $ControlEvery) -eq 0 -or $index -eq $Configurations.Count-1) { $plan.Add($control) }
 }
 $summary=New-Object System.Collections.Generic.List[object]
 for($step=0;$step -lt $plan.Count;++$step) {
@@ -40,7 +48,7 @@ for($step=0;$step -lt $plan.Count;++$step) {
         if($t+1 -lt $tokens.Count -and !$tokens[$t+1].StartsWith('-')) { $extra[$key]=[int]$tokens[$t+1];++$t }
         else { $extra[$key]=$true }
     }
-    $call=@{OutputDirectory=$run;Projects=@($Project);Order=@('S');Seconds=$Seconds;TargetFps=$TargetFps
+    $call=@{OutputDirectory=$run;Projects=@($Project);Order=@($Tier);Seconds=$Seconds;TargetFps=$TargetFps
         MaximumStartBatteryCelsius=$MaximumStartBatteryCelsius;MaximumCoolingMinutes=$MaximumCoolingMinutes}
     # A névoa resolvida por texel é o padrão do APK; o coletor do G0 a desliga se não pedir.
     if($extra.ContainsKey('NoFogResolve')) { $extra.Remove('NoFogResolve') } else { $call.FogResolve=$true }

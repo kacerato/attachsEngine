@@ -43,7 +43,7 @@ layout(set=0,binding=0,std140) uniform CloudFrameBlock {
   layout(offset=3552) vec4 cloudShape;      // 1/tamanho, altitude, vento x, z
   layout(offset=3568) vec4 cloudTint;       // tom*2^EV, luz do céu
   layout(offset=3584) vec4 cloudShadow;     // sombra, espessura, tipo, passos
-  layout(offset=4752) vec4 cloudVolume;     // fator de forma, erosão, histórico válido, fase do subpixel
+  layout(offset=4832) vec4 cloudVolume;     // fator de forma, erosão, histórico válido, fase do subpixel
 } environment;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
 layout(set=0,binding=20) uniform mediump sampler2D cloudHistory;

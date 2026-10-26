@@ -5,7 +5,7 @@
 //  2. reconstrução em meia resolução (rhi/shaders/cloud_resolve.frag): a
 //     amostra nova vai ao subpixel dela, os outros seguem o histórico
 //     reprojetado e contido pela vizinhança (HZD, 1/16 por quadro). O
-//     resultado é copiado para o histórico (20) e o céu o lê (19).
+//     resultado é copiado para o histórico (20) e o céu o lê (27).
 //
 // Imagens fixas, descritores fixos: nenhuma troca de papel, então o conjunto
 // de ambiente é escrito uma vez. Há um quadro em voo (ver

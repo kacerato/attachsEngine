@@ -9,7 +9,8 @@
 // AO: o mesmo SSAO de 12 amostras roda em 1/2 num alvo R8; o pós reconstrói com
 // as 4 amostras bilineares ponderadas pela profundidade (shader, bit 4096).
 //
-// Os dois são chaves de diagnóstico até o A/B no aparelho. Nenhum roda depois
+// Os dois seguem o nível de qualidade (padrão de B e C desde o A/B de 23/10);
+// as opções de lançamento continuam como override de diagnóstico. Nenhum roda depois
 // do ampliador temporal, que tem composição própria.
 
 InstancedRenderer::PostBloomState InstancedRenderer::postBloomState() const {
@@ -44,7 +45,7 @@ bool InstancedRenderer::createPostChainResources() {
   image.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;
   image.memoryClass=rhi::MemoryClass::RenderTarget;
 
-  if(bloomChainEnabled_) {
+  if(bloomChainEnabled()) {
     if(!createPostTargetRenderPass(VK_FORMAT_R16G16B16A16_SFLOAT,false,bloomDownRenderPass_)||
        !createPostTargetRenderPass(VK_FORMAT_R16G16B16A16_SFLOAT,true,bloomUpRenderPass_)||
        !createPostShaderPipeline(bloomDownRenderPass_,false,bloomDownPipeline_)||
@@ -59,7 +60,7 @@ bool InstancedRenderer::createPostChainResources() {
       if(!createFramebuffer(bloomDownRenderPass_,bloomLevels_[level].view(),width,height,bloomFramebuffers_[level])) return false;
     }
   }
-  if(halfAmbientOcclusionEnabled_) {
+  if(halfAmbientOcclusionEnabled()) {
     if(!createPostTargetRenderPass(VK_FORMAT_R8_UNORM,false,halfAmbientOcclusionRenderPass_)||
        !createPostShaderPipeline(halfAmbientOcclusionRenderPass_,false,halfAmbientOcclusionPipeline_)) return false;
     image.format=VK_FORMAT_R8_UNORM;
@@ -138,7 +139,7 @@ void InstancedRenderer::recordPostChainPass(VkRenderPass pass,VkFramebuffer fram
 
 bool InstancedRenderer::recordHalfAmbientOcclusion(const platform::FreeCameraState &camera) {
   halfAmbientOcclusionThisFrame_=false;
-  if(!halfAmbientOcclusionEnabled_||halfAmbientOcclusionPipeline_==VK_NULL_HANDLE||!aoActiveThisFrame_||
+  if(!halfAmbientOcclusionEnabled()||halfAmbientOcclusionPipeline_==VK_NULL_HANDLE||!aoActiveThisFrame_||
      postPrepassDescriptorSet_==VK_NULL_HANDLE) return false;
   PostPushConstants push{};
   fillSceneAuxPush(camera,push);
@@ -151,7 +152,7 @@ bool InstancedRenderer::recordHalfAmbientOcclusion(const platform::FreeCameraSta
 
 bool InstancedRenderer::recordBloomChain(const platform::FreeCameraState &camera,float threshold) {
   bloomChainThisFrame_=false;
-  if(!bloomChainEnabled_||bloomDownPipeline_==VK_NULL_HANDLE||bloomSceneSet_==VK_NULL_HANDLE) return false;
+  if(!bloomChainEnabled()||bloomDownPipeline_==VK_NULL_HANDLE||bloomSceneSet_==VK_NULL_HANDLE) return false;
   // Extensão ativa de cada nível segue a resolução dinâmica; a alocação, não.
   std::array<VkExtent2D,kBloomLevelCount> active{};
   u32 width=renderWidth(),height=renderHeight();

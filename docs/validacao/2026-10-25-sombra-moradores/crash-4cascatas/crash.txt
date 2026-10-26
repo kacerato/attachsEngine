@@ -1,0 +1,7 @@
+--------- beginning of crash
+10-25 05:44:43.458 29590 31356 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d9360eaf8)
+10-25 05:44:43.458 29590 31355 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d9360eaf8)
+10-25 05:44:43.458 29590 31332 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d93610d30)
+10-25 05:44:54.579 29828 31719 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d9360eaf8)
+10-25 05:44:54.579 29828 31730 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d9360eaf8)
+10-25 05:44:54.579 29828 31714 F libc    : FORTIFY: pthread_mutex_lock called on a destroyed mutex (0x7d93610d30)

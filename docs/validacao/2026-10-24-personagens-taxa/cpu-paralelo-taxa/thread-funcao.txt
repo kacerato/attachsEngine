@@ -1,0 +1,38 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 19239
+Event count: 9619500000
+
+Overhead  Command                Symbol
+7.73%     AstraGame              ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+6.51%     AstraGame              syscall
+4.89%     AstraGame              __ioctl
+3.28%     AstraGame              ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+2.38%     AstraGame              ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+2.16%     AstraGame              ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+2.04%     AstraGame              @plt
+1.60%     AstraGame              ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.32%     AstraGame              !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+1.24%     AstraGame              ae::renderer::buildNormalMatrix(float const*, float*)
+1.23%     AstraGame              ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+1.23%     AstraGame              atan
+1.11%     binder:28106_1         __ioctl
+1.06%     AstraGame              __memmove_aarch64_simd
+1.05%     AstraGame              libaether_android.so[+10af820]
+0.94%     AstraGame              __aarch64_cas4_acq
+0.94%     AstraGame              __close
+0.92%     AstraGame              libaether_android.so[+10b0590]
+0.83%     AstraGame              ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+0.83%     AstraGame              ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+0.78%     AstraGame              ae::runtime::SceneGraph::find(unsigned int) const
+0.72%     AstraGame              ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+0.71%     AstraGame              __ppoll
+0.71%     AstraGame              __memset_aarch64
+0.65%     AstraGame              scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+0.64%     AstraGame              sincosf
+0.62%     AstraGame              ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+0.62%     AstraGame              std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::__unordered_map_hasher<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::hash<unsigned int>, std::__ndk1::equal_to<unsigned int>, true>, std::__ndk1::__unordered_map_equal<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::equal_to<unsigned int>, std::__ndk1::hash<unsigned int>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>>>::__emplace_unique_key_args<unsigned int, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>, std::__ndk1::tuple<>>(unsigned int const&, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>&&, std::__ndk1::tuple<>&&)
+0.60%     AstraGame              !!!0000!65bb4f16e1c4caf7a56f18c58bd23d!208ca19915!
+0.55%     AstraGame              ae::renderer::applyMaterialOverride(ae::renderer::MapMaterialRecord const&, ae::scene::MaterialParameters const&, unsigned int)
+0.54%     dev.aether.editor.u07  __epoll_pwait
