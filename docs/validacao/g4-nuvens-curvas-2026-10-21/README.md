@@ -112,3 +112,21 @@ antes de gastar o aparelho; `prancha-depois-v7.png`, quadros em `poco-v7/`.
   menor deixaram a luz do sol dominar a cor.
 - Custo: +1,48 ms (meta 1,5 ms).
 
+## v8 no POCO (APK 0.3.0-dev.261026999-nuvens-0915, 26/10, com a base a06d4e30)
+
+`prancha-depois-v8.png` (pares 3 a 5), quadros em `poco-v8/`. O Play abriu nas
+três cenas sem crash (buffer de crash vazio, sem [Exit]).
+
+- Riscos: com o histórico contido pelos 4 texels da marcha e a rejeição por
+  movimento, as estrias na borda das nuvens grandes ao girar sumiram
+  (`poco-v8/riscos-v7-x-v8.jpg`, v7 à esquerda).
+- Hora dourada e poente: a marcha de luz esticada e o ambiente cinza-arroxeado
+  não aparecem o bastante no aparelho; a nuvem segue laranja quase uniforme.
+  No emulador o lado da sombra ficava cinza-arroxeado; a diferença vem da
+  exposição do aparelho, que o emulador não reproduz.
+- Cúmulos grandes: a cena saiu mais exposta que na v7 (céu azul-marinho, nuvem
+  branca estourada e chapada). A cor nova só atua com o sol baixo; a suspeita é
+  a exposição/teto de qualidade trazidos com a base. Não confirmado.
+- Custo: não medido nesta rodada (as mudanças só valem com sol baixo e no
+  histórico; a v7 mediu +1,48 ms).
+
