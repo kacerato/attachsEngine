@@ -23,6 +23,7 @@
 #include "scene/player_input.h"
 #include "editor/editor_scene_template.h"
 #include "harness.h"
+#include "editor/editor_archive.h"
 #include "editor/editor_material_fields.h"
 #include "editor/editor_component_visuals.h"
 #include "scene/light.h"
@@ -6699,4 +6700,23 @@ AE_TEST(g7_touch_button_drives_player_input_connection_to_volume_weight) {
   session.handlePointer({21,UiPointerPhase::Up,button,1.15});session.advanceClock(1.2f);session.extractPlayMap(draws);
   session.advanceClock(1.25f);session.extractPlayMap(draws);
   AE_EXPECT_TRUE(weight()==0.f,"soltar desliga");
+}
+
+// G7: a mesma mira, com a cena gerada do exemplo 3 (G7_AIM_SCENE), para
+// separar o que é da cena do que é do aparelho.
+AE_TEST(g7_generated_aim_scene_touch) {
+  const char *path=std::getenv("G7_AIM_SCENE");if(!path)return;
+  Fixture f;auto &session=f.session;
+  AE_EXPECT_TRUE(loadEditorDocument(path,0,session.document()),"cena gerada");
+  session.update();session.usePlatformTextInput(true);
+  AE_EXPECT_TRUE(session.startPlay(),"Play");session.update();
+  std::vector<renderer::MapDrawState> draws;session.advanceClock(1);session.extractPlayMap(draws);
+  EditorScreenLayout layout;AE_EXPECT_TRUE(scanWidget(session,widgetId(EditorWidget::PlaySecondaryAction),layout).x>=0,"botão Mirar");
+  const UiPoint button{layout.viewport.x+layout.viewport.width-108+46,layout.viewport.y+layout.viewport.height-76+28};
+  const auto pressed=[&]{const auto &in=session.playScene().input();return in.pressed("Mirar");};
+  session.handlePointer({0,UiPointerPhase::Down,button,1.0});session.advanceClock(1.05f);session.extractPlayMap(draws);
+  session.advanceClock(1.1f);session.extractPlayMap(draws);
+  AE_EXPECT_TRUE(pressed(),("Mirar pressionada · "+session.playScene().eventConnections().diagnostic()).c_str());
+  AE_EXPECT_TRUE(session.playScene().eventConnections().deliveries()>0,session.playScene().eventConnections().diagnostic().c_str());
+  session.handlePointer({0,UiPointerPhase::Up,button,1.15});session.advanceClock(1.2f);session.extractPlayMap(draws);
 }

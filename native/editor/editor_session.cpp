@@ -2232,6 +2232,14 @@ EditorEntityId EditorSession::inspectorScopeFor(const UiPointerEvent &event) {
 }
 
 bool EditorSession::handlePointer(const UiPointerEvent &event) {
+  if(isPlaying() && event.phase==UiPointerPhase::Down) {
+    const auto hit=router_.hitTest(event.position);
+    char trace[200];std::snprintf(trace,sizeof trace,"widget=%08x alvo=%d gui=%d texto=%d pausado=%d menu=%d capturaJogo=%d",
+      hit.widgetId,static_cast<int>(hit.target),guiActive()?1:0,
+      (state_.platformTextInput&&pendingTextEdit().purpose!=EditorTextPurpose::None)?1:0,state_.playPaused?1:0,state_.contextMenu?1:0,
+      (playScene_.gui().captures(event.pointerId,event.device)||playScene_.sceneGui().captures(event.pointerId,event.device))?1:0);
+    playTouchTrace_=trace;
+  }
   if(guiActive() && !state_.contextMenu && gui_.pointer(event)) return true;
   if(guiAuthorPointer(event))return true;
   if(isPlaying() && playScene_.active() && !state_.playPaused && !state_.contextMenu) {

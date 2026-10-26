@@ -513,6 +513,8 @@ public:
     state_.playTimeScale=value;
     return true;
   }
+  const std::string &playTouchTrace() const noexcept {return playTouchTrace_;}
+  const std::string &playInputTrace() const noexcept {return playInputTrace_;}
   bool gameplayInputFocused() const noexcept {
     // Play hides authoring panels and their text fields. platformTextInput
     // advertises IME support for the whole Android session, not active focus.
@@ -2201,7 +2203,9 @@ private:
   bool secondaryPressed_ = false;
   std::vector<std::pair<u32,u32>> playButtonPointers_;
   u32 playButtonCanceled_=0;
-  void cancelPlayButtons(){playButtonPointers_.clear();jumpPressed_=secondaryPressed_=false;playButtonCanceled_=runtime::InputTouch;}
+  // G7: diagnóstico do toque no Play (Android loga quando muda).
+  std::string playTouchTrace_,playInputTrace_;u32 playButtonCancels_=0;
+  void cancelPlayButtons(){++playButtonCancels_;playButtonPointers_.clear();jumpPressed_=secondaryPressed_=false;playButtonCanceled_=runtime::InputTouch;}
   float sceneTime_ = 0.0f;
   float lastWallSeconds_ = 0.0f;
   float guiDeltaSeconds_ = 1.f/60;

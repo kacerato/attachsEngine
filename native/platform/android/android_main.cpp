@@ -2074,6 +2074,7 @@ int32_t handleInput(android_app *app, AInputEvent *event) {
         const auto at=toLogical(editorIndex);const auto &v=shell.editorSession.layout().viewport;
         __android_log_print(ANDROID_LOG_INFO,LogTag,"[PlayToque] down x=%.1f y=%.1f escala=%.3f consumido=%d foco=%d viewport=%.1f,%.1f %.1fx%.1f",
           at.x,at.y,shell.editorScale,consumed?1:0,shell.editorSession.gameplayInputFocused()?1:0,v.x,v.y,v.width,v.height);
+        __android_log_print(ANDROID_LOG_INFO,LogTag,"[PlayToque] %s",shell.editorSession.playTouchTrace().c_str());
       }
     } else if (editorAction == AMOTION_EVENT_ACTION_UP ||
                editorAction == AMOTION_EVENT_ACTION_POINTER_UP) {
@@ -3887,6 +3888,8 @@ void android_main(android_app *app) {
             ready=shell.editorSession.extractPlayMap(authored,shell.gameInput.snapshot(),
                 !ae::platform::android::editorCodePanelVisible());
             shell.gameInput.finishFrame();
+            {static std::string lastTrace;const auto &trace=shell.editorSession.playInputTrace();
+             if(trace!=lastTrace){lastTrace=trace;__android_log_print(ANDROID_LOG_INFO,LogTag,"[PlayToque] quadro %s",trace.c_str());}}
             if(ready) {timeSeconds=shell.editorSession.sceneTime();shell.waterTimeSeconds=timeSeconds;}
           }
           if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();
