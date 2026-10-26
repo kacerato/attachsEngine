@@ -80,3 +80,19 @@ girando: o acúmulo temporal não deixa rastro visível).
   mede -0,8 EV100, não +1,5): as capturas da v5 com limite 0 e -1,2 saíram pretas.
   As de agora usam -3,3 (hora dourada) e -4,5 (poente).
 
+## v6 no POCO (APK 0.3.0-dev.261025999-nuvens-2043, 25/10)
+
+`prancha-depois-v6.png`, quadros em `poco-v6/`.
+
+- Hora dourada e poente: o céu físico recebe o sol de fora do ar (a Hora do dia
+  já tinge e atenua o sol da cena). Zênite da hora dourada (40, 71, 91), antes
+  (40, 0, 0); poente com zênite cinza quente e a faixa laranja no horizonte. As
+  nuvens ficam pêssego do lado do sol, como a Unity em 0:52.
+- Nitidez: marcha em 1/16 dos pixels com subpixel por quadro e reconstrução em
+  meia resolução (cloud_resolve.frag). A borda arredondada ficou mais definida,
+  mas a nuvem grande segue lisa por dentro: o borrão vem mais da forma (ruído
+  de baixa frequência, erosão fraca no miolo visível) do que da resolução.
+- Horizonte: ruído limitado a 2 mips e corte do céu a ~0,7°. Na captura ainda
+  há poucos cúmulos pequenos perto do horizonte; não melhorou de forma visível.
+- Custo: o A/B não rodou (o adb caiu no fim da rodada).
+
