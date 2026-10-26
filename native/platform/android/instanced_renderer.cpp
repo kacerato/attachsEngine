@@ -6811,7 +6811,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     // histórico só vale depois de um quadro integrado.
     if (!volumetricCloudsReady()) frame->cloudShadow[2] = 0.0f;
     frame->cloudVolume[2] = cloudHistoryValid_ ? 1.0f : 0.0f;
-    frame->cloudVolume[3] = static_cast<float>(cloudFrameIndex_ & 3u);
+    // Contador de quadros integrados (a fase do subpixel é & 3 no shader).
+    frame->cloudVolume[3] = static_cast<float>(cloudFrameIndex_ & 4095u);
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;

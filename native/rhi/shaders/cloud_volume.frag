@@ -84,13 +84,16 @@ float cloudVolumePatch(vec2 weatherUv,float lod) {
 // borda (recortes e fiapos), sem borrar o miolo.
 float cloudVolumeDensity(vec3 p,float height,float lod,float noiseLod,bool cheap) {
   // Mapa a 0,8x: manchas menores, dezenas de cúmulos até o horizonte (Unity 0:03).
-  float patchValue=cloudVolumePatch(cloudLayerUv(p.xz*1000.0)*0.8,lod);
+  // Coordenadas de mundo: a posição da câmera entra, e só o vento desloca o
+  // ruído (antes a camada andava junto com o jogador).
+  vec2 worldXz=p.xz*1000.0+frame.cameraPositionNear.xz;
+  float patchValue=cloudVolumePatch(cloudLayerUv(worldXz)*0.8,lod);
   if(patchValue<=0.0) return 0.0;
   float coverage=patchValue*(0.28+0.5*environment.cloudParameters.y);
   // Cúmulo do HZD: sobe de 0 a 8% da camada (base plana) e cai de 55% a 100%.
   float profile=smoothstep(0.0,0.08,height)*smoothstep(1.0,0.55,height);
   if(profile<=0.0) return 0.0;
-  vec3 world=vec3(p.x*1000.0-environment.cloudShape.z,p.y*1000.0,p.z*1000.0-environment.cloudShape.w);
+  vec3 world=vec3(worldXz.x-environment.cloudShape.z,p.y*1000.0,worldXz.y-environment.cloudShape.w);
   // Ruído de forma a 1x na horizontal (era 0,7x): células de cúmulo menores.
   vec3 q=world*environment.cloudShape.x*vec3(1.0,2.5,1.0);
   vec4 n=textureLod(cloudShapeNoise,q,noiseLod);
@@ -129,7 +132,9 @@ void main() {
   // Alvo de 1/4 da resolução em cada eixo (1/16 dos pixels), todos marchando:
   // um padrão de pixels alternados dentro do mesmo quad faz a GPU pagar a
   // marcha no quad inteiro. A nitidez vem da reconstrução (cloud_resolve.frag).
-  float frameIndex=mod(floor(frame.cameraFrame.w*60.0),64.0);
+  // Contador real de quadros integrados (cloudVolume.w; a fase do subpixel é
+  // ele & 3). O tempo x 60 repetia a cada 64 e pulava quadros a 30 fps.
+  float frameCounter=environment.cloudVolume.w;
   vec4 result=vec4(0.0);
   if(viewDirection.y>-0.002 && environment.cloudParameters.x>0.0) {
     float y=max(viewDirection.y,0.0);
@@ -144,7 +149,12 @@ void main() {
     float stepKm=pathKm/float(steps);
     // Ruído de gradiente intercalado que muda a cada quadro: o acúmulo
     // temporal soma posições diferentes dentro do passo.
-    float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy+5.588238*frameIndex,vec2(0.06711056,0.00583715))));
+    // Baixa discrepância por pixel e por quadro: ruído intercalado no espaço
+    // somado à sequência da razão áurea no tempo. Cada pixel percorre o passo
+    // inteiro de modo uniforme em poucos quadros, e o histórico converge sem
+    // a trepidação do padrão que se repetia.
+    float jitter=fract(52.9829189*fract(dot(gl_FragCoord.xy,vec2(0.06711056,0.00583715)))+
+                       0.61803398875*frameCounter);
     vec3 toSun=normalize(environment.sunDirectionIntensity.xyz);
     float extinction=mix(8.0,48.0,environment.cloudParameters.w);   // por km com densidade 1
     float cosine=dot(viewDirection,toSun);

@@ -82,7 +82,13 @@ void main() {
     if(before.z>0.0 && all(greaterThanEqual(previousUv,vec2(0.0))) && all(lessThanEqual(previousUv,vec2(1.0)))) {
       // A vizinhança da marcha contém o histórico; uma folga pequena guarda o
       // detalhe de meia resolução que só o histórico tem.
-      vec4 margin=(high-low)*0.05+vec4(0.001);
+      // Parada, a caixa folga (25% da faixa): o ruído da marcha não puxa o
+      // histórico a cada quadro, que era a trepidação das nuvens do fundo.
+      // Girando, fica justa (5%) e a borda antiga não deixa rastro. Os canais
+      // não são cor (luz do sol, altura, distância, cobertura), por isso não
+      // há conversão YCoCg: a caixa é por canal.
+      float still=1.0-smoothstep(0.25,1.5,length((previousUv-uv)*vec2(textureSize(cloudHistory,0))));
+      vec4 margin=(high-low)*mix(0.05,0.25,still)+vec4(0.001);
       vec4 history=clamp(textureLod(cloudHistory,previousUv,0.0),low-margin,high+margin);
       // Rejeição por movimento: deslocamento da reprojeção em pixels daqui.
       // Parada, a câmera acumula; girando, o upsample da marcha atual manda.
@@ -91,7 +97,9 @@ void main() {
       // Amostra nova: metade do histórico tira o ruído do passo. Os outros
       // subpixels seguem o histórico e puxam um pouco do upsample para nunca
       // ficarem presos num quadro antigo.
-      result=fresh?mix(current,history,0.5*trust):mix(upsampled,history,0.88*trust);
+      // Amostra nova: 85% de histórico com a câmera parada (era 50%), só cai
+      // onde há movimento de verdade.
+      result=fresh?mix(current,history,0.85*trust):mix(upsampled,history,0.92*trust);
     }
   }
   outCloud=result;

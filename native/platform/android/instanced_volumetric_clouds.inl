@@ -272,6 +272,8 @@ void InstancedRenderer::recordVolumetricClouds(const platform::FreeCameraState &
   push.cameraFrame[1] = camera.yaw;
   push.cameraFrame[2] = camera.pitch;
   push.cameraFrame[3] = timeSeconds;
+  // Posição da câmera: o ruído das nuvens fica preso ao mundo.
+  for (u32 axis = 0; axis < 3; ++axis) push.cameraPositionNear[axis] = camera.position[axis];
   push.surfaceTransform[0] = surfaceTransform.xx;
   push.surfaceTransform[1] = surfaceTransform.xy;
   push.surfaceTransform[2] = surfaceTransform.yx;
