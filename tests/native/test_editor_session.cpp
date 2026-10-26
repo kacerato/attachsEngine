@@ -6707,6 +6707,9 @@ AE_TEST(g7_touch_button_drives_player_input_connection_to_volume_weight) {
 AE_TEST(g7_generated_aim_scene_touch) {
   const char *path=std::getenv("G7_AIM_SCENE");if(!path)return;
   Fixture f;auto &session=f.session;
+  // As primitivas do aparelho ocupam as vagas 1 a 6 da biblioteca.
+  std::vector<renderer::MapDrawRecord> meshes(6);for(auto &mesh:meshes){mesh.model[0]=mesh.model[5]=mesh.model[10]=mesh.model[15]=1;mesh.boundsRadius=.75f;mesh.indexCount=36;}
+  session.importMap(meshes,{},false);
   AE_EXPECT_TRUE(loadEditorDocument(path,0,session.document()),"cena gerada");
   session.update();session.usePlatformTextInput(true);
   AE_EXPECT_TRUE(session.startPlay(),"Play");session.update();
@@ -6716,7 +6719,7 @@ AE_TEST(g7_generated_aim_scene_touch) {
   const auto pressed=[&]{const auto &in=session.playScene().input();return in.pressed("Mirar");};
   session.handlePointer({0,UiPointerPhase::Down,button,1.0});session.advanceClock(1.05f);session.extractPlayMap(draws);
   session.advanceClock(1.1f);session.extractPlayMap(draws);
-  AE_EXPECT_TRUE(pressed(),("Mirar pressionada · "+session.playScene().eventConnections().diagnostic()).c_str());
+  AE_EXPECT_TRUE(pressed(),("Mirar pressionada · play="+std::to_string(session.isPlaying())+" "+session.playInputTrace()+" "+session.playScene().frameError()+" · "+session.playScene().eventConnections().diagnostic()).c_str());
   AE_EXPECT_TRUE(session.playScene().eventConnections().deliveries()>0,session.playScene().eventConnections().diagnostic().c_str());
   session.handlePointer({0,UiPointerPhase::Up,button,1.15});session.advanceClock(1.2f);session.extractPlayMap(draws);
 }

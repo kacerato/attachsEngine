@@ -3890,6 +3890,9 @@ void android_main(android_app *app) {
             shell.gameInput.finishFrame();
             {static std::string lastTrace;const auto &trace=shell.editorSession.playInputTrace();
              if(trace!=lastTrace){lastTrace=trace;__android_log_print(ANDROID_LOG_INFO,LogTag,"[PlayToque] quadro %s",trace.c_str());}}
+            // Falha de script no Play (Behavior desligado) também vai ao logcat.
+            {static std::string lastScript;const auto &failure=shell.editorSession.playScene().scriptDiagnostics();
+             if(failure!=lastScript){lastScript=failure;if(!failure.empty())__android_log_print(ANDROID_LOG_ERROR,LogTag,"[Script] %s",failure.c_str());}}
             if(ready) {timeSeconds=shell.editorSession.sceneTime();shell.waterTimeSeconds=timeSeconds;}
           }
           if(changed && shell.authoredWaterPlay.active()) shell.authoredWaterPlay.stop();

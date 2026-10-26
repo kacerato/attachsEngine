@@ -32,6 +32,10 @@ public static class G7GraphicsApiTests
         public bool SetBodyVelocity(ulong id, Vector3 value) => true;
         public bool MoveKinematic(ulong id, Vector3 value, Quaternion rotation) => true;
         public readonly List<string> Logs = [];
+        public bool Aim;
+        public TransformValue GetWorldTransform(ulong objectId) => GetTransform(objectId);
+        public int InputButton(string action, uint query) => action == "Mirar" ? (query == 0 && Aim ? 1 : 0) : -1;
+        public int RayCast(Vector3 origin, Vector3 direction, in QueryFilter filter, Span<RawQueryHit> results) => 0;
         public void Log(ulong id, string message) => Logs.Add(message);
 
         private static readonly (ulong Object, ulong Instance, string Type)[] Table =
@@ -301,5 +305,31 @@ public static class G7GraphicsApiTests
         Assert.Equal(unchecked("set_shared_profile(" + (long)0x0123456789abcdef + "," + (long)0xfedcba9876543210 + ")"), scene.Calls[0]);
         Assert.Equal("set_weight(0.5)", scene.Calls[1]);
         Assert.Equal("set_shared_material(1,2)", scene.Calls[2]);
+    }
+
+    // Exemplo 3 em C#: o script real, com a ação Mirar segurada.
+    [Test]
+    public static void AimExample_ReactsToTheHeldAction()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "examples", "g7-api"))) directory = directory.Parent;
+        var root = Path.Combine(Path.GetTempPath(), "astra-g7-mira-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.Copy(Path.Combine(directory!.FullName, "examples", "g7-api", "Scripts", "MiraComDesfoque.cs"), Path.Combine(root, "MiraComDesfoque.cs"));
+            var result = new ProjectCompiler().Build(root);
+            Assert.True(result.Success, string.Join(" | ", result.Diagnostics.Select(d => d.Message)));
+            using var world = new BehaviorWorld();
+            var scene = new Scene();
+            world.Start(result.Project!, scene, [new(3, 90, "g7.mira_com_desfoque", true, new Dictionary<string, JsonElement>
+                { ["volume_de_mira"] = JsonSerializer.SerializeToElement(new ObjectReference(2)) })]);
+            world.Update(1f / 60);
+            scene.Aim = true;
+            world.Update(1f / 60);world.Update(1f / 60);
+            Assert.Equal(0, world.Failures.Count, string.Join(" | ", world.Failures.Select(f => f.Message)));
+            Assert.True(scene.Logs.Contains("Mirando"), string.Join(" | ", scene.Logs));
+        }
+        finally { Directory.Delete(root, true); }
     }
 }
