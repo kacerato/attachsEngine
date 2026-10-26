@@ -83,7 +83,6 @@ struct Assets {
   std::vector<std::pair<std::string, std::string>> files; // caminho, conteúdo
   resources::AssetGuid exterior, interior, gold, neon;
   // Diagnóstico do exemplo 2 no aparelho: o que da troca derruba o Play.
-  resources::AssetGuid same, vignetteOnly, colorOnly;
 };
 
 class Builder {
@@ -216,6 +215,10 @@ public:
     }
     camera = doc.createEntity(doc.root(), EditorEntityKind::Camera, "Câmera");
     place(camera, 0, 3.2f, -9, 1, 1, 1, 9, 0);
+    // Como na Unity e nos modelos de cena: o objeto da câmera leva o componente Camera.
+    {auto values = *doc.find(camera);
+     if (!values.components.find(scene::Camera::descriptor) && !values.components.add(scene::Camera::descriptor)) fail("câmera recusada");
+     if (!doc.applyEntityValues(camera, values)) fail("câmera recusada");}
   }
   // Modo de atualização: 0 ao acordar, 1 todo quadro, 2 via script.
   void chromeProbe(EditorEntityId &probe, u32 refresh) {
@@ -259,9 +262,6 @@ Assets makeAssets() {
   };
   out.exterior = profile("Exterior", "Ambientes/Exterior.environment", 0);
   out.interior = profile("Área coberta", "Ambientes/Area coberta.environment", 1);
-  out.same = profile("Igual", "Ambientes/Igual.environment", 0);
-  out.colorOnly = profile("Só cor", "Ambientes/So cor.environment", 2);
-  out.vignetteOnly = profile("Só vinheta", "Ambientes/So vinheta.environment", 3);
   const auto material = [&](const char *name, const char *path, const float color[3], float metallic, float roughness, u8 shader) {
     resources::MaterialAsset m;
     m.name = name;m.values.enabled = true;
@@ -473,23 +473,6 @@ int main(int argc, char **argv) {
       }
       publish(output, "G7 6 Troca de material" + suffix, b, assets, scripts, csharp ? "TrocaDeMaterial.cs" : nullptr);
     }
-  }
-  // Diagnóstico do exemplo 2: a mesma cena em Flow trocando para perfis que
-  // mudam uma coisa só (nada, só cor, só vinheta).
-  for (const auto &[tag, guid] : {std::pair{"2a Troca igual", assets.same}, std::pair{"2b Troca so cor", assets.colorOnly},
-                                  std::pair{"2c Troca so vinheta", assets.vignetteOnly}, std::pair{"2d Sem troca", resources::AssetGuid{}}}) {
-    Builder b;b.base(assets, 15, 0);
-    const auto area = b.folder(0, "Área coberta");
-    b.place(area, 0, 1, 6);
-    b.physics(area, scene::BodyMotion::Static, true, 3, 1.5f, 3);
-    const float red[3]{.9f, .15f, .1f};
-    const auto visitor = b.primitive(0, "Visitante", "sphere", red, 0, .4f);
-    b.place(visitor, 0, 24, 6);
-    b.physics(visitor, scene::BodyMotion::Dynamic, false, .5f, .5f, .5f);
-    // Sem perfil: o sensor só esconde a estátua (física e conexão sem mexer no Volume).
-    if (guid.valid()) b.connection(area, 3, call, 42, b.volume, 0, guid);
-    else b.connection(area, 3, 3, 0, b.statue);
-    publish(output, std::string("G7 ") + tag + " (Flow)", b, assets, scripts, nullptr);
   }
   return 0;
 }

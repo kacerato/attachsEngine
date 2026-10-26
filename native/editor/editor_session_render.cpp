@@ -230,8 +230,6 @@ bool EditorSession::extractPlayMap(std::vector<renderer::MapDrawState> &out,
   device.lookX=actions.lookScreenX;device.lookY=actions.lookScreenY;
   device.touchButtons=(jumpPressed_?1u:0u)|(secondaryPressed_?2u:0u);
   for(const auto &[pointer,mask]:playButtonPointers_)device.touchButtons|=mask;
-  {char trace[160];std::snprintf(trace,sizeof trace,"botoes=%u ponteiros=%zu foco=%d plataforma=%d cancelamentos=%u",
-     device.touchButtons,playButtonPointers_.size(),gameplayInputFocused()?1:0,platformFocus?1:0,playButtonCancels_);playInputTrace_=trace;}
   device.canceledDeviceGroups=platformInput.canceledDeviceGroups|playButtonCanceled_;
   device.canceledSources=platformInput.canceledSources;
   playButtonCanceled_=0;

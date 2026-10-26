@@ -66,7 +66,7 @@ Contagem (nesta tabela, 31 linhas): antes ✅ 0 · 🟡 22 · ❌ 7 · ⚠️ 2.
   `hour_changed/sunrise/sunset/day_changed` no descritor da Hora do dia; 8 métodos do Volume e `set_shared_material` do
   Mesh Renderer (`runtime/component_operations.cpp`); `GameWorld::replaceComponent`; serviços de recurso nas operações
   (`ComponentOperationServices::assets/environmentProfiles/resolveResource`, os mesmos do script).
-- Conexão de evento **v3**: recurso do método (perfil ou material), eventos 39–42 e métodos 36–39. Cenas v2 abrem igual.
+- Conexão de evento **v3**: recurso do método (perfil ou material), eventos 40–45 e métodos 41–44 (36–40 e o evento 39 são das Partículas, G5). Cenas v2 abrem igual.
 - Gerador da fachada: structs `partial`, métodos com recurso recebem `AssetGuid`, tabela `VolumeParameterTable`.
 - Gerenciado: `managed/Astra.Scripting/Rendering/` (`Volume.cs`, `RenderSettings.cs`, `UnityNames.cs`, `SceneQuery.cs`) e
   `MaterialSlot.SetFloat/SetColor/SetTexture` em `Materials.cs`.
@@ -87,20 +87,24 @@ e “G7 n … (Flow)”). Capturas do POCO em `capturas/`.
 
 ## Validação
 
-Host (24/10): suíte nativa 1670/1670 (`aether_tests`, exe das 01:00); gerenciada 529/529 (`Aether.Tests.exe`), com
-`G7GraphicsApiTests` (6) e `test_g7_graphics_api` (8, inclusive Entrada do jogador e cena gerada) e
-`g7_touch_button_drives_player_input_connection_to_volume_weight` (toque real da sessão no centro do botão).
+Host (26/10, base 145ba63b mesclada): suíte nativa 1723/1723; gerenciada 529 ok / 0 falhas / 71 pulados (`dotnet run`),
+com `G7GraphicsApiTests` (7, inclusive o script real do exemplo 3 com a ação Mirar segurada), `test_g7_graphics_api` (9)
+e os testes de toque da sessão `g7_touch_button_drives_player_input_connection_to_volume_weight` e
+`g7_generated_aim_scene_touch` (cena gerada do exemplo 3, por `G7_AIM_SCENE`).
 
-POCO F7, Astra Dev `0.3.0-dev.261024999-g7-api-0103` (pranchas em `capturas/`):
+POCO, 26/10 09:48, Astra Dev `0.3.0-dev.261026999-g7-api-0938` (prancha `capturas/g7-prancha-20261026.jpg`, os 12
+projetos na mesma rodada, com a guarda de ligação e primeiro plano):
 
 | # | C# | Flow |
 |---|---|---|
-| 1 Dia acelerado | ✅ `HourChanged` a cada 5 s, pôr/nascer; noite coerente após recapturar a sonda por script e usar a Lua padrão (exposição chega a −6 EV) | ✅ sonda recapturada a cada hora |
-| 2 Perfil por área | ❌ o app cai ~2 s após a troca de perfil (`FORTIFY: pthread_mutex_lock called on a destroyed mutex`) | ❌ idem |
-| 3 Desfoque ao mirar | ❌ toque no botão “Mirar” não vira a ação no aparelho (no host passa; toque injetado na pausa funciona) | ❌ idem |
+| 1 Dia acelerado | ✅ `HourChanged` 17h→23h, pôr do sol, noite com estrelas | ✅ hora mudou → sonda recapturada |
+| 2 Perfil por área | ✅ “Perfil da área ativo”, sem queda (a correção do Play da base resolveu o mutex destruído) | ✅ troca de perfil, sem queda |
+| 3 Desfoque ao mirar | ✅ “Mirando”/“Mira solta”, FOV 60→30 e desfoque | ✅ segurar Mirar liga o desfoque; soltar desliga |
 | 4 Postes ao anoitecer | ✅ `Sunset` acende luz e emissão | ✅ pôr do sol → Ativar Postes |
 | 5 Sonda por script | ✅ cor do painel + `RenderProbe()` | ✅ Timer → capturar agora |
 | 6 Troca de material | ✅ Ouro (Lit) ↔ Neon (Unlit) | ✅ Timer → Malha: trocar material |
 
-Pendente: diagnóstico dos itens 2 e 3 com o APK `g7-api-2051` (log `[PlayToque]` e variantes 2a–2d do gerador),
-bloqueado enquanto o G4 investiga a mesma queda “mutex destruído” no Play.
+Causa do exemplo 3 em C#: o objeto “Câmera” gerado pela ferramenta não tinha o componente Camera, então
+`GetComponent<Camera>()` vinha nulo e o Update caía no primeiro quadro (o toque chegava: botão secundário = bit 2 no
+Play). O gerador agora cria a câmera com o componente, como os modelos de cena. O log de diagnóstico do toque e das
+falhas de script usado para achar isso saiu do código depois da rodada.
