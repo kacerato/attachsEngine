@@ -108,3 +108,12 @@ Causa do exemplo 3 em C#: o objeto “Câmera” gerado pela ferramenta não tin
 `GetComponent<Camera>()` vinha nulo e o Update caía no primeiro quadro (o toque chegava: botão secundário = bit 2 no
 Play). O gerador agora cria a câmera com o componente, como os modelos de cena. O log de diagnóstico do toque e das
 falhas de script usado para achar isso saiu do código depois da rodada.
+
+Revisão dos exemplos 2 e 3 (26/10 13:25 e 13:47, APK `0.3.0-dev.261026999-g7-api-1235`, prancha
+`capturas/g7-prancha-ex2-ex3-20261026.jpg`): na primeira prancha os dois não mostravam o efeito.
+- 2: o visitante caía de 24 m e entrava na área em ~2 s, antes da primeira captura; o sensor também encostava no chão.
+  Agora a área fica acima do piso e o visitante cai de 80 m (~4 s): 1 s fora (céu claro) e 7 s dentro (perfil coberto),
+  em C# e em Flow.
+- 3: sem nada perto da câmera, o foco caía em objetos à mesma distância e o fundo quase não borrava. Agora há um alvo a
+  4 m na linha de visão: segurando Mirar, o alvo fica nítido e o fundo desfoca, nas duas variantes e nas duas miradas
+  (o teste `g7_generated_aim_scene_touch` também confere a segunda mirada).

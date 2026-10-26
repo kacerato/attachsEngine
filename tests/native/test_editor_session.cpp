@@ -6721,5 +6721,16 @@ AE_TEST(g7_generated_aim_scene_touch) {
   session.advanceClock(1.1f);session.extractPlayMap(draws);
   AE_EXPECT_TRUE(pressed(),("Mirar pressionada · play="+std::to_string(session.isPlaying())+" "+session.playScene().frameError()+" · "+session.playScene().eventConnections().diagnostic()).c_str());
   AE_EXPECT_TRUE(session.playScene().eventConnections().deliveries()>0,session.playScene().eventConnections().diagnostic().c_str());
+  const auto first=session.playScene().eventConnections().deliveries();
   session.handlePointer({0,UiPointerPhase::Up,button,1.15});session.advanceClock(1.2f);session.extractPlayMap(draws);
+  session.advanceClock(1.25f);session.extractPlayMap(draws);
+  AE_EXPECT_TRUE(!pressed(),"soltar");
+  const auto released=session.playScene().eventConnections().deliveries();
+  // Segunda mirada: a mesma ação volta a disparar.
+  session.handlePointer({0,UiPointerPhase::Down,button,1.3});session.advanceClock(1.35f);session.extractPlayMap(draws);
+  session.advanceClock(1.4f);session.extractPlayMap(draws);
+  AE_EXPECT_TRUE(pressed(),"segunda mirada");
+  const auto second=session.playScene().eventConnections().deliveries();
+  AE_EXPECT_TRUE(released>first&&second>released,("entregas "+std::to_string(first)+" "+std::to_string(released)+" "+std::to_string(second)).c_str());
+  session.handlePointer({0,UiPointerPhase::Up,button,1.45});session.advanceClock(1.5f);session.extractPlayMap(draws);
 }

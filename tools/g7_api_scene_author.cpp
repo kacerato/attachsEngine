@@ -339,11 +339,12 @@ int main(int argc, char **argv) {
       Builder b;b.base(assets, 15, 0);
       const float glass[3]{.6f, .8f, 1};
       const auto area = b.folder(0, "Área coberta");
-      b.place(area, 0, 1, 6);
+      // Acima do chão: o sensor só percebe quem entra, não o piso.
+      b.place(area, 0, 1.7f, 6);
       b.physics(area, scene::BodyMotion::Static, true, 3, 1.5f, 3);
       const float red[3]{.9f, .15f, .1f};
       const auto visitor = b.primitive(0, "Visitante", "sphere", red, 0, .4f);
-      b.place(visitor, 0, 24, 6);
+      b.place(visitor, 0, 80, 6);  // ~4 s de queda: dá para ver o antes e o depois
       b.physics(visitor, scene::BodyMotion::Dynamic, false, .5f, .5f, .5f);
       (void)glass;
       if (csharp) b.script(area, "g7.perfil_por_area", "PerfilPorArea.cs",
@@ -371,6 +372,11 @@ int main(int argc, char **argv) {
         environment->weight = 0;
         if (!b.doc.applyEntityValues(aim, values)) fail("volume de mira recusado");
       }
+      // Alvo a 4 m na linha de visão: em foco ao mirar, com o fundo desfocado.
+      {const float yellow[3]{.95f, .75f, .1f};
+       const auto target = b.primitive(0, "Alvo", "sphere", yellow, 0, .5f);
+       b.place(target, 0, 2.57f, -5, .6f, .6f, .6f);
+       b.physics(target, scene::BodyMotion::Static, false, .3f, .3f, .3f);}
       // Ação "Mirar" no botão de toque secundário do Play, nas duas variantes.
       auto map = b.doc.inputActions();
       runtime::InputAction action;action.id = "Mirar";action.kind = runtime::ActionKind::Button;
