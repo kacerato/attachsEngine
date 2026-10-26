@@ -6488,7 +6488,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         __android_log_print(ANDROID_LOG_INFO, LogTag,
             "[DynamicResolution] scale=%.3f render=%ux%u gpu=%.3fms budget=%.3fms.",
             static_cast<double>(resolution.scale), renderWidth(), renderHeight(),
-            gpuTimings.frameMs, static_cast<double>(dynamicResolution_.targetGpuMilliseconds()));
+            static_cast<double>(dynamicResolution_.decisionGpuMilliseconds()),
+            static_cast<double>(dynamicResolution_.targetGpuMilliseconds()));
       }
     }
   }
