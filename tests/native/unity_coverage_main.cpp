@@ -57,8 +57,13 @@ int main(int argc, char **argv) {
   const std::filesystem::path root = utf8Path(argv[1]);
   std::map<std::string, std::filesystem::path> byGuid;
   std::vector<std::filesystem::path> prefabs, assets;
-  for (const auto &entry : std::filesystem::recursive_directory_iterator(root)) {
-    if (!entry.is_regular_file()) continue;
+  std::error_code walk;
+
+  for (std::filesystem::recursive_directory_iterator it(root, std::filesystem::directory_options::skip_permission_denied, walk), end;
+       !walk && it != end; it.increment(walk)) {
+    const auto &entry = *it;
+    std::error_code kind;
+    if (!entry.is_regular_file(kind)) continue;
     const auto path = entry.path();
     if (path.extension() == ".meta") {
       const auto text = readFile(path);
@@ -68,6 +73,10 @@ int main(int argc, char **argv) {
       if (at != std::string::npos) byGuid[text.substr(at + 6, 32)] = path.parent_path() / path.stem();
     } else if (path.extension() == ".prefab") prefabs.push_back(path);
     else if (path.extension() == ".asset") assets.push_back(path);
+  }
+  if (walk) {
+    std::cerr << "pasta do pacote ilegível: " << walk.message() << std::endl;
+    return 2;
   }
   std::sort(prefabs.begin(), prefabs.end());
   const auto pathOf = [&](const AssetGuid &guid) -> std::filesystem::path {
@@ -121,8 +130,9 @@ int main(int argc, char **argv) {
     UnityPrefabImport imported;
     runtime::Prefab prefab;
     runtime::UnityPrefabIdentityMap identities;
-    std::vector<std::string> notes;
+    std::vector<std::string> notes, minor;
     effects.notes = &notes;
+    effects.approximations = &minor;
     const bool ok = readUnityYaml(readFile(path), document, error) && convertUnityPrefab(document, imported, error, &context) &&
                     runtime::buildUnityPrefab(imported, assetGuidFromSeed("coverage-prefab:" + relative), resolve, nullptr, prefab,
                                               identities, error, &effects);
@@ -140,8 +150,10 @@ int main(int argc, char **argv) {
     auto losses = imported.coverage.losses;
     for (const auto &note : notes) losses.push_back(note);
     for (const auto &loss : losses) ++lossCounts[loss.substr(0, loss.find('('))];
-    for (const auto &approx : imported.coverage.approximations) ++approximationCounts[approx];
-    if (losses.empty() && imported.coverage.approximations.empty()) { ++supported; detail << "SUPORTADO " << relative << "\n"; }
+    auto approximations = imported.coverage.approximations;
+    for (const auto &approx : minor) approximations.push_back(approx);
+    for (const auto &approx : approximations) ++approximationCounts[approx];
+    if (losses.empty() && approximations.empty()) { ++supported; detail << "SUPORTADO " << relative << "\n"; }
     else if (losses.empty()) { ++invisible; detail << "SEM PERDA VISIVEL " << relative << "\n"; }
     else {
       ++partial;

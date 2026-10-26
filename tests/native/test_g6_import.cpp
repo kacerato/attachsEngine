@@ -4,6 +4,7 @@
 // pacotes da Asset Store entra no repositório.
 #include "harness.h"
 
+#include "renderer/particles/particle_gpu.h"
 #include "renderer/particles/particle_simulation.h"
 #include "resources/unistorm_import.h"
 #include "resources/unity_material_import.h"
@@ -105,11 +106,50 @@ AE_TEST(g6a_particle_archive_v4_keeps_mesh_alignment_and_axes) {
                  back.scalingMode == scene::ParticleScalingMode::Hierarchy && back.collisionType == scene::ParticleCollisionType::World,
                  "malha, alinhamento, eixos, escala e colisão preservados");
   // Arquivo v3 não tem o token da malha no fim e abre com o comportamento antigo.
-  std::istringstream v3("1 duration 2 0 0 0 -");
+  std::istringstream v3("1 duration 2 0 0 -");
   scene::ParticleSystem old;
   AE_EXPECT_TRUE(old.read(v3, 3) && !old.meshAsset.valid() && old.scalingMode == scene::ParticleScalingMode::Shape &&
                  old.renderAlignment == scene::ParticleRenderAlignment::View, "v3 abre igual (Forma, Vista)");
-  AE_EXPECT_TRUE(scene::ParticleSystem::curveSlots().size() == 58, "16 curvas novas endereçáveis");
+  AE_EXPECT_TRUE(scene::ParticleSystem::curveSlots().size() == 66, "24 curvas novas endereçáveis");
+}
+
+AE_TEST(g6a_orbital_and_radial_velocity_turn_around_the_offset_center) {
+  scene::ParticleSystemSettings s;
+  s.startLifetime = scene::particleCurveDefault(10);
+  s.startSpeed = scene::particleCurveDefault(0);
+  s.emissionRate = scene::particleCurveDefault(0);
+  s.shapeEnabled = false;  // nasce na origem do objeto
+  s.velocityOverLifetimeEnabled = true;
+  s.velocityOrbitalOffset[0] = -1;
+  s.velocityOrbitalZ = scene::particleCurveDefault(90);
+  ParticleEmitter emitter;
+  emitter.configure(s, 1);
+  emitter.play();
+  emitter.emit(1, kIdentity);
+  for (u32 frame = 0; frame < 30; ++frame) emitter.simulate(1.0f / 30, kIdentity);
+  std::vector<ParticleInstance> out;
+  emitter.build(kIdentity, kCamera, out);
+  AE_EXPECT_TRUE(out.size() == 1, "uma partícula");
+  // Um segundo a 90°/s em volta de (-1, 0, 0): sai de (0, 0, 0) e chega a (-1, 1, 0).
+  AE_EXPECT_TRUE(std::abs(out[0].position[0] + 1) < 0.05f && std::abs(out[0].position[1] - 1) < 0.05f, "um quarto de volta");
+  // Radial empurra para fora do centro sem girar.
+  s.velocityOrbitalZ = scene::particleCurveDefault(0);
+  s.velocityRadial = scene::particleCurveDefault(1);
+  ParticleEmitter pushed;
+  pushed.configure(s, 1);
+  pushed.play();
+  pushed.emit(1, kIdentity);
+  for (u32 frame = 0; frame < 30; ++frame) pushed.simulate(1.0f / 30, kIdentity);
+  out.clear();
+  pushed.build(kIdentity, kCamera, out);
+  AE_EXPECT_TRUE(out.size() == 1 && std::abs(out[0].position[0] - 1) < 0.05f && std::abs(out[0].position[1]) < 0.01f,
+                 "raio de 1 m para 2 m");
+  // Sub-emissores extras ouvem o acontecimento que declaram.
+  s.subEmittersEnabled = true;
+  s.subEmitterExtra[1] = 7;
+  s.subEmitterExtraType[1] = 2;
+  emitter.configure(s, 1);
+  AE_EXPECT_TRUE(emitter.wantsEvents(2) && !emitter.wantsEvents(0) && !emitter.wantsEvents(1), "extra de morte");
 }
 
 AE_TEST(g6a_mesh_particles_carry_orientation_and_three_sizes) {
@@ -233,6 +273,25 @@ AE_TEST(g6a_line_renderer_draws_stretched_segments_through_the_particle_pass) {
                  projectileBack.detach[1] == 7 && projectileBack.forwardAxis == scene::VfxForwardAxis::NegativeZ, "Projétil ida e volta");
 }
 
+AE_TEST(g6a_distortion_blend_reaches_the_batch_with_its_strength) {
+  scene::ParticleSystem source;
+  source.materialBlend = scene::ParticleBlend::Distortion;
+  source.materialDistortion = 100;
+  scene::ParticleSystem back;
+  AE_EXPECT_TRUE(roundTrip(source, back) && back.materialBlend == scene::ParticleBlend::Distortion && back.materialDistortion == 100,
+                 "Distorção e força preservadas");
+  ParticleEmitter emitter;
+  emitter.configure(source, 1);
+  const auto push = renderer::particles::particlePushConstants(emitter.material(), 0, 1000, 500, false);
+  AE_EXPECT_TRUE((push.layers[3] & renderer::particles::kParticleFlagDistortion) != 0 &&
+                 (push.layers[3] & renderer::particles::kParticleFlagAdditive) == 0 && push.sheet[2] == 100,
+                 "lote distorce na força pedida, sem soma");
+  source.materialBlend = scene::ParticleBlend::Additive;
+  emitter.configure(source, 1);
+  AE_EXPECT_TRUE((renderer::particles::particlePushConstants(emitter.material(), 0, 1000, 500, false).layers[3] &
+                  renderer::particles::kParticleFlagDistortion) == 0, "aditivo não distorce");
+}
+
 AE_TEST(g6a_unity_particle_system_converts_module_by_module) {
   resources::UnityYamlDocument document;
   std::string error;
@@ -352,7 +411,7 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
       "  m_Script: {fileID: 11500000, guid: e4ec900128fbff24683f8f2aac8c2192, type: 3}\n  m_Name: Tempestade\n"
       "  WeatherTypeName: Thunderstorm\n  FogDensity: 0.005\n  WindIntensity: 1\n  ParticleEffectAmount: 1000\n"
       "  PrecipitationWeatherType: 0\n  UseLightning: 0\n  TemperatureType: 1\n  CloudLevel: 4\n  ShaderControl: 0\n"
-      "  UseWeatherEffect: 0\n  UseWeatherSound: 1\n  WeatherVolume: 0.8\n"
+      "  UseWeatherEffect: 0\n  UseWeatherSound: 0\n  WeatherVolume: 0.8\n"
       "  WeatherSound: {fileID: 8300000, guid: 44444444444444444444444444444444, type: 3}\n";
   resources::UnityYamlDocument document;
   std::string error;

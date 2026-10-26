@@ -1,0 +1,33 @@
+{
+  "format": 1,
+  "prefabs": 27,
+  "opened": 18,
+  "supported": 2,
+  "approximated_without_visible_loss": 14,
+  "partial_with_visible_loss": 2,
+  "refused": 9,
+  "without_visible_loss_ratio": 0.592593,
+  "particle_systems": 21,
+  "lights": 0,
+  "audio_sources": 1,
+  "line_renderers": 1,
+  "scripts": 1,
+  "unistorm_weather_types": 33,
+  "unistorm_cloud_profiles": 3,
+  "unistorm_refused": 0,
+  "losses": {
+    "Material da linha sem conversão ": 1,
+    "Script DespawnObjectUniStorm sem equivalente na Astra: o efeito fica sem o comportamento dele.": 1
+  },
+  "approximations": {
+    "Arco da forma em modo Laço/Vai e volta emite pelo arco inteiro, sorteado.": 2,
+    "Billboard horizontal/vertical vira billboard na Vista.": 3,
+    "Cantos e pontas arredondados da Linha ficam retos.": 1,
+    "Esticar pela velocidade da câmera não existe na Astra.": 10,
+    "Herdar velocidade no modo Atual vira Inicial.": 1,
+    "Material embutido da Unity (Default-Particle) vira o ponto suave da Astra.": 1,
+    "Registro antigo de modificações do prefab ignorado (os objetos já trazem os valores).": 3,
+    "Ruído com força por eixo usa a força de X nos três.": 4,
+    "Valores fora do domínio da Astra foram levados ao limite mais próximo.": 9
+  }
+}

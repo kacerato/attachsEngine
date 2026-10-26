@@ -126,7 +126,7 @@ AE_TEST(particle_system_archive_rejects_unknown_ids_versions_and_ranges) {
   auto text = serialize(source);
   {
     std::istringstream in(text);
-    AE_EXPECT_TRUE(!target.read(in, 4), "versão futura recusada");
+    AE_EXPECT_TRUE(!target.read(in, 5), "versão futura recusada");
   }
   {
     auto bad = text;

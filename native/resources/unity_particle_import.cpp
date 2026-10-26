@@ -42,7 +42,7 @@ bool flag(const Node &node, std::string_view key, bool fallback) {
 bool enabled(const Node *module) { return module && flag(*module, "enabled", false); }
 void vector3(const Node &node, std::string_view key, float (&out)[3], const float (&fallback)[3]) {
   const auto *value = node.get(key);
-  for (u32 c = 0; c < 3; ++c) out[c] = value ? number(*value, std::string_view("xyz" + c, 1), fallback[c]) : fallback[c];
+  for (u32 c = 0; c < 3; ++c) out[c] = value ? number(*value, std::string_view("xyz").substr(c, 1), fallback[c]) : fallback[c];
 }
 i64 localReference(const Node *node) {
   UnityObjectReference reference;
@@ -471,14 +471,18 @@ bool convertUnityParticleSystem(const Node &system, const Node *renderer, UnityP
     s.velocityZ = minMax(velocity->get("z"), -1, s.velocityZ);
     s.velocitySpace = flag(*velocity, "inWorldSpace", false) ? scene::ParticleSimulationSpace::World : scene::ParticleSimulationSpace::Local;
     s.speedModifier = minMax(velocity->get("speedModifier"), 1, s.speedModifier);
-    if (s.velocityOverLifetimeEnabled)
-      for (const char *orbital : {"orbitalX", "orbitalY", "orbitalZ", "radial", "orbitalOffsetX", "orbitalOffsetY", "orbitalOffsetZ"}) {
-        const auto value = minMax(velocity->get(orbital), 1, scene::particleCurveDefault(0));
-        if (value.constantMax != 0 || value.constantMin != 0 || (value.usesCurves() && value.multiplier != 0)) {
-          notes.loss("Velocidade orbital/radial (Velocity over Lifetime) sem consumidor: as partículas não giram em volta do centro.");
-          break;
-        }
-      }
+    // Órbita em radianos/s na Unity; velocidade angular é pseudovetor: na
+    // reflexão em Z, X e Y trocam de sinal e Z fica.
+    s.velocityOrbitalX = minMax(velocity->get("orbitalX"), -kDegreesPerRadian, s.velocityOrbitalX);
+    s.velocityOrbitalY = minMax(velocity->get("orbitalY"), -kDegreesPerRadian, s.velocityOrbitalY);
+    s.velocityOrbitalZ = minMax(velocity->get("orbitalZ"), kDegreesPerRadian, s.velocityOrbitalZ);
+    s.velocityRadial = minMax(velocity->get("radial"), 1, s.velocityRadial);
+    const auto offset = [&](const char *key) {
+      return constantOf(minMax(velocity->get(key), 1, scene::particleCurveDefault(0)), notes, "Centro da órbita");
+    };
+    s.velocityOrbitalOffset[0] = offset("orbitalOffsetX");
+    s.velocityOrbitalOffset[1] = offset("orbitalOffsetY");
+    s.velocityOrbitalOffset[2] = -offset("orbitalOffsetZ");
   }
   if (const auto *inherit = system.get("InheritVelocityModule"); enabled(inherit)) {
     s.inheritVelocityEnabled = true;
@@ -574,7 +578,13 @@ bool convertUnityParticleSystem(const Node &system, const Node *renderer, UnityP
       if (!emitter) return;
       i64 *slot = type == 0 ? &result.subEmitterBirth : type == 1 ? &result.subEmitterCollision : type == 2 ? &result.subEmitterDeath : nullptr;
       if (!slot) { notes.loss("Sub-emissor por gatilho ou manual sem consumidor."); return; }
-      if (*slot) { notes.loss("Mais de um sub-emissor do mesmo tipo: fica o primeiro."); return; }
+      if (*slot) {
+        // Mais um do mesmo acontecimento: vai para os extras.
+        for (auto &extra : result.extraSubEmitters)
+          if (!extra.first) { extra = {emitter, static_cast<u32>(type)}; return; }
+        notes.loss("Mais de quatro sub-emissores no sistema: os seguintes são ignorados.");
+        return;
+      }
       *slot = emitter;
     };
     if (const auto *list = sub->get("subEmitters"); list && list->kind == Node::Kind::Sequence) {

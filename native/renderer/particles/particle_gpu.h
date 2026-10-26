@@ -21,6 +21,8 @@ inline constexpr u32 kParticleFlagOriented = 1u << 4;
 inline constexpr u32 kParticleAlignmentShift = 5;
 inline constexpr u32 kParticleFlagMesh = 1u << 7;
 inline constexpr u32 kParticleFlagLineUv = 1u << 8;
+// G6a: Distorção — amostra a cópia da cena deslocada (força em sheet.z).
+inline constexpr u32 kParticleFlagDistortion = 1u << 9;
 
 struct ParticlePushConstants {
   float tint[4]{};     // rgb = tinta × emissão; w = tempo em segundos
@@ -62,10 +64,12 @@ inline ParticlePushConstants particlePushConstants(const ParticleMaterialParamet
                 (projectSlot != ~0u ? kParticleFlagProjectTexture : 0u) |
                 (m.oriented ? kParticleFlagOriented : 0u) | ((m.alignment & 3u) << kParticleAlignmentShift) |
                 (m.renderMode == static_cast<u32>(scene::ParticleRenderMode::Mesh) ? kParticleFlagMesh : 0u) |
-                (m.lineUv ? kParticleFlagLineUv : 0u);
+                (m.lineUv ? kParticleFlagLineUv : 0u) |
+                (m.blend == static_cast<u32>(scene::ParticleBlend::Distortion) ? kParticleFlagDistortion : 0u);
   if (projectSlot != ~0u) std::memcpy(&p.stretch[3], &projectSlot, sizeof projectSlot);
   p.sheet[0] = m.sheetTiles[0];
   p.sheet[1] = m.sheetTiles[1];
+  p.sheet[2] = m.distortion;
   return p;
 }
 

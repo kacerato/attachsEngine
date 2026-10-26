@@ -14,7 +14,9 @@
 #include "resources/unity_yaml.h"
 #include "scene/particle_system.h"
 
+#include <array>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace ae::resources {
@@ -31,6 +33,8 @@ struct UnityParticleImport {
   i64 collisionPlanes[2]{};
   i64 subEmitterBirth = 0, subEmitterCollision = 0, subEmitterDeath = 0;
   i64 lightTemplate = 0;
+  // Mais sub-emissores (fileID do ParticleSystem, acontecimento 0/1/2).
+  std::array<std::pair<i64, u32>, scene::ParticleSystemSettings::kExtraSubEmitters> extraSubEmitters{};
   std::vector<std::string> losses, approximations;
 };
 

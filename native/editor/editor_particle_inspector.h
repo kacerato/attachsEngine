@@ -17,7 +17,7 @@ namespace ae::editor {
 
 inline constexpr std::string_view kParticlePreviewRow = "preview";
 
-inline constexpr std::array<std::string_view, 350> particleInspectorOrder{{
+inline constexpr std::array<std::string_view, 383> particleInspectorOrder{{
   // Principal
   kParticlePreviewRow, "duration", "looping", "prewarm",
   "start_delay_mode", "start_delay", "start_delay_min",
@@ -60,6 +60,11 @@ inline constexpr std::array<std::string_view, 350> particleInspectorOrder{{
   "velocity_y.max", "velocity_y.min", "velocity_z_mode", "velocity_z", "velocity_z_min", "velocity_z_multiplier",
   "velocity_z.max", "velocity_z.min", "velocity_space", "speed_modifier_mode", "speed_modifier",
   "speed_modifier_min", "speed_modifier_multiplier", "speed_modifier.max", "speed_modifier.min",
+  "velocity_orbital_x_mode", "velocity_orbital_x", "velocity_orbital_x_min", "velocity_orbital_x_multiplier", "velocity_orbital_x.max", "velocity_orbital_x.min",
+  "velocity_orbital_y_mode", "velocity_orbital_y", "velocity_orbital_y_min", "velocity_orbital_y_multiplier", "velocity_orbital_y.max", "velocity_orbital_y.min",
+  "velocity_orbital_z_mode", "velocity_orbital_z", "velocity_orbital_z_min", "velocity_orbital_z_multiplier", "velocity_orbital_z.max", "velocity_orbital_z.min",
+  "velocity_orbital_offset_x", "velocity_orbital_offset_y", "velocity_orbital_offset_z",
+  "velocity_radial_mode", "velocity_radial", "velocity_radial_min", "velocity_radial_multiplier", "velocity_radial.max", "velocity_radial.min",
   "limit_velocity_enabled", "limit_speed_mode", "limit_speed", "limit_speed_min", "limit_speed_multiplier",
   "limit_speed.max", "limit_speed.min", "limit_dampen", "limit_drag", "force_over_lifetime_enabled", "force_x_mode",
   "force_x", "force_x_min", "force_x_multiplier", "force_x.max", "force_x.min", "force_y_mode", "force_y",
@@ -78,6 +83,7 @@ inline constexpr std::array<std::string_view, 350> particleInspectorOrder{{
   // Colisão e sub-emissores (P2b)
   "collision_enabled", "collision_type", "collision_plane_0", "collision_plane_1", "collision_dampen", "collision_bounce", "collision_lifetime_loss", "collision_min_kill_speed", "collision_radius_scale",
   "sub_emitters_enabled", "sub_emitter_birth", "sub_emitter_birth_count", "sub_emitter_collision", "sub_emitter_collision_count", "sub_emitter_death", "sub_emitter_death_count",
+  "sub_emitter_extra_0", "sub_emitter_extra_0_type", "sub_emitter_extra_1", "sub_emitter_extra_1_type", "sub_emitter_extra_2", "sub_emitter_extra_2_type",
   // Folha de textura (PK-10a): grade, linha, quadro no tempo, início e ciclos
   "texture_sheet_enabled", "sheet_tiles_x", "sheet_tiles_y", "sheet_animation", "sheet_row_mode", "sheet_row",
   "sheet_frame_mode", "sheet_frame", "sheet_frame_min", "sheet_frame_multiplier", "sheet_frame.max", "sheet_frame.min",
@@ -94,7 +100,7 @@ inline constexpr std::array<std::string_view, 350> particleInspectorOrder{{
   "material", "material_blend", "material_texture", "material_tint", "material_tint_r", "material_tint_g", "material_tint_b", "material_emission",
   "material_scroll", "material_scroll_x", "material_scroll_y", "material_noise", "material_noise_scale",
   "material_noise_scroll_x", "material_noise_scroll_y", "material_noise_strength", "material_noise_distortion",
-  "material_mask", "material_center_glow", "material_center_glow_power", "material_soft_distance",
+  "material_mask", "material_center_glow", "material_center_glow_power", "material_soft_distance", "material_distortion",
 }};
 
 // Interruptor do módulo, desenhado no cabeçalho da seção (Unity: a caixa ao
@@ -184,6 +190,10 @@ inline const char *particleSlotName(std::string_view slot) {
   if (base == "velocity_y") return "Velocidade Y";
   if (base == "velocity_z") return "Velocidade Z";
   if (base == "speed_modifier") return "Modificador de velocidade";
+  if (base == "velocity_orbital_x") return "Órbita X";
+  if (base == "velocity_orbital_y") return "Órbita Y";
+  if (base == "velocity_orbital_z") return "Órbita Z";
+  if (base == "velocity_radial") return "Radial";
   if (base == "limit_speed") return "Velocidade máxima";
   if (base == "force_x") return "Força X";
   if (base == "force_y") return "Força Y";

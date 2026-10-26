@@ -36,6 +36,13 @@ struct InstancedRenderer::ParticleResources {
   bool timestampPending = false;
   bool softAvailable = false;
   bool projectTextures = false;  // PK-10a: variante bindless com set 2
+  // G6a: cópia da cor da cena em meia resolução para a Distorção. Só existe
+  // com o passe de pós dedicado (a cena numa imagem própria) e blit linear no
+  // formato; até a primeira cópia o binding 2 aponta para o atlas.
+  rhi::VulkanImage sceneCopy;
+  rhi::VulkanSampler copySampler;
+  u32 copyWidth = 0, copyHeight = 0;
+  bool copyAvailable = false, copyBound = false;
   renderer::particles::ParticleFrame frame;
   renderer::particles::ParticleRenderStats stats;
 };
@@ -92,15 +99,38 @@ bool InstancedRenderer::createParticleResources() {
   depth.addressU = depth.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   if (!p.depthSampler.initialize(device_, depth)) return false;
 
-  VkDescriptorSetLayoutBinding bindings[2]{};
+  // G6a: cópia da cena para a Distorção (meia resolução, filtro linear).
+  if (renderingPolicy_.post.dedicatedPass) {
+    VkFormatProperties formatProperties{};
+    vkGetPhysicalDeviceFormatProperties(physicalDevice_, sceneColorFormat_, &formatProperties);
+    const VkFormatFeatureFlags needed = VK_FORMAT_FEATURE_BLIT_SRC_BIT | VK_FORMAT_FEATURE_BLIT_DST_BIT |
+                                        VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT;
+    if ((formatProperties.optimalTilingFeatures & needed) == needed) {
+      p.copyWidth = std::max(1u, renderTargetWidth() / 2);
+      p.copyHeight = std::max(1u, renderTargetHeight() / 2);
+      rhi::ImageDesc copy{};
+      copy.width = p.copyWidth;
+      copy.height = p.copyHeight;
+      copy.format = sceneColorFormat_;
+      copy.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+      copy.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+      copy.memoryClass = rhi::MemoryClass::RenderTarget;
+      rhi::SamplerDesc linear{};
+      linear.addressU = linear.addressV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+      p.copyAvailable = memoryAllocator_->createImage(copy, &p.sceneCopy) && p.copySampler.initialize(device_, linear);
+    }
+  }
+
+  VkDescriptorSetLayoutBinding bindings[3]{};
   bindings[0] = {0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
   bindings[1] = {1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
+  bindings[2] = {2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr};
   VkDescriptorSetLayoutCreateInfo setInfo{};
   setInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-  setInfo.bindingCount = 2;
+  setInfo.bindingCount = 3;
   setInfo.pBindings = bindings;
   if (vkCreateDescriptorSetLayout(device_, &setInfo, nullptr, &p.setLayout) != VK_SUCCESS) return false;
-  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 2};
+  VkDescriptorPoolSize size{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 3};
   VkDescriptorPoolCreateInfo poolInfo{};
   poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
   poolInfo.maxSets = 1;
@@ -118,11 +148,12 @@ bool InstancedRenderer::createParticleResources() {
   // partícula suave nunca liga.
   const VkImageLayout depthLayout = p.softAvailable ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
                                                     : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  VkDescriptorImageInfo images[2]{
+  VkDescriptorImageInfo images[3]{
     {p.atlasSampler.handle(), p.atlas.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
-    {p.depthSampler.handle(), p.softAvailable ? depthImage_.view() : p.atlas.view(), depthLayout}};
-  VkWriteDescriptorSet writes[2]{};
-  for (u32 i = 0; i < 2; ++i) {
+    {p.depthSampler.handle(), p.softAvailable ? depthImage_.view() : p.atlas.view(), depthLayout},
+    {p.atlasSampler.handle(), p.atlas.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  VkWriteDescriptorSet writes[3]{};
+  for (u32 i = 0; i < 3; ++i) {
     writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     writes[i].dstSet = p.set;
     writes[i].dstBinding = i;
@@ -130,7 +161,7 @@ bool InstancedRenderer::createParticleResources() {
     writes[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     writes[i].pImageInfo = &images[i];
   }
-  vkUpdateDescriptorSets(device_, 2, writes, 0, nullptr);
+  vkUpdateDescriptorSets(device_, 3, writes, 0, nullptr);
 
   // Render pass: carrega cor e profundidade nos layouts finais do passe da cena.
   const VkImageLayout colorLayout = renderingPolicy_.post.dedicatedPass ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
@@ -372,6 +403,8 @@ void InstancedRenderer::destroyParticleResources() {
   if (p.pool) vkDestroyDescriptorPool(device_, p.pool, nullptr);
   if (p.setLayout) vkDestroyDescriptorSetLayout(device_, p.setLayout, nullptr);
   if (p.timestamps) vkDestroyQueryPool(device_, p.timestamps, nullptr);
+  p.sceneCopy.reset();
+  p.copySampler.shutdown();
   p.instances.reset();
   p.atlas.reset();
   delete particles_;
@@ -452,6 +485,64 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
     vkCmdWriteTimestamp(commandBuffer_, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, p.timestamps, 0);
   }
   rhiDevice_->cmdBeginDebugLabel(commandBuffer_, "Particles", 0.98f, 0.55f, 0.18f);
+  // G6a: Distorção amostra a cena como estava antes das partículas. Só copia
+  // quando algum lote distorce; sem cópia possível esses lotes não desenham.
+  const bool distorts = p.copyAvailable &&
+      std::any_of(frame.batches.begin(), frame.batches.end(), [](const auto &batch) {
+        return batch.instanceCount && batch.material.blend == static_cast<u32>(scene::ParticleBlend::Distortion);
+      });
+  if (distorts) {
+    if (!p.copyBound) {
+      // O quadro anterior terminou: trocar o descritor do atlas pela cópia é seguro.
+      const VkDescriptorImageInfo info{p.copySampler.handle(), p.sceneCopy.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+      VkWriteDescriptorSet write{};
+      write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+      write.dstSet = p.set;
+      write.dstBinding = 2;
+      write.descriptorCount = 1;
+      write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+      write.pImageInfo = &info;
+      vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+      p.copyBound = true;
+    }
+    VkImageMemoryBarrier toCopy[2]{};
+    for (auto &barrier : toCopy) {
+      barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+      barrier.srcQueueFamilyIndex = barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+      barrier.subresourceRange = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1};
+    }
+    toCopy[0].image = postSceneColor_.handle();
+    toCopy[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    toCopy[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    toCopy[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    toCopy[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    // Conteúdo anterior da cópia é descartado: o blit reescreve tudo.
+    toCopy[1].image = p.sceneCopy.handle();
+    toCopy[1].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    toCopy[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    toCopy[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    toCopy[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 2, toCopy);
+    VkImageBlit blit{};
+    blit.srcSubresource = blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
+    blit.srcOffsets[1] = {static_cast<i32>(renderTargetWidth()), static_cast<i32>(renderTargetHeight()), 1};
+    blit.dstOffsets[1] = {static_cast<i32>(p.copyWidth), static_cast<i32>(p.copyHeight), 1};
+    vkCmdBlitImage(commandBuffer_, postSceneColor_.handle(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, p.sceneCopy.handle(),
+                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+    VkImageMemoryBarrier back[2]{toCopy[0], toCopy[1]};
+    back[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    back[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    back[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    back[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    back[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    back[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    back[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    back[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    vkCmdPipelineBarrier(commandBuffer_, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 2, back);
+  }
   VkRenderPassBeginInfo begin{};
   begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   begin.renderPass = p.renderPass;
@@ -481,7 +572,8 @@ void InstancedRenderer::recordParticlePass(u32 imageIndex, float timeSeconds) {
   bool meshBuffersBound = false;
   for (const auto &batch : frame.batches) {
     if (!batch.instanceCount) continue;
-    const bool mesh = batch.material.renderMode == static_cast<u32>(scene::ParticleRenderMode::Mesh);
+    if (batch.material.blend == static_cast<u32>(scene::ParticleBlend::Distortion) && !distorts) continue;
+    const bool mesh =batch.material.renderMode == static_cast<u32>(scene::ParticleRenderMode::Mesh);
     const renderer::particles::ParticleMeshRange *range = nullptr;
     if (mesh) {
       // Malha ausente ou ainda não subida: o lote não desenha (nunca um

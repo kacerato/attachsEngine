@@ -60,6 +60,7 @@ struct ParticleMaterialParameters {
   float scroll[2]{}, noiseScroll[2]{};
   float noiseScale = 1, noiseStrength = 1, noiseDistortion = 0;
   float centerGlow = 0, centerGlowPower = 4, softDistance = 0;
+  float distortion = 0;  // G6a: pixels a 1 m (só na mistura Distorção)
   float stretchVelocityScale = 0, stretchLengthScale = 2, maxScreenSize = 0.5f;
   // PK-10a: grade da folha de textura (1x1 = imagem inteira) e a textura do
   // Material de projeto, já resolvida para o índice da biblioteca publicada
@@ -209,6 +210,8 @@ public:
   const std::vector<ParticleEvent> &births() const noexcept { return births_; }
   const std::vector<ParticleEvent> &collisions() const noexcept { return collisions_; }
   const std::vector<ParticleEvent> &deaths() const noexcept { return deaths_; }
+  // Algum sub-emissor ouve o acontecimento (0 nascer, 1 colidir, 2 morrer).
+  bool wantsEvents(u32 type) const;
   void clearEvents() { births_.clear(); collisions_.clear(); deaths_.clear(); }
 
   void play();
@@ -251,6 +254,7 @@ private:
   void collide(float dt, const float (&world)[16]);
   bool collideWorld(u32 index, const float (&previous)[3], const float (&world)[16]);
   void touched(u32 index, const float (&world)[16], const float (&normal)[3]);
+  void orbit(float dt, const float (&world)[16]);
   // Orientação 3D da partícula (quatérnio x, y, z, w) no alinhamento do sistema.
   void orientation(u32 index, const float (&world)[16], float (&q)[4]) const;
   void advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]);
@@ -262,6 +266,7 @@ private:
   BakedMinMaxCurve sizeOverLifetime_, rotationOverLifetime_;
   BakedMinMaxCurve startSizeY_, startSizeZ_, startRotationX_, startRotationY_;
   BakedMinMaxCurve sizeOverLifetimeY_, sizeOverLifetimeZ_, rotationOverLifetimeX_, rotationOverLifetimeY_;
+  BakedMinMaxCurve orbital_[3], radial_;
   BakedMinMaxCurve velocity_[3], speedModifier_, limitSpeed_, force_[3], noiseStrength_, sizeBySpeed_, rotationBySpeed_;
   BakedMinMaxGradient colorBySpeed_;
   BakedMinMaxCurve sheetFrame_, sheetStart_;

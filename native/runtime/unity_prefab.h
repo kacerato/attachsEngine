@@ -25,6 +25,8 @@ struct UnityPrefabEffectServices {
   // Malha do Render Mode Mesh: pode converter a fonte (FBX) na hora.
   UnityPrefabResolver particleMesh;
   std::vector<std::string> *notes=nullptr;
+  // Diferenças pequenas (o efeito fica parecido): ficam fora das perdas.
+  std::vector<std::string> *approximations=nullptr;
 };
 bool buildUnityPrefab(const resources::UnityPrefabImport &,resources::AssetGuid guid,const UnityPrefabResolver &,
     const UnityPrefabIdentityMap *previous,Prefab &out,UnityPrefabIdentityMap &identities,std::string &diagnostic,

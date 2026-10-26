@@ -57,7 +57,7 @@ void gradientEnds(const Node *gradient,float (&start)[4],float (&end)[4]) {
   const auto colors=std::clamp<i64>(integer(*gradient,"m_NumColorKeys",2),1,8),alphas=std::clamp<i64>(integer(*gradient,"m_NumAlphaKeys",2),1,8);
   const auto color=[&](i64 index,float (&out)[4]) {
     if(const auto *key=gradient->get("key"+std::to_string(index)))
-      for(u32 c=0;c<3;++c)out[c]=unityLinearFromSrgb(num(*key,std::string_view("rgb"+c,1),1));
+      for(u32 c=0;c<3;++c)out[c]=unityLinearFromSrgb(num(*key,std::string_view("rgb").substr(c,1),1));
   };
   const auto alpha=[&](i64 index)->float {const auto *key=gradient->get("key"+std::to_string(index));return key?std::clamp(num(*key,"a",1),0.f,1.f):1.f;};
   color(0,start);color(colors-1,end);start[3]=alpha(0);end[3]=alpha(alphas-1);
@@ -73,11 +73,18 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
   for(const auto &object:document.objects) {
     if(object.stripped)return fail(diagnostic,"Prefab Unity contém objeto stripped/instância; patches precisam de conversão específica.");
     if(object.classId==1001) {
+      // Unity até 2018.2 chama o pai de m_ParentPrefab; a 2018.2 de transição,
+      // de m_SourcePrefab. Sem pai, o asset é o próprio prefab.
       const auto *mod=object.value.get("m_Modification");UnityObjectReference parent;
-      if(object.type!="Prefab"||!ref(object.value,"m_ParentPrefab",parent)||parent.fileId||parent.external()||!mod)
+      if(object.type!="Prefab"||!(ref(object.value,"m_ParentPrefab",parent)||ref(object.value,"m_SourcePrefab",parent))||
+         parent.fileId||parent.external()||!mod)
         return fail(diagnostic,"PrefabVariant/PrefabInstance Unity exige aplicação de patches por fileID; fonte preservada.");
-      for(const char *field:{"m_Modifications","m_RemovedComponents"})if(const auto *value=mod->get(field);value&&!value->empty())
-        return fail(diagnostic,"Prefab Unity contém modificações não materializadas.");
+      // Sem prefab pai, a lista de modificações é registro antigo do editor:
+      // os objetos do arquivo já trazem os valores. Peças removidas, não.
+      if(const auto *removed=mod->get("m_RemovedComponents");removed&&!removed->empty())
+        return fail(diagnostic,"Prefab Unity contém componentes removidos não materializados.");
+      if(const auto *modifications=mod->get("m_Modifications");modifications&&!modifications->empty())
+        note(coverage.approximations,"Registro antigo de modificações do prefab ignorado (os objetos já trazem os valores).");
       UnityObjectReference root;if(!ref(object.value,"m_RootGameObject",root)||root.external()||!root.fileId||candidate.rootFileId)
         return fail(diagnostic,"Raiz de prefab Unity inválida ou duplicada.");
       candidate.rootFileId=root.fileId;continue;
@@ -175,7 +182,7 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
       if(value.light)return fail(diagnostic,"Light Unity duplicada no mesmo GameObject.");
       UnityPrefabLight light;
       light.type=static_cast<u32>(std::clamp<i64>(integer(node,"m_Type",2),0,3));
-      if(const auto *color=node.get("m_Color"))for(u32 c=0;c<3;++c)light.color[c]=std::clamp(num(*color,std::string_view("rgb"+c,1),1),0.f,1.f);
+      if(const auto *color=node.get("m_Color"))for(u32 c=0;c<3;++c)light.color[c]=std::clamp(num(*color,std::string_view("rgb").substr(c,1),1),0.f,1.f);
       light.intensity=std::max(0.f,num(node,"m_Intensity",1));light.range=std::max(.01f,num(node,"m_Range",10));
       light.spotAngle=std::clamp(num(node,"m_SpotAngle",30),1.f,179.f);
       if(const auto *shadows=node.get("m_Shadows"))light.shadows=static_cast<u32>(std::clamp<i64>(integer(*shadows,"m_Type",0),0,2));
@@ -272,6 +279,7 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
     auto &p=*value.particle;
     for(auto &plane:p.collisionPlanes)if(plane){const auto found=transforms.find(plane);plane=found==transforms.end()?0:found->second;}
     for(i64 *sub:{&p.subEmitterBirth,&p.subEmitterCollision,&p.subEmitterDeath})*sub=*sub?ownerOf(*sub):0;
+    for(auto &extra:p.extraSubEmitters)extra.first=extra.first?ownerOf(extra.first):0;
     p.lightTemplate=p.lightTemplate?ownerOf(p.lightTemplate):0;
     // Quantos o sub-sistema emite por acontecimento: as rajadas dele (a Unity
     // dispara a emissão do sub-sistema no evento), no mínimo uma partícula.
@@ -289,7 +297,9 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
   // Na Unity o sub-emissor só emite pelos acontecimentos do pai, nunca sozinho.
   for(const auto &value:candidate.objects) {
     if(!value.particle||!value.particle->settings.subEmittersEnabled)continue;
-    for(const i64 sub:{value.particle->subEmitterBirth,value.particle->subEmitterCollision,value.particle->subEmitterDeath}) {
+    std::vector<i64> subs{value.particle->subEmitterBirth,value.particle->subEmitterCollision,value.particle->subEmitterDeath};
+    for(const auto &extra:value.particle->extraSubEmitters)subs.push_back(extra.first);
+    for(const i64 sub:subs) {
       const auto found=gameObjects.find(sub);
       if(sub&&found!=gameObjects.end()&&candidate.objects[found->second].particle)
         candidate.objects[found->second].particle->settings.playOnAwake=false;
@@ -344,6 +354,10 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
         value.laser=laser;
         if(!value.line)loss("Hovl_Laser sem Line Renderer no objeto.");
         approximate("Laser: a rolagem do ruído pelo comprimento (NoiseTextureLength) segue a da imagem principal.");
+      } else if(name.find("Demo")!=std::string::npos) {
+        // Script da cena de demonstração do pacote (teclas, troca de efeito):
+        // não faz parte da aparência do efeito.
+        approximate("Script de demonstração "+name+" não é convertido (controle da cena de exemplo do pacote).");
       } else {
         loss("Script "+(name.empty()?"de GUID "+script.guid.text():name)+" sem equivalente na Astra: o efeito fica sem o comportamento dele.");
       }

@@ -61,7 +61,7 @@ struct EngineCapability {
 
 // A lista. Acrescentar uma linha aqui é barato; MUDAR um estado é uma
 // afirmação sobre o código e deve vir junto do consumidor que a sustenta.
-inline constexpr std::array<EngineCapability, 82> engineCapabilities{{
+inline constexpr std::array<EngineCapability, 83> engineCapabilities{{
   // --- Luz -----------------------------------------------------------------
   {"render.light.directional", "Sol direcional", CapabilityState::Implemented,
    "renderer/punctual_lights.h + rhi/shaders/material_shading.glsl", ""},
@@ -248,6 +248,9 @@ inline constexpr std::array<EngineCapability, 82> engineCapabilities{{
   {"render.particles.texture_sheet", "Folha de textura (Texture Sheet Animation)", CapabilityState::Implemented,
    "renderer/particles/particle_simulation.cpp + rhi/shaders/particle_billboard.vert",
    "Modo Grid da Unity: Colunas x Linhas, Folha inteira ou Uma linha (escolhida ou sorteada), Quadro no tempo (curva), Quadro inicial e Ciclos; sem modo Sprites nem mistura entre quadros"},
+  {"render.particles.distortion", "Distorção das partículas", CapabilityState::DeviceLimited,
+   "platform/android/instanced_particles.inl + rhi/shaders/particle_material.frag",
+   "G6a: Mistura Distorção desloca uma cópia em meia resolução da cena pelo mapa normal do Material (ou pela lente da forma própria), na força em pixels a 1 m; exige o passe de pós dedicado e cópia por blit; partículas de trás não entram na cópia"},
   {"render.particles.soft", "Partícula suave por profundidade", CapabilityState::DeviceLimited,
    "platform/android/instanced_particles.inl", "Exige profundidade da cena amostrável; sem ela a partícula fica com borda dura"},
   {"render.particles.mesh", "Partícula de malha e alinhamentos", CapabilityState::Implemented,

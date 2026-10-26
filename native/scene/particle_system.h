@@ -52,7 +52,9 @@ enum class ParticleScalingMode : u32 { Hierarchy = 0, Local = 1, Shape = 2 };
 // Collision Type da Unity: planos escolhidos ou o mundo (colisores da física).
 enum class ParticleCollisionType : u32 { Planes = 0, World = 1 };
 enum class ParticleSortMode : u32 { None = 0, ByDistance = 1, OldestInFront = 2, YoungestInFront = 3 };
-enum class ParticleBlend : u32 { AlphaBlend = 0, Additive = 1 };
+// G6a: Distorção desloca a imagem da cena atrás da partícula pelo mapa normal
+// do material (calor, onda de choque, vidro mágico).
+enum class ParticleBlend : u32 { AlphaBlend = 0, Additive = 1, Distortion = 2 };
 // Texturas próprias, geradas pela engine (renderer/particles/particle_textures):
 // nenhuma vem de pacote da Asset Store. Textura do projeto fica para o P2, junto
 // do Texture Sheet, porque exige o caminho de residência da biblioteca.
@@ -228,6 +230,13 @@ struct ParticleSystemSettings {
   ParticleMinMaxCurve velocityX = particleCurveDefault(0), velocityY = particleCurveDefault(0), velocityZ = particleCurveDefault(0);
   ParticleSimulationSpace velocitySpace = ParticleSimulationSpace::Local;
   ParticleMinMaxCurve speedModifier = particleCurveDefault(1);
+  // G6a: Orbital e Radial (Unity Velocity over Lifetime): giro em volta do
+  // centro (graus/s por eixo) e afastamento dele (m/s); o centro é a origem do
+  // objeto mais o deslocamento.
+  ParticleMinMaxCurve velocityOrbitalX = particleCurveDefault(0), velocityOrbitalY = particleCurveDefault(0),
+                      velocityOrbitalZ = particleCurveDefault(0);
+  float velocityOrbitalOffset[3]{0, 0, 0};
+  ParticleMinMaxCurve velocityRadial = particleCurveDefault(0);
   // Limit Velocity over Lifetime: teto de velocidade com Dampen e Drag.
   bool limitVelocityEnabled = false;
   ParticleMinMaxCurve limitSpeed = particleCurveDefault(1);
@@ -292,6 +301,11 @@ struct ParticleSystemSettings {
   bool subEmittersEnabled = false;
   u64 subEmitterBirth = 0, subEmitterCollision = 0, subEmitterDeath = 0;
   float subEmitterBirthCount = 1, subEmitterCollisionCount = 3, subEmitterDeathCount = 5;
+  // G6a: até três sub-sistemas a mais, cada um com o seu acontecimento. Como na
+  // Unity, cada um emite as próprias rajadas no ponto (ao menos uma partícula).
+  static constexpr usize kExtraSubEmitters = 3;
+  std::array<u64, kExtraSubEmitters> subEmitterExtra{};
+  std::array<u32, kExtraSubEmitters> subEmitterExtraType{};  // 0 nascer, 1 colidir, 2 morrer
 
   // --- Renderização -------------------------------------------------------
   ParticleRenderMode renderMode = ParticleRenderMode::Billboard;
@@ -320,6 +334,8 @@ struct ParticleSystemSettings {
   float materialCenterGlow = 0;
   float materialCenterGlowPower = 4;
   float materialSoftDistance = 0;
+  // G6a: deslocamento da Distorção em pixels a 1 m da câmera (cai com a distância).
+  float materialDistortion = 0;
 
   // --- Material de projeto e Folha de textura (PK-10a) -----------------------
   // Como o Particle System Renderer da Unity: um Material do projeto com shader
@@ -443,11 +459,13 @@ inline bool particleShapeBox(const ComponentValue &v) {
 }
 inline bool particleStretched(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::StretchedBillboard; }
 inline bool particleMeshMode(const ComponentValue &v) { return particleSystem(v).renderMode == ParticleRenderMode::Mesh; }
+inline bool particleDistorts(const ComponentValue &v) { return particleSystem(v).materialBlend == ParticleBlend::Distortion; }
 inline bool particleAlignable(const ComponentValue &v) {
   const auto mode = particleSystem(v).renderMode;
   return mode == ParticleRenderMode::Billboard || mode == ParticleRenderMode::Mesh;
 }
 inline bool particleSize3DOn(const ComponentValue &v) { return particleSystem(v).size3D; }
+inline bool particleVelocityOn(const ComponentValue &v) { return particleSystem(v).velocityOverLifetimeEnabled; }
 inline bool particleRotation3DOn(const ComponentValue &v) { return particleSystem(v).rotation3D; }
 inline bool particleSizeAxesOn(const ComponentValue &v) {
   const auto &p = particleSystem(v);
@@ -491,9 +509,10 @@ inline constexpr std::array<ComponentEnumOption, 4> particleMeshShapeOptions{{
 inline constexpr std::array<ComponentEnumOption, 3> particleScalingOptions{{
   {0, "Hierarquia"}, {1, "Local"}, {2, "Forma"}}};
 inline constexpr std::array<ComponentEnumOption, 2> particleCollisionTypeOptions{{{0, "Planos"}, {1, "Mundo"}}};
+inline constexpr std::array<ComponentEnumOption, 3> particleSubEmitterEventOptions{{{0, "Ao nascer"}, {1, "Ao colidir"}, {2, "Ao morrer"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleSortOptions{{
   {0, "Nenhuma"}, {1, "Por distância"}, {2, "Mais antigas na frente"}, {3, "Mais novas na frente"}}};
-inline constexpr std::array<ComponentEnumOption, 2> particleBlendOptions{{{0, "Mistura"}, {1, "Aditivo"}}};
+inline constexpr std::array<ComponentEnumOption, 3> particleBlendOptions{{{0, "Mistura"}, {1, "Aditivo"}, {2, "Distorção"}}};
 inline constexpr std::array<ComponentEnumOption, 8> particleTextureOptions{{
   {0, "Ponto suave"}, {1, "Brilho"}, {2, "Chama"}, {3, "Fumaça"}, {4, "Faísca"}, {5, "Anel"}, {6, "Estrela"}, {7, "Quadrado"}}};
 inline constexpr std::array<ComponentEnumOption, 4> particleNoiseOptions{{
@@ -531,7 +550,15 @@ inline bool particleHasSubEmitters(const ComponentValue &v) { return particleSys
 #include "scene/generated/particle_system_particleSystemEnums.inc"
 // Planos e sub-sistemas são objetos da cena, com referência persistente
 // remapeada por clone e prefab como qualquer outra.
-inline constexpr std::array<ComponentObjectReference, 6> particleSystemReferences{{
+template <usize N> constexpr ComponentObjectReference particleExtraSubEmitter(const char *name) {
+  return {N == 0 ? "sub_emitter_extra_0" : N == 1 ? "sub_emitter_extra_1" : "sub_emitter_extra_2", name, "astra.effects.particle_system",
+          ObjectReferenceScope::Other, "Nenhum",
+          [](const ComponentValue &v) { return particleSystem(v).subEmitterExtra[N]; },
+          [](ComponentValue &v, u64 id) { particleSystem(v).subEmitterExtra[N] = id; },
+          {"Sub-emissores", "", "Mais um sistema disparado no acontecimento escolhido; emite as rajadas dele", particleHasSubEmitters,
+           nullptr, "render.particles.sub_emitters", "runtime/scene_particles.cpp"}};
+}
+inline constexpr std::array<ComponentObjectReference, 9> particleSystemReferences{{
   {"collision_plane_0", "Plano 1", "", ObjectReferenceScope::Other, "Nenhum",
    [](const ComponentValue &v) { return particleSystem(v).collisionPlane0; },
    [](ComponentValue &v, u64 id) { particleSystem(v).collisionPlane0 = id; },
@@ -562,6 +589,7 @@ inline constexpr std::array<ComponentObjectReference, 6> particleSystemReference
    [](ComponentValue &v, u64 id) { particleSystem(v).lightTemplate = id; },
    {"Luzes", "", "Objeto com Luz pontual ou spot: cor, intensidade, alcance e unidade copiados (pode ficar inativo)",
     particleLightsOn, nullptr, "render.particles.lights", "runtime/scene_particles.cpp"}},
+  particleExtraSubEmitter<0>("Extra 1"), particleExtraSubEmitter<1>("Extra 2"), particleExtraSubEmitter<2>("Extra 3"),
 }};
 
 // Material do projeto (PK-10a). Ausente = material embutido do componente.
@@ -621,7 +649,7 @@ inline const ComponentType ParticleSystem::descriptor{
   particleSystemResources, {}, {}, {}, particleSystemMethods, particleSystemEvents};
 
 inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
-  static constexpr std::array<CurveSlot, 58> slots{{
+  static constexpr std::array<CurveSlot, 66> slots{{
     {"start_delay.min", &ParticleSystem::startDelay, false}, {"start_delay.max", &ParticleSystem::startDelay, true},
     {"start_lifetime.min", &ParticleSystem::startLifetime, false}, {"start_lifetime.max", &ParticleSystem::startLifetime, true},
     {"start_speed.min", &ParticleSystem::startSpeed, false}, {"start_speed.max", &ParticleSystem::startSpeed, true},
@@ -654,6 +682,10 @@ inline std::span<const ParticleSystem::CurveSlot> ParticleSystem::curveSlots() {
     {"rotation_over_lifetime_x.max", &ParticleSystem::rotationOverLifetimeX, true},
     {"rotation_over_lifetime_y.min", &ParticleSystem::rotationOverLifetimeY, false},
     {"rotation_over_lifetime_y.max", &ParticleSystem::rotationOverLifetimeY, true},
+    {"velocity_orbital_x.min", &ParticleSystem::velocityOrbitalX, false}, {"velocity_orbital_x.max", &ParticleSystem::velocityOrbitalX, true},
+    {"velocity_orbital_y.min", &ParticleSystem::velocityOrbitalY, false}, {"velocity_orbital_y.max", &ParticleSystem::velocityOrbitalY, true},
+    {"velocity_orbital_z.min", &ParticleSystem::velocityOrbitalZ, false}, {"velocity_orbital_z.max", &ParticleSystem::velocityOrbitalZ, true},
+    {"velocity_radial.min", &ParticleSystem::velocityRadial, false}, {"velocity_radial.max", &ParticleSystem::velocityRadial, true},
   }};
   return slots;
 }
@@ -761,7 +793,7 @@ inline bool ParticleSystem::read(std::istream &in, u32 version) {
       }
     if (!applied) return false;
   }
-  if (!(in >> count) || count > 64) return false;
+  if (!(in >> count) || count > 128) return false;
   for (u32 i = 0; i < count; ++i) {
     std::string id, text;
     if (!(in >> id >> std::quoted(text)) || !fresh(id)) return false;

@@ -65,13 +65,23 @@ constexpr HovlShader hovlShaders[]{
   {"145bae762d8de8f4c8fb1b284128fae7","DissolveNoise","_MainTex",UnityParticleFamily::AlphaBlend,true},
   {"68f568f887edc9d449e3a18dafbe5027","LightGlow","_MainTex",UnityParticleFamily::Additive,true},
   {"734ad3a5e0f9f384683a822995bcecd3","SmoothSmoke","_MainTex",UnityParticleFamily::AlphaBlend,false},
+  // Shaders de partícula embutidos da Unity (fileID do recurso embutido): os
+  // Legacy multiplicam a cor por 2; os Standard decidem a mistura pelo _Mode.
+  {"builtin:200","Particles/Additive","_MainTex",UnityParticleFamily::Additive,false},
+  {"builtin:202","Particles/Additive (Soft)","_MainTex",UnityParticleFamily::Additive,false},
+  {"builtin:203","Particles/Alpha Blended","_MainTex",UnityParticleFamily::AlphaBlend,false},
+  {"builtin:210","Particles/Standard Surface","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"builtin:211","Particles/Standard Unlit","_MainTex",UnityParticleFamily::AlphaBlend,false},
 };
 const HovlShader *hovlShader(std::string_view guid) {
   for(const auto &shader:hovlShaders) if(shader.guid==guid) return &shader;
   return nullptr;
 }
 UnityShader shaderFrom(std::string_view guid,std::string_view id) {
-  if(guid=="0000000000000000f000000000000000"||guid.empty()) return id=="46"?UnityShader::Standard:id=="45"?UnityShader::StandardSpecular:UnityShader::None;
+  if(guid=="0000000000000000f000000000000000"||guid.empty()) {
+    if(hovlShader("builtin:"+std::string(id))) return UnityShader::Hovl;
+    return id=="46"?UnityShader::Standard:id=="45"?UnityShader::StandardSpecular:UnityShader::None;
+  }
   if(id!="4800000") return UnityShader::None;
   if(guid=="933532a4fcc9baf4fa0491de14d08ed7") return UnityShader::UrpLit;
   if(guid=="8d2bb70cbf9db8d4da26e15b26e74248") return UnityShader::UrpSimpleLit;
@@ -93,6 +103,7 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   std::map<std::string,UnityMaterialTexture> textures;
   enum class Section {None,Textures,Floats,Colors,Keywords,InvalidKeywords};Section section=Section::None;
   std::string keywords;
+  std::set<std::string> badTextures;
   std::string current;bool material=false;UnityShader shader=UnityShader::None;bool shaderSeen=false;std::string shaderGuid;
   std::istringstream lines{std::string(text)};std::string storage;
   const auto fail=[&](const std::string &why) {out={};out.diagnostic=why;return false;};
@@ -106,6 +117,7 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     if(line.starts_with("m_Shader:")) {
       shaderSeen=true;
       shaderGuid=std::string(member(line,"guid"));
+      if(shaderGuid.empty()||shaderGuid=="0000000000000000f000000000000000") shaderGuid="builtin:"+std::string(member(line,"fileID"));
       shader=shaderFrom(member(line,"guid"),member(line,"fileID"));
       if(shader==UnityShader::None) result.unsupported.push_back("Shader sem conversor: "+std::string(line.substr(9)));
       continue;
@@ -113,9 +125,13 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     if(line.starts_with("m_TexEnvs:")) {section=Section::Textures;current.clear();continue;}
     if(line.starts_with("m_Floats:")||line.starts_with("m_Ints:")) {section=Section::Floats;continue;}
     if(line.starts_with("m_Colors:")) {section=Section::Colors;continue;}
+    // Listas e mapas do editor da Unity (passes desligados, tags, travas)
+    // não descrevem a aparência.
+    if(line.starts_with("disabledShaderPasses:")||line.starts_with("stringTagMap:")||line.starts_with("m_SavedProperties:")||
+       line.starts_with("m_LockedProperties:")||line.starts_with("m_BuildTextureStacks:")) {section=Section::None;current.clear();continue;}
     if(line.starts_with("- ")) {
       if(section==Section::Keywords) {keywords+=" "+std::string(line.substr(2))+" ";continue;}
-      if(section==Section::InvalidKeywords) continue;
+      if(section==Section::InvalidKeywords||section==Section::None) continue;
       const auto colon=line.find(':');if(colon==line.npos) return fail("Propriedade YAML sem valor.");
       current=std::string(line.substr(2,colon-2));const auto value=trim(line.substr(colon+1));
       if(section==Section::Textures) {if(textures.contains(current)) return fail("Textura duplicada: "+current);textures[current].property=current;}
@@ -124,6 +140,8 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
         floats[current]=parsed;
       } else if(section==Section::Colors) {
         std::array<float,4> parsed;const char *keys[]{"r","g","b","a"};
+        // Parâmetros internos de fade guardam Infinity; nenhum é aparência.
+        if(value.find("Infinity")!=value.npos) continue;
         if(!vector(value,keys,parsed.data(),4)||colors.contains(current)) return fail("Cor inválida ou duplicada: "+current);
         colors[current]=parsed;
       }
@@ -134,7 +152,7 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
       if(line.starts_with("m_Texture:")) {
         const auto id=member(line,"fileID"),guid=member(line,"guid");
         if(id!="0" && (id!="2800000"||!AssetGuid::parse(guid,texture.unityGuid)||!texture.unityGuid.valid()))
-          return fail("Referência de textura não suportada: "+current);
+          {badTextures.insert(current);texture.unityGuid={};}
       } else if(line.starts_with("m_Scale:")||line.starts_with("m_Offset:")) {
         const char *keys[]{"x","y"};auto *values=line.starts_with("m_Scale:")?texture.sampling.scale:texture.sampling.offset;
         if(!vector(line,keys,values,2)||!scene::validMaterialSampling(texture.sampling)) return fail("Transformação UV inválida: "+current);
@@ -148,7 +166,11 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
   asset.channels.occlusionSource=scene::MaterialOcclusionNone;asset.channels.normalFlipY=scene::MaterialToggleOff;
   asset.surface.alphaMode=scene::MaterialAlphaOpaque;asset.surface.sides=scene::MaterialSidesSingle;
   const auto get=[&](const char *key,float fallback) {const auto it=floats.find(key);return it==floats.end()?fallback:it->second;};
+  // Fora das partículas, textura que não é imagem (render texture, sprite)
+  // continua recusando o material inteiro.
+  if(shader!=UnityShader::Hovl&&!badTextures.empty()) return fail("Referência de textura não suportada: "+*badTextures.begin());
   if(shader==UnityShader::Hovl) {
+    if(!badTextures.empty()) result.approximations.push_back("Textura que não é imagem ("+*badTextures.begin()+") fica de fora; vale a imagem principal.");
     // Partícula Unlit da Astra: imagem principal, cor (sem HDR: o brilho vai
     // para o componente) e a mistura da família. Ruído, máscara e fluxo do
     // shader viram o ruído e a rolagem do material de partícula do componente.
@@ -159,7 +181,15 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     shading.blend=hovl.family==UnityParticleFamily::Additive?scene::MaterialBlendAdditive:scene::MaterialBlendAlpha;
     asset.channels.alphaSource=scene::MaterialAlphaSourceBase;
     asset.values.metallic=0;asset.values.roughness=1;
-    const char *colorNames[]{"_Color","_StartColor","_Maincolor"};
+    // Standard Surface/Unlit: o _Mode decide a mistura (4 aditivo).
+    if(hovl.name.starts_with("Particles/Standard")) {
+      const int mode=static_cast<int>(get("_Mode",2)+.5f);
+      look.family=mode==4?UnityParticleFamily::Additive:UnityParticleFamily::AlphaBlend;
+      shading.blend=mode==4?scene::MaterialBlendAdditive:scene::MaterialBlendAlpha;
+      if(mode==5||mode==6) result.approximations.push_back("Partícula Standard em Subtrair/Modular vira mistura alfa.");
+    }
+    if(hovl.name.starts_with("Particles/Additive")||hovl.name=="Particles/Alpha Blended") look.emission*=2;
+    const char *colorNames[]{"_Color","_StartColor","_Maincolor","_TintColor"};
     for(const char *name:colorNames) if(colors.contains(name)) {
       const auto &c=colors[name];
       const float peak=std::max({1.0f,c[0],c[1],c[2]});
@@ -180,7 +210,12 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
     const auto hasTexture=[&](const char *name) {return textures.contains(name)&&textures[name].unityGuid.valid();};
     look.noise=hasTexture("_Noise")||hasTexture("_TextureNoise");
     if(hovl.family==UnityParticleFamily::Distortion) {
-      result.approximations.push_back("Distorção (Distortion) sem consumidor: o sistema que usa este material não é desenhado.");
+      // O mapa normal entra como a imagem do Material; a força segue em pixels.
+      look.distortion=std::clamp(get("_Distortionpower",.05f),0.f,1000.f);
+      if(hasTexture("_NormalMap")) {
+        auto texture=textures["_NormalMap"];texture.binding=0;texture.sampling.uvSet=scene::MaterialUv0;
+        result.textures.push_back(texture);
+      } else result.approximations.push_back("Distorção sem mapa normal: a lente da forma própria entorta a cena.");
     } else if(!hovl.mainTexture.empty()&&hasTexture(std::string(hovl.mainTexture).c_str())) {
       auto texture=textures[std::string(hovl.mainTexture)];texture.binding=0;texture.sampling.uvSet=scene::MaterialUv0;
       result.textures.push_back(texture);

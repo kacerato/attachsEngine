@@ -2342,6 +2342,31 @@
           }
         },
         {
+          "id": "material_distortion",
+          "label": "Força da distorção",
+          "type": "ParticleSystem",
+          "member": "materialDistortion",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Material",
+            "unit": "px",
+            "capability": "render.particles.distortion",
+            "consumer": "rhi/shaders/particle_material.frag",
+            "help": "Deslocamento da imagem atrás, a 1 m da câmera",
+            "visible": {
+              "cpp": "particleDistorts"
+            }
+          }
+        },
+        {
           "id": "velocity_x",
           "label": "Velocidade X",
           "type": "ParticleSystem",
@@ -4722,6 +4747,381 @@
               "cpp": "particleGatedCurveShowsCurve<particleRotationAxesOn, &ParticleSystemSettings::rotationOverLifetimeY>"
             }
           }
+        },
+        {
+          "id": "velocity_orbital_x",
+          "label": "Órbita X",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalX.constantMax",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Gira as partículas em volta do eixo X do centro",
+            "visible": {
+              "cpp": "particleGatedCurveShowsConstant<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalX>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_x_min",
+          "label": "Órbita X mínimo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalX.constantMin",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleGatedCurveShowsMin<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalX>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_x_multiplier",
+          "label": "Órbita X · multiplicador",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalX.multiplier",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleGatedCurveShowsCurve<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalX>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_y",
+          "label": "Órbita Y",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalY.constantMax",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Gira as partículas em volta do eixo Y do centro",
+            "visible": {
+              "cpp": "particleGatedCurveShowsConstant<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalY>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_y_min",
+          "label": "Órbita Y mínimo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalY.constantMin",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleGatedCurveShowsMin<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalY>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_y_multiplier",
+          "label": "Órbita Y · multiplicador",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalY.multiplier",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleGatedCurveShowsCurve<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalY>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_z",
+          "label": "Órbita Z",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalZ.constantMax",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Gira as partículas em volta do eixo Z do centro",
+            "visible": {
+              "cpp": "particleGatedCurveShowsConstant<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalZ>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_z_min",
+          "label": "Órbita Z mínimo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalZ.constantMin",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleGatedCurveShowsMin<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalZ>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_z_multiplier",
+          "label": "Órbita Z · multiplicador",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalZ.multiplier",
+          "min": {
+            "cpp": "-36000.0f"
+          },
+          "max": {
+            "cpp": "36000.0f"
+          },
+          "step": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "°/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleGatedCurveShowsCurve<particleVelocityOn, &ParticleSystemSettings::velocityOrbitalZ>"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_offset_x",
+          "label": "Centro da órbita X",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalOffset[0]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Deslocamento do centro da órbita e da velocidade radial",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_offset_y",
+          "label": "Centro da órbita Y",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalOffset[1]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Deslocamento do centro da órbita e da velocidade radial",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_offset_z",
+          "label": "Centro da órbita Z",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalOffset[2]",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Deslocamento do centro da órbita e da velocidade radial",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_radial",
+          "label": "Radial",
+          "type": "ParticleSystem",
+          "member": "velocityRadial.constantMax",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Afasta (positivo) ou puxa (negativo) as partículas do centro",
+            "visible": {
+              "cpp": "particleGatedCurveShowsConstant<particleVelocityOn, &ParticleSystemSettings::velocityRadial>"
+            }
+          }
+        },
+        {
+          "id": "velocity_radial_min",
+          "label": "Radial mínimo",
+          "type": "ParticleSystem",
+          "member": "velocityRadial.constantMin",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Limite inferior do sorteio por partícula",
+            "visible": {
+              "cpp": "particleGatedCurveShowsMin<particleVelocityOn, &ParticleSystemSettings::velocityRadial>"
+            }
+          }
+        },
+        {
+          "id": "velocity_radial_multiplier",
+          "label": "Radial · multiplicador",
+          "type": "ParticleSystem",
+          "member": "velocityRadial.multiplier",
+          "min": {
+            "cpp": "-1000.0f"
+          },
+          "max": {
+            "cpp": "1000.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "m/s",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Escala aplicada à curva",
+            "visible": {
+              "cpp": "particleGatedCurveShowsCurve<particleVelocityOn, &ParticleSystemSettings::velocityRadial>"
+            }
+          }
         }
       ]
     },
@@ -5423,7 +5823,7 @@
             "unit": "",
             "capability": "render.particles.material",
             "consumer": "rhi/shaders/particle_material.frag",
-            "help": "Mistura cobre o fundo pela opacidade; Aditivo soma luz (fogo, magia)"
+            "help": "Mistura cobre o fundo pela opacidade; Aditivo soma luz (fogo, magia); Distorção entorta a cena atrás"
           }
         },
         {
@@ -5930,6 +6330,125 @@
             "help": "Malha embutida de cada partícula; uma Malha do projeto escolhida abaixo tem prioridade",
             "visible": {
               "cpp": "particleMeshMode"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_x_mode",
+          "label": "Órbita X · modo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalX.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_y_mode",
+          "label": "Órbita Y · modo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalY.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_orbital_z_mode",
+          "label": "Órbita Z · modo",
+          "type": "ParticleSystem",
+          "member": "velocityOrbitalZ.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "velocity_radial_mode",
+          "label": "Radial · modo",
+          "type": "ParticleSystem",
+          "member": "velocityRadial.mode",
+          "options": "particleCurveModeOptions",
+          "presentation": {
+            "group": "Velocidade no tempo",
+            "unit": "",
+            "capability": "render.particles.simulation",
+            "consumer": "renderer/particles/particle_simulation.cpp",
+            "help": "Constante, curva no tempo, ou sorteio entre dois valores por partícula",
+            "visible": {
+              "cpp": "particleVelocityOn"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_0_type",
+          "label": "Extra 1 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[0]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleHasSubEmitters"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_1_type",
+          "label": "Extra 2 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[1]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleHasSubEmitters"
+            }
+          }
+        },
+        {
+          "id": "sub_emitter_extra_2_type",
+          "label": "Extra 3 · quando",
+          "type": "ParticleSystem",
+          "member": "subEmitterExtraType[2]",
+          "options": "particleSubEmitterEventOptions",
+          "presentation": {
+            "group": "Sub-emissores",
+            "unit": "",
+            "capability": "render.particles.sub_emitters",
+            "consumer": "runtime/scene_particles.cpp",
+            "help": "Acontecimento que dispara o sub-sistema extra (emite as rajadas dele)",
+            "visible": {
+              "cpp": "particleHasSubEmitters"
             }
           }
         }

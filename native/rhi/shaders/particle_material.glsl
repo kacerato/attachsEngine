@@ -15,6 +15,8 @@
 
 layout(set=1, binding=0) uniform sampler2D particleAtlas;
 layout(set=1, binding=1) uniform highp sampler2D sceneDepth;
+// G6a: cópia da cor da cena antes do passe (meia resolução), para a Distorção.
+layout(set=1, binding=2) uniform sampler2D sceneCopy;
 #ifdef PARTICLE_PROJECT_TEXTURES
 // O mesmo conjunto bindless das texturas da cena. O índice vem por lote
 // (push constant), uniforme no desenho inteiro.
@@ -28,7 +30,7 @@ layout(push_constant) uniform ParticleBatch {
   vec4 glow;
   vec4 stretch;  // w: bits do slot bindless da textura de projeto (flag 8)
   uvec4 layers;
-  vec4 sheet;    // colunas, linhas da folha de textura
+  vec4 sheet;    // colunas, linhas da folha de textura; z = força da Distorção (px a 1 m)
 } batch;
 
 layout(location=0) in vec2 vUv;
@@ -91,6 +93,34 @@ void main() {
     alpha *= clamp((sceneZ - vViewDepth) / batch.noise.w, 0.0, 1.0);
   }
   alpha = clamp(alpha, 0.0, 1.0);
+  if((batch.layers.w & 512u) != 0u) {
+    // Distorção: a imagem é um mapa normal (xy em [0,1]). A do Material chega
+    // decodificada como sRGB e volta à codificação original aqui; a forma
+    // própria vira uma lente que empurra do centro para fora.
+    vec2 bend;
+    if((batch.layers.w & 8u) != 0u) {
+      vec3 c = clamp(shape.rgb, 0.0, 1.0);
+      vec3 encoded = mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(vec3(0.0031308), c));
+      bend = encoded.xy * 2.0 - 1.0;
+    } else {
+      bend = (uv - 0.5) * 2.0 * shape.a;
+    }
+    // Força em pixels a 1 m; cai com a distância, como a refração de perto.
+    vec2 offset = bend * batch.sheet.z * vColor.a / max(vViewDepth, 0.25) * batch.stretch.yz;
+    vec3 behind = texture(sceneCopy, gl_FragCoord.xy * batch.stretch.yz + offset).rgb;
+    // Onde o normal é plano não há o que entortar: some sem marcar a borda.
+    float weight = clamp(length(bend) * 6.0, 0.0, 1.0) * (hasNoise ? mix(1.0, noise, batch.noise.y) : 1.0);
+    if((batch.layers.w & 4u) != 0u) {
+      float stored = texture(sceneDepth, gl_FragCoord.xy * batch.stretch.yz).r;
+      float nearPlane = temporalFrame.temporalProjection.z, farPlane = temporalFrame.temporalProjection.w;
+      float sceneZ = temporalFrame.temporalParameters.x > 0.0
+          ? nearPlane + stored * (farPlane - nearPlane)
+          : nearPlane * farPlane / max(farPlane - stored * (farPlane - nearPlane), 1.0e-6);
+      weight *= clamp((sceneZ - vViewDepth) / batch.noise.w, 0.0, 1.0);
+    }
+    outColor = vec4(behind, clamp(weight, 0.0, 1.0));
+    return;
+  }
   // Aditivo: a mistura é ONE,ONE na cor e preserva o alfa do destino.
   outColor = (batch.layers.w & 2u) != 0u ? vec4(rgb * alpha, 0.0) : vec4(rgb, alpha);
 }

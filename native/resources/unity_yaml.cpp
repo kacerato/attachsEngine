@@ -1,4 +1,5 @@
 #include "resources/unity_yaml.h"
+#include <deque>
 #include <algorithm>
 #include <charconv>
 #include <cmath>
@@ -57,6 +58,9 @@ struct Line {std::string_view body;usize indent=0,number=0;};
 class Reader {
 public:
   std::vector<Line> lines;
+  // Linhas de continuação unidas (a Unity quebra coleções longas, como
+  // `{fileID: ..., guid: ...,` + `    type: 2}`); as views apontam para cá.
+  std::deque<std::string> joined;
   usize at=0,nodes=0;
   std::string error;
   const std::function<bool()> &cancelled;
@@ -79,9 +83,41 @@ public:
       if(body.empty()||body.front()=='#')continue;
       if(raw.find('\t')!=raw.npos)return fail("tabulação não permitida.");
       if(lines.size()>=UnityYamlDocument::MaximumNodes)return fail("limite de linhas excedido.");
+      const usize first=number;
+      if(int open=openCollections(body);open>0) {
+        std::string whole(body);
+        while(open>0&&!text.empty()) {
+          ++number;const auto next=text.find('\n');const auto piece=trim(text.substr(0,next));
+          text=next==text.npos?std::string_view{}:text.substr(next+1);
+          if(piece.find('\t')!=piece.npos||whole.size()+piece.size()>65536)return fail("coleção em várias linhas inválida.");
+          whole+=' ';whole+=piece;open+=openCollections(piece,false);
+        }
+        joined.push_back(std::move(whole));lines.push_back({joined.back(),indent,first});continue;
+      }
       lines.push_back({body,indent,number});
     }
     return true;
+  }
+  // Coleções `{`/`[` abertas e não fechadas na linha. Na primeira linha só
+  // conta quando o valor começa uma coleção (texto puro pode ter chaves).
+  static int openCollections(std::string_view body,bool start=true) {
+    if(start) {
+      auto value=body;
+      if(value.starts_with("- "))value=trim(value.substr(2));
+      if(!value.empty()&&value.front()!='{'&&value.front()!='[') {
+        const auto split=colon(value);if(split==value.npos)return 0;
+        value=trim(value.substr(split+1));
+      }
+      if(value.empty()||(value.front()!='{'&&value.front()!='['))return 0;
+      body=value;
+    }
+    int depth=0;char quote=0;
+    for(usize i=0;i<body.size();++i) {
+      const char c=body[i];
+      if(quote){if(c==quote)quote=0;continue;}
+      if(c=='\''||c=='"')quote=c;else if(c=='{'||c=='[')++depth;else if(c=='}'||c==']')--depth;
+    }
+    return depth;
   }
   static usize colon(std::string_view value) {
     char quote=0;int nesting=0;

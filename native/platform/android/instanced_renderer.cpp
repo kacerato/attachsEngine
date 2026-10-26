@@ -2412,7 +2412,8 @@ bool InstancedRenderer::createPostResources() {
   image.width = renderTargetWidth();
   image.height = renderTargetHeight();
   image.format = sceneColorFormat_;
-  image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+  // TRANSFER_SRC: a Distorção das partículas copia a cena por blit (G6a).
+  image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
   image.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   image.memoryClass = rhi::MemoryClass::RenderTarget;
   if (!memoryAllocator_->createImage(image, &postSceneColor_)) return false;

@@ -189,6 +189,36 @@ void SceneParticles::routeSubEmitters(const SceneGraph &graph) {
         {settings.subEmitterBirth, settings.subEmitterBirthCount, entry.emitter.births()},
         {settings.subEmitterCollision, settings.subEmitterCollisionCount, entry.emitter.collisions()},
         {settings.subEmitterDeath, settings.subEmitterDeathCount, entry.emitter.deaths()}};
+    // G6a: extras emitem as rajadas do próprio sub-sistema (como a Unity), ao
+    // menos uma partícula por acontecimento.
+    const auto burstsOf = [&](u64 target) -> float {
+      const auto *other = firstEntryOf(static_cast<ObjectId>(target));
+      if (!other) return 1;
+      float total = 0;
+      const auto &s = other->emitter.settings();
+      for (usize b = 0; b < s.activeBursts(); ++b) total += std::max(s.bursts[b].countMin, s.bursts[b].countMax);
+      return std::max(1.0f, std::floor(total));
+    };
+    std::vector<std::pair<u64, std::pair<float, const std::vector<renderer::particles::ParticleEvent> *>>> extras;
+    for (usize k = 0; k < scene::ParticleSystemSettings::kExtraSubEmitters; ++k) {
+      if (!settings.subEmitterExtra[k]) continue;
+      const u32 type = settings.subEmitterExtraType[k];
+      const auto *events = type == 0 ? &entry.emitter.births() : type == 1 ? &entry.emitter.collisions() : &entry.emitter.deaths();
+      extras.push_back({settings.subEmitterExtra[k], {burstsOf(settings.subEmitterExtra[k]), events}});
+    }
+    for (const auto &extra : extras) {
+      const auto child = static_cast<ObjectId>(extra.first);
+      const auto &events = *extra.second.second;
+      if (events.empty() || child == key.object) continue;
+      auto *target = firstEntryOf(child);
+      float world[16];
+      if (!target || !target->active || !worldMatrix(graph, child, world)) continue;
+      for (const auto &event : events) {
+        for (u32 k = 0; k < 3; ++k) world[12 + k] = event.position[k];
+        target->emitter.emit(static_cast<u32>(extra.second.first), world);
+      }
+      target->idle = 0;
+    }
     for (const auto &route : routes) {
       const auto child = static_cast<ObjectId>(route.target);
       // Um sistema não é sub-emissor de si mesmo: seria uma reação em cadeia.
@@ -347,7 +377,9 @@ void SceneParticles::build(const SceneGraph &graph, const float (&camera)[3], re
       if ((*materials)(asset, look)) {
         batch.material.projectTexture = look.texture;
         for (u32 k = 0; k < 3; ++k) batch.material.tint[k] *= look.color[k];
-        batch.material.blend = static_cast<u32>(look.additive ? scene::ParticleBlend::Additive : scene::ParticleBlend::AlphaBlend);
+        // Distorção é do componente: o Surface do material não a desfaz.
+        if (batch.material.blend != static_cast<u32>(scene::ParticleBlend::Distortion))
+          batch.material.blend = static_cast<u32>(look.additive ? scene::ParticleBlend::Additive : scene::ParticleBlend::AlphaBlend);
       }
     }
     const float d[3]{entry.world[12] - camera[0], entry.world[13] - camera[1], entry.world[14] - camera[2]};

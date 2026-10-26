@@ -21,7 +21,8 @@ enum Channel : u32 {
   ChannelSheetFrame, ChannelSheetStart, ChannelSheetRow, ChannelTrail,
   // G6a: acrescentados no fim para não mudar os canais anteriores.
   ChannelSizeY, ChannelSizeZ, ChannelRotationX, ChannelRotationY,
-  ChannelSizeOverLifetimeY, ChannelSizeOverLifetimeZ, ChannelRotationOverLifetimeX, ChannelRotationOverLifetimeY
+  ChannelSizeOverLifetimeY, ChannelSizeOverLifetimeZ, ChannelRotationOverLifetimeX, ChannelRotationOverLifetimeY,
+  ChannelOrbitalX, ChannelOrbitalY, ChannelOrbitalZ, ChannelRadial
 };
 constexpr u32 kTrailStride = scene::ParticleSystemSettings::kTrailPoints * 4;
 // Velocidade normalizada na faixa autoral (Size/Color/Rotation by Speed).
@@ -302,6 +303,8 @@ void ParticleEmitter::configure(const scene::ParticleSystemSettings &settings, u
   startRotationX_.bake(settings.startRotationX); startRotationY_.bake(settings.startRotationY);
   sizeOverLifetimeY_.bake(settings.sizeOverLifetimeY); sizeOverLifetimeZ_.bake(settings.sizeOverLifetimeZ);
   rotationOverLifetimeX_.bake(settings.rotationOverLifetimeX); rotationOverLifetimeY_.bake(settings.rotationOverLifetimeY);
+  orbital_[0].bake(settings.velocityOrbitalX); orbital_[1].bake(settings.velocityOrbitalY); orbital_[2].bake(settings.velocityOrbitalZ);
+  radial_.bake(settings.velocityRadial);
   startColor_.bake(settings.startColor);
   colorOverLifetime_.bake(settings.colorOverLifetime);
   float rotation[9];
@@ -441,6 +444,17 @@ void ParticleEmitter::collide(float dt, const float (&world)[16]) {
     }
     if (hit) touched(i, world, normal);
   }
+}
+
+// Algum sub-emissor (o principal ou um extra) ouve este acontecimento:
+// 0 nascer, 1 colidir, 2 morrer.
+bool ParticleEmitter::wantsEvents(u32 type) const {
+  const auto &s = settings_;
+  if (!s.subEmittersEnabled) return false;
+  if ((type == 0 && s.subEmitterBirth) || (type == 1 && s.subEmitterCollision) || (type == 2 && s.subEmitterDeath)) return true;
+  for (usize k = 0; k < scene::ParticleSystemSettings::kExtraSubEmitters; ++k)
+    if (s.subEmitterExtra[k] && s.subEmitterExtraType[k] == type) return true;
+  return false;
 }
 
 void ParticleEmitter::kill(u32 index) {
@@ -644,13 +658,13 @@ void ParticleEmitter::spawn(u32 count, const float (&world)[16], float systemNor
       trail_.resize(trail_.size() + kTrailStride, 0.0f);
       trailCount_.push_back(0);
     }
-    if (settings_.subEmittersEnabled && settings_.subEmitterBirth) record(births_, alive() - 1, world);
+    if (wantsEvents(0)) record(births_, alive() - 1, world);
   }
 }
 
 void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3], const float (&world)[16]) {
   // Morte primeiro: a lista fica compacta antes de integrar.
-  const bool wantsDeaths = settings_.subEmittersEnabled && settings_.subEmitterDeath != 0;
+  const bool wantsDeaths = wantsEvents(2);
   for (u32 i = alive(); i-- > 0;) {
     age_[i] += dt;
     if (age_[i] >= lifetime_[i]) {
@@ -744,6 +758,7 @@ void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3], cons
     py_[i] += (vy_[i] + a[1]) * speedScale * dt;
     pz_[i] += (vz_[i] + a[2]) * speedScale * dt;
   }
+  if (settings_.velocityOverLifetimeEnabled) orbit(dt, world);
   if (settings_.rotationBySpeedEnabled)
     for (u32 i = 0; i < alive(); ++i) {
       const float vx = vx_[i] + ax_[i], vy = vy_[i] + ay_[i], vz = vz_[i] + az_[i];
@@ -774,15 +789,68 @@ void ParticleEmitter::advanceParticles(float dt, const float (&gravity)[3], cons
   }
 }
 
+// Orbital e Radial (Unity Velocity over Lifetime): cada partícula gira em volta
+// do centro (origem do objeto + deslocamento) pelo vetor de velocidade angular
+// e se afasta dele pela velocidade radial. Gira a posição (Rodrigues), não a
+// velocidade, para a órbita não abrir em espiral com passos grandes.
+void ParticleEmitter::orbit(float dt, const float (&world)[16]) {
+  const auto &s = settings_;
+  const bool orbits = s.velocityOrbitalX.constantMax != 0 || s.velocityOrbitalX.constantMin != 0 || s.velocityOrbitalX.usesCurves() ||
+                      s.velocityOrbitalY.constantMax != 0 || s.velocityOrbitalY.constantMin != 0 || s.velocityOrbitalY.usesCurves() ||
+                      s.velocityOrbitalZ.constantMax != 0 || s.velocityOrbitalZ.constantMin != 0 || s.velocityOrbitalZ.usesCurves();
+  const bool pushes = s.velocityRadial.constantMax != 0 || s.velocityRadial.constantMin != 0 || s.velocityRadial.usesCurves();
+  if (!orbits && !pushes) return;
+  const bool simLocal = s.simulationSpace == scene::ParticleSimulationSpace::Local;
+  // Centro e eixos no espaço da simulação.
+  float center[3]{s.velocityOrbitalOffset[0], s.velocityOrbitalOffset[1], s.velocityOrbitalOffset[2]};
+  if (!simLocal) {
+    float offset[3];
+    transformVector(world, center, offset);
+    for (u32 k = 0; k < 3; ++k) center[k] = world[12 + k] + offset[k];
+  }
+  float inverse[9]{1, 0, 0, 0, 1, 0, 0, 0, 1};
+  const bool invertible = inverseLinear(world, inverse);
+  for (u32 i = 0; i < alive(); ++i) {
+    const float t = age_[i] / lifetime_[i];
+    float omega[3]{orbital_[0].evaluate(t, particleRandom(seed_[i], ChannelOrbitalX)) * kDegrees,
+                   orbital_[1].evaluate(t, particleRandom(seed_[i], ChannelOrbitalY)) * kDegrees,
+                   orbital_[2].evaluate(t, particleRandom(seed_[i], ChannelOrbitalZ)) * kDegrees};
+    // Eixos do módulo: os do objeto (Local) ou os da cena (Mundo).
+    if (simLocal && s.velocitySpace == scene::ParticleSimulationSpace::World && invertible) {
+      const float w[3]{omega[0], omega[1], omega[2]};
+      for (u32 k = 0; k < 3; ++k) omega[k] = inverse[k] * w[0] + inverse[3 + k] * w[1] + inverse[6 + k] * w[2];
+    } else if (!simLocal && s.velocitySpace == scene::ParticleSimulationSpace::Local) {
+      const float w[3]{omega[0], omega[1], omega[2]};
+      transformVector(world, w, omega);
+    }
+    float p[3]{px_[i] - center[0], py_[i] - center[1], pz_[i] - center[2]};
+    const float speed = length3(omega);
+    if (speed > 1e-6f) {
+      const float angle = speed * dt, c = std::cos(angle), sn = std::sin(angle);
+      const float k[3]{omega[0] / speed, omega[1] / speed, omega[2] / speed};
+      const float kp = k[0] * p[0] + k[1] * p[1] + k[2] * p[2];
+      const float cross[3]{k[1] * p[2] - k[2] * p[1], k[2] * p[0] - k[0] * p[2], k[0] * p[1] - k[1] * p[0]};
+      for (u32 j = 0; j < 3; ++j) p[j] = p[j] * c + cross[j] * sn + k[j] * kp * (1 - c);
+    }
+    const float radius = length3(p);
+    if (pushes && radius > 1e-6f) {
+      const float push = radial_.evaluate(t, particleRandom(seed_[i], ChannelRadial)) * dt;
+      const float scale = std::max(0.0f, radius + push) / radius;
+      for (auto &value : p) value *= scale;
+    }
+    px_[i] = center[0] + p[0]; py_[i] = center[1] + p[1]; pz_[i] = center[2] + p[2];
+  }
+}
+
 // O toque (plano ou mundo) gasta vida, pode matar e alimenta sub-emissores e
 // ouvintes de colisão.
 void ParticleEmitter::touched(u32 i, const float (&world)[16], const float (&normal)[3]) {
-  const bool wantsCollisions = (settings_.subEmittersEnabled && settings_.subEmitterCollision != 0) || collisionListeners_;
+  const bool wantsCollisions = wantsEvents(1) || collisionListeners_;
   if (wantsCollisions) record(collisions_, i, world, normal);
   age_[i] += lifetime_[i] * std::clamp(settings_.collisionLifetimeLoss, 0.0f, 1.0f);
   const float speed = std::sqrt(vx_[i] * vx_[i] + vy_[i] * vy_[i] + vz_[i] * vz_[i]);
   if (age_[i] >= lifetime_[i] || speed < settings_.collisionMinKillSpeed) {
-    if (settings_.subEmittersEnabled && settings_.subEmitterDeath) record(deaths_, i, world);
+    if (wantsEvents(2)) record(deaths_, i, world);
     kill(i);
   }
 }
@@ -1179,6 +1247,7 @@ ParticleMaterialParameters ParticleEmitter::material() const {
   m.centerGlow = s.materialCenterGlow;
   m.centerGlowPower = s.materialCenterGlowPower;
   m.softDistance = s.materialSoftDistance;
+  m.distortion = s.materialDistortion;
   m.stretchVelocityScale = s.stretchVelocityScale;
   m.stretchLengthScale = s.stretchLengthScale;
   m.maxScreenSize = s.maxParticleSize;

@@ -522,7 +522,7 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
       Dependency result;if(!resolve(session,path,reference,type,result,diagnostic))return false;
       ids=std::move(result.identities);dependency(result.owner);return true;
     };
-    std::vector<std::string> notes;runtime::UnityPrefabEffectServices effects;effects.notes=&notes;
+    std::vector<std::string> notes,minor;runtime::UnityPrefabEffectServices effects;effects.notes=&notes;effects.approximations=&minor;
     effects.particleLook=[&session,path](const UnityObjectReference &reference,UnityParticleLook &look){return particleLook(session,path,reference,look);};
     effects.particleMesh=[&](const UnityObjectReference &reference,AssetType,std::vector<AssetGuid> &ids,std::string &diagnostic) {
       Dependency result;if(!particleMesh(session,path,reference,result,diagnostic))return false;
@@ -534,6 +534,7 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
     recipe.nextIdentity=identities.nextObject;for(const auto &entry:identities.entries)recipe.identities.emplace_back(entry.fileId,entry.object);
     recipe.transformations=imported.transformations;
     for(const auto &text:notes)recipe.transformations.push_back("Perda: "+text);
+    for(const auto &text:minor)recipe.transformations.push_back("Aproximação: "+text);
     // A receita guarda até 64 notas; o resto vira uma contagem.
     if(recipe.transformations.size()>64) {
       const auto extra=recipe.transformations.size()-63;recipe.transformations.resize(63);

@@ -25,6 +25,10 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
   const auto note=[&](const std::string &text) {
     if(services&&services->notes&&std::find(services->notes->begin(),services->notes->end(),text)==services->notes->end())services->notes->push_back(text);
   };
+  const auto approximate=[&](const std::string &text) {
+    auto *list=services?services->approximations:nullptr;
+    if(list&&std::find(list->begin(),list->end(),text)==list->end())list->push_back(text);
+  };
   const auto local=[&](i64 fileId)->u64 {const auto found=mapping.find(fileId);return fileId&&found!=mapping.end()?found->second:0;};
   // Uma identidade só (material, prefab, áudio); falha vira nota.
   const auto single=[&](const resources::UnityObjectReference &reference,resources::AssetType type,const char *what)->resources::AssetGuid {
@@ -45,19 +49,23 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
     system->collisionPlane0=local(source.collisionPlanes[0]);system->collisionPlane1=local(source.collisionPlanes[1]);
     system->subEmitterBirth=local(source.subEmitterBirth);system->subEmitterCollision=local(source.subEmitterCollision);
     system->subEmitterDeath=local(source.subEmitterDeath);system->lightTemplate=local(source.lightTemplate);
+    for(usize k=0;k<source.extraSubEmitters.size();++k) {
+      system->subEmitterExtra[k]=local(source.extraSubEmitters[k].first);system->subEmitterExtraType[k]=source.extraSubEmitters[k].second;
+    }
     // Material: o do projeto e o que o shader do pacote passa ao componente.
     if(source.material.external()&&source.material.fileId) {
       if(source.material.guid.text()=="0000000000000000f000000000000000") {
-        note("Material embutido da Unity (Default-Particle) vira o ponto suave da Astra.");
+        approximate("Material embutido da Unity (Default-Particle) vira o ponto suave da Astra.");
       } else {
         system->materialAsset=single(source.material,resources::AssetType::Material,"Material de partícula");
         resources::UnityParticleLook look;
         if(services&&services->particleLook&&services->particleLook(source.material,look)) {
-          if(look.family==resources::UnityParticleFamily::Distortion) {
-            system->renderMode=scene::ParticleRenderMode::None;
-            note("Distorção sem consumidor: "+object.name+" simula sem desenhar.");
-          }
-          system->materialBlend=look.family==resources::UnityParticleFamily::Additive?scene::ParticleBlend::Additive:scene::ParticleBlend::AlphaBlend;
+          system->materialBlend=look.family==resources::UnityParticleFamily::Additive?scene::ParticleBlend::Additive:
+                                look.family==resources::UnityParticleFamily::Distortion?scene::ParticleBlend::Distortion:
+                                scene::ParticleBlend::AlphaBlend;
+          system->materialDistortion=look.distortion;
+          if(look.family==resources::UnityParticleFamily::Distortion)
+            approximate("Distorção copia a cena antes das partículas: as de trás não entram na imagem entortada.");
           system->materialEmission=std::clamp(look.emission*std::min(look.opacity,1.0f),0.0f,100.0f);
           std::copy(look.scroll,look.scroll+2,system->materialScroll);
           if(look.noise) {
@@ -107,7 +115,7 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
       const float scale=std::max({std::abs(object.scale[0]),std::abs(object.scale[1]),std::abs(object.scale[2])});
       projectileRadius=collider.radius*scale;break;
     }
-    if(object.body||!object.colliders.empty())note("Projétil: o Rigidbody e o colisor do pacote viram o raio da consulta do Projétil.");
+    if(object.body||!object.colliders.empty())approximate("Projétil: o Rigidbody e o colisor do pacote viram o raio da consulta do Projétil.");
   } else {
     if(object.body) {
       const auto &source=*object.body;

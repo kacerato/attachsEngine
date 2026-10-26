@@ -27,6 +27,7 @@ struct UnityParticleLook {
   float scroll[2]{}, noiseScroll[2]{};
   bool noise = false, centerGlow = false, soft = false;
   float opacity = 1;
+  float distortion = 0;  // Distorção: pixels a 1 m (_Distortionpower do shader do pacote)
   std::string shader;  // nome da família de origem, para o relatório
 };
 struct UnityMaterialImport {
