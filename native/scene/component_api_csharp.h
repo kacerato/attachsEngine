@@ -13,6 +13,7 @@
 // A fachada usa o acesso genérico por id já exposto pela ABI (`Component.GetFloat`
 // e afins). Nenhuma função nova atravessa a fronteira nativa por tipo.
 #pragma once
+#include "renderer/volume_parameters.h"
 #include "scene/component_schema.h"
 
 #include <string>
@@ -163,7 +164,9 @@ inline std::string componentCSharpApi() {
     out+="\n/// <summary>"+xml(schema.name)+": "+xml(schema.description)+". Família "+
          xml(componentFamilyName(schema.family))+" · "+xml(schema.subfamily)+".</summary>\n";
     if(!schema.reference.empty()) out+="/// <remarks>Referência estudada: "+xml(schema.reference)+"</remarks>\n";
-    out+="public readonly struct "+name+" : IComponentFacade<"+name+">\n{\n";
+    // partial: membros finos com os nomes da Unity moram em arquivos escritos à
+    // mão (managed/Astra.Scripting/Rendering), sem duplicar o acesso por id.
+    out+="public readonly partial struct "+name+" : IComponentFacade<"+name+">\n{\n";
     out+="    public static string TypeId => \""+std::string(type.id)+"\";\n";
     out+="    public static "+name+" Wrap(Component component) => new(component);\n";
     out+="    public Component Component { get; }\n";
@@ -247,6 +250,12 @@ inline std::string componentCSharpApi() {
     for(const auto &m:type.methods) {
       out+=doc(m.name,{},m.help?m.help:"");
       out+="    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>\n";
+      // Recurso do projeto em duas metades inteiras: a fachada recebe o AssetGuid.
+      if(componentMethodTakesAsset(m) && m.result==ComponentValueKind::None) {
+        out+="    public void "+csharp::memberName(type,m.id)+"(AssetGuid asset) => Component.Invoke(\""+std::string(m.id)+
+             "\", ComponentValue.Integer(unchecked((long)asset.High)), ComponentValue.Integer(unchecked((long)asset.Low)));\n";
+        continue;
+      }
       std::string parameters,arguments;
       for(const auto &parameter:m.parameters) {
         if(!parameters.empty()) {parameters+=", ";}
@@ -269,6 +278,27 @@ inline std::string componentCSharpApi() {
     }
     out+="}\n";
   }
+  // G7: endereços gravados dos parâmetros e overrides do Volume Profile
+  // (renderer/volume_parameters.cpp). O VolumeParameter.overrideState do C# e
+  // o VolumeComponent.active usam estes índices nos métodos do Volume.
+  out+="\n/// <summary>Tabela gravada dos parâmetros do Volume Profile: índice = endereço do overrideState.</summary>\n"
+       "public static class VolumeParameterTable\n{\n    public static readonly string[] Ids =\n    [\n";
+  for(const auto &parameter:renderer::volumeParameters()) out+="        \""+std::string(parameter.id)+"\",\n";
+  out+="    ];\n    public static readonly string[] Aliases =\n    [\n";
+  for(const auto &parameter:renderer::volumeParameters()) out+="        \""+std::string(parameter.alias)+"\",\n";
+  out+="    ];\n    public static readonly int[] Groups =\n    [\n       ";
+  for(const auto &parameter:renderer::volumeParameters()) out+=" "+std::to_string(static_cast<u32>(parameter.group))+",";
+  out+="\n    ];\n    /// <summary>Propriedade booleana que põe o override no perfil (Add Override), por índice de grupo.</summary>\n"
+       "    public static readonly string[] GroupAddedProperties =\n    [\n";
+  for(const auto &group:renderer::volumeGroups()) out+="        \""+std::string(group.addedProperty)+"\",\n";
+  out+="    ];\n"
+       "    /// <summary>Índice do parâmetro de uma propriedade do Volume (aceita canais \"bloom_tint.r\" e aliases); -1 quando não é parâmetro.</summary>\n"
+       "    public static int IndexOf(string propertyId)\n    {\n"
+       "        ArgumentNullException.ThrowIfNull(propertyId);\n"
+       "        var dot = propertyId.IndexOf('.');\n"
+       "        var id = dot < 0 ? propertyId : propertyId[..dot];\n"
+       "        for (var i = 0; i < Ids.Length; ++i) if (Ids[i] == id || (Aliases[i].Length > 0 && Aliases[i] == id)) return i;\n"
+       "        return -1;\n    }\n}\n";
   return out;
 }
 } // namespace ae::scene

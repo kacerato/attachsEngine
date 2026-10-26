@@ -242,6 +242,20 @@
    "apiName": "EventConnection"
   },
   {
+   "type": "PlayerInput",
+   "name": "Entrada do jogador",
+   "description": "Ações do mapa de entrada viram eventos deste objeto",
+   "structuralInPlay": {
+    "cpp": "PlayMutability::SafePoint"
+   },
+   "consumer": "runtime/scene_player_input.h",
+   "subfamily": "Eventos",
+   "icon": "component/player-input",
+   "searchTerms": "PlayerInput Input System Invoke Unity Events Acao Entrada Botao Toque",
+   "reference": "https://docs.unity3d.com/Packages/com.unity.inputsystem@1.11/manual/PlayerInput.html",
+   "apiName": "PlayerInput"
+  },
+  {
    "type": "ScriptBehavior",
    "name": "Comportamento",
    "description": "Código C# do projeto",

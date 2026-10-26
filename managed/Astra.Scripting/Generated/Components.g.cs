@@ -27,7 +27,7 @@ public static class ComponentFacadeExtensions
 
 /// <summary>Mola de posição: Segue fonte com velocidade e amortecimento persistentes no runtime. Família Lógica · Molas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
-public readonly struct SpringPositionConstraint : IComponentFacade<SpringPositionConstraint>
+public readonly partial struct SpringPositionConstraint : IComponentFacade<SpringPositionConstraint>
 {
     public static string TypeId => "astra.spring.position";
     public static SpringPositionConstraint Wrap(Component component) => new(component);
@@ -92,7 +92,7 @@ public readonly struct SpringPositionConstraint : IComponentFacade<SpringPositio
 
 /// <summary>Mola de rotação: Segue orientação por quaternion com amortecimento e caminho curto. Família Lógica · Molas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html</remarks>
-public readonly struct SpringRotationConstraint : IComponentFacade<SpringRotationConstraint>
+public readonly partial struct SpringRotationConstraint : IComponentFacade<SpringRotationConstraint>
 {
     public static string TypeId => "astra.spring.rotation";
     public static SpringRotationConstraint Wrap(Component component) => new(component);
@@ -157,7 +157,7 @@ public readonly struct SpringRotationConstraint : IComponentFacade<SpringRotatio
 
 /// <summary>Mola de escala: Segue escala positiva sem publicar escala singular. Família Lógica · Molas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html</remarks>
-public readonly struct SpringScaleConstraint : IComponentFacade<SpringScaleConstraint>
+public readonly partial struct SpringScaleConstraint : IComponentFacade<SpringScaleConstraint>
 {
     public static string TypeId => "astra.spring.scale";
     public static SpringScaleConstraint Wrap(Component component) => new(component);
@@ -222,7 +222,7 @@ public readonly struct SpringScaleConstraint : IComponentFacade<SpringScaleConst
 
 /// <summary>Position Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
-public readonly struct PositionConstraint : IComponentFacade<PositionConstraint>
+public readonly partial struct PositionConstraint : IComponentFacade<PositionConstraint>
 {
     public static string TypeId => "astra.constraint.position";
     public static PositionConstraint Wrap(Component component) => new(component);
@@ -284,7 +284,7 @@ public readonly struct PositionConstraint : IComponentFacade<PositionConstraint>
 
 /// <summary>Rotation Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-RotationConstraint.html</remarks>
-public readonly struct RotationConstraint : IComponentFacade<RotationConstraint>
+public readonly partial struct RotationConstraint : IComponentFacade<RotationConstraint>
 {
     public static string TypeId => "astra.constraint.rotation";
     public static RotationConstraint Wrap(Component component) => new(component);
@@ -346,7 +346,7 @@ public readonly struct RotationConstraint : IComponentFacade<RotationConstraint>
 
 /// <summary>Scale Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ScaleConstraint.html</remarks>
-public readonly struct ScaleConstraint : IComponentFacade<ScaleConstraint>
+public readonly partial struct ScaleConstraint : IComponentFacade<ScaleConstraint>
 {
     public static string TypeId => "astra.constraint.scale";
     public static ScaleConstraint Wrap(Component component) => new(component);
@@ -408,7 +408,7 @@ public readonly struct ScaleConstraint : IComponentFacade<ScaleConstraint>
 
 /// <summary>Aim Constraint: Restrição de mundo com uma fonte. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AimConstraint.html</remarks>
-public readonly struct AimConstraint : IComponentFacade<AimConstraint>
+public readonly partial struct AimConstraint : IComponentFacade<AimConstraint>
 {
     public static string TypeId => "astra.constraint.aim";
     public static AimConstraint Wrap(Component component) => new(component);
@@ -497,7 +497,7 @@ public readonly struct AimConstraint : IComponentFacade<AimConstraint>
 
 /// <summary>Parent Constraint: Segue posição e rotação da fonte sem herdar escala. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html</remarks>
-public readonly struct ParentConstraint : IComponentFacade<ParentConstraint>
+public readonly partial struct ParentConstraint : IComponentFacade<ParentConstraint>
 {
     public static string TypeId => "astra.constraint.parent";
     public static ParentConstraint Wrap(Component component) => new(component);
@@ -583,7 +583,7 @@ public readonly struct ParentConstraint : IComponentFacade<ParentConstraint>
 
 /// <summary>Look At Constraint: Orienta +Z para a fonte com vertical e roll. Família Lógica · Restrições.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-LookAtConstraint.html</remarks>
-public readonly struct LookAtConstraint : IComponentFacade<LookAtConstraint>
+public readonly partial struct LookAtConstraint : IComponentFacade<LookAtConstraint>
 {
     public static string TypeId => "astra.constraint.look_at";
     public static LookAtConstraint Wrap(Component component) => new(component);
@@ -658,7 +658,7 @@ public readonly struct LookAtConstraint : IComponentFacade<LookAtConstraint>
 
 /// <summary>Transform Tween: Interpola canais locais com espera, curva e repetição. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html</remarks>
-public readonly struct TransformTween : IComponentFacade<TransformTween>
+public readonly partial struct TransformTween : IComponentFacade<TransformTween>
 {
     public static string TypeId => "astra.tween.transform";
     public static TransformTween Wrap(Component component) => new(component);
@@ -820,7 +820,7 @@ public readonly struct TransformTween : IComponentFacade<TransformTween>
 
 /// <summary>Tween de propriedade: Interpola uma propriedade numérica interpolável de um componente. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html#class-tween-method-tween-property</remarks>
-public readonly struct PropertyTween : IComponentFacade<PropertyTween>
+public readonly partial struct PropertyTween : IComponentFacade<PropertyTween>
 {
     public static string TypeId => "astra.tween.property";
     public static PropertyTween Wrap(Component component) => new(component);
@@ -940,7 +940,7 @@ public readonly struct PropertyTween : IComponentFacade<PropertyTween>
 
 /// <summary>Sequência de tweens: Encadeia Transform Tweens em etapas sequenciais ou paralelas. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_tween.html</remarks>
-public readonly struct TweenSequence : IComponentFacade<TweenSequence>
+public readonly partial struct TweenSequence : IComponentFacade<TweenSequence>
 {
     public static string TypeId => "astra.tween.sequence";
     public static TweenSequence Wrap(Component component) => new(component);
@@ -1156,7 +1156,7 @@ public readonly struct TweenSequence : IComponentFacade<TweenSequence>
 
 /// <summary>Timer: Dispara eventos temporizados e ações persistentes de ativação de objetos. Família Lógica · Tempo.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_timer.html</remarks>
-public readonly struct GameTimer : IComponentFacade<GameTimer>
+public readonly partial struct GameTimer : IComponentFacade<GameTimer>
 {
     public static string TypeId => "astra.time.timer";
     public static GameTimer Wrap(Component component) => new(component);
@@ -1245,7 +1245,7 @@ public readonly struct GameTimer : IComponentFacade<GameTimer>
 
 /// <summary>Conexão de evento: Evento deste objeto aciona objetos ou métodos, sem script. Família Lógica · Eventos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Events.UnityEvent.html</remarks>
-public readonly struct EventConnection : IComponentFacade<EventConnection>
+public readonly partial struct EventConnection : IComponentFacade<EventConnection>
 {
     public static string TypeId => "astra.logic.event_connection";
     public static EventConnection Wrap(Component component) => new(component);
@@ -1260,7 +1260,7 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
     public bool IsAlive => Component.IsAlive;
     /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
     public void Remove() => Component.Remove();
-    /// <summary>Valor (s). Timer: intervalo (zero usa o autorado). Áudio: posição do cursor</summary>
+    /// <summary>Valor (s). Timer: intervalo (zero usa o autorado). Áudio: posição do cursor. Volume: peso de 0 a 1</summary>
     /// <remarks>Faixa válida: 0 a 3600.</remarks>
     public float Argument
     {
@@ -1328,6 +1328,12 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         InteracaoEntrouNoGatilho = 37,
         InteracaoSaiuDoGatilho = 38,
         ParticulasParou = 39,
+        HoraDoDiaHoraMudou = 40,
+        HoraDoDiaNascerDoSol = 41,
+        HoraDoDiaPorDoSol = 42,
+        HoraDoDiaDiaMudou = 43,
+        EntradaAcaoExecutada = 44,
+        EntradaAcaoCancelada = 45,
     }
     /// <summary>Evento. Emitido por um componente deste objeto; sem o componente, a conexão não dispara</summary>
     public EventOption Event
@@ -1392,12 +1398,58 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         ParticulasPararELimpar = 38,
         ParticulasPausar = 39,
         ParticulasLimpar = 40,
+        VolumeDefinirPeso = 41,
+        VolumeTrocarPerfil = 42,
+        VolumeUsarCopiaDoPerfil = 43,
+        MalhaTrocarMaterial = 44,
     }
     /// <summary>Método. Chamado no primeiro componente do tipo correspondente no receptor</summary>
     public MethodOption Method
     {
         get => (MethodOption)Component.GetEnum("method");
         set => Component.SetEnum("method", (uint)value);
+    }
+    public enum InputActionOption : uint
+    {
+        QualquerAcao = 0,
+        Acao1 = 1,
+        Acao2 = 2,
+        Acao3 = 3,
+        Acao4 = 4,
+        Acao5 = 5,
+        Acao6 = 6,
+        Acao7 = 7,
+        Acao8 = 8,
+        Acao9 = 9,
+        Acao10 = 10,
+        Acao11 = 11,
+        Acao12 = 12,
+        Acao13 = 13,
+        Acao14 = 14,
+        Acao15 = 15,
+        Acao16 = 16,
+        Acao17 = 17,
+        Acao18 = 18,
+        Acao19 = 19,
+        Acao20 = 20,
+        Acao21 = 21,
+        Acao22 = 22,
+        Acao23 = 23,
+        Acao24 = 24,
+        Acao25 = 25,
+        Acao26 = 26,
+        Acao27 = 27,
+        Acao28 = 28,
+        Acao29 = 29,
+        Acao30 = 30,
+        Acao31 = 31,
+        Acao32 = 32,
+    }
+    /// <summary>Ação. Ação do mapa de entrada da cena; Qualquer ação aceita todas as observadas pela Entrada do jogador</summary>
+    public InputActionOption InputAction
+    {
+        get => (InputActionOption)Component.GetEnum("input_action");
+        set => Component.SetEnum("input_action", (uint)value);
     }
     /// <summary>Receptor. Objeto ativado ou dono do componente chamado; vazio usa o próprio emissor</summary>
     public ObjectReference Receiver
@@ -1411,11 +1463,88 @@ public readonly struct EventConnection : IComponentFacade<EventConnection>
         get => Component.GetReference("other_filter");
         set => Component.SetReference("other_filter", value);
     }
+    /// <summary>Perfil. Recurso do projeto por slot</summary>
+    public AssetGuid GetArgumentProfile(uint slot = 0) => Component.GetResource("argument_profile", slot);
+    public void SetArgumentProfile(AssetGuid value, uint slot = 0) => Component.SetResource("argument_profile", value, slot);
+    /// <summary>Material. Recurso do projeto por slot</summary>
+    public AssetGuid GetArgumentMaterial(uint slot = 0) => Component.GetResource("argument_material", slot);
+    public void SetArgumentMaterial(AssetGuid value, uint slot = 0) => Component.SetResource("argument_material", value, slot);
+}
+
+/// <summary>Entrada do jogador: Ações do mapa de entrada viram eventos deste objeto. Família Lógica · Eventos.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.inputsystem@1.11/manual/PlayerInput.html</remarks>
+public readonly partial struct PlayerInput : IComponentFacade<PlayerInput>
+{
+    public static string TypeId => "astra.input.player_input";
+    public static PlayerInput Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public PlayerInput(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Ativa. Desligada não emite eventos; as ações continuam valendo para scripts e personagem</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+    [System.Flags]
+    public enum ActionsOption : uint
+    {
+        Acao1 = 1,
+        Acao2 = 2,
+        Acao3 = 4,
+        Acao4 = 8,
+        Acao5 = 16,
+        Acao6 = 32,
+        Acao7 = 64,
+        Acao8 = 128,
+        Acao9 = 256,
+        Acao10 = 512,
+        Acao11 = 1024,
+        Acao12 = 2048,
+        Acao13 = 4096,
+        Acao14 = 8192,
+        Acao15 = 16384,
+        Acao16 = 32768,
+        Acao17 = 65536,
+        Acao18 = 131072,
+        Acao19 = 262144,
+        Acao20 = 524288,
+        Acao21 = 1048576,
+        Acao22 = 2097152,
+        Acao23 = 4194304,
+        Acao24 = 8388608,
+        Acao25 = 16777216,
+        Acao26 = 33554432,
+        Acao27 = 67108864,
+        Acao28 = 134217728,
+        Acao29 = 268435456,
+        Acao30 = 536870912,
+        Acao31 = 1073741824,
+        Acao32 = 2147483648,
+    }
+    /// <summary>Ações. Ações do mapa de entrada da cena que geram eventos neste objeto</summary>
+    public ActionsOption Actions
+    {
+        get => (ActionsOption)Component.GetEnum("actions");
+        set => Component.SetEnum("actions", (uint)value);
+    }
+    /// <summary>Ação executada. A ação disparou neste quadro (performed do Input System); o valor é o índice da ação, a partir de 1. Payload: Ação: inteiro</summary>
+    public ComponentSubscription OnPerformed(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "performed", handler);
+    /// <summary>Ação cancelada. A ação foi solta neste quadro (canceled do Input System). Payload: Ação: inteiro</summary>
+    public ComponentSubscription OnCanceled(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "canceled", handler);
 }
 
 /// <summary>IK de dois ossos: Raiz e meio da cadeia levam a ponta ao alvo, com direção da dobra. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
+public readonly partial struct TwoBoneIk : IComponentFacade<TwoBoneIk>
 {
     public static string TypeId => "astra.ik.two_bone";
     public static TwoBoneIk Wrap(Component component) => new(component);
@@ -1550,7 +1679,7 @@ public readonly struct TwoBoneIk : IComponentFacade<TwoBoneIk>
 
 /// <summary>IK de cadeia: CCD ou FABRIK em N ossos, com iterações e tolerância. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/ChainIKConstraint.html</remarks>
-public readonly struct ChainIk : IComponentFacade<ChainIk>
+public readonly partial struct ChainIk : IComponentFacade<ChainIk>
 {
     public static string TypeId => "astra.ik.chain";
     public static ChainIk Wrap(Component component) => new(component);
@@ -1707,7 +1836,7 @@ public readonly struct ChainIk : IComponentFacade<ChainIk>
 
 /// <summary>Apoio do pé: Raio pela física apoia o pé na superfície e resolve a perna. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
-public readonly struct FootGrounding : IComponentFacade<FootGrounding>
+public readonly partial struct FootGrounding : IComponentFacade<FootGrounding>
 {
     public static string TypeId => "astra.ik.foot_grounding";
     public static FootGrounding Wrap(Component component) => new(component);
@@ -1786,7 +1915,7 @@ public readonly struct FootGrounding : IComponentFacade<FootGrounding>
 
 /// <summary>Look At IK: Coluna e cabeça olham para o alvo com pesos e ângulo máximo. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html</remarks>
-public readonly struct LookAtIk : IComponentFacade<LookAtIk>
+public readonly partial struct LookAtIk : IComponentFacade<LookAtIk>
 {
     public static string TypeId => "astra.ik.look_at";
     public static LookAtIk Wrap(Component component) => new(component);
@@ -1874,7 +2003,7 @@ public readonly struct LookAtIk : IComponentFacade<LookAtIk>
 
 /// <summary>Aim IK: Cadeia gira para o eixo da ponta mirar o alvo. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html</remarks>
-public readonly struct AimIk : IComponentFacade<AimIk>
+public readonly partial struct AimIk : IComponentFacade<AimIk>
 {
     public static string TypeId => "astra.ik.aim";
     public static AimIk Wrap(Component component) => new(component);
@@ -1955,7 +2084,7 @@ public readonly struct AimIk : IComponentFacade<AimIk>
 
 /// <summary>Limite de rotação: Dobradiça ou cone aplicados ao osso depois do IK. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct RotationLimit : IComponentFacade<RotationLimit>
+public readonly partial struct RotationLimit : IComponentFacade<RotationLimit>
 {
     public static string TypeId => "astra.ik.rotation_limit";
     public static RotationLimit Wrap(Component component) => new(component);
@@ -2025,7 +2154,7 @@ public readonly struct RotationLimit : IComponentFacade<RotationLimit>
 
 /// <summary>Grounder do corpo: Desce a pelve para os pés alcançarem o chão (bípede ou quadrúpede). Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
-public readonly struct GrounderBody : IComponentFacade<GrounderBody>
+public readonly partial struct GrounderBody : IComponentFacade<GrounderBody>
 {
     public static string TypeId => "astra.ik.grounder";
     public static GrounderBody Wrap(Component component) => new(component);
@@ -2070,7 +2199,7 @@ public readonly struct GrounderBody : IComponentFacade<GrounderBody>
 
 /// <summary>Curvatura de dedo: Fecha ou abre a cadeia do dedo no eixo local. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/ChainIKConstraint.html</remarks>
-public readonly struct FingerCurl : IComponentFacade<FingerCurl>
+public readonly partial struct FingerCurl : IComponentFacade<FingerCurl>
 {
     public static string TypeId => "astra.ik.finger_curl";
     public static FingerCurl Wrap(Component component) => new(component);
@@ -2138,7 +2267,7 @@ public readonly struct FingerCurl : IComponentFacade<FingerCurl>
 
 /// <summary>Offset de efetor: Desloca o alvo do IK desta ponta. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct IkOffset : IComponentFacade<IkOffset>
+public readonly partial struct IkOffset : IComponentFacade<IkOffset>
 {
     public static string TypeId => "astra.ik.offset";
     public static IkOffset Wrap(Component component) => new(component);
@@ -2169,7 +2298,7 @@ public readonly struct IkOffset : IComponentFacade<IkOffset>
 
 /// <summary>Relaxar torção: Divide a torção do filho com este osso. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwistCorrection.html</remarks>
-public readonly struct TwistRelaxer : IComponentFacade<TwistRelaxer>
+public readonly partial struct TwistRelaxer : IComponentFacade<TwistRelaxer>
 {
     public static string TypeId => "astra.ik.twist_relaxer";
     public static TwistRelaxer Wrap(Component component) => new(component);
@@ -2201,7 +2330,7 @@ public readonly struct TwistRelaxer : IComponentFacade<TwistRelaxer>
 
 /// <summary>Reação a impacto: Gira a cadeia para longe do golpe e volta. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html</remarks>
-public readonly struct HitReaction : IComponentFacade<HitReaction>
+public readonly partial struct HitReaction : IComponentFacade<HitReaction>
 {
     public static string TypeId => "astra.ik.hit_reaction";
     public static HitReaction Wrap(Component component) => new(component);
@@ -2281,7 +2410,7 @@ public readonly struct HitReaction : IComponentFacade<HitReaction>
 
 /// <summary>Recuo: Levanta e recua a cadeia a cada disparo. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiAimConstraint.html</remarks>
-public readonly struct Recoil : IComponentFacade<Recoil>
+public readonly partial struct Recoil : IComponentFacade<Recoil>
 {
     public static string TypeId => "astra.ik.recoil";
     public static Recoil Wrap(Component component) => new(component);
@@ -2359,7 +2488,7 @@ public readonly struct Recoil : IComponentFacade<Recoil>
 
 /// <summary>Inércia: A ponta do osso segue a pose por uma mola. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/DampedTransform.html</remarks>
-public readonly struct Inertia : IComponentFacade<Inertia>
+public readonly partial struct Inertia : IComponentFacade<Inertia>
 {
     public static string TypeId => "astra.ik.inertia";
     public static Inertia Wrap(Component component) => new(component);
@@ -2412,7 +2541,7 @@ public readonly struct Inertia : IComponentFacade<Inertia>
 
 /// <summary>Amplificador: Exagera a rotação animada do osso. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/MultiRotationConstraint.html</remarks>
-public readonly struct Amplifier : IComponentFacade<Amplifier>
+public readonly partial struct Amplifier : IComponentFacade<Amplifier>
 {
     public static string TypeId => "astra.ik.amplifier";
     public static Amplifier Wrap(Component component) => new(component);
@@ -2451,7 +2580,7 @@ public readonly struct Amplifier : IComponentFacade<Amplifier>
 
 /// <summary>Inclinação do corpo: Inclina o osso para dentro da curva. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html</remarks>
-public readonly struct BodyTilt : IComponentFacade<BodyTilt>
+public readonly partial struct BodyTilt : IComponentFacade<BodyTilt>
 {
     public static string TypeId => "astra.ik.body_tilt";
     public static BodyTilt Wrap(Component component) => new(component);
@@ -2519,7 +2648,7 @@ public readonly struct BodyTilt : IComponentFacade<BodyTilt>
 
 /// <summary>Poser de mão: Copia a pose de uma hierarquia de referência. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/OverrideTransform.html</remarks>
-public readonly struct HandPoser : IComponentFacade<HandPoser>
+public readonly partial struct HandPoser : IComponentFacade<HandPoser>
 {
     public static string TypeId => "astra.ik.hand_poser";
     public static HandPoser Wrap(Component component) => new(component);
@@ -2563,7 +2692,7 @@ public readonly struct HandPoser : IComponentFacade<HandPoser>
 
 /// <summary>Evitar penetração: Para o alvo do IK na superfície do colisor. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
-public readonly struct PenetrationAvoidance : IComponentFacade<PenetrationAvoidance>
+public readonly partial struct PenetrationAvoidance : IComponentFacade<PenetrationAvoidance>
 {
     public static string TypeId => "astra.ik.penetration_avoidance";
     public static PenetrationAvoidance Wrap(Component component) => new(component);
@@ -2595,7 +2724,7 @@ public readonly struct PenetrationAvoidance : IComponentFacade<PenetrationAvoida
 
 /// <summary>Objeto interagível: Ponto de pegada, pose da mão e tempos. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct InteractionObject : IComponentFacade<InteractionObject>
+public readonly partial struct InteractionObject : IComponentFacade<InteractionObject>
 {
     public static string TypeId => "astra.ik.interaction_object";
     public static InteractionObject Wrap(Component component) => new(component);
@@ -2665,7 +2794,7 @@ public readonly struct InteractionObject : IComponentFacade<InteractionObject>
 
 /// <summary>Sistema de interação: Leva a mão até objetos interagíveis. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
+public readonly partial struct InteractionSystem : IComponentFacade<InteractionSystem>
 {
     public static string TypeId => "astra.ik.interaction_system";
     public static InteractionSystem Wrap(Component component) => new(component);
@@ -2787,7 +2916,7 @@ public readonly struct InteractionSystem : IComponentFacade<InteractionSystem>
 
 /// <summary>Pivô de pegada: Gira o objeto sobre este pivô para a pegada encarar a mão. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-grab-interactable.html</remarks>
-public readonly struct InteractionGrip : IComponentFacade<InteractionGrip>
+public readonly partial struct InteractionGrip : IComponentFacade<InteractionGrip>
 {
     public static string TypeId => "astra.ik.interaction_grip";
     public static InteractionGrip Wrap(Component component) => new(component);
@@ -2871,7 +3000,7 @@ public readonly struct InteractionGrip : IComponentFacade<InteractionGrip>
 
 /// <summary>Gatilho de interação: Faixa à frente do objeto: o personagem dentro dela interage. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.xr.interaction.toolkit@3.0/manual/xr-direct-interactor.html</remarks>
-public readonly struct InteractionTrigger : IComponentFacade<InteractionTrigger>
+public readonly partial struct InteractionTrigger : IComponentFacade<InteractionTrigger>
 {
     public static string TypeId => "astra.ik.interaction_trigger";
     public static InteractionTrigger Wrap(Component component) => new(component);
@@ -2967,7 +3096,7 @@ public readonly struct InteractionTrigger : IComponentFacade<InteractionTrigger>
 
 /// <summary>IK de corpo inteiro: Puxa a pelve para alcançar alvos e resolve os membros. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
-public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
+public readonly partial struct FullBodyIk : IComponentFacade<FullBodyIk>
 {
     public static string TypeId => "astra.ik.full_body";
     public static FullBodyIk Wrap(Component component) => new(component);
@@ -3087,7 +3216,7 @@ public readonly struct FullBodyIk : IComponentFacade<FullBodyIk>
 
 /// <summary>FABRIK em árvore: Várias cadeias com raiz comum resolvidas juntas. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_skeletonmodifier3d.html</remarks>
-public readonly struct FabrikRoot : IComponentFacade<FabrikRoot>
+public readonly partial struct FabrikRoot : IComponentFacade<FabrikRoot>
 {
     public static string TypeId => "astra.ik.fabrik_root";
     public static FabrikRoot Wrap(Component component) => new(component);
@@ -3181,7 +3310,7 @@ public readonly struct FabrikRoot : IComponentFacade<FabrikRoot>
 
 /// <summary>Corpo por alvos (VRIK): Cabeça e mãos seguem alvos; pelve e tronco acompanham. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.animation.rigging@1.2/manual/constraints/TwoBoneIKConstraint.html</remarks>
-public readonly struct BodyByTargets : IComponentFacade<BodyByTargets>
+public readonly partial struct BodyByTargets : IComponentFacade<BodyByTargets>
 {
     public static string TypeId => "astra.ik.body_by_targets";
     public static BodyByTargets Wrap(Component component) => new(component);
@@ -3288,7 +3417,7 @@ public readonly struct BodyByTargets : IComponentFacade<BodyByTargets>
 
 /// <summary>Encaixe: Acessório preso a um osso com deslocamento; segue a pose final. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_boneattachment3d.html</remarks>
-public readonly struct Socket : IComponentFacade<Socket>
+public readonly partial struct Socket : IComponentFacade<Socket>
 {
     public static string TypeId => "astra.ik.socket";
     public static Socket Wrap(Component component) => new(component);
@@ -3337,7 +3466,7 @@ public readonly struct Socket : IComponentFacade<Socket>
 
 /// <summary>Filho de: Troca o pai do objeto durante a animação; os canais locais valem no espaço do pai escolhido. Família Lógica · IK.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ParentConstraint.html</remarks>
-public readonly struct ChildOf : IComponentFacade<ChildOf>
+public readonly partial struct ChildOf : IComponentFacade<ChildOf>
 {
     public static string TypeId => "astra.constraint.child_of";
     public static ChildOf Wrap(Component component) => new(component);
@@ -3374,7 +3503,7 @@ public readonly struct ChildOf : IComponentFacade<ChildOf>
 
 /// <summary>Canvas UI: Instância independente de documento de UI, na tela ou no objeto. Família Renderização · Interface.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ugui@2.0/manual/class-Canvas.html</remarks>
-public readonly struct UiCanvas : IComponentFacade<UiCanvas>
+public readonly partial struct UiCanvas : IComponentFacade<UiCanvas>
 {
     public static string TypeId => "astra.ui.canvas";
     public static UiCanvas Wrap(Component component) => new(component);
@@ -3475,7 +3604,7 @@ public readonly struct UiCanvas : IComponentFacade<UiCanvas>
 
 /// <summary>Malha: Geometria e material. Família Renderização · Geometria.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-MeshRenderer.html</remarks>
-public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
+public readonly partial struct MeshRenderer : IComponentFacade<MeshRenderer>
 {
     public static string TypeId => "astra.render.mesh";
     public static MeshRenderer Wrap(Component component) => new(component);
@@ -3882,11 +4011,14 @@ public readonly struct MeshRenderer : IComponentFacade<MeshRenderer>
     /// <summary>Emissão / Filtro. Opção por slot</summary>
     public uint GetSamplingEmissiveFilter(uint slot) => Component.GetSlotEnum("sampling.emissive.filter", slot);
     public void SetSamplingEmissiveFilter(uint slot, uint value) => Component.SetSlotEnum("sampling.emissive.filter", value, slot);
+    /// <summary>Trocar material. Renderer.sharedMaterial: o primeiro slot passa a usar outro Material do projeto</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetSharedMaterial(AssetGuid asset) => Component.Invoke("set_shared_material", ComponentValue.Integer(unchecked((long)asset.High)), ComponentValue.Integer(unchecked((long)asset.Low)));
 }
 
 /// <summary>Malha deformável: Esqueleto e blend shapes da Malha. Família Renderização · Geometria.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-SkinnedMeshRenderer.html</remarks>
-public readonly struct SkinnedMesh : IComponentFacade<SkinnedMesh>
+public readonly partial struct SkinnedMesh : IComponentFacade<SkinnedMesh>
 {
     public static string TypeId => "astra.render.skinned_mesh";
     public static SkinnedMesh Wrap(Component component) => new(component);
@@ -3927,7 +4059,7 @@ public readonly struct SkinnedMesh : IComponentFacade<SkinnedMesh>
 
 /// <summary>LOD Group: Nível de detalhe pela altura na tela. Família Renderização · Desempenho.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-LODGroup.html</remarks>
-public readonly struct LodGroup : IComponentFacade<LodGroup>
+public readonly partial struct LodGroup : IComponentFacade<LodGroup>
 {
     public static string TypeId => "astra.render.lod_group";
     public static LodGroup Wrap(Component component) => new(component);
@@ -4083,7 +4215,7 @@ public readonly struct LodGroup : IComponentFacade<LodGroup>
 
 /// <summary>Ambiente: Céu, atmosfera, neblina e pós globais ou por volume. Família Renderização · Ambiente.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@17.0/manual/Volumes.html</remarks>
-public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
+public readonly partial struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
 {
     public static string TypeId => "astra.render.environment";
     public static EnvironmentVolume Wrap(Component component) => new(component);
@@ -5271,11 +5403,35 @@ public readonly struct EnvironmentVolume : IComponentFacade<EnvironmentVolume>
     /// <summary>Textura de sujeira. Recurso do projeto por slot</summary>
     public AssetGuid GetBloomDirt(uint slot = 0) => Component.GetResource("bloom_dirt", slot);
     public void SetBloomDirt(AssetGuid value, uint slot = 0) => Component.SetResource("bloom_dirt", value, slot);
+    /// <summary>Definir peso. Volume.weight: 0 não contribui, 1 contribui inteiro</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetWeight(double weight) => Component.Invoke("set_weight", ComponentValue.Number(weight));
+    /// <summary>Trocar perfil. Volume.sharedProfile: passa a usar outro Volume Profile do projeto (zero tira o perfil)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetSharedProfile(AssetGuid asset) => Component.Invoke("set_shared_profile", ComponentValue.Integer(unchecked((long)asset.High)), ComponentValue.Integer(unchecked((long)asset.Low)));
+    /// <summary>Usar cópia do perfil. Volume.profile: copia o perfil compartilhado para este Volume; mudanças seguintes não tocam o recurso</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void InstantiateProfile() => Component.Invoke("instantiate_profile");
+    /// <summary>Tem cópia própria?. Volume.HasInstantiatedProfile: verdadeiro quando os valores são deste Volume, sem perfil compartilhado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool HasInstantiatedProfile() => Component.Invoke("has_instantiated_profile").AsBoolean();
+    /// <summary>Parâmetro marcado?. VolumeParameter.overrideState do parâmetro de índice dado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool ParameterOverridden(long parameter) => Component.Invoke("parameter_overridden", ComponentValue.Integer(parameter)).AsBoolean();
+    /// <summary>Marcar parâmetro. VolumeParameter.overrideState; com perfil compartilhado, primeiro usa a cópia (Volume.profile)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetParameterOverridden(long parameter, bool value) => Component.Invoke("set_parameter_overridden", ComponentValue.Integer(parameter), ComponentValue.Boolean(value));
+    /// <summary>Override ligado?. VolumeComponent.active do override de índice dado</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public bool ComponentActive(long group) => Component.Invoke("component_active", ComponentValue.Integer(group)).AsBoolean();
+    /// <summary>Ligar override. VolumeComponent.active; com perfil compartilhado, primeiro usa a cópia (Volume.profile)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public void SetComponentActive(long group, bool active) => Component.Invoke("set_component_active", ComponentValue.Integer(group), ComponentValue.Boolean(active));
 }
 
 /// <summary>Clima: Chuva, neve e tempestade: dirige as nuvens do Ambiente e as partículas. Família Renderização · Ambiente.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/create-simple-clouds-cloud-layer.html</remarks>
-public readonly struct Weather : IComponentFacade<Weather>
+public readonly partial struct Weather : IComponentFacade<Weather>
 {
     public static string TypeId => "astra.environment.weather";
     public static Weather Wrap(Component component) => new(component);
@@ -5457,7 +5613,7 @@ public readonly struct Weather : IComponentFacade<Weather>
 
 /// <summary>Luz: Direcional, pontual ou spot. Família Luz · Luzes.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Light.html</remarks>
-public readonly struct Light : IComponentFacade<Light>
+public readonly partial struct Light : IComponentFacade<Light>
 {
     public static string TypeId => "astra.render.light";
     public static Light Wrap(Component component) => new(component);
@@ -5679,7 +5835,7 @@ public readonly struct Light : IComponentFacade<Light>
 
 /// <summary>Hora do dia: Move o sol pela hora, data e latitude; dia, crepúsculo e noite. Família Luz · Luzes.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_directionallight3d.html</remarks>
-public readonly struct TimeOfDay : IComponentFacade<TimeOfDay>
+public readonly partial struct TimeOfDay : IComponentFacade<TimeOfDay>
 {
     public static string TypeId => "astra.render.time_of_day";
     public static TimeOfDay Wrap(Component component) => new(component);
@@ -5741,11 +5897,19 @@ public readonly struct TimeOfDay : IComponentFacade<TimeOfDay>
         get => Component.GetReference("moon_light");
         set => Component.SetReference("moon_light", value);
     }
+    /// <summary>Hora mudou. A hora inteira mudou: passou o tempo ou um script escreveu outra hora. Payload: Hora: inteiro</summary>
+    public ComponentSubscription OnHourChanged(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "hour_changed", handler);
+    /// <summary>Nascer do sol. O sol subiu acima do horizonte</summary>
+    public ComponentSubscription OnSunrise(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "sunrise", handler);
+    /// <summary>Pôr do sol. O sol desceu abaixo do horizonte</summary>
+    public ComponentSubscription OnSunset(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "sunset", handler);
+    /// <summary>Dia mudou. A hora passou de 24 h; o Dia do ano avança um. Payload: Dia do ano: inteiro</summary>
+    public ComponentSubscription OnDayChanged(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "day_changed", handler);
 }
 
 /// <summary>Iluminação da cena: Fonte do sol: qual luz direcional é o sol da cena. Família Luz · Luzes.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/lighting-window.html</remarks>
-public readonly struct LightingSettings : IComponentFacade<LightingSettings>
+public readonly partial struct LightingSettings : IComponentFacade<LightingSettings>
 {
     public static string TypeId => "astra.render.lighting_settings";
     public static LightingSettings Wrap(Component component) => new(component);
@@ -5878,7 +6042,7 @@ public readonly struct LightingSettings : IComponentFacade<LightingSettings>
 
 /// <summary>Sonda de reflexo: Captura a cena num cubemap: metal e vidro refletem o cômodo em vez do céu. Família Luz · Sondas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ReflectionProbe.html</remarks>
-public readonly struct ReflectionProbe : IComponentFacade<ReflectionProbe>
+public readonly partial struct ReflectionProbe : IComponentFacade<ReflectionProbe>
 {
     public static string TypeId => "astra.render.reflection_probe";
     public static ReflectionProbe Wrap(Component component) => new(component);
@@ -6076,7 +6240,7 @@ public readonly struct ReflectionProbe : IComponentFacade<ReflectionProbe>
 
 /// <summary>Grupo de sondas de luz: Pontos que guardam a luz da cena para iluminar objetos que se movem. Família Luz · Sondas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-LightProbeGroup.html</remarks>
-public readonly struct LightProbeGroup : IComponentFacade<LightProbeGroup>
+public readonly partial struct LightProbeGroup : IComponentFacade<LightProbeGroup>
 {
     public static string TypeId => "astra.render.light_probe_group";
     public static LightProbeGroup Wrap(Component component) => new(component);
@@ -6121,11 +6285,14 @@ public readonly struct LightProbeGroup : IComponentFacade<LightProbeGroup>
     /// <summary>Posição Z (m). Valor por slot</summary>
     public float GetProbePositionZ(uint slot) => Component.GetSlotFloat("probe_position_z", slot);
     public void SetProbePositionZ(uint slot, float value) => Component.SetSlotFloat("probe_position_z", value, slot);
+    /// <summary>Quantidade de sondas. Quantos pontos o grupo tem (probePositions.Length da Unity)</summary>
+    /// <remarks>Executado no mundo de Play; fora dele lança WorldException NotRunning.</remarks>
+    public long ProbeCount() => Component.Invoke("probe_count").AsInteger();
 }
 
 /// <summary>Câmera: Projeção e enquadramento. Família Câmera · Projeção.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Camera.html</remarks>
-public readonly struct Camera : IComponentFacade<Camera>
+public readonly partial struct Camera : IComponentFacade<Camera>
 {
     public static string TypeId => "astra.camera";
     public static Camera Wrap(Component component) => new(component);
@@ -6397,7 +6564,7 @@ public readonly struct Camera : IComponentFacade<Camera>
 
 /// <summary>Olhar: Rotação local da câmera por entrada ou script. Família Câmera · Controle.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachinePanTilt.html</remarks>
-public readonly struct CameraLook : IComponentFacade<CameraLook>
+public readonly partial struct CameraLook : IComponentFacade<CameraLook>
 {
     public static string TypeId => "astra.camera.look";
     public static CameraLook Wrap(Component component) => new(component);
@@ -6443,7 +6610,7 @@ public readonly struct CameraLook : IComponentFacade<CameraLook>
 
 /// <summary>Acompanhar alvo: Posiciona a câmera após física e animação. Família Câmera · Controle.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineFollow.html</remarks>
-public readonly struct CameraFollow : IComponentFacade<CameraFollow>
+public readonly partial struct CameraFollow : IComponentFacade<CameraFollow>
 {
     public static string TypeId => "astra.camera.follow";
     public static CameraFollow Wrap(Component component) => new(component);
@@ -6500,7 +6667,7 @@ public readonly struct CameraFollow : IComponentFacade<CameraFollow>
 
 /// <summary>Câmera virtual: Pose e lente por prioridade: seguir, órbita, mira, desoclusão e tremor. Família Câmera · Câmera virtual.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineCamera.html</remarks>
-public readonly struct VirtualCamera : IComponentFacade<VirtualCamera>
+public readonly partial struct VirtualCamera : IComponentFacade<VirtualCamera>
 {
     public static string TypeId => "astra.camera.virtual";
     public static VirtualCamera Wrap(Component component) => new(component);
@@ -6822,7 +6989,7 @@ public readonly struct VirtualCamera : IComponentFacade<VirtualCamera>
 
 /// <summary>Cérebro de câmera: Mostra a câmera virtual de maior prioridade e faz a transição. Família Câmera · Câmera virtual.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.cinemachine@3.1/manual/CinemachineBrain.html</remarks>
-public readonly struct CameraBrain : IComponentFacade<CameraBrain>
+public readonly partial struct CameraBrain : IComponentFacade<CameraBrain>
 {
     public static string TypeId => "astra.camera.brain";
     public static CameraBrain Wrap(Component component) => new(component);
@@ -6888,7 +7055,7 @@ public readonly struct CameraBrain : IComponentFacade<CameraBrain>
 
 /// <summary>Campo de gravidade: Gravidade local em volume sobre corpos dinâmicos. Família Física 3D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
-public readonly struct GravityField : IComponentFacade<GravityField>
+public readonly partial struct GravityField : IComponentFacade<GravityField>
 {
     public static string TypeId => "astra.physics.field.gravity";
     public static GravityField Wrap(Component component) => new(component);
@@ -7015,7 +7182,7 @@ public readonly struct GravityField : IComponentFacade<GravityField>
 
 /// <summary>Campo de vento: Arrasto para velocidade local do ar, dependente da massa. Família Física 3D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
-public readonly struct WindField : IComponentFacade<WindField>
+public readonly partial struct WindField : IComponentFacade<WindField>
 {
     public static string TypeId => "astra.physics.field.wind";
     public static WindField Wrap(Component component) => new(component);
@@ -7143,7 +7310,7 @@ public readonly struct WindField : IComponentFacade<WindField>
 
 /// <summary>Campo de arrasto: Amortecimento linear e angular local. Família Física 3D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
-public readonly struct DragField : IComponentFacade<DragField>
+public readonly partial struct DragField : IComponentFacade<DragField>
 {
     public static string TypeId => "astra.physics.field.drag";
     public static DragField Wrap(Component component) => new(component);
@@ -7272,7 +7439,7 @@ public readonly struct DragField : IComponentFacade<DragField>
 
 /// <summary>Campo radial: Atração, repulsão e vórtice ao redor do centro. Família Física 3D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
-public readonly struct RadialField : IComponentFacade<RadialField>
+public readonly partial struct RadialField : IComponentFacade<RadialField>
 {
     public static string TypeId => "astra.physics.field.radial";
     public static RadialField Wrap(Component component) => new(component);
@@ -7401,7 +7568,7 @@ public readonly struct RadialField : IComponentFacade<RadialField>
 
 /// <summary>Conexão física 3D: Evento de sensor/contato altera a ativação de um receptor. Família Física 3D · Eventos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area3d.html</remarks>
-public readonly struct PhysicsEventConnection3D : IComponentFacade<PhysicsEventConnection3D>
+public readonly partial struct PhysicsEventConnection3D : IComponentFacade<PhysicsEventConnection3D>
 {
     public static string TypeId => "astra.physics.event_connection";
     public static PhysicsEventConnection3D Wrap(Component component) => new(component);
@@ -7466,7 +7633,7 @@ public readonly struct PhysicsEventConnection3D : IComponentFacade<PhysicsEventC
 
 /// <summary>Força constante: Força e torque contínuos sobre corpo dinâmico. Família Física 3D · Forças.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-ConstantForce.html</remarks>
-public readonly struct ConstantForce : IComponentFacade<ConstantForce>
+public readonly partial struct ConstantForce : IComponentFacade<ConstantForce>
 {
     public static string TypeId => "astra.physics.constant_force";
     public static ConstantForce Wrap(Component component) => new(component);
@@ -7515,7 +7682,7 @@ public readonly struct ConstantForce : IComponentFacade<ConstantForce>
 
 /// <summary>Corpo físico: Massa e resposta física. Família Física 3D · Corpos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Rigidbody.html</remarks>
-public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
+public readonly partial struct PhysicsBody : IComponentFacade<PhysicsBody>
 {
     public static string TypeId => "astra.physics.body";
     public static PhysicsBody Wrap(Component component) => new(component);
@@ -7776,7 +7943,7 @@ public readonly struct PhysicsBody : IComponentFacade<PhysicsBody>
 
 /// <summary>Personagem: Locomoção com cápsula. Família Física 3D · Corpos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-CharacterController.html</remarks>
-public readonly struct Character : IComponentFacade<Character>
+public readonly partial struct Character : IComponentFacade<Character>
 {
     public static string TypeId => "astra.physics.character";
     public static Character Wrap(Component component) => new(component);
@@ -7973,7 +8140,7 @@ public readonly struct Character : IComponentFacade<Character>
 
 /// <summary>Colisor 3D: Volume de contato. Família Física 3D · Formas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-BoxCollider.html</remarks>
-public readonly struct Collider : IComponentFacade<Collider>
+public readonly partial struct Collider : IComponentFacade<Collider>
 {
     public static string TypeId => "astra.physics.collider";
     public static Collider Wrap(Component component) => new(component);
@@ -8174,7 +8341,7 @@ public readonly struct Collider : IComponentFacade<Collider>
 
 /// <summary>Junta: Nove mecanismos Jolt com limites, referenciais e motores. Família Física 3D · Juntas.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_generic6dofjoint3d.html</remarks>
-public readonly struct Joint : IComponentFacade<Joint>
+public readonly partial struct Joint : IComponentFacade<Joint>
 {
     public static string TypeId => "astra.physics.joint";
     public static Joint Wrap(Component component) => new(component);
@@ -8851,7 +9018,7 @@ public readonly struct Joint : IComponentFacade<Joint>
 
 /// <summary>Motor dinâmico: Locomoção por força e salto com apoio sobre Corpo físico dinâmico. Família Física 3D · Corpos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_rigidbody3d.html</remarks>
-public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
+public readonly partial struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
 {
     public static string TypeId => "astra.physics.dynamic_motor";
     public static DynamicBodyMotor Wrap(Component component) => new(component);
@@ -9001,7 +9168,7 @@ public readonly struct DynamicBodyMotor : IComponentFacade<DynamicBodyMotor>
 
 /// <summary>Raio: Consulta um raio a cada quadro e guarda o primeiro acerto. Família Física 3D · Consultas.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_raycast3d.html</remarks>
-public readonly struct RayCast : IComponentFacade<RayCast>
+public readonly partial struct RayCast : IComponentFacade<RayCast>
 {
     public static string TypeId => "astra.physics.raycast";
     public static RayCast Wrap(Component component) => new(component);
@@ -9116,7 +9283,7 @@ public readonly struct RayCast : IComponentFacade<RayCast>
 
 /// <summary>Varredura de forma: Varre uma forma até o alvo e guarda o primeiro acerto. Família Física 3D · Consultas.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_shapecast3d.html</remarks>
-public readonly struct ShapeCast : IComponentFacade<ShapeCast>
+public readonly partial struct ShapeCast : IComponentFacade<ShapeCast>
 {
     public static string TypeId => "astra.physics.shapecast";
     public static ShapeCast Wrap(Component component) => new(component);
@@ -9264,7 +9431,7 @@ public readonly struct ShapeCast : IComponentFacade<ShapeCast>
 
 /// <summary>Braço de mola: Afasta os filhos até a primeira colisão, como câmera em terceira pessoa. Família Física 3D · Consultas.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_springarm3d.html</remarks>
-public readonly struct SpringArm : IComponentFacade<SpringArm>
+public readonly partial struct SpringArm : IComponentFacade<SpringArm>
 {
     public static string TypeId => "astra.physics.spring_arm";
     public static SpringArm Wrap(Component component) => new(component);
@@ -9379,7 +9546,7 @@ public readonly struct SpringArm : IComponentFacade<SpringArm>
 
 /// <summary>Animação: Clipes tocados e misturados no Play. Família Animação · Clipes.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-Animation.html</remarks>
-public readonly struct Animation : IComponentFacade<Animation>
+public readonly partial struct Animation : IComponentFacade<Animation>
 {
     public static string TypeId => "astra.animation";
     public static Animation Wrap(Component component) => new(component);
@@ -9482,7 +9649,7 @@ public readonly struct Animation : IComponentFacade<Animation>
 
 /// <summary>Animator: Máquina de estados: parâmetros, transições, misturas e camadas. Família Animação · Máquina de estados.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AnimatorController.html</remarks>
-public readonly struct Animator : IComponentFacade<Animator>
+public readonly partial struct Animator : IComponentFacade<Animator>
 {
     public static string TypeId => "astra.animation.animator";
     public static Animator Wrap(Component component) => new(component);
@@ -9618,7 +9785,7 @@ public readonly struct Animator : IComponentFacade<Animator>
 
 /// <summary>Root motion: O passo do osso raiz anima o personagem; o osso fica no lugar. Família Animação · Movimento.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/RootMotion.html</remarks>
-public readonly struct RootMotion : IComponentFacade<RootMotion>
+public readonly partial struct RootMotion : IComponentFacade<RootMotion>
 {
     public static string TypeId => "astra.animation.root_motion";
     public static RootMotion Wrap(Component component) => new(component);
@@ -9709,7 +9876,7 @@ public readonly struct RootMotion : IComponentFacade<RootMotion>
 
 /// <summary>Campo de gravidade 2D: Gravidade XY em área sobre corpos dinâmicos 2D. Família Física 2D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
-public readonly struct GravityField2D : IComponentFacade<GravityField2D>
+public readonly partial struct GravityField2D : IComponentFacade<GravityField2D>
 {
     public static string TypeId => "astra.physics2d.field.gravity";
     public static GravityField2D Wrap(Component component) => new(component);
@@ -9836,7 +10003,7 @@ public readonly struct GravityField2D : IComponentFacade<GravityField2D>
 
 /// <summary>Campo de vento 2D: Acoplamento XY à velocidade do ar com massa real. Família Física 2D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
-public readonly struct WindField2D : IComponentFacade<WindField2D>
+public readonly partial struct WindField2D : IComponentFacade<WindField2D>
 {
     public static string TypeId => "astra.physics2d.field.wind";
     public static WindField2D Wrap(Component component) => new(component);
@@ -9964,7 +10131,7 @@ public readonly struct WindField2D : IComponentFacade<WindField2D>
 
 /// <summary>Campo de arrasto 2D: Amortecimento linear XY e angular de Body2D. Família Física 2D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
-public readonly struct DragField2D : IComponentFacade<DragField2D>
+public readonly partial struct DragField2D : IComponentFacade<DragField2D>
 {
     public static string TypeId => "astra.physics2d.field.drag";
     public static DragField2D Wrap(Component component) => new(component);
@@ -10093,7 +10260,7 @@ public readonly struct DragField2D : IComponentFacade<DragField2D>
 
 /// <summary>Campo radial 2D: Atração, repulsão e vórtice no plano XY. Família Física 2D · Campos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
-public readonly struct RadialField2D : IComponentFacade<RadialField2D>
+public readonly partial struct RadialField2D : IComponentFacade<RadialField2D>
 {
     public static string TypeId => "astra.physics2d.field.radial";
     public static RadialField2D Wrap(Component component) => new(component);
@@ -10222,7 +10389,7 @@ public readonly struct RadialField2D : IComponentFacade<RadialField2D>
 
 /// <summary>Conexão física 2D: Evento real de sensor/contato 2D altera ativação do receptor. Família Física 2D · Eventos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_area2d.html</remarks>
-public readonly struct PhysicsEventConnection2D : IComponentFacade<PhysicsEventConnection2D>
+public readonly partial struct PhysicsEventConnection2D : IComponentFacade<PhysicsEventConnection2D>
 {
     public static string TypeId => "astra.physics2d.event_connection";
     public static PhysicsEventConnection2D Wrap(Component component) => new(component);
@@ -10287,7 +10454,7 @@ public readonly struct PhysicsEventConnection2D : IComponentFacade<PhysicsEventC
 
 /// <summary>Força constante 2D: Força XY e torque contínuos sobre Body2D dinâmico. Família Física 2D · Forças.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/ConstantForce2D.html</remarks>
-public readonly struct ConstantForce2D : IComponentFacade<ConstantForce2D>
+public readonly partial struct ConstantForce2D : IComponentFacade<ConstantForce2D>
 {
     public static string TypeId => "astra.physics2d.constant-force";
     public static ConstantForce2D Wrap(Component component) => new(component);
@@ -10347,7 +10514,7 @@ public readonly struct ConstantForce2D : IComponentFacade<ConstantForce2D>
 
 /// <summary>Junta 2D: Fixed/Weld, Revolute, Prismatic ou Distance reais. Família Física 2D · Juntas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/Joint2D.html</remarks>
-public readonly struct Joint2D : IComponentFacade<Joint2D>
+public readonly partial struct Joint2D : IComponentFacade<Joint2D>
 {
     public static string TypeId => "astra.physics2d.joint";
     public static Joint2D Wrap(Component component) => new(component);
@@ -10582,7 +10749,7 @@ public readonly struct Joint2D : IComponentFacade<Joint2D>
 
 /// <summary>Corpo 2D: Corpo XY independente de física 3D. Família Física 2D · Corpos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_rigidbody2d.html</remarks>
-public readonly struct Body2D : IComponentFacade<Body2D>
+public readonly partial struct Body2D : IComponentFacade<Body2D>
 {
     public static string TypeId => "astra.physics2d.body";
     public static Body2D Wrap(Component component) => new(component);
@@ -10674,7 +10841,7 @@ public readonly struct Body2D : IComponentFacade<Body2D>
 
 /// <summary>Colisor 2D: Caixa, círculo ou cápsula; sensor real. Família Física 2D · Formas.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_collisionshape2d.html</remarks>
-public readonly struct Collider2D : IComponentFacade<Collider2D>
+public readonly partial struct Collider2D : IComponentFacade<Collider2D>
 {
     public static string TypeId => "astra.physics2d.collider";
     public static Collider2D Wrap(Component component) => new(component);
@@ -10775,7 +10942,7 @@ public readonly struct Collider2D : IComponentFacade<Collider2D>
 
 /// <summary>Fonte de áudio: Clipe de projeto com reprodução e espaço acústico. Família Áudio · Reprodução.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioSource.html</remarks>
-public readonly struct AudioSource : IComponentFacade<AudioSource>
+public readonly partial struct AudioSource : IComponentFacade<AudioSource>
 {
     public static string TypeId => "astra.audio.source";
     public static AudioSource Wrap(Component component) => new(component);
@@ -10983,7 +11150,7 @@ public readonly struct AudioSource : IComponentFacade<AudioSource>
 
 /// <summary>Ouvinte de áudio: Pose e volume de escuta escolhidos por prioridade. Família Áudio · Escuta.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioListener.html</remarks>
-public readonly struct AudioListener : IComponentFacade<AudioListener>
+public readonly partial struct AudioListener : IComponentFacade<AudioListener>
 {
     public static string TypeId => "astra.audio.listener";
     public static AudioListener Wrap(Component component) => new(component);
@@ -11022,7 +11189,7 @@ public readonly struct AudioListener : IComponentFacade<AudioListener>
 
 /// <summary>Bus de áudio: Nó do mixer: ganho, mute, solo, cadeia de efeitos e envios até Master. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/tutorials/audio/audio_buses.html</remarks>
-public readonly struct AudioBus : IComponentFacade<AudioBus>
+public readonly partial struct AudioBus : IComponentFacade<AudioBus>
 {
     public static string TypeId => "astra.audio.bus";
     public static AudioBus Wrap(Component component) => new(component);
@@ -11075,7 +11242,7 @@ public readonly struct AudioBus : IComponentFacade<AudioBus>
 
 /// <summary>Filtro de áudio: Passa-baixa, passa-alta, banda, rejeita-banda, pico e prateleiras. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectfilter.html</remarks>
-public readonly struct AudioFilter : IComponentFacade<AudioFilter>
+public readonly partial struct AudioFilter : IComponentFacade<AudioFilter>
 {
     public static string TypeId => "astra.audio.filter";
     public static AudioFilter Wrap(Component component) => new(component);
@@ -11137,7 +11304,7 @@ public readonly struct AudioFilter : IComponentFacade<AudioFilter>
 
 /// <summary>Eco: Repetições atrasadas com realimentação. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-AudioEchoEffect.html</remarks>
-public readonly struct AudioEcho : IComponentFacade<AudioEcho>
+public readonly partial struct AudioEcho : IComponentFacade<AudioEcho>
 {
     public static string TypeId => "astra.audio.echo";
     public static AudioEcho Wrap(Component component) => new(component);
@@ -11190,7 +11357,7 @@ public readonly struct AudioEcho : IComponentFacade<AudioEcho>
 
 /// <summary>Reverberação: Sala simulada com tamanho, amortecimento e pré-atraso. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectreverb.html</remarks>
-public readonly struct AudioReverb : IComponentFacade<AudioReverb>
+public readonly partial struct AudioReverb : IComponentFacade<AudioReverb>
 {
     public static string TypeId => "astra.audio.reverb";
     public static AudioReverb Wrap(Component component) => new(component);
@@ -11257,7 +11424,7 @@ public readonly struct AudioReverb : IComponentFacade<AudioReverb>
 
 /// <summary>Compressor: Controla picos; com sidechain abaixa este bus quando outro soa. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_audioeffectcompressor.html</remarks>
-public readonly struct AudioCompressor : IComponentFacade<AudioCompressor>
+public readonly partial struct AudioCompressor : IComponentFacade<AudioCompressor>
 {
     public static string TypeId => "astra.audio.compressor";
     public static AudioCompressor Wrap(Component component) => new(component);
@@ -11333,7 +11500,7 @@ public readonly struct AudioCompressor : IComponentFacade<AudioCompressor>
 
 /// <summary>Envio de áudio: Copia o sinal deste ponto da cadeia para outro bus. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixer.html</remarks>
-public readonly struct AudioSend : IComponentFacade<AudioSend>
+public readonly partial struct AudioSend : IComponentFacade<AudioSend>
 {
     public static string TypeId => "astra.audio.send";
     public static AudioSend Wrap(Component component) => new(component);
@@ -11371,7 +11538,7 @@ public readonly struct AudioSend : IComponentFacade<AudioSend>
 
 /// <summary>Snapshot de mixer: Leva ganhos e efeitos a valores salvos com transição. Família Áudio · Mixer.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/AudioMixerSnapshots.html</remarks>
-public readonly struct AudioSnapshot : IComponentFacade<AudioSnapshot>
+public readonly partial struct AudioSnapshot : IComponentFacade<AudioSnapshot>
 {
     public static string TypeId => "astra.audio.snapshot";
     public static AudioSnapshot Wrap(Component component) => new(component);
@@ -11663,7 +11830,7 @@ public readonly struct AudioSnapshot : IComponentFacade<AudioSnapshot>
 
 /// <summary>Path: Curva Bézier local com pontos persistentes. Família Lógica · Caminhos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_path3d.html</remarks>
-public readonly struct PathComponent : IComponentFacade<PathComponent>
+public readonly partial struct PathComponent : IComponentFacade<PathComponent>
 {
     public static string TypeId => "astra.path";
     public static PathComponent Wrap(Component component) => new(component);
@@ -11724,7 +11891,7 @@ public readonly struct PathComponent : IComponentFacade<PathComponent>
 
 /// <summary>Path Follow: Percorre curva em distância mundial e orienta +Z. Família Lógica · Caminhos.</summary>
 /// <remarks>Referência estudada: https://docs.godotengine.org/en/4.5/classes/class_pathfollow3d.html</remarks>
-public readonly struct PathFollow : IComponentFacade<PathFollow>
+public readonly partial struct PathFollow : IComponentFacade<PathFollow>
 {
     public static string TypeId => "astra.path.follow";
     public static PathFollow Wrap(Component component) => new(component);
@@ -11844,7 +12011,7 @@ public readonly struct PathFollow : IComponentFacade<PathFollow>
 
 /// <summary>Superfície de navegação: Assa a malha de navegação dos colisores estáticos e a carrega no Play. Família Navegação · Malha.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshSurface.html</remarks>
-public readonly struct NavSurface : IComponentFacade<NavSurface>
+public readonly partial struct NavSurface : IComponentFacade<NavSurface>
 {
     public static string TypeId => "astra.navigation.surface";
     public static NavSurface Wrap(Component component) => new(component);
@@ -12028,7 +12195,7 @@ public readonly struct NavSurface : IComponentFacade<NavSurface>
 
 /// <summary>Agente de navegação: Anda pela malha até um destino, desviando de outros agentes. Família Navegação · Movimento.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshAgent.html</remarks>
-public readonly struct NavAgent : IComponentFacade<NavAgent>
+public readonly partial struct NavAgent : IComponentFacade<NavAgent>
 {
     public static string TypeId => "astra.navigation.agent";
     public static NavAgent Wrap(Component component) => new(component);
@@ -12206,7 +12373,7 @@ public readonly struct NavAgent : IComponentFacade<NavAgent>
 
 /// <summary>Obstáculo de navegação: Recorta a malha onde o objeto está, em tempo de execução. Família Navegação · Malha.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-NavMeshObstacle.html</remarks>
-public readonly struct NavObstacle : IComponentFacade<NavObstacle>
+public readonly partial struct NavObstacle : IComponentFacade<NavObstacle>
 {
     public static string TypeId => "astra.navigation.obstacle";
     public static NavObstacle Wrap(Component component) => new(component);
@@ -12291,7 +12458,7 @@ public readonly struct NavObstacle : IComponentFacade<NavObstacle>
 
 /// <summary>Link de navegação: Liga dois pontos da malha: salto, escada, vão ou porta. Família Navegação · Malha.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshLink.html</remarks>
-public readonly struct NavLink : IComponentFacade<NavLink>
+public readonly partial struct NavLink : IComponentFacade<NavLink>
 {
     public static string TypeId => "astra.navigation.link";
     public static NavLink Wrap(Component component) => new(component);
@@ -12353,7 +12520,7 @@ public readonly struct NavLink : IComponentFacade<NavLink>
 
 /// <summary>Modificador de navegação: Muda a área dos colisores deste objeto no bake ou os ignora. Família Navegação · Malha.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/Packages/com.unity.ai.navigation@2.0/manual/NavMeshModifier.html</remarks>
-public readonly struct NavModifier : IComponentFacade<NavModifier>
+public readonly partial struct NavModifier : IComponentFacade<NavModifier>
 {
     public static string TypeId => "astra.navigation.modifier";
     public static NavModifier Wrap(Component component) => new(component);
@@ -12402,7 +12569,7 @@ public readonly struct NavModifier : IComponentFacade<NavModifier>
 
 /// <summary>Sistema de partículas: Emite, simula e desenha partículas: fogo, faíscas, fumaça, magia. Família Efeitos · Partículas.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/ParticleSystemModules.html</remarks>
-public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
+public readonly partial struct ParticleSystem : IComponentFacade<ParticleSystem>
 {
     public static string TypeId => "astra.effects.particle_system";
     public static ParticleSystem Wrap(Component component) => new(component);
@@ -14243,4 +14410,333 @@ public readonly struct ParticleSystem : IComponentFacade<ParticleSystem>
     public double Time() => Component.Invoke("time").AsNumber();
     /// <summary>Parou. O sistema terminou: não emite mais e não há partículas vivas (Ação ao parar = Evento Parou)</summary>
     public ComponentSubscription OnStopped(Behavior owner, Action<ComponentEventArgs> handler) => owner.Connect(Component, "stopped", handler);
+}
+
+/// <summary>Tabela gravada dos parâmetros do Volume Profile: índice = endereço do overrideState.</summary>
+public static class VolumeParameterTable
+{
+    public static readonly string[] Ids =
+    [
+        "skybox",
+        "sky",
+        "sun_disk",
+        "sun_size",
+        "sun_size_convergence",
+        "atmosphere",
+        "sky_zenith",
+        "sky_horizon",
+        "ground",
+        "sky_exposure",
+        "environment_map",
+        "hdri_rotation_degrees",
+        "hdri_exposure_ev",
+        "sun_glare",
+        "moon_phase",
+        "moon_size",
+        "moon_intensity",
+        "star_intensity",
+        "physical_atmosphere_high_quality",
+        "sun_disk_degrees",
+        "sun_disk_intensity",
+        "physical_sky_intensity",
+        "air_density",
+        "aerosol_density",
+        "aerosol_anisotropy",
+        "planet_radius_km",
+        "observer_height_km",
+        "rayleigh_scale_height_km",
+        "aerosol_scale_height_km",
+        "atmosphere_height_km",
+        "ground_albedo",
+        "ambient_source",
+        "ambient_sky_color",
+        "ambient_equator_color",
+        "ambient_ground_color",
+        "ambient_color",
+        "indirect_diffuse",
+        "indirect_specular",
+        "fog",
+        "fog_mode",
+        "fog_color_mode",
+        "fog_color",
+        "fog_light_energy",
+        "fog_density",
+        "fog_start",
+        "fog_end",
+        "fog_base_height",
+        "fog_height_falloff",
+        "clouds",
+        "cloud_shadows",
+        "cloud_opacity",
+        "cloud_coverage",
+        "cloud_cirrus",
+        "cloud_altitude",
+        "cloud_size",
+        "cloud_tint",
+        "cloud_exposure",
+        "cloud_wind_orientation",
+        "cloud_wind_speed",
+        "cloud_density",
+        "cloud_ambient_dimmer",
+        "cloud_shadow_multiplier",
+        "exposure_mode",
+        "exposure_metering",
+        "exposure_adaptation",
+        "exposure_fixed",
+        "exposure_compensation",
+        "exposure_limit_min",
+        "exposure_limit_max",
+        "exposure_histogram_low",
+        "exposure_histogram_high",
+        "exposure_target_mid_grey",
+        "exposure_speed_dark_to_light",
+        "exposure_speed_light_to_dark",
+        "post",
+        "tone_mapper",
+        "bloom_threshold",
+        "bloom_intensity",
+        "bloom_scatter",
+        "bloom_tint",
+        "bloom_clamp",
+        "bloom_high_quality",
+        "bloom_dirt",
+        "bloom_dirt_intensity",
+        "vignette_color",
+        "vignette_center",
+        "vignette_intensity",
+        "vignette_smoothness",
+        "vignette_rounded",
+        "post_exposure",
+        "contrast",
+        "color_filter",
+        "hue_shift",
+        "saturation",
+        "grading_temperature",
+        "grading_tint",
+        "grading_lift",
+        "grading_gamma",
+        "grading_gain",
+        "grading_shadows",
+        "grading_midtones",
+        "grading_highlights",
+        "grading_shadows_start",
+        "grading_shadows_end",
+        "grading_highlights_start",
+        "grading_highlights_end",
+        "grading_vibrance",
+        "curve_master",
+        "curve_red",
+        "curve_green",
+        "curve_blue",
+        "curve_hue_vs_hue",
+        "curve_hue_vs_sat",
+        "curve_sat_vs_sat",
+        "curve_lum_vs_sat",
+        "film_grain_intensity",
+        "ambient_occlusion_intensity",
+        "ambient_occlusion_radius",
+        "ambient_occlusion_power",
+        "ambient_occlusion_bias",
+        "dof_mode",
+        "dof_quality",
+        "dof_gaussian_start",
+        "dof_gaussian_end",
+        "dof_gaussian_max_radius",
+        "dof_gaussian_high_quality",
+        "dof_focus_distance",
+        "dof_focal_length",
+        "dof_aperture",
+        "dof_blade_count",
+        "dof_blade_curvature",
+        "dof_blade_rotation",
+        "motion_blur_quality",
+        "motion_blur_intensity",
+        "motion_blur_clamp",
+        "chromatic_aberration",
+        "lens_distortion",
+        "lens_distortion_x_multiplier",
+        "lens_distortion_y_multiplier",
+        "lens_distortion_center",
+        "lens_distortion_scale",
+    ];
+    public static readonly string[] Aliases =
+    [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "exposure_target_mid_grey_choice",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "grading_lift_color",
+        "grading_gamma_color",
+        "grading_gain_color",
+        "grading_shadows_color",
+        "grading_midtones_color",
+        "grading_highlights_color",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+    ];
+    public static readonly int[] Groups =
+    [
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 13, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 16, 16, 16, 17, 18, 18, 18, 18, 18,
+    ];
+    /// <summary>Propriedade booleana que põe o override no perfil (Add Override), por índice de grupo.</summary>
+    public static readonly string[] GroupAddedProperties =
+    [
+        "override_sky",
+        "override_celestial",
+        "override_physical_atmosphere",
+        "override_indirect",
+        "override_fog",
+        "override_clouds",
+        "override_exposure",
+        "override_post",
+        "override_bloom",
+        "override_vignette",
+        "override_color_adjustments",
+        "override_color_grading",
+        "override_color_curves",
+        "override_film_grain",
+        "override_ambient_occlusion",
+        "override_depth_of_field",
+        "override_motion_blur",
+        "override_chromatic_aberration",
+        "override_lens_distortion",
+    ];
+    /// <summary>Índice do parâmetro de uma propriedade do Volume (aceita canais "bloom_tint.r" e aliases); -1 quando não é parâmetro.</summary>
+    public static int IndexOf(string propertyId)
+    {
+        ArgumentNullException.ThrowIfNull(propertyId);
+        var dot = propertyId.IndexOf('.');
+        var id = dot < 0 ? propertyId : propertyId[..dot];
+        for (var i = 0; i < Ids.Length; ++i) if (Ids[i] == id || (Aliases[i].Length > 0 && Aliases[i] == id)) return i;
+        return -1;
+    }
 }

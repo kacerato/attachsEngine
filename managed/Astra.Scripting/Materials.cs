@@ -104,4 +104,65 @@ public readonly struct MaterialSlot(Component component,uint slot)
     public void InheritTexture(MaterialTextureBinding binding)=>SetTexture(binding,default(AssetGuid));
     /// <summary>Declara o binding sem textura, mesmo quando a fonte ou o material compartilhado possui uma.</summary>
     public void RemoveTexture(MaterialTextureBinding binding)=>SetTexture(binding,new AssetGuid(ulong.MaxValue,ulong.MaxValue));
+
+    // G7: Material.SetFloat/SetColor/SetTexture com os nomes de propriedade dos
+    // shaders Lit, Simple Lit e Unlit da URP (e os do Standard: _Color,
+    // _MainTex, _Glossiness). Escrevem o override deste slot, como
+    // Renderer.material na Unity; nome desconhecido lança, em vez de sumir.
+    // Referência: https://docs.unity3d.com/6000.0/Documentation/Manual/urp/lit-shader.html
+    private static readonly string[] FloatNames=["_Smoothness","_Glossiness","_Metallic","_BumpScale","_Cutoff","_OcclusionStrength"];
+    private static readonly string[] ColorNames=["_BaseColor","_Color","_EmissionColor"];
+    private static readonly string[] TextureNames=["_BaseMap","_MainTex","_BumpMap","_MetallicGlossMap","_EmissionMap","_OcclusionMap"];
+    private static ArgumentException Unknown(string name,string[] known)=>
+        new($"Propriedade de material desconhecida: {name}. Aceitas: {string.Join(", ",known)}.",nameof(name));
+    public bool HasProperty(string name)=>FloatNames.Contains(name)||ColorNames.Contains(name)||TextureNames.Contains(name);
+    public float GetFloat(string name)=>name switch {
+        "_Smoothness" or "_Glossiness"=>Smoothness,"_Metallic"=>Metallic,"_BumpScale"=>NormalScale,
+        "_Cutoff"=>AlphaCutoff,"_OcclusionStrength"=>OcclusionStrength,_=>throw Unknown(name,FloatNames)};
+    public void SetFloat(string name,float value)
+    {
+        switch(name) {
+        case "_Smoothness": case "_Glossiness": Smoothness=value; break;
+        case "_Metallic": Metallic=value; break;
+        case "_BumpScale": NormalScale=value; break;
+        case "_Cutoff": AlphaCutoff=value; break;
+        case "_OcclusionStrength": OcclusionStrength=value; break;
+        default: throw Unknown(name,FloatNames);
+        }
+    }
+    /// <summary>_EmissionColor é HDR: lê a cor de emissão multiplicada pela força.</summary>
+    public Color GetColor(string name)
+    {
+        switch(name) {
+        case "_BaseColor": case "_Color": { var c=BaseColor; return new(c.X,c.Y,c.Z,1); }
+        case "_EmissionColor": { var c=Emission*EmissionStrength; return new(c.X,c.Y,c.Z,1); }
+        default: throw Unknown(name,ColorNames);
+        }
+    }
+    /// <summary>Cor linear; o alfa não é usado. Na emissão, um canal acima de 1 vira força (a cor fica normalizada).</summary>
+    public void SetColor(string name,Color value)
+    {
+        switch(name) {
+        case "_BaseColor": case "_Color": BaseColor=new(value.R,value.G,value.B); break;
+        case "_EmissionColor": {
+            var peak=MathF.Max(value.R,MathF.Max(value.G,value.B));
+            if(!float.IsFinite(peak)||peak<0) throw new ArgumentOutOfRangeException(nameof(value));
+            var strength=MathF.Max(1,peak);
+            Emission=new(value.R/strength,value.G/strength,value.B/strength);EmissionStrength=peak>0?strength:0;
+            break;
+        }
+        default: throw Unknown(name,ColorNames);
+        }
+    }
+    private static MaterialTextureBinding TextureBinding(string name)=>name switch {
+        "_BaseMap" or "_MainTex"=>MaterialTextureBinding.BaseColor,"_BumpMap"=>MaterialTextureBinding.Normal,
+        "_MetallicGlossMap"=>MaterialTextureBinding.MetallicRoughness,"_EmissionMap"=>MaterialTextureBinding.Emissive,
+        "_OcclusionMap"=>MaterialTextureBinding.Occlusion,_=>throw Unknown(name,TextureNames)};
+    public AssetGuid GetTexture(string name)=>GetTexture(TextureBinding(name));
+    public void SetTexture(string name,AssetGuid texture)=>SetTexture(TextureBinding(name),texture);
+    public void SetTexture(string name,AssetReference texture)=>SetTexture(TextureBinding(name),texture);
+    public Vector2 GetTextureOffset(string name)=>TextureSampling(TextureBinding(name)).Offset;
+    public void SetTextureOffset(string name,Vector2 offset){var s=TextureSampling(TextureBinding(name));s.Offset=offset;}
+    public Vector2 GetTextureScale(string name)=>TextureSampling(TextureBinding(name)).Scale;
+    public void SetTextureScale(string name,Vector2 scale){var s=TextureSampling(TextureBinding(name));s.Scale=scale;}
 }

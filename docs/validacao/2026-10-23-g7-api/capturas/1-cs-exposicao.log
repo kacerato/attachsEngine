@@ -1,0 +1,116 @@
+10-24 16:46:22.186 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.340 lua=0 ceu=0,0,0 ambiente=0.365 sh=1
+10-24 16:46:22.188 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=0.00 EV100 adaptado=0.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:25.838 22094 26251 I Aether.Android: [Editor] Play iniciado pela opção aether.start_play.
+10-24 16:46:27.730 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.83 EV100 adaptado=1.86 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:28.536 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.223 lua=0 ceu=0,0,0 ambiente=0.351 sh=1
+10-24 16:46:29.731 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.71 EV100 adaptado=1.78 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:30.763 22094 26251 I Astra.Script: 16: Hora do dia: 17:00
+10-24 16:46:31.725 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.57 EV100 adaptado=1.67 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:33.501 22094 26251 I Astra.Script: 16: Pôr do sol
+10-24 16:46:33.702 22094 26251 I Aether.Android: [NightSky] noite=0.07 solY=-0.010 lua=0 ceu=0.0018,0.00241,0.00401 ambiente=0.225 sh=1
+10-24 16:46:33.733 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.28 EV100 adaptado=1.48 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:35.732 22094 26251 I Astra.Script: 16: Hora do dia: 18:00
+10-24 16:46:35.747 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-0.59 EV100 adaptado=0.69 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:37.762 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-3.35 EV100 adaptado=-1.55 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:38.885 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.249 lua=0 ceu=0.001,0.00134,0.00224 ambiente=2.23e-05 sh=1
+10-24 16:46:39.771 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-6.72 EV100 adaptado=-4.06 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:40.739 22094 26251 I Astra.Script: 16: Hora do dia: 19:00
+10-24 16:46:41.775 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-9.27 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:43.780 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:44.285 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.487 lua=0 ceu=5.49e-07,7.35e-07,1.22e-06 ambiente=1.22e-08 sh=1
+10-24 16:46:45.734 22094 26251 I Astra.Script: 16: Hora do dia: 20:00
+10-24 16:46:45.787 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:47.792 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.27 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:49.609 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.692 lua=0.000121 ceu=0.000286,0.000383,0.000637 ambiente=6.35e-06 sh=1
+10-24 16:46:49.806 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-9.58 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:50.725 22094 26251 I Astra.Script: 16: Hora do dia: 21:00
+10-24 16:46:51.821 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.24 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:53.832 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.23 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:55.221 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.859 lua=0.00031 ceu=0.000734,0.000982,0.00163 ambiente=1.63e-05 sh=1
+10-24 16:46:55.738 22094 26251 I Astra.Script: 16: Hora do dia: 22:00
+10-24 16:46:55.830 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.22 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:57.844 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.19 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:46:59.843 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.16 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:00.648 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.958 lua=0.00031 ceu=0.000734,0.000982,0.00163 ambiente=1.63e-05 sh=1
+10-24 16:47:00.734 22094 26251 I Astra.Script: 16: Hora do dia: 23:00
+10-24 16:47:01.866 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.13 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:03.882 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.13 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:05.732 22094 26251 I Astra.Script: 16: Hora do dia: 00:00
+10-24 16:47:05.811 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.989 lua=0.00023 ceu=0.000546,0.000731,0.00121 ambiente=1.21e-05 sh=1
+10-24 16:47:05.885 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.18 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:07.898 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.18 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:09.903 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.18 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:10.732 22094 26251 I Astra.Script: 16: Hora do dia: 01:00
+10-24 16:47:10.901 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.957 lua=0.00023 ceu=0.000546,0.000731,0.00121 ambiente=1.21e-05 sh=1
+10-24 16:47:11.914 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.60 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:13.933 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.64 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:15.727 22094 26251 I Astra.Script: 16: Hora do dia: 02:00
+10-24 16:47:15.895 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.866 lua=0.00023 ceu=0.000546,0.000731,0.00121 ambiente=1.21e-05 sh=1
+10-24 16:47:15.932 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.64 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:17.943 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-9.34 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:19.958 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:20.739 22094 26251 I Astra.Script: 16: Hora do dia: 03:00
+10-24 16:47:20.889 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.724 lua=0 ceu=5.46e-07,7.3e-07,1.21e-06 ambiente=1.21e-08 sh=1
+10-24 16:47:21.972 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:23.987 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:25.742 22094 26251 I Astra.Script: 16: Hora do dia: 04:00
+10-24 16:47:25.997 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.535 lua=0 ceu=5.47e-07,7.32e-07,1.22e-06 ambiente=1.21e-08 sh=1
+10-24 16:47:25.998 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:27.999 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.28 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:30.012 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-10.16 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:30.730 22094 26251 I Astra.Script: 16: Hora do dia: 05:00
+10-24 16:47:31.308 22094 26251 I Aether.Android: [NightSky] noite=1.00 solY=-0.306 lua=0 ceu=0.000171,0.000229,0.00038 ambiente=3.79e-06 sh=1
+10-24 16:47:32.020 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-8.02 EV100 adaptado=-6.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:34.037 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-4.21 EV100 adaptado=-4.67 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:35.727 22094 26251 I Astra.Script: 16: Hora do dia: 06:00
+10-24 16:47:36.047 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=-0.55 EV100 adaptado=-1.55 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:36.795 22094 26251 I Aether.Android: [NightSky] noite=0.33 solY=-0.053 lua=0 ceu=0.00703,0.00941,0.0156 ambiente=0.128 sh=1
+10-24 16:47:37.964 22094 26251 I Astra.Script: 16: Nascer do sol
+10-24 16:47:38.065 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=0.53 EV100 adaptado=0.32 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:40.081 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=0.85 EV100 adaptado=0.79 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:40.738 22094 26251 I Astra.Script: 16: Hora do dia: 07:00
+10-24 16:47:42.092 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.04 EV100 adaptado=1.00 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:42.405 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.201 lua=0 ceu=0,0,0 ambiente=0.346 sh=1
+10-24 16:47:44.090 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.20 EV100 adaptado=1.16 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:45.733 22094 26251 I Astra.Script: 16: Hora do dia: 08:00
+10-24 16:47:46.106 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.36 EV100 adaptado=1.32 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:47.420 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.407 lua=0 ceu=0,0,0 ambiente=0.369 sh=1
+10-24 16:47:48.120 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.52 EV100 adaptado=1.48 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:50.131 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.18 EV100 adaptado=2.13 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:50.728 22094 26251 I Astra.Script: 16: Hora do dia: 09:00
+10-24 16:47:52.153 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.28 EV100 adaptado=2.25 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:52.415 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.577 lua=0 ceu=0,0,0 ambiente=0.378 sh=1
+10-24 16:47:54.172 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.34 EV100 adaptado=2.33 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:55.740 22094 26251 I Astra.Script: 16: Hora do dia: 10:00
+10-24 16:47:56.188 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.38 EV100 adaptado=2.38 limites=[-6.0, 10.0] comp=0.00
+10-24 16:47:57.817 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.708 lua=0 ceu=0,0,0 ambiente=0.384 sh=1
+10-24 16:47:58.192 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.42 EV100 adaptado=2.41 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:00.187 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.44 EV100 adaptado=2.44 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:00.735 22094 26251 I Astra.Script: 16: Hora do dia: 11:00
+10-24 16:48:02.203 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.47 EV100 adaptado=2.46 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:02.911 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.774 lua=0 ceu=0,0,0 ambiente=0.386 sh=1
+10-24 16:48:04.229 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.48 EV100 adaptado=2.47 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:05.738 22094 26251 I Astra.Script: 16: Hora do dia: 12:00
+10-24 16:48:06.240 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.48 EV100 adaptado=2.48 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:08.242 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.48 EV100 adaptado=2.48 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:08.356 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.775 lua=0 ceu=0,0,0 ambiente=0.386 sh=1
+10-24 16:48:10.229 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.47 EV100 adaptado=2.48 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:10.727 22094 26251 I Astra.Script: 16: Hora do dia: 13:00
+10-24 16:48:12.251 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.46 EV100 adaptado=2.47 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:13.607 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.709 lua=0 ceu=0,0,0 ambiente=0.384 sh=1
+10-24 16:48:14.243 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.44 EV100 adaptado=2.45 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:15.739 22094 26251 I Astra.Script: 16: Hora do dia: 14:00
+10-24 16:48:16.259 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.40 EV100 adaptado=2.43 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:18.273 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.36 EV100 adaptado=2.39 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:18.608 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.589 lua=0 ceu=0,0,0 ambiente=0.38 sh=1
+10-24 16:48:20.285 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.28 EV100 adaptado=2.33 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:20.735 22094 26251 I Astra.Script: 16: Hora do dia: 15:00
+10-24 16:48:22.300 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.17 EV100 adaptado=2.25 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:23.599 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.422 lua=0 ceu=0,0,0 ambiente=0.371 sh=1
+10-24 16:48:24.315 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=2.07 EV100 adaptado=2.14 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:25.729 22094 26251 I Astra.Script: 16: Hora do dia: 16:00
+10-24 16:48:26.345 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.95 EV100 adaptado=2.03 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:28.364 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.84 EV100 adaptado=1.92 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:28.766 22094 26251 I Aether.Android: [NightSky] noite=0.00 solY=0.213 lua=0 ceu=0,0,0 ambiente=0.349 sh=1
+10-24 16:48:30.358 22094 26251 I Aether.Android: [AutoExposure] modo=1 medicao=2 medido=1.73 EV100 adaptado=1.81 limites=[-6.0, 10.0] comp=0.00
+10-24 16:48:30.723 22094 26251 I Astra.Script: 16: Hora do dia: 17:00

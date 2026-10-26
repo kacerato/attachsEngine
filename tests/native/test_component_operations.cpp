@@ -79,7 +79,7 @@ AE_TEST(component_operations_every_declared_method_has_one_runtime_function) {
   const auto issues=runtime::auditComponentOperations();
   std::string joined;for(const auto &issue:issues) joined+=issue+"; ";
   AE_EXPECT_TRUE(issues.empty(),(std::string("method and event contracts audited: ")+joined).c_str());
-  AE_EXPECT_EQ(runtime::componentMethodBindings().size(),usize{95},"timer 6 + tween 5 + property tween 5 + sequence 5 + audio 6 + path follow 4 + queries 13 + câmeras 5 + mixer 4 + animator 11 + navegação 12 + IK 6 + personagem 3 + sonda de reflexo 1 + partículas 9");
+  AE_EXPECT_EQ(runtime::componentMethodBindings().size(),usize{105},"timer 6 + tween 5 + property tween 5 + sequence 5 + audio 6 + path follow 4 + queries 13 + câmeras 5 + mixer 4 + animator 11 + navegação 12 + IK 6 + personagem 3 + sonda de reflexo 1 + partículas 9");
   AE_EXPECT_TRUE(scene::findComponentEvent(scene::Timer::descriptor,"elapsed")&&
                  scene::findComponentEvent(scene::Collider::descriptor,"trigger_enter")&&
                  scene::findComponentEvent(scene::Collider2D::descriptor,"collision_exit")&&
@@ -221,7 +221,7 @@ AE_TEST(event_connection_persists_validates_and_clones_with_remapped_receiver) {
   const auto *c=static_cast<const scene::EventConnection*>(reopened.find(emitter)->components.find(scene::EventConnection::descriptor));
   AE_EXPECT_TRUE(c&&c->event==3&&c->action==4&&c->method==6&&c->receiver==receiver&&c->argument==.25f&&c->once&&c->otherFilter==receiver,"every field persisted");
   scene::EventConnection bad;bad.method=99;AE_EXPECT_TRUE(!bad.valid(),"unknown method identity refused");
-  bad.method=0;bad.event=42;AE_EXPECT_TRUE(!bad.valid(),"unknown event identity refused");
+  bad.method=0;bad.event=99;AE_EXPECT_TRUE(!bad.valid(),"unknown event identity refused");
   bad.event=0;bad.argument=-1;AE_EXPECT_TRUE(!bad.valid(),"argument domain enforced");
   // Visibilidade condicional dirigida pelos mesmos predicados da validação.
   const auto &type=scene::EventConnection::descriptor;scene::EventConnection draft;

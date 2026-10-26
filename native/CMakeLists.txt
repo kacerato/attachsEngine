@@ -596,6 +596,7 @@ add_library(aether_runtime STATIC
   runtime/scene_lights.cpp
   runtime/scene_probes.cpp
   runtime/scene_time_of_day.cpp
+  runtime/scene_player_input.cpp
   runtime/scene_particles.cpp
   runtime/scene_weather.cpp
   runtime/scene_environment.cpp
@@ -1010,6 +1011,7 @@ if(NOT ANDROID)
     ../tests/native/test_editor_code_catalog.cpp
     ../tests/native/test_editor_play_scripts.cpp
     ../tests/native/test_component_operations.cpp
+    ../tests/native/test_g7_graphics_api.cpp
     ../tests/native/test_game_services.cpp
     ../tests/native/test_play_scenes.cpp
     ../tests/native/test_editor_map_scene.cpp
@@ -1342,6 +1344,11 @@ if(NOT ANDROID)
   target_link_libraries(pk5_post_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
   if(MINGW)
     target_compile_options(pk5_post_scene_author PRIVATE -Wa,-mbig-obj)
+  endif()
+  add_executable(g7_api_scene_author EXCLUDE_FROM_ALL ../tools/g7_api_scene_author.cpp)
+  target_link_libraries(g7_api_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
+  if(MINGW)
+    target_compile_options(g7_api_scene_author PRIVATE -Wa,-mbig-obj)
   endif()
   add_executable(v2_night_scene_author EXCLUDE_FROM_ALL ../tools/v2_night_scene_author.cpp)
   target_link_libraries(v2_night_scene_author PRIVATE aether_editor aether_renderer aether_physics aether_ui)
