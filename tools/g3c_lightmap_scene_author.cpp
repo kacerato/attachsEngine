@@ -45,6 +45,11 @@ std::string readText(const std::filesystem::path &p) {
   std::ifstream in(p, std::ios::binary);
   return {std::istreambuf_iterator<char>(in), {}};
 }
+// "luzes=tempo-real": as lanternas saem em Tempo real. Com Iluminação global
+// assada ligada o bake ainda gera o lightmap, só com o céu e a visibilidade
+// dele -- o par "tempo real" da Unity (luz Realtime + ambiente do lightmap) em
+// vez de "tempo real" = cena nunca assada, que vê o céu sem oclusão.
+bool realtimeLanterns = false;
 EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, u32 mode,
                        const float *color = nullptr) {
   const auto id = doc.createEntity(parent, EditorEntityKind::Folder, name);
@@ -82,11 +87,6 @@ void banner(EditorDocument &doc, EditorEntityId parent, const char *name, float 
   mesh->contributeGlobalIllumination = true;
   if (!doc.applyEntityValues(id, values)) fail(std::string("estandarte recusado: ") + name);
 }
-// "luzes=tempo-real": as lanternas saem em Tempo real. Com Iluminação global
-// assada ligada o bake ainda gera o lightmap, só com o céu e a visibilidade
-// dele -- o par "tempo real" da Unity (luz Realtime + ambiente do lightmap) em
-// vez de "tempo real" = cena nunca assada, que vê o céu sem oclusão.
-bool realtimeLanterns = false;
 } // namespace
 
 int main(int argc, char **argv) {
