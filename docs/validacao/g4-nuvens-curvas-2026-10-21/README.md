@@ -179,3 +179,39 @@ Quadros em `poco-v10/`.
   lua está provado no host (teste da lua cheia de 19 h a 5 h e ~50 min de
   atraso por dia), não ainda numa prancha do aparelho.
 
+## v11 no POCO (26/10) — prancha final e fechamento
+
+`prancha-final.png`: pares de cor Unity × POCO (hora dourada e poente, APK
+0.3.0-dev.261026999-nuvens-1121), a noite no aparelho e o mapa do tremor.
+Quadros e vídeos em `poco-v11/`. Vila devolvida com md5 2e2e9968 ao fim de
+cada rodada.
+
+- Tremor, agora no vídeo (5 s a 30 fps, `screenrecord`, câmera parada, vento
+  zero), controle 1136 × 1121: diferença média entre quadros seguidos nas
+  nuvens 0,16 → 0,07 níveis de 8 bits (−56%), p99 1,64 → 1,16, desvio por
+  pixel 0,35 → 0,24 (`tremor-controle.mp4`, `tremor-1121.mp4`, `tremor.png`).
+  Técnica: jitter da marcha por ruído de gradiente intercalado somado à razão
+  áurea × contador real de quadros; histórico com 85% de peso com a câmera
+  parada; caixa de contenção a 25% da faixa parada e 5% girando; ruído das
+  nuvens em coordenadas de mundo.
+- Lua por efeméride: disco visto com céu limpo à 0 h (perto do zênite) e às 4 h
+  (baixo no oeste). Às 20 h, baixo no leste, ficou atrás das casas no giro
+  usado; o movimento das 19 h às 5 h está no teste de host.
+- Nuvens à noite (APK 1444): a marcha de luz usa a direcional dominante (o sol
+  de dia, a lua à noite, cruzando no crepúsculo) com a cor e a intensidade
+  dela, e o ambiente do céu noturno da V-2 entra na base. Com lua cheia as
+  nuvens ficam cinza-arroxeadas contra o céu azul-luar, com a borda do lado da
+  lua mais clara (0 h). Exposição 2,05 EV100.
+- Lua nova (APK 1550): antes o piso das estrelas era uma fração do ambiente da
+  meia-noite, que já chega quase zerado; o céu ficava 11 EV abaixo da lua
+  cheia, a exposição ia ao piso (−8,3) e as luminárias e telhados estouravam
+  em branco (`v20`, fora da prancha). Agora o brilho do ar tem piso absoluto
+  (`NightStarlightFloor`, ~1/20 do céu sob a Lua padrão de 0,5 lux): céu
+  noturno 0,056/0,075/0,124 contra 1,62/2,17/3,61 com lua cheia (5,3 EV
+  abaixo), exposição −2,85 EV100, nuvens escuras recortadas contra o céu.
+  A exposição automática devolve boa parte da diferença; para uma lua nova
+  visivelmente mais escura, o limite mínimo de exposição do Volume decide,
+  como no HDRP.
+- Suíte: 1725/1725 nativos, 105/105 do ambiente, contratos sem mudança.
+
+Pendência registrada: sombra das nuvens no chão ainda pela camada 2D (v9).

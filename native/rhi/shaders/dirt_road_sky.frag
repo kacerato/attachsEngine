@@ -316,10 +316,18 @@ void main() {
     vec3 sunRadiance;
     vec3 skyAmbient;
     if(environment.sceneSky.w>1.5) {
+      // A luz das nuvens é a da direcional dominante, como o HDRP: o sol de dia
+      // e a Lua à noite (a mesma direção que cloud_volume.frag marcha), com a
+      // cor e a intensidade dela. A da Lua já traz a fase e o horizonte
+      // (renderer::evaluateMoon); o sol esmaece pelo horizonte dele.
+      float lightIntensity=max(environment.sunDirectionIntensity.w,0.0);
+      float lightFade=environment.skyMoon.w>0.5&&environment.skySun.w<=0.0?1.0:daylight;
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*
-          max(skySunIntensity(),0.0)*environment.atmosphereScattering.x*(0.9/PI)*daylight;
+          lightIntensity*environment.atmosphereScattering.x*(0.9/PI)*lightFade;
+      // À noite a irradiância do chão vai a zero: o céu noturno (V-2) é o
+      // preenchimento da base, e sem lua a nuvem fica escura mas legível.
       skyAmbient=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0))*(0.9/PI)*
-          environment.atmosphereScattering.x+diffuseSky*0.35;
+          environment.atmosphereScattering.x+diffuseSky*0.35+max(environment.skyNight.rgb,vec3(0.0))*1.2;
     } else {
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*environment.sceneAoDetail.z*daylight*
           (skySunIntensity()>0.0?1.0:0.0);

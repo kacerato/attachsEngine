@@ -171,6 +171,14 @@ AE_TEST(night_sky_lights_with_moonlight_not_with_the_day_ambient) {
   AE_EXPECT_TRUE(renderer::nightLuminance(moonless.sky) > 0.0f &&
                  renderer::nightLuminance(moonless.sky) < renderer::nightLuminance(ambient) * 0.05f,
                  "lua nova: só o piso das estrelas");
+  const auto midnight = renderer::evaluateNightSkyLighting(ambient, ground, 0.015f, dark, night);
+  const float tinyAmbient[3]{0.004f, 0.005f, 0.006f};
+  const auto deepNight = renderer::evaluateNightSkyLighting(tinyAmbient, ground, 0.015f, dark, night);
+  const float defaultMoonSky = 0.5f * renderer::NightMoonSkyFraction / 3.14159265f;
+  AE_EXPECT_TRUE(renderer::nightLuminance(deepNight.nightSky) > defaultMoonSky / 40.0f &&
+                 renderer::nightLuminance(deepNight.nightSky) < defaultMoonSky / 10.0f &&
+                 midnight.nightSky[2] >= deepNight.nightSky[2],
+                 "lua nova com ambiente zerado: piso absoluto ~1/20 do céu da Lua padrão");
 }
 
 AE_TEST(day_night_recipe_creates_the_moon_linked_to_the_sun) {
