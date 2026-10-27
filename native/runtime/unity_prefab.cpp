@@ -176,6 +176,8 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
     if(services&&services->particleLook&&source.material.external()&&services->particleLook(source.material,look)) {
       line->emission=std::clamp(look.emission*std::min(look.opacity,1.0f),0.0f,100.0f);
       line->scrollX=std::clamp(look.scroll[0],-100.0f,100.0f);line->scrollY=std::clamp(look.scroll[1],-100.0f,100.0f);
+      // O _Noise do shader rola por cima da imagem: o fluxo de energia do raio.
+      if(look.noise){line->noise=true;line->noiseScrollX=std::clamp(look.noiseScroll[0],-100.0f,100.0f);line->noiseScrollY=std::clamp(look.noiseScroll[1],-100.0f,100.0f);}
     }
     if(!line->valid())return fail("Linha convertida inválida: "+object.name);
   }

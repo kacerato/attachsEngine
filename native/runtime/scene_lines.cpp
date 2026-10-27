@@ -92,6 +92,13 @@ u32 appendLineRenderers(const SceneGraph &graph, const float (&camera)[3], rende
     m.lineUv = true;
     m.scroll[0] = line.scrollX;
     m.scroll[1] = line.scrollY;
+    if (line.noise) {
+      m.noise = static_cast<u32>(scene::ParticleNoise::Clouds);
+      m.noiseScale = line.noiseScale;
+      m.noiseStrength = line.noiseStrength;
+      m.noiseScroll[0] = line.noiseScrollX;
+      m.noiseScroll[1] = line.noiseScrollY;
+    }
     if (line.material.valid() && materials && *materials) {
       ParticleMaterialLook look;
       if ((*materials)(line.material, look)) {

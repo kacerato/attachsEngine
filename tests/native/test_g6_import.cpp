@@ -276,6 +276,30 @@ AE_TEST(g6a_line_renderer_draws_stretched_segments_through_the_particle_pass) {
   line->pointCount = 2;
   scene::LineRenderer back;
   AE_EXPECT_TRUE(roundTrip(*line, back) && back.tileLength == .5f && back.points[5] == 3, "Linha ida e volta");
+  // v2 acrescentou o ruído no fim das tabelas: um arquivo v1 (39 números, 3
+  // booleanos) abre com o ruído desligado.
+  {
+    line->noise = true;
+    std::ostringstream text;
+    text.imbue(std::locale::classic());
+    line->write(text);
+    std::istringstream all(text.str());
+    std::vector<std::string> tokens;
+    for (std::string token; all >> token;) tokens.push_back(token);
+    std::vector<std::string> v1{"39"};
+    v1.insert(v1.end(), tokens.begin() + 1, tokens.begin() + 40);
+    v1.push_back("3");
+    v1.insert(v1.end(), tokens.begin() + 45, tokens.begin() + 48);
+    v1.insert(v1.end(), tokens.begin() + 49, tokens.end());
+    std::string joined;
+    for (const auto &token : v1) joined += token + " ";
+    std::istringstream in(joined);
+    in.imbue(std::locale::classic());
+    scene::LineRenderer old;
+    AE_EXPECT_TRUE(tokens[0] == "43" && tokens[44] == "4" && old.read(in, 1) && !old.noise && old.tileLength == .5f,
+                   "Linha v1 abre sem o ruído");
+    line->noise = false;
+  }
   scene::Projectile projectile, projectileBack;
   projectile.speed = 30;
   projectile.impact = resources::assetGuidFromSeed("prefab:impacto");

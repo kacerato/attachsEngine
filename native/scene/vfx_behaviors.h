@@ -54,13 +54,20 @@ inline void writeVfxTables(const ComponentValue &v, std::ostream &out) {
       out << ' ' << (guid.valid() ? guid.text() : std::string("-"));
     }
 }
-inline bool readVfxTables(ComponentValue &v, std::istream &in) {
+// `older`: arquivo de uma versão anterior, que acaba antes dos campos
+// acrescentados no fim das tabelas; esses ficam no padrão.
+inline bool readVfxTables(ComponentValue &v, std::istream &in, bool older = false) {
   const auto &type = v.type();
   usize count = 0;
-  if (!(in >> count) || count != type.numbers.size()) return false;
-  for (const auto &p : type.numbers) if (!(in >> *p.write(v)) || !std::isfinite(*p.write(v))) return false;
-  if (!(in >> count) || count != type.booleans.size()) return false;
-  for (const auto &p : type.booleans) {
+  const auto fits = [older](usize count, usize size) { return older ? count <= size : count == size; };
+  if (!(in >> count) || !fits(count, type.numbers.size())) return false;
+  for (usize i = 0; i < count; ++i) {
+    const auto &p = type.numbers[i];
+    if (!(in >> *p.write(v)) || !std::isfinite(*p.write(v))) return false;
+  }
+  if (!(in >> count) || !fits(count, type.booleans.size())) return false;
+  for (usize i = 0; i < count; ++i) {
+    const auto &p = type.booleans[i];
     u32 flag = 0;
     if (!(in >> flag) || flag > 1) return false;
     p.write(v, flag != 0);
@@ -122,7 +129,8 @@ public:
   void write(std::ostream &out) const override { detail::writeVfxTables(*this, out); }
   bool read(std::istream &in, u32 version) override {
     LineRenderer candidate;
-    if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    // v2 acrescentou o ruído no fim das tabelas.
+    if (version < 1 || version > 2 || !detail::readVfxTables(candidate, in, version < 2) || !candidate.valid()) return false;
     // A base (identidade da instância) é do objeto lido, não do temporário.
     static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
     *this = candidate;
@@ -132,6 +140,7 @@ public:
 };
 inline const LineRenderer &lineRenderer(const ComponentValue &v) { return static_cast<const LineRenderer &>(v); }
 template <u32 N> bool linePointVisible(const ComponentValue &v) { return lineRenderer(v).usedPoints() > N; }
+inline bool lineNoiseOn(const ComponentValue &v) { return lineRenderer(v).noise; }
 
 // --- Laser -----------------------------------------------------------------
 class Laser final : public ComponentValue {
@@ -288,7 +297,7 @@ inline constexpr std::array<ComponentResourceBinding, 1> lineResources{{
    {"Aparência", "", "Material com shader Partícula: a imagem corre ao longo da linha", nullptr, nullptr, "render.lines",
     "runtime/scene_lines.cpp → platform/android/instanced_particles.inl"}}}};
 inline const ComponentType LineRenderer::descriptor{
-  "astra.render.line", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<LineRenderer>(); },
+  "astra.render.line", 2, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<LineRenderer>(); },
   lineNumbers, lineBooleans, {}, nullptr, false, {}, lineTriples, lineResources};
 
 inline constexpr std::array<ComponentObjectReference, 1> laserReferences{{

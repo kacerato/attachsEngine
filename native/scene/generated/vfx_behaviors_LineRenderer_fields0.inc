@@ -10,3 +10,8 @@
   float emission = 1.0f;
   float scrollX = 0.0f;
   float scrollY = 0.0f;
+  bool noise = false;
+  float noiseScale = 1.0f;
+  float noiseStrength = 1.0f;
+  float noiseScrollX = 0.0f;
+  float noiseScrollY = 0.0f;

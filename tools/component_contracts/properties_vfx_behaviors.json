@@ -64,6 +64,25 @@
             }
           },
           "type": "LineRenderer"
+        },
+        {
+          "id": "noise",
+          "label": "Ruído fluindo",
+          "member": "noise",
+          "default": {
+            "cpp": "false"
+          },
+          "presentation": {
+            "group": "Ruído",
+            "unit": "",
+            "help": "Uma segunda camada que rola em outra velocidade e recorta a imagem",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "LineRenderer"
         }
       ]
     },
@@ -1153,6 +1172,132 @@
           },
           "tweenable": true,
           "type": "LineRenderer"
+        },
+        {
+          "id": "noise_scale",
+          "label": "Escala do ruído",
+          "member": "noiseScale",
+          "min": {
+            "cpp": "0.01f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.05f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Ruído",
+            "unit": "×",
+            "help": "Repetições do ruído por repetição da imagem",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "lineNoiseOn"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "noise_strength",
+          "label": "Recorte do ruído",
+          "member": "noiseStrength",
+          "min": {
+            "cpp": "0.0f"
+          },
+          "max": {
+            "cpp": "1.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "1.0f"
+          },
+          "presentation": {
+            "group": "Ruído",
+            "unit": "",
+            "help": "0 só mistura; 1 o ruído apaga onde é escuro",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "lineNoiseOn"
+            }
+          },
+          "type": "LineRenderer"
+        },
+        {
+          "id": "noise_scroll_x",
+          "label": "Ruído ao longo",
+          "member": "noiseScrollX",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Ruído",
+            "unit": "/s",
+            "help": "Rolagem do ruído pela linha",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "lineNoiseOn"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
+        },
+        {
+          "id": "noise_scroll_y",
+          "label": "Ruído através",
+          "member": "noiseScrollY",
+          "min": {
+            "cpp": "-100.0f"
+          },
+          "max": {
+            "cpp": "100.0f"
+          },
+          "step": {
+            "cpp": "0.01f"
+          },
+          "default": {
+            "cpp": "0.0f"
+          },
+          "presentation": {
+            "group": "Ruído",
+            "unit": "/s",
+            "help": "Rolagem do ruído através da faixa",
+            "capability": "render.lines",
+            "consumer": "runtime/scene_lines.cpp → platform/android/instanced_particles.inl",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            },
+            "visible": {
+              "cpp": "lineNoiseOn"
+            }
+          },
+          "tweenable": true,
+          "type": "LineRenderer"
         }
       ]
     },
@@ -2201,7 +2346,12 @@
         "lineNumbers/tile_length",
         "lineNumbers/emission",
         "lineNumbers/scroll_x",
-        "lineNumbers/scroll_y"
+        "lineNumbers/scroll_y",
+        "lineBooleans/noise",
+        "lineNumbers/noise_scale",
+        "lineNumbers/noise_strength",
+        "lineNumbers/noise_scroll_x",
+        "lineNumbers/noise_scroll_y"
       ]
     },
     {

@@ -5790,6 +5790,34 @@ public readonly partial struct LineRenderer : IComponentFacade<LineRenderer>
         get => Component.GetFloat("scroll_y");
         set => Component.SetFloat("scroll_y", value);
     }
+    /// <summary>Escala do ruído (×). Repetições do ruído por repetição da imagem</summary>
+    /// <remarks>Faixa válida: 0.01 a 100.</remarks>
+    public float NoiseScale
+    {
+        get => Component.GetFloat("noise_scale");
+        set => Component.SetFloat("noise_scale", value);
+    }
+    /// <summary>Recorte do ruído. 0 só mistura; 1 o ruído apaga onde é escuro</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float NoiseStrength
+    {
+        get => Component.GetFloat("noise_strength");
+        set => Component.SetFloat("noise_strength", value);
+    }
+    /// <summary>Ruído ao longo (/s). Rolagem do ruído pela linha</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float NoiseScrollX
+    {
+        get => Component.GetFloat("noise_scroll_x");
+        set => Component.SetFloat("noise_scroll_x", value);
+    }
+    /// <summary>Ruído através (/s). Rolagem do ruído através da faixa</summary>
+    /// <remarks>Faixa válida: -100 a 100.</remarks>
+    public float NoiseScrollY
+    {
+        get => Component.GetFloat("noise_scroll_y");
+        set => Component.SetFloat("noise_scroll_y", value);
+    }
     /// <summary>Ativa. Desligada, a linha não é desenhada</summary>
     public bool Enabled
     {
@@ -5807,6 +5835,12 @@ public readonly partial struct LineRenderer : IComponentFacade<LineRenderer>
     {
         get => Component.GetBool("loop");
         set => Component.SetBool("loop", value);
+    }
+    /// <summary>Ruído fluindo. Uma segunda camada que rola em outra velocidade e recorta a imagem</summary>
+    public bool Noise
+    {
+        get => Component.GetBool("noise");
+        set => Component.SetBool("noise", value);
     }
     /// <summary>Material. Recurso do projeto por slot</summary>
     public AssetGuid GetMaterial(uint slot = 0) => Component.GetResource("material", slot);
