@@ -105,6 +105,12 @@ de aura convertido, cuja fonte de som é 3D. Medição com `dumpsys audio`:
 Antes desta mudança, essa fonte seria barrada por "Áudio 3D requer listener ativo".
 Não foi conferido de ouvido.
 
+Projeto vazio novo no POCO (27/10, 20:37), criado por Novo projeto › Criar projeto:
+
+- a Hierarquia abre com "Main Camera" em (0, 1, -10), rotação 0, com 2 componentes (Câmera e Ouvinte);
+- a cena gravada traz a marca `MainCamera`;
+- o desfazer começa vazio, porque a câmera inicial não entra no histórico.
+
 Prancha Unity × POCO: fica na evidência interna, com os quadros dos vídeos
 oficiais (link e timestamp). Os quadros da Unity mostram os efeitos maiores, sobre
 fundo escuro e com bloom. As capturas do POCO são de longe, sobre chão claro, e
