@@ -741,6 +741,22 @@ WorldStatus GameWorld::getProperty(const ComponentHandle &component, std::string
   return WorldStatus::Ok;
 }
 
+WorldStatus GameWorld::replaceComponent(const ComponentHandle &component, const scene::ComponentValue &candidate) {
+  const auto status = validate(component.object);
+  if (status != WorldStatus::Ok) return status;
+  const auto *current = readComponent(component);
+  if (!current) return WorldStatus::ComponentMissing;
+  if (&current->type() != &candidate.type()) return WorldStatus::InvalidArgument;
+  const auto *schema = scene::findComponentSchema(current->type().id);
+  if (!schema) return WorldStatus::UnknownComponent;
+  if (schema->propertiesInPlay == scene::PlayMutability::Never) return WorldStatus::NotMutableInPlay;
+  if (!candidate.valid()) return WorldStatus::Rejected;
+  auto *components = editComponents(component.object.id);
+  if (!components || !components->replaceInstance(component.instance, candidate)) return WorldStatus::StaleHandle;
+  invalidated_ |= schema->invalidates;
+  return WorldStatus::Ok;
+}
+
 WorldStatus GameWorld::setProperty(const ComponentHandle &component, std::string_view propertyId,
                                    const scene::ComponentPropertyValue &value) {
   const auto *object = find(component.object);

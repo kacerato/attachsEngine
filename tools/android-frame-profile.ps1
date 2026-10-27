@@ -114,7 +114,8 @@ $FrameProfileFrameMetricNames = @('interval_ms', 'process_cpu_ms', 'thread_cpu_m
 $FrameProfilePassMetricNames = @('gpu_skinning_ms', 'gpu_probes_ms', 'gpu_camera_preview_ms', 'gpu_water_simulation_ms',
     'gpu_shadow_ms', 'gpu_local_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',
     'gpu_coverage_ms', 'gpu_sky_ms', 'gpu_transparent_ms', 'gpu_motion_ms', 'gpu_auto_exposure_ms',
-    'gpu_temporal_upscale_ms', 'gpu_post_ms', 'gpu_fsr_easu_ms', 'gpu_fsr_rcas_ms', 'gpu_ui_ms', 'gpu_hzb_ms')
+    'gpu_temporal_upscale_ms', 'gpu_post_ms', 'gpu_fsr_easu_ms', 'gpu_fsr_rcas_ms', 'gpu_ui_ms', 'gpu_hzb_ms',
+    'gpu_clouds_ms')
 # O nativo divide as regioes em registros de 5 (limite do Logcat).
 $FrameProfilePassParts = [int][math]::Ceiling($FrameProfilePassMetricNames.Count / 5)
 $FrameProfileLegacyPassMetricNames = @('gpu_shadow_ms', 'gpu_culling_ms', 'gpu_opaque_ms',

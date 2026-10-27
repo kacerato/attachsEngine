@@ -1,0 +1,53 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 13380
+Error Callchains: 1184, 8.849028%
+Event count: 6690000000
+
+Children  Self    Symbol
+93.89%    0.00%   __pthread_start(void*)
+93.89%    0.00%   __start_thread
+93.89%    0.00%   android_app_entry
+93.70%    0.29%   android_main
+58.98%    0.01%   ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+49.64%    0.01%   ae::editor::EditorPlayScene::advanceFrame(double, bool)
+37.53%    0.01%   ae::editor::EditorPlayScene::animate(float, float)
+33.36%    13.36%  ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+20.71%    0.22%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+7.56%     1.07%   ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+4.51%     3.04%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+4.48%     0.01%   ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+4.44%     0.04%   ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+4.19%     0.19%   ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+4.13%     0.01%   ae::rhi::VulkanSwapchain::present(unsigned int)
+4.13%     0.01%   vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+4.06%     4.06%   __ioctl
+3.92%     3.57%   ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+3.92%     0.04%   android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+3.59%     0.02%   qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+3.46%     0.01%   android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+3.45%     0.33%   !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+3.41%     0.55%   void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+3.36%     2.26%   ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+3.36%     0.01%   android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+3.34%     0.01%   android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+3.21%     0.00%   android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+3.18%     0.01%   android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+3.18%     0.02%   android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+3.10%     0.04%   android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+2.99%     0.00%   ALooper_pollOnce
+2.94%     1.80%   ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+2.85%     2.12%   ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)::$_9::operator()(unsigned int, ae::resources::AnimationPath, unsigned int, float, std::__ndk1::span<float const, 18446744073709551615ul>, bool, std::__ndk1::span<float const, 18446744073709551615ul>, bool) const
+2.62%     0.07%   ae::editor::EditorSession::update()
+2.51%     0.06%   android::SurfaceComposerClient::Transaction::apply(bool, bool)
+2.51%     0.05%   ae::rhi::VulkanSwapchain::acquireNextImage(unsigned int*)
+2.49%     0.08%   android::Looper::pollOnce(int, int*, int*, void**)
+2.34%     0.03%   android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+2.31%     2.31%   ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+2.29%     0.08%   ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+2.28%     0.03%   android::DisplayEventDispatcher::handleEvent(int, int, void*)
+2.09%     2.09%   std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::__unordered_map_hasher<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::hash<unsigned int>, std::__ndk1::equal_to<unsigned int>, true>, std::__ndk1::__unordered_map_equal<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::equal_to<unsigned int>, std::__ndk1::hash<unsigned int>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>>>::__emplace_unique_key_args<unsigned int, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>, std::__ndk1::tuple<>>(unsigned int const&, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>&&, std::__ndk1::tuple<>&&)
+2.06%     2.06%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)::$_4::operator()(float const*) const
+2.06%     2.06%   @plt
+2.06%     1.83%   ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)

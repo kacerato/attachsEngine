@@ -1055,8 +1055,8 @@ public:
   // mundo de Play; fora dele, o documento autoral. É o que faz um script mover
   // ou apagar uma luz e a tela mudar, sem nenhum caminho separado de execução.
   bool extractLights(std::vector<renderer::SceneLight> &out) const {
-    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out,
-                                      isPlaying() && playScene_.active() ? playScene_.world().elapsedSeconds() : 0.0);
+    // G7: no Play a hora já avançou no próprio componente (SceneTimeOfDayClock).
+    return runtime::collectSceneLights(isPlaying() && playScene_.active() ? playScene_.document() : evaluatedEditorScene(), out, 0.0);
   }
   bool extractEnvironment(renderer::SceneEnvironment &out) const {
     return runtime::collectSceneEnvironment(
@@ -1092,6 +1092,11 @@ public:
   // retângulo dela em pixels, a lente efetiva e a saída (fundo, máscara, pós).
   bool playStackView(renderer::RenderViewSnapshot &out);
   void setPlayStackImage(bool ready) {state_.playStackReady=ready&&!state_.playStackRect.isEmpty();}
+  void setAnimatorCullingOverride(int mode) noexcept {animatorCullingOverride_=mode;}
+  // Taxa de atualização da animação por tamanho na tela (ver SceneAnimatorGraphs).
+  void setAnimationUpdateRate(bool enabled) noexcept {animationUpdateRate_=enabled;}
+  // Bancada: congela o Play no quadro atual (o botão de pausa do editor).
+  void setPlayPaused(bool paused) noexcept {state_.playPaused=paused;state_.playStepRequested=false;}
   bool extractPlayMap(std::vector<renderer::MapDrawState> &out,
                       const runtime::InputDeviceState &platformInput={},bool platformFocus=true);
   EditorEntityId instantiateAsset(u32 index, EditorEntityId parent, const float worldPosition[3], const EditorAssetInstantiation *options=nullptr);
@@ -1572,6 +1577,12 @@ private:
   u64 profileReconcileRevision_=~u64{0};
   std::vector<std::pair<resources::AssetGuid,renderer::SharedLensDirt>> lensDirtTextures_;
   std::vector<std::string> lensDirtHashes_;
+  // Chave da última varredura (grafo varrido, identidade, revisão, perfis):
+  // quadros sem mutação não percorrem a cena atrás de Ambientes.
+  u64 lensDirtScanKey_[4]{};bool lensDirtScanned_=false;
+  // Bancada (aether.animator_culling): -1 respeita o Culling Mode de cada Animator.
+  int animatorCullingOverride_=-1;
+  bool animationUpdateRate_=true;
   usize profileReconcileCount_=0;
   double codeCheckpointAt_=0;
   // A impressão digital do pacote base, guardada na importação inicial: é ela

@@ -212,6 +212,14 @@ struct SceneLight {
   // G3c: 0 Tempo real, 1 Misto, 2 Assado (o astro da Hora do dia é sempre 0).
   u8 lightmapMode = 0;
   float celestialToSun[3]{0, 1, 0};
+  // G4: a lua da mesma hora pela efeméride (renderer::evaluateMoon), no sol da
+  // Hora do dia; o céu desenha o disco nela mesmo sem uma direcional Lua. Zero
+  // quando a luz não tem Hora do dia.
+  float celestialToMoon[3]{0, 0, 0};
+  // G4d: o ar que a Hora do dia já pôs na cor e na intensidade do sol
+  // (TimeOfDayState::atmosphereTint/atmosphereDimming); o céu físico divide.
+  float atmosphereTint[3]{1, 1, 1};
+  float atmosphereDimming = 1.0f;
   float celestialSphere[3][3]{{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
 };
 

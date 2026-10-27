@@ -150,7 +150,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     rhi::BufferDesc buffer{};buffer.sizeBytes=sizeof(DirtRoadFrameUniform);
     buffer.usage=VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;buffer.cpuAccess=rhi::CpuAccess::SequentialWrite;buffer.preferDeviceMemory=false;
     if(!memoryAllocator_->createBuffer(buffer,&previewUniform_)) {destroyCameraPreview();return false;}
-    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,13},
+    VkDescriptorPoolSize sizes[]{{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,1},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,19},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,7},{VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,1}};
     VkDescriptorPoolCreateInfo pool{};pool.sType=VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     pool.maxSets=1;pool.poolSizeCount=4;pool.pPoolSizes=sizes;
@@ -210,7 +210,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     uiRenderer_.setCameraPreview(previewColor_.view());
   }
   std::vector<VkCopyDescriptorSet> copies;
-  for(u32 binding=1;binding<=18;++binding) {
+  for(u32 binding=1;binding<=23;++binding) {
     if(binding==1||binding==3||binding==4) continue;
     if((binding==5||binding==6||binding==15)&&!waterSubpassActive_) continue;
     if(binding>=7&&binding<=14&&!spectralWaterCount_) continue;
@@ -219,7 +219,7 @@ bool InstancedRenderer::prepareCameraPreview() {
     copies.push_back(copy);
   }
   // PK-6: a câmera da cena vê as mesmas sondas que a vista principal.
-  for(u32 binding:{24u,25u,26u}) {
+  for(u32 binding:{24u,25u,26u,27u}) {
     VkCopyDescriptorSet copy{};copy.sType=VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
     copy.srcSet=environmentSet_;copy.dstSet=previewSet_;copy.srcBinding=copy.dstBinding=binding;copy.descriptorCount=1;
     copies.push_back(copy);
@@ -289,6 +289,9 @@ bool InstancedRenderer::prepareCameraPreview() {
     previewDiagnostic_="Ambiente da câmera inválido";
     return false;
   }
+  // As nuvens volumétricas integradas são da vista principal; a prévia usa a
+  // camada 2D com os mesmos parâmetros.
+  frame.cloudShadow[2]=0.0f;
   {
     const auto look=effectiveSceneLook(previewSceneEnvironment_);
     applyScenePostEffects(frame,look,editorPost,

@@ -476,6 +476,94 @@ AE_TEST(animator_blend_tree_state_follows_its_parameter_and_speed) {
   p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),.25f),"o estado acompanha o parâmetro a cada quadro");
 }
 
+// A composição paralela (pool de animação) tem de dar exatamente a pose serial:
+// 300 personagens passam do limiar (256 canais): cada job avalia Animators inteiros.
+AE_TEST(animator_parallel_composition_matches_serial_pose) {
+  const auto run=[](bool parallel) {
+    SceneAnimator::setParallelEvaluation(parallel);
+    Library library;const auto walk=library.add("Andar",0,1);const auto wave=library.add("Acenar",1,10);
+    SceneGraph g;std::vector<ObjectId> hips;
+    for(u32 i=0;i<300;++i) {
+      const auto owner=g.createEntity(g.root(),ObjectKind::Folder,"Personagem");
+      hips.push_back(g.createEntity(owner,ObjectKind::Folder,"Quadril"));
+      g.createEntity(hips.back(),ObjectKind::Folder,"Braço");
+      auto &a=scene::animator(*g.editComponents(owner)->add(scene::Animator::descriptor));
+      a.layers[0].states[0].motions={{i%2?walk:wave}};
+    }
+    GameWorld world;world.load(g);SceneAnimator mixer;SceneAnimatorGraphs graphs;
+    mixer.begin(world.poseGraph(),library);graphs.setLibrary(&library);graphs.setComposer(&mixer);
+    for(u32 frame=0;frame<3;++frame) {
+      world.beginFrame(.1f);std::vector<SceneAnimator::ExternalSample> samples;
+      graphs.advance(world,library,.1f,.1f,samples);mixer.setExternalSamples(std::move(samples));mixer.advance(.1f,nullptr);
+    }
+    std::vector<float> pose;
+    for(const auto id:world.graph().childrenOf(world.graph().root())) {
+      std::vector<ObjectId> subtree;world.graph().collectSubtree(id,subtree);
+      for(const auto node:subtree) {const auto &t=world.graph().find(node)->transform;pose.insert(pose.end(),t.position,t.position+3);}
+    }
+    return pose;
+  };
+  const auto serial=run(false),parallel=run(true);
+  SceneAnimator::setParallelEvaluation(true);
+  AE_EXPECT_TRUE(!serial.empty()&&serial==parallel,"mesma pose com e sem paralelismo");
+  bool moved=false;for(float v:serial) moved=moved||v!=0;
+  AE_EXPECT_TRUE(moved,"os personagens foram de fato animados");
+}
+
+// Taxa por tamanho na tela: pequeno na tela avalia a cada 4 quadros e os
+// quadros pulados interpolam até a pose avaliada, sem salto.
+AE_TEST(animator_update_rate_by_screen_size_interpolates_between_evaluations) {
+  Rig r;auto &a=r.animator();
+  a.layers[0].states[0].motions={{r.run}};
+  Play p(r);
+  p.graphs.setUpdateRateEnabled(true);
+  p.graphs.setScreenSizes({{r.hips,.02f}});
+  p.graphs.setVisibleObjects({r.hips});
+  std::vector<float> xs;
+  for(u32 frame=0;frame<8;++frame) {p.step(.1f);xs.push_back(p.x(r.hips));}
+  AE_EXPECT_EQ(p.graphs.reducedRateAnimators(),1u,"personagem pequeno na tela entra na taxa reduzida");
+  bool monotonic=true;for(usize i=1;i<xs.size();++i) monotonic=monotonic&&xs[i]>=xs[i-1]-1e-5f;
+  AE_EXPECT_TRUE(monotonic,"a pose anda sem voltar entre as avaliações");
+  bool intermediate=false;for(float v:xs) intermediate=intermediate||(v>1e-3f&&v<2-1e-3f);
+  AE_EXPECT_TRUE(intermediate,"há quadros intermediários interpolados");
+  for(u32 frame=0;frame<8;++frame) p.step(.1f);
+  AE_EXPECT_TRUE(near(p.x(r.hips),2),"a interpolação chega à pose do clipe");
+  p.graphs.setScreenSizes({{r.hips,.5f}});p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.reducedRateAnimators(),0u,"grande na tela volta a avaliar todo quadro");
+}
+
+// Culling Mode da Unity: fora da vista, Cull Update Transforms segue o tempo
+// sem escrever a pose; Cull Completely para; Always Animate ignora a vista.
+AE_TEST(animator_culling_mode_follows_visibility_like_unity) {
+  Rig r;auto &a=r.animator();
+  a.layers[0].states[0].motions={{r.run}};
+  a.cullingMode=scene::AnimatorCullingMode::CullUpdateTransforms;
+  std::stringstream text;a.write(text);scene::Animator back;
+  AE_EXPECT_TRUE(back.read(text,7)&&back.cullingMode==scene::AnimatorCullingMode::CullUpdateTransforms,"modo relido na v7");
+  std::stringstream legacy;a.write(legacy);scene::Animator old;
+  AE_EXPECT_TRUE(old.read(legacy,6)&&old.cullingMode==scene::AnimatorCullingMode::AlwaysAnimate,"v6 abre como Sempre animar");
+  Play p(r);const auto instance=p.handle().instance;
+  p.step(.1f);AE_EXPECT_TRUE(near(p.x(r.hips),2),"sem culling conhecido o personagem anima");
+  p.graphs.setVisibleObjects({});
+  SceneAnimatorGraphs::Info before;p.graphs.info(p.world,r.owner,instance,0,before);
+  // Fora da vista a máquina e o tempo continuam, mas nenhuma amostra chega ao
+  // misturador: os ossos guardam a última pose escrita.
+  {
+    p.world.beginFrame(.25f);std::vector<SceneAnimator::ExternalSample> samples;
+    AE_EXPECT_TRUE(p.graphs.advance(p.world,r.library,.25f,.25f,samples)&&samples.empty(),"sem amostras fora da vista");
+  }
+  SceneAnimatorGraphs::Info after;p.graphs.info(p.world,r.owner,instance,0,after);
+  AE_EXPECT_TRUE(after.normalizedTime>before.normalizedTime,"Cull Update Transforms avança o tempo");
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),1u,"o Animator conta como fora da vista");
+  p.graphs.setCullingOverride(2);
+  p.graphs.info(p.world,r.owner,instance,0,before);p.step(.25f);p.graphs.info(p.world,r.owner,instance,0,after);
+  AE_EXPECT_TRUE(near(after.normalizedTime,before.normalizedTime),"Cull Completely para o tempo");
+  p.graphs.setCullingOverride(0);p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),0u,"Sempre animar ignora a vista");
+  p.graphs.setCullingOverride(-1);p.graphs.setVisibleObjects({r.arm});p.step(.1f);
+  AE_EXPECT_EQ(p.graphs.culledAnimators(),0u,"um renderer da hierarquia na vista basta");
+}
+
 AE_TEST(animator_layer_with_mask_overrides_only_its_subtree_and_emits_events) {
   Rig r;auto &a=r.animator();
   a.layers[0].states[0].motions.push_back({r.walk});a.layers[0].states[0].events.push_back({.5f,9});

@@ -22,7 +22,7 @@ namespace ae::resources {
 // caixa de cada parâmetro). Volumes que apontam para o mesmo perfil leem o
 // recurso; editar o perfil muda todos.
 struct EnvironmentProfile final {
-  static constexpr u32 FormatVersion = 14;
+  static constexpr u32 FormatVersion = 15;
   AssetGuid guid{};
   u32 revision = 1;
   std::string name;

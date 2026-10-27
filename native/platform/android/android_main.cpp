@@ -1,5 +1,6 @@
 #include "editor/editor_import_transaction.h"
 #include "imgui.h"
+#include <sys/system_properties.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <cerrno>
@@ -174,6 +175,7 @@ struct AndroidShell final {
   bool lockCamera = false;
   // Medição sem toque: entra em Play assim que o projeto termina de abrir.
   bool startPlayOnOpen = false;
+  ae::u32 debugPropertyFrame = 0;
   std::future<bool> rendererInitialization;
   std::atomic<bool> cancelRendererInitialization{false};
   bool sceneValidation = false;
@@ -879,6 +881,14 @@ namespace {
 std::string projectRenderingSettingsPath(const char *projectPath) {
   return projectPath && projectPath[0] ? std::string(projectPath)+"/.astra/rendering.astra" : std::string();
 }
+// Booleano tri-estado: -1 quando a opção não veio (o nível decide), 0/1 quando veio.
+// Ler com os dois padrões distingue "ausente" de "false" sem outra API de Intent.
+int readLaunchOverride(ANativeActivity *activity,const char *option) {
+  const bool whenFalse=ae::platform::android::readBooleanLaunchOption(activity,option,false);
+  const bool whenTrue=ae::platform::android::readBooleanLaunchOption(activity,option,true);
+  return whenFalse==whenTrue?(whenFalse?1:0):-1;
+}
+
 bool readProjectRenderingSettings(const char *projectPath,ae::renderer::ProjectRenderingSettings &settings) {
   const auto path=projectRenderingSettingsPath(projectPath);
   if(path.empty()) return false;
@@ -1561,6 +1571,15 @@ void resolveRenderingPolicyForDevice(AndroidShell &shell, float displayHz) {
       static_cast<double>(shell.renderingPolicy.dynamicResolution.minimumScale),
       static_cast<double>(shell.renderingPolicy.dynamicResolution.maximumScale),
       shell.renderingPolicy.clampCount);
+  // Teto do nível (Quality da Unity): o que o coletor de medição confere.
+  __android_log_print(ANDROID_LOG_INFO, LogTag,
+      "[RenderPolicy] nivel teto=%s ao=%s ao_meia=%d bloom_cadeia=%d luzes_por_objeto=%u luzes_quadro=%u",
+      shell.activeRenderingSettings.qualityLevelCeiling ? "on" : "off",
+      shell.renderingPolicy.post.ambientOcclusion ? "on" : "off",
+      shell.renderingPolicy.post.halfResolutionAmbientOcclusion ? 1 : 0,
+      shell.renderingPolicy.post.bloomMipChain ? 1 : 0,
+      shell.renderingPolicy.lights.additionalLightsPerObject,
+      shell.renderingPolicy.lights.additionalLights);
   for (ae::u32 index = 0; index < shell.renderingPolicy.clampCount; ++index) {
     const auto &clamp = shell.renderingPolicy.clamps[index];
     __android_log_print(ANDROID_LOG_INFO, LogTag, "[RenderPolicy] %s reduzido por %s.",
@@ -2409,14 +2428,28 @@ void android_main(android_app *app) {
   // Promovida no A/B de 17/10/2026 (pós -38%, imagem equivalente); false volta ao caminho anterior.
   shell.instancedRenderer.setFogResolveEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_fog_resolve", true));
-  // Candidatas do G1/G2, desligadas até o A/B no aparelho.
-  shell.instancedRenderer.setBloomChainEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.post_bloom_chain"));
-  shell.instancedRenderer.setHalfAmbientOcclusionEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.post_half_ao"));
+  // Bloom em cadeia e AO em 1/2 seguem o nível (padrão de B e C desde o A/B de
+  // 23/10/2026). A opção, quando presente, sobrepõe o nível para diagnóstico.
+  shell.instancedRenderer.setBloomChainOverride(readLaunchOverride(app->activity, "aether.post_bloom_chain"));
+  shell.instancedRenderer.setHalfAmbientOcclusionOverride(readLaunchOverride(app->activity, "aether.post_half_ao"));
   // G2: LUT de gradação também no Neutro, para medir a leitura 3D e comparar imagem.
   shell.instancedRenderer.setColorGradingForced(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.post_grading_force"));
+  {
+    // Animação em paralelo por personagem (padrão desde o A/B de 24/10); false volta à thread do jogo.
+    ae::runtime::SceneAnimator::setParallelEvaluation(ae::platform::android::readBooleanLaunchOption(
+        app->activity,"aether.animation_parallel",true));
+    // Taxa da animação por tamanho na tela (padrão desde o A/B de 24/10: processo
+    // -2,1 ms na Vila S); false volta a avaliar todo Animator a cada quadro.
+    shell.editorSession.setAnimationUpdateRate(ae::platform::android::readBooleanLaunchOption(
+        app->activity,"aether.animation_rate",true));
+    // Bancada do Culling Mode do Animator: força o modo em todos (0 sempre, 1 só o tempo, 2 parado).
+    ae::u32 culling=0;
+    if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.animator_culling",culling)) {
+      shell.editorSession.setAnimatorCullingOverride(static_cast<int>(std::min(culling,2u)));
+      __android_log_print(ANDROID_LOG_INFO,LogTag,"[AnimatorCulling] modo forçado=%u em todos os Animators.",std::min(culling,2u));
+    }
+  }
   {
     ae::u32 postIsolation=0;
     if(ae::platform::android::readUnsignedLaunchOption(app->activity,"aether.post_isolation",postIsolation)) {
@@ -2431,10 +2464,20 @@ void android_main(android_app *app) {
       app->activity, "aether.full_detail_sampling"));
   shell.instancedRenderer.setPointLightingSpecializationEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.point_lighting_specialization", true));
+  // Padrão desde o A/B de 23/10/2026 (Vila S: -0,44 ms de GPU); false volta ao laço sobre todas.
   shell.instancedRenderer.setPunctualLightMaskEnabled(ae::platform::android::readBooleanLaunchOption(
-      app->activity, "aether.punctual_light_mask", false));
+      app->activity, "aether.punctual_light_mask", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[PunctualLightMask] %s",
                       shell.instancedRenderer.punctualLightMaskEnabled() ? "por desenho" : "desligada");
+  // Bancada: true volta a sujar as 4 cascatas a cada movimento (antes de 24/10).
+  shell.instancedRenderer.setShadowDirtyAll(ae::platform::android::readBooleanLaunchOption(
+      app->activity, "aether.shadow_dirty_all"));
+  {
+    // Bancada: lado da cascata no mapa dinâmico da sombra (0 = automático).
+    ae::u32 side = 0;
+    ae::platform::android::readUnsignedLaunchOption(app->activity, "aether.shadow_dynamic_resolution", side);
+    shell.instancedRenderer.setShadowDynamicResolution(side);
+  }
   shell.instancedRenderer.setShadowGatherEnabled(ae::platform::android::readBooleanLaunchOption(
       app->activity, "aether.shadow_gather", true));
   __android_log_print(ANDROID_LOG_INFO, LogTag, "[ShadowGather] %s",
@@ -2457,6 +2500,9 @@ void android_main(android_app *app) {
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.preset = ae::renderer::parseQualityPreset(buffer);
     }
+    // Bancada: false mede o "antes" do teto por nível no mesmo binário.
+    shell.renderingSettings.qualityLevelCeiling = ae::platform::android::readBooleanLaunchOption(
+        app->activity, "aether.quality_ceiling", true);
     if (ae::platform::android::readStringLaunchOption(app->activity, "aether.quality_shadows",
                                                       buffer, sizeof(buffer))) {
       shell.renderingSettings.shadows = ae::renderer::parseShadowQuality(buffer);
@@ -2909,6 +2955,18 @@ void android_main(android_app *app) {
             !shell.projectReopening && !editorPlaying)
           shell.editorSession.setCameraPose(shell.launchCamera.position,
                                             shell.launchCamera.yaw, shell.launchCamera.pitch);
+        // Bancada (par congelado): `adb shell setprop debug.astra.play_pause 1` congela o
+        // Play e `debug.astra.shadow_dirty_all 0/1` troca o modo da sombra no mesmo quadro.
+        if (++shell.debugPropertyFrame >= 30) {
+          shell.debugPropertyFrame = 0;
+          char value[PROP_VALUE_MAX]{};
+          if (__system_property_get("debug.astra.play_pause", value) > 0 && editorPlaying)
+            shell.editorSession.setPlayPaused(value[0] == '1');
+          if (__system_property_get("debug.astra.shadow_dirty_all", value) > 0)
+            shell.instancedRenderer.setShadowDirtyAll(value[0] == '1');
+          if (__system_property_get("debug.astra.shadow_dynamic_force", value) > 0)
+            shell.instancedRenderer.setShadowDynamicForce(value[0] == '1');
+        }
         shell.editorSession.update();
         updateAndroidAudioFocus(shell,shell.editorSession.audioWantsFocus());
         // Painel Qualidade: "Aplicar" grava o arquivo do projeto e refaz o

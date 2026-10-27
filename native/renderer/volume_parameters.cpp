@@ -196,6 +196,12 @@ const VolumeParameter kParameters[]{
   {"lens_distortion_y_multiplier", G::LensDistortion, K::Float, 1, AE_FIELD(lensDistortionYMultiplier)},
   {"lens_distortion_center", G::LensDistortion, K::Floats, 2, AE_FIELD(lensDistortionCenter)},
   {"lens_distortion_scale", G::LensDistortion, K::Float, 1, AE_FIELD(lensDistortionScale)},
+  // G4c/G4d: espessura da camada e Volumetric Clouds (no fim: a tabela só cresce).
+  {"cloud_thickness", G::Clouds, K::Float, 1, AE_FIELD(clouds.thicknessMeters)},
+  {"cloud_type", G::Clouds, K::Enum, 1, AE_FIELD(clouds.type)},
+  {"cloud_shape_factor", G::Clouds, K::Float, 1, AE_FIELD(clouds.shapeFactor)},
+  {"cloud_erosion", G::Clouds, K::Float, 1, AE_FIELD(clouds.erosion)},
+  {"cloud_steps", G::Clouds, K::Float, 1, AE_FIELD(clouds.steps)},
 };
 #undef AE_FIELD
 static_assert(std::size(kParameters) <= VolumeParameterCapacity);

@@ -39,6 +39,9 @@ layout(set=0,binding=0,std140) uniform EnvironmentLightingBlock {
   layout(offset=4176) vec4 skyMoon;
   layout(offset=4192) vec4 skyStarRotation[3];
   layout(offset=4240) vec4 skyNight; // rgb brilho do céu ao luar
+  // G4d: desfaz a cor e a atenuação que a Hora do dia pôs no sol; só o céu
+  // físico usa (DirtRoadFrameUniform::skySunExtraterrestrial).
+  layout(offset=4848) vec4 skySunExtraterrestrial;
 } environment;
 // O céu segue o sol verdadeiro; à noite a luz principal pode ser a Lua.
 vec3 skySunDirection() {
@@ -51,7 +54,11 @@ float skySunIntensity() {
 }
 layout(set=0,binding=1) uniform sampler2D environmentMap;
 layout(set=0,binding=18) uniform mediump sampler2D cloudMap;
+// Volumetric Clouds já integradas (rgb pré-multiplicado, a = cobertura).
+// G4d: reconstrução das Volumetric Clouds (27; o 19 é a sombra dinâmica das cascatas).
+layout(set=0,binding=27) uniform mediump sampler2D cloudVolumeImage;
 layout(location=0) in vec3 vDirection;
+layout(location=1) in vec2 vScreen;
 layout(location=0) out vec4 outColor;
 vec2 environmentUv(vec3 direction) {
   direction=normalize(direction);
@@ -106,6 +113,11 @@ vec2 opticalDepthToAtmosphere(vec3 origin,vec3 direction,float planetRadius,
   return depth;
 }
 
+// Ozônio (Hillaire 2020, padrão do Physically Based Sky do HDRP): só absorve,
+// (0,650; 1,881; 0,085)e-3/km. A camada segue aqui a densidade do ar com a
+// coluna equivalente da camada de 25 km (fator 1,9). Sem ele o zênite fica
+// verde-acinzentado e o poente amarelo; com ele o zênite segue azul.
+const vec3 PhysicalSkyOzoneExtinction=vec3(0.000650,0.001881,0.000085)*1.9;
 vec3 integrateSingleScattering(vec3 origin,vec3 direction,float distance,
                                int viewSteps,int lightSteps,float planetRadius,
                                float atmosphereRadius,vec2 scaleHeights,
@@ -136,7 +148,7 @@ vec3 integrateSingleScattering(vec3 origin,vec3 direction,float distance,
     if(groundShadow.x<=0.0) {
       vec2 sunDepth=opticalDepthToAtmosphere(samplePosition,sunDirection,planetRadius,
                                              atmosphereRadius,scaleHeights,lightSteps);
-      vec3 extinction=betaRayleigh*(viewDepth.x+sunDepth.x)+
+      vec3 extinction=(betaRayleigh+PhysicalSkyOzoneExtinction)*(viewDepth.x+sunDepth.x)+
                       betaAerosolExtinction*(viewDepth.y+sunDepth.y);
       scattered+=exp(-extinction)*(betaRayleigh*density.x*rayleighPhase+
                                    betaAerosol*density.y*aerosolPhase)*segmentLength;
@@ -175,10 +187,11 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
   vec3 betaRayleigh=vec3(0.005802,0.013558,0.033100)*airDensity;
   vec3 betaAerosol=vec3(0.021000)*aerosolDensity;
   vec3 betaAerosolExtinction=betaAerosol*1.10;
-  float sunIntensity=max(skySunIntensity(),0.0);
+  // O ar já está na integral abaixo: o sol entra como fora da atmosfera.
+  float sunIntensity=max(skySunIntensity(),0.0)*environment.skySunExtraterrestrial.w;
   if(sunIntensity<=0.0) return vec3(0.0);
   vec3 sunDirection=skySunDirection();
-  vec3 sunColor=max(environment.sunColorAngularRadius.rgb,vec3(0.0));
+  vec3 sunColor=max(environment.sunColorAngularRadius.rgb*environment.skySunExtraterrestrial.rgb,vec3(0.0));
   vec2 viewDepth;
   vec3 scattered=integrateSingleScattering(origin,viewDirection,viewDistance,
       viewSteps,lightSteps,planetRadius,atmosphereRadius,scaleHeights,
@@ -194,7 +207,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
     if(illumination>0.0) {
       vec2 groundSunDepth=opticalDepthToAtmosphere(groundOrigin,sunDirection,planetRadius,
                                                    atmosphereRadius,scaleHeights,lightSteps);
-      vec3 groundSunTransmittance=exp(-(betaRayleigh*groundSunDepth.x+
+      vec3 groundSunTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*groundSunDepth.x+
                                        betaAerosolExtinction*groundSunDepth.y));
       directIrradiance=sunColor*sunIntensity*groundSunTransmittance*illumination;
     }
@@ -203,7 +216,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
     // Lambertiano. A integral do céu é pré-calculada e cacheada na CPU para
     // não executar três integrações atmosféricas extras por pixel inferior.
     vec3 skyIrradiance=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0));
-    vec3 viewTransmittance=exp(-(betaRayleigh*viewDepth.x+
+    vec3 viewTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*viewDepth.x+
                                 betaAerosolExtinction*viewDepth.y));
     color+=vec3(groundAlbedo)*(directIrradiance+skyIrradiance)/PI*
            viewTransmittance*intensity;
@@ -219,7 +232,7 @@ vec3 physicalAtmosphere(vec3 viewDirection,float pixelAngle) {
               vec3(celestialSunGlare(angularDistance,cosine,radius));
     vec2 sunDepth=opticalDepthToAtmosphere(origin,sunDirection,planetRadius,
                                            atmosphereRadius,scaleHeights,lightSteps);
-    vec3 sunTransmittance=exp(-(betaRayleigh*sunDepth.x+
+    vec3 sunTransmittance=exp(-((betaRayleigh+PhysicalSkyOzoneExtinction)*sunDepth.x+
                                betaAerosolExtinction*sunDepth.y));
     color+=sunColor*sunIntensity*sunTransmittance*disc*environment.sceneSky.z;
   }
@@ -287,8 +300,11 @@ void main() {
     color+=celestialStars(visibleDirection,sunDirection,color,pixelAngle,frame.cameraFrame.w)*
            (1.0-moonCoverage*aboveHorizon);
   }
-  // Nuvens por cima de tudo: escondem sol, lua e estrelas como no Cloud Layer.
-  if(environment.cloudParameters.x>0.0 && visibleDirection.y>0.0) {
+  // Nuvens por cima de tudo: escondem sol, lua e estrelas. Volumétricas vêm
+  // prontas do passe próprio; a camada 2D é integrada aqui.
+  vec4 volume=environment.cloudShadow.z>0.5?textureLod(cloudVolumeImage,vScreen,0.0):vec4(0.0);
+  if(environment.cloudParameters.x>0.0 &&
+     (volume.a>0.001 || (environment.cloudShadow.z<0.5 && visibleDirection.y>0.0))) {
     vec3 toSun=skySunDirection();
     // A luz do sol na escala do céu de cada modo. Físico: radiância de uma
     // superfície branca lambertiana (E/pi), como o chão do próprio céu físico,
@@ -300,17 +316,52 @@ void main() {
     vec3 sunRadiance;
     vec3 skyAmbient;
     if(environment.sceneSky.w>1.5) {
+      // A luz das nuvens é a da direcional dominante, como o HDRP: o sol de dia
+      // e a Lua à noite (a mesma direção que cloud_volume.frag marcha), com a
+      // cor e a intensidade dela. A da Lua já traz a fase e o horizonte
+      // (renderer::evaluateMoon); o sol esmaece pelo horizonte dele.
+      float lightIntensity=max(environment.sunDirectionIntensity.w,0.0);
+      float lightFade=environment.skyMoon.w>0.5&&environment.skySun.w<=0.0?1.0:daylight;
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*
-          max(skySunIntensity(),0.0)*environment.atmosphereScattering.x*(0.9/PI)*daylight;
+          lightIntensity*environment.atmosphereScattering.x*(0.9/PI)*lightFade;
+      // À noite a irradiância do chão vai a zero: o céu noturno (V-2) é o
+      // preenchimento da base, e sem lua a nuvem fica escura mas legível.
       skyAmbient=max(environment.atmosphereGroundIrradiance.rgb,vec3(0.0))*(0.9/PI)*
-          environment.atmosphereScattering.x+diffuseSky*0.35;
+          environment.atmosphereScattering.x+diffuseSky*0.35+max(environment.skyNight.rgb,vec3(0.0))*1.2;
     } else {
       sunRadiance=max(environment.sunColorAngularRadius.rgb,vec3(0.0))*environment.sceneAoDetail.z*daylight*
           (skySunIntensity()>0.0?1.0:0.0);
       float skyLuminance=dot(diffuseSky,vec3(0.2126,0.7152,0.0722));
       skyAmbient=mix(vec3(skyLuminance),diffuseSky,0.6)*1.1;
     }
-    color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient);
+    if(environment.cloudShadow.z>0.5) {
+      // Volumetric Clouds: os fatores do passe próprio viram cor com as mesmas
+      // radiâncias da camada 2D; longe a nuvem se perde na névoa do horizonte.
+      float distanceKm=volume.b/volume.a;
+      // A camada vai até a linha do horizonte (Unity, 95OOpQPJKU0 0:03): só o
+      // último ~0,7° some, e a névoa pela distância faz o resto.
+      float fade=mix(1.0,0.25,1.0-exp(-distanceKm/120.0))*smoothstep(-0.002,0.012,visibleDirection.y)*
+                 environment.cloudParameters.x;
+      // Ambiente por altura (UniStorm 5.3.1, cloudsInclude.cginc, renderCloudsInternal:
+      // cor de base e de topo interpoladas pela altura): topo com o céu, base
+      // cinza-azulada (sombra do próprio cúmulo).
+      // A base fica cinza-azulada mesmo na hora dourada (UniStorm 5.3.1:
+      // CloudBaseColor fria enquanto CloudLightColor esquenta; HDRP 0:52): o
+      // lado escuro não herda o amarelo do céu, só o lado iluminado esquenta.
+      float ambientLuminance=dot(skyAmbient,vec3(0.2126,0.7152,0.0722));
+      vec3 ambientTop=mix(vec3(ambientLuminance),skyAmbient,0.7)*0.85;
+      // Base mais escura (0,45x): a sombra embaixo do cúmulo da Unity em 0:13.
+      vec3 ambientBottom=ambientLuminance*vec3(0.46,0.53,0.64)*0.45;
+      // Hora dourada e poente: o lado da sombra e a base ficam cinza-arroxeados
+      // (o céu oposto ao sol), só o lado iluminado esquenta (Unity 0:52/0:54).
+      float lowSun=1.0-smoothstep(0.06,0.35,toSun.y);
+      ambientTop=mix(ambientTop,ambientLuminance*vec3(0.70,0.64,0.82),lowSun);
+      ambientBottom=mix(ambientBottom,ambientLuminance*vec3(0.50,0.46,0.64)*0.55,lowSun);
+      vec3 cloud=(sunRadiance*volume.r+ambientTop*volume.g+ambientBottom*max(volume.a-volume.g,0.0))*
+                 environment.cloudTint.rgb;
+      color=color*(1.0-volume.a*fade)+cloud*fade;
+    } else
+      color=cloudLayerComposite(color,visibleDirection,toSun,sunRadiance,skyAmbient,pixelAngle);
   }
   if(environment.scenePost.z<0.5)
     color=astraToneMap(color*environment.parameters.x*exp2(environment.scenePost.x),environment.scenePost.y);

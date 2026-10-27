@@ -1,0 +1,38 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 13380
+Event count: 6690000000
+
+Overhead  Symbol
+13.36%    ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+4.06%     __ioctl
+3.57%     ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+3.04%     ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+2.31%     ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+2.26%     ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+2.12%     ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)::$_9::operator()(unsigned int, ae::resources::AnimationPath, unsigned int, float, std::__ndk1::span<float const, 18446744073709551615ul>, bool, std::__ndk1::span<float const, 18446744073709551615ul>, bool) const
+2.09%     std::__ndk1::pair<std::__ndk1::__hash_iterator<std::__ndk1::__hash_node<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, void*>*>, bool> std::__ndk1::__hash_table<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::__unordered_map_hasher<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::hash<unsigned int>, std::__ndk1::equal_to<unsigned int>, true>, std::__ndk1::__unordered_map_equal<unsigned int, std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>, std::__ndk1::equal_to<unsigned int>, std::__ndk1::hash<unsigned int>, true>, std::__ndk1::allocator<std::__ndk1::__hash_value_type<unsigned int, ae::runtime::SceneAnimator::Rest>>>::__emplace_unique_key_args<unsigned int, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>, std::__ndk1::tuple<>>(unsigned int const&, std::__ndk1::piecewise_construct_t const&, std::__ndk1::tuple<unsigned int const&>&&, std::__ndk1::tuple<>&&)
+2.06%     ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)::$_4::operator()(float const*) const
+2.06%     @plt
+1.83%     ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+1.80%     ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+1.60%     __memmove_aarch64_simd
+1.37%     ae::runtime::(anonymous namespace)::FlatIndex::insert(unsigned long, unsigned int, bool&)
+1.07%     ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+1.06%     ae::rotationArc(float const*, float const*, double&, double*, double*)
+1.03%     sincosf
+0.99%     !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+0.99%     __close
+0.98%     ae::editor::EditorSession::lensDirtTextures()::$_1::operator()(ae::runtime::SceneGraph const&) const
+0.88%     __memset_aarch64
+0.87%     ae::runtime::SceneGraph::find(unsigned int) const
+0.86%     ae::resources::skinnedLocalBounds(ae::resources::SkinDefinition const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, float*, float&)
+0.82%     __ppoll
+0.81%     ae::runtime::SceneTweens::advance(ae::runtime::GameWorld&, double, double)
+0.81%     scudo::HybridMutex::tryLock()
+0.79%     __aarch64_ldadd4_rel
+0.79%     ae::renderer::buildNormalMatrix(float const*, float*)
+0.79%     ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+0.70%     atan
+0.62%     ae::renderer::applyMaterialOverride(ae::renderer::MapMaterialRecord const&, ae::scene::MaterialParameters const&, unsigned int)

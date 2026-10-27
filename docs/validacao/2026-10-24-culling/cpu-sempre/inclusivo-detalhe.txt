@@ -1,0 +1,208 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 19207
+Error Callchains: 1547, 8.054355%
+Event count: 9603500000
+
+Children  Self    Symbol
+93.60%    0.00%   __pthread_start(void*)
+93.60%    0.00%   __start_thread
+93.60%    0.00%   android_app_entry
+93.40%    0.24%   android_main
+53.00%    0.04%   ae::editor::EditorSession::extractPlayMap(std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&, ae::runtime::InputDeviceState const&, bool)
+45.57%    0.02%   ae::editor::EditorPlayScene::advanceFrame(double, bool)
+33.62%    0.03%   ae::editor::EditorPlayScene::animate(float, float)
+30.59%    13.21%  ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+26.89%    0.22%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)
+5.74%     0.03%   ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)
+5.52%     0.00%   ae::rhi::VulkanSwapchain::present(unsigned int)
+5.51%     0.03%   vulkan::driver::QueuePresentKHR(VkQueue_T*, VkPresentInfoKHR const*)
+5.29%     0.90%   ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+5.09%     5.09%   __ioctl
+5.06%     0.05%   android::Surface::queueBuffer(ANativeWindowBuffer*, int, android::SurfaceQueueBufferOutput*)
+5.01%     0.02%   qglinternal::vkCmdDrawIndexed(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, int, unsigned int)
+4.84%     0.33%   !!!0000!2811eda5a50b96d359a865efb92f8d!208ca19915!
+4.77%     0.11%   ae::runtime::ScenePhysics::advance(double, ae::runtime::GameWorld&, bool (*)(void*, float), void*, bool (*)(void*, unsigned int, unsigned int, unsigned int), bool (*)(void*, ae::runtime::ContactEvent const&), bool (*)(void*, unsigned int, unsigned long, float), bool (*)(void*, ae::runtime::CharacterHit const&))
+4.43%     0.85%   void ae::platform::android::InstancedRenderer::recordShadowCasters<ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1>(ae::platform::android::InstancedRenderer::recordShadowPass(ae::platform::FreeCameraState const&)::$_1 const&)::'lambda'(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool)::operator()(VkPipeline_T*, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&, bool) const
+4.43%     0.03%   android::BufferQueueProducer::queueBuffer(int, android::IGraphicBufferProducer::QueueBufferInput const&, android::IGraphicBufferProducer::QueueBufferOutput*)
+4.11%     2.60%   ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)::$_9::operator()(unsigned int, ae::resources::AnimationPath, unsigned int, float, std::__ndk1::span<float const, 18446744073709551615ul>, bool, std::__ndk1::span<float const, 18446744073709551615ul>, bool) const
+4.10%     0.00%   android::BufferQueue::ProxyConsumerListener::onFrameAvailable(android::BufferItem const&)
+4.09%     0.01%   android::ConsumerBase::onFrameAvailable(android::BufferItem const&) (.cold.0)
+4.08%     0.01%   android::BLASTBufferQueue::onFrameAvailable(android::BufferItem const&)
+4.03%     0.02%   android::BpBinder::transact(unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+3.99%     0.04%   android::BLASTBufferQueue::acquireNextBufferLocked(std::__1::optional<android::SurfaceComposerClient::Transaction*>)
+3.99%     0.03%   android::IPCThreadState::transact(int, unsigned int, android::Parcel const&, android::Parcel*, unsigned int)
+3.94%     3.44%   ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+3.83%     2.69%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+3.71%     2.30%   ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+3.18%     3.18%   ae::runtime::(anonymous namespace)::FlatIndex::insert(unsigned long, unsigned int, bool&)
+3.06%     0.07%   android::SurfaceComposerClient::Transaction::apply(bool, bool)
+3.04%     0.06%   ae::editor::EditorSession::update()
+2.94%     0.07%   ae::editor::EditorMapScene::deformedPose(ae::runtime::SceneGraph const&, ae::scene::SkinnedMesh const&, unsigned int, float const*, ae::editor::EditorMapScene::DeformedPose&) const
+2.79%     0.01%   android::BpSurfaceComposer::setTransactionState(android::TransactionState&&)
+2.63%     1.62%   !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+2.61%     1.62%   ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+2.51%     0.00%   ae::rhi::VulkanSwapchain::acquireNextImage(unsigned int*)
+2.19%     0.00%   !!!0000!0964412298f54481475bf89d4ab944!208ca19915!
+2.19%     0.01%   ae::editor::EditorPlayScene::fixedStep(void*, float)
+2.18%     2.18%   @plt
+2.07%     0.00%   ae::runtime::SceneGui::prepare(ae::runtime::GameWorld&, ae::renderer::PerspectiveFrustum const&, ae::ui::UiRect const&, ae::ui::UiRect const&)
+2.05%     0.00%   ALooper_pollOnce
+2.03%     0.93%   scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+2.01%     0.18%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_8::operator()(unsigned int, VkPipeline_T* const*, VkPipeline_T*, VkPipeline_T*) const
+1.93%     0.03%   android::Looper::pollOnce(int, int*, int*, void**)
+1.87%     1.87%   ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.85%     0.01%   android::DisplayEventDispatcher::handleEvent(int, int, void*)
+1.76%     0.03%   !!!0000!ee32190b451f4c50fbbb49e27f3eb6!208ca19915!
+1.74%     0.00%   mono_threads_enter_gc_safe_region_unbalanced
+1.68%     0.16%   !!!0000!e7ab4d2380bdd080c59ad1251f7ed3!208ca19915!
+1.66%     0.93%   ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+1.63%     0.06%   malloc
+1.63%     0.02%   vulkan::driver::QueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+1.60%     0.01%   !!!0000!f0ff2d1e04a1ca7bef42d34f453e8a!208ca19915!
+1.60%     0.00%   qglinternal::vkQueueSubmit(VkQueue_T*, unsigned int, VkSubmitInfo const*, VkFence_T*)
+1.60%     1.47%   ae::runtime::(anonymous namespace)::cachedWorldMatrix(ae::runtime::SceneGraph const&, unsigned int, float*, unsigned int)
+1.58%     0.07%   operator new(unsigned long)
+1.57%     0.01%   android::Choreographer::dispatchVsync(long, android::PhysicalDisplayId, unsigned int, android::gui::VsyncEventData)
+1.57%     0.02%   vulkan::driver::AcquireNextImageKHR(VkDevice_T*, VkSwapchainKHR_T*, unsigned long, VkSemaphore_T*, VkFence_T*, unsigned int*)
+1.55%     0.10%   ae::runtime::SceneNavigation::advance(ae::runtime::GameWorld&, float)
+1.55%     0.02%   scudo_malloc
+1.52%     0.03%   ae::physics::CharacterMotor::update(float, float, float, float)
+1.48%     0.01%   ae::platform::android::AndroidPerformance::reportFrameWorkDuration(long, long, long, long)
+1.48%     0.01%   AetherPhysics_UpdateCharacterEx
+1.46%     0.02%   android::Choreographer::postFrameCallbackDelayed(void (*)(long, void*), void (*)(long, void*), void (*)(AChoreographerFrameCallbackData const*, void*), void*, long, android::CallbackType)
+1.43%     0.03%   JPH::CharacterVirtual::ExtendedUpdate(float, JPH::Vec3, JPH::CharacterVirtual::ExtendedUpdateSettings const&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+1.43%     0.02%   APerformanceHintSession::reportActualWorkDurationInternal(AWorkDuration*)
+1.42%     0.13%   ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)
+1.41%     1.41%   ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)::$_4::operator()(float const*) const
+1.41%     0.27%   scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::deallocate(void*, scudo::Chunk::Origin, unsigned long, unsigned long)
+1.37%     0.01%   JPH::CharacterVirtual::Update(float, JPH::Vec3, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+1.34%     1.34%   __memmove_aarch64_simd
+1.30%     0.01%   android::gui::BpDisplayEventConnection::requestNextVsync() (.cold.0)
+1.25%     0.97%   ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+1.25%     0.01%   aidl::android::os::BpHintSession::reportActualWorkDuration2(std::__1::vector<aidl::android::hardware::power::WorkDuration, std::__1::allocator<aidl::android::hardware::power::WorkDuration>> const&)
+1.24%     0.01%   ae::editor::EditorSession::applyLodGroups(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+1.23%     1.23%   __close
+1.21%     0.05%   JPH::CharacterVirtual::MoveShape(JPH::Vec3&, JPH::Vec3, float, JPH::Array<JPH::CharacterContact, JPH::STLAllocator<JPH::CharacterContact>>*, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&, JPH::TempAllocator&)
+1.19%     0.01%   qglinternal::vkCmdBeginRenderPass(VkCommandBuffer_T*, VkRenderPassBeginInfo const*, VkSubpassContents)
+1.18%     0.02%   !!!0000!3a4be7d9bfa8ce1de708d9937123e3!208ca19915!
+1.16%     0.41%   ae::runtime::SceneAnimator::player(unsigned int, unsigned long, ae::runtime::AnimationCommandStatus&)
+1.15%     0.32%   scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::quarantineOrDeallocateChunk(scudo::Options const&, void*, scudo::Chunk::UnpackedHeader*, unsigned long)
+1.11%     0.02%   AIBinder_transact
+1.10%     0.14%   ae::interpolateRotationArc(float const*, float const*, double, float*)
+1.07%     0.02%   mono_threads_exit_gc_safe_region_unbalanced
+1.05%     0.79%   !!!0000!65bb4f16e1c4caf7a56f18c58bd23d!208ca19915!
+1.03%     1.03%   __aarch64_cas4_acq
+1.00%     0.00%   libcoreclr.so[+2468c2]
+0.99%     0.01%   close
+0.98%     0.26%   atan2
+0.96%     0.83%   ae::rotationArc(float const*, float const*, double&, double*, double*)
+0.95%     0.01%   sync_wait
+0.94%     0.65%   ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+0.93%     0.03%   !!!0000!4abcaff60ae4bdf37cf318d2baab9f!208ca19915!
+0.93%     0.02%   qglinternal::vkWaitForFences(VkDevice_T*, unsigned int, VkFence_T* const*, unsigned int, unsigned long)
+0.93%     0.93%   __ppoll
+0.93%     0.03%   gsl_syncobj_destroy
+0.91%     0.02%   gsl_syncobj_wait
+0.90%     0.00%   libcoreclr.so[+2467b2]
+0.90%     0.01%   !!!0000!793137038dbf2b85f2cb5552520123!208ca19915!
+0.89%     0.89%   ae::runtime::SceneGraph::find(unsigned int) const
+0.89%     0.01%   !!!0000!6a7f7ec785028d96437db04399d932!208ca19915!
+0.89%     0.04%   qglinternal::vkAcquireImageANDROID(VkDevice_T*, VkImage_T*, int, VkSemaphore_T*, VkFence_T*)
+0.88%     0.03%   !!!0000!260addb415166054346467f72a0679!208ca19915!
+0.87%     0.00%   qglinternal::vkResetCommandBuffer(VkCommandBuffer_T*, unsigned int)
+0.86%     0.01%   !!!0000!c83e82fe22b881f50f4107c4c3af6f!208ca19915!
+0.86%     0.71%   ae::editor::EditorMapScene::findClip(ae::resources::AssetGuid const&, ae::runtime::AnimationClipView&) const
+0.86%     0.03%   !!!0000!6a59edb2d6e4ac956ef4c608fd9c2c!208ca19915!
+0.83%     0.01%   JPH::CharacterVirtual::GetContactsAtPosition(JPH::Vec3, JPH::Vec3, JPH::Shape const*, JPH::Array<JPH::CharacterContact, JPH::STLTempAllocator<JPH::CharacterContact>>&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&) const
+0.83%     0.01%   !!!0000!3b3f2aec5c81326b394132c9cfaf9c!208ca19915!
+0.83%     0.01%   !!!0000!58a4fd6802a47cff0fc9219bfd35e5!208ca19915!
+0.82%     0.02%   JPH::CharacterVirtual::CheckCollision(JPH::Vec3, JPH::Quat, JPH::Vec3, float, JPH::Shape const*, JPH::Vec3, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&) const
+0.82%     0.01%   android::TransactionState::writeToParcel(android::Parcel*) const
+0.81%     0.81%   __memset_aarch64
+0.81%     0.03%   gsl_command_issueib_timeline_sync
+0.81%     0.00%   !!!0000!264dbe589750895622faec5c2d15c8!208ca19915!
+0.80%     0.80%   atan
+0.80%     0.01%   JPH::NarrowPhaseQuery::CollideShape(JPH::Shape const*, JPH::Vec3, JPH::Mat44 const&, JPH::CollideShapeSettings const&, JPH::Vec3, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&) const
+0.77%     0.77%   ae::renderer::buildNormalMatrix(float const*, float*)
+0.77%     0.01%   !!!0000!8cf9cc05f436738178cf8b8b6481c7!208ca19915!
+0.76%     0.03%   !!!0000!69d92616a4f6f9d79ae8cc45b6fc97!208ca19915!
+0.76%     0.01%   ioctl_kgsl_gpu_command
+0.74%     0.59%   !!!0000!7aa204b0e62a6c0dd629283b470dd9!208ca19915!
+0.71%     0.67%   ae::runtime::SceneAnimator::syncStates(ae::runtime::SceneAnimator::Player&)
+0.71%     0.04%   calloc
+0.71%     0.03%   !!!0000!e3a652ee8dfc3e8be13a2556d69df1!208ca19915!
+0.71%     0.01%   JPH::BroadPhaseQuadTree::CollideAABox(JPH::AABox const&, JPH::CollisionCollector<JPH::BodyID, JPH::CollisionCollectorTraitsCollideShape>&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&) const
+0.68%     0.03%   ae::platform::android::applySceneEnvironmentLook(ae::platform::android::(anonymous namespace)::DirtRoadFrameUniform&, ae::renderer::EnvironmentLighting const&, ae::renderer::SceneEnvironment const&, ae::renderer::EnvironmentMapDescription const&, bool, bool, bool, std::__ndk1::span<ae::renderer::SceneLight const, 18446744073709551615ul>, ae::renderer::PhysicalAtmosphereGroundIrradianceCache&, ae::renderer::ProceduralAmbientProbeCache&, double)
+0.68%     0.11%   JPH::QuadTree::CollideAABox(JPH::AABox const&, JPH::CollisionCollector<JPH::BodyID, JPH::CollisionCollectorTraitsCollideShape>&, JPH::ObjectLayerFilter const&, JPH::Array<JPH::QuadTree::Tracking, JPH::STLAllocator<JPH::QuadTree::Tracking>> const&) const
+0.67%     0.08%   dtCrowd::update(float, dtCrowdAgentDebugInfo*)
+0.66%     0.02%   !!!0000!f82bbe53268c24e3e7107ea427a2ab!208ca19915!
+0.66%     0.00%   scudo_calloc
+0.64%     0.64%   ae::renderer::applyMaterialOverride(ae::renderer::MapMaterialRecord const&, ae::scene::MaterialParameters const&, unsigned int)
+0.64%     0.01%   !!!0000!b78ad09fc24eab751708d0a80613cf!208ca19915!
+0.62%     0.04%   !!!0000!0d0d7a47f7d0047a5f2d0c51f7b79a!208ca19915!
+0.61%     0.41%   ae::runtime::lodObjectStates(ae::runtime::SceneGraph const&, ae::runtime::LodView const&, ae::runtime::LodCrossFadeClock*, double)
+0.61%     0.04%   !!!0000!a8a5578ec7eb449d8c8076f2948068!208ca19915!
+0.60%     0.60%   scudo::HybridMutex::unlock()
+0.59%     0.59%   ae::runtime::SceneTweens::advance(ae::runtime::GameWorld&, double, double)
+0.58%     0.49%   ae::runtime::ScenePhysicsQueries::advance(ae::runtime::GameWorld&, ae::runtime::ScenePhysics const&)
+0.58%     0.01%   ae::editor::EditorPlayScene::advanceTimeOfDay()
+0.58%     0.37%   ae::editor::EditorSession::lensDirtTextures()
+0.57%     0.57%   libcoreclr.so[+348b04]
+0.56%     0.01%   !!!0000!3e4d8611b5ff0fa5b4397294fb7af7!208ca19915!
+0.55%     0.04%   JPH::NarrowPhaseQuery::CollideShape(JPH::Shape const*, JPH::Vec3, JPH::Mat44 const&, JPH::CollideShapeSettings const&, JPH::Vec3, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::BroadPhaseLayerFilter const&, JPH::ObjectLayerFilter const&, JPH::BodyFilter const&, JPH::ShapeFilter const&) const::MyCollector::AddHit(JPH::BodyID const&)
+0.54%     0.09%   ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_15::operator()(std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>> const&) const
+0.54%     0.04%   !!!0000!475f18195e7dc4867a166580dd0950!208ca19915!
+0.53%     0.00%   libcoreclr.so[+2f3ad2]
+0.52%     0.52%   ae::resources::(anonymous namespace)::invert(float const*, float*)
+0.52%     0.32%   ae::runtime::collectSceneEnvironmentVolumes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneEnvironmentVolume, std::__ndk1::allocator<ae::renderer::SceneEnvironmentVolume>>&, std::__ndk1::span<ae::resources::EnvironmentProfile const, 18446744073709551615ul>)
+0.52%     0.52%   ae::runtime::SceneGraph::exists(unsigned int) const
+0.52%     0.03%   !!!0000!1d8cf90a0b0d8d51f807e6fd3a502f!208ca19915!
+0.51%     0.30%   ae::runtime::applyTimeOfDay(ae::runtime::SceneGraph const&, double, std::__ndk1::function<bool (unsigned int, ae::runtime::Transform const&)> const&)
+0.51%     0.01%   ae::editor::EditorSession::lightProbeSet() const
+0.51%     0.19%   !!!0000!c45c62288db37cfbc71e3d41ae9a7c!208ca19915!
+0.51%     0.02%   android::layer_state_t::write(android::Parcel&) const
+0.49%     0.49%   pthread_getspecific
+0.47%     0.03%   JPH::TransformedShape::CollideShape(JPH::Shape const*, JPH::Vec3, JPH::Mat44 const&, JPH::CollideShapeSettings const&, JPH::Vec3, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::ShapeFilter const&) const
+0.47%     0.47%   sincosf
+0.47%     0.02%   !!!0000!2b54ec3f889e47c947f5102d244cd8!208ca19915!
+0.47%     0.01%   gsl_syncobj_create
+0.46%     0.46%   __dup
+0.46%     0.08%   std::__ndk1::__function::__func<ae::editor::EditorPlayScene::animate(float, float)::'lambda'(unsigned int), std::__ndk1::allocator<ae::editor::EditorPlayScene::animate(float, float)::'lambda'(unsigned int)>, bool (unsigned int)>::operator()(unsigned int&&)
+0.46%     0.02%   ioctl_kgsl_syncobj_create
+0.46%     0.01%   !!!0000!911e660d6e6b7331f329601621db85!208ca19915!
+0.46%     0.01%   ae::editor::EditorSession::extractReflectionProbes(std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&) const
+0.45%     0.45%   ae::renderer::punctualLightMask(float const*, float, std::__ndk1::span<ae::renderer::PunctualLight const, 18446744073709551615ul>, std::__ndk1::span<ae::renderer::PunctualLightFilter const, 18446744073709551615ul>, ae::renderer::DrawLightingKey const&, unsigned int, bool)
+0.45%     0.00%   libcoreclr.so[+2467a6]
+0.45%     0.02%   JPH::RotatedTranslatedShape::sCollideRotatedTranslatedVsShape(JPH::Shape const*, JPH::Shape const*, JPH::Vec3, JPH::Vec3, JPH::Mat44 const&, JPH::Mat44 const&, JPH::SubShapeIDCreator const&, JPH::SubShapeIDCreator const&, JPH::CollideShapeSettings const&, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::ShapeFilter const&)
+0.44%     0.44%   ae::resources::skinnedLocalBounds(ae::resources::SkinDefinition const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, float*, float&)
+0.44%     0.30%   ae::runtime::collectSceneLightProbeGroups(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::runtime::SceneLightProbeGroup, std::__ndk1::allocator<ae::runtime::SceneLightProbeGroup>>&)
+0.44%     0.08%   ae::platform::android::InstancedRenderer::recordSkinning()
+0.43%     0.38%   ae::resources::computeSkinPalette(ae::resources::SkinDefinition const&, float const*, std::__ndk1::vector<float, std::__ndk1::allocator<float>> const&, std::__ndk1::vector<float, std::__ndk1::allocator<float>>&)
+0.42%     0.27%   ae::runtime::collectSceneReflectionProbes(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneReflectionProbe, std::__ndk1::allocator<ae::renderer::SceneReflectionProbe>>&)
+0.42%     0.16%   !!!0000!615ce7af35925d1ba1c8a8b4826134!208ca19915!
+0.41%     0.41%   ae::runtime::SceneTweenSequences::advance(ae::runtime::GameWorld&, ae::runtime::SceneTweens&, double, double)
+0.39%     0.10%   ae::runtime::SceneAnimatorGraphs::ensure(ae::runtime::GameWorld&, unsigned int, unsigned long, ae::scene::Animator const**)
+0.39%     0.00%   android::Surface::dequeueBuffer(ANativeWindowBuffer**, int*)
+0.39%     0.00%   qglinternal::vkCmdDraw(VkCommandBuffer_T*, unsigned int, unsigned int, unsigned int, unsigned int)
+0.38%     0.02%   !!!0000!d0b635c8563f6c0e6cf2954422725a!208ca19915!
+0.37%     0.03%   !!!0000!3f2ffbb1a6c3cdc88f7ac01042dc2e!208ca19915!
+0.36%     0.00%   !!!0000!707c7a0e369a31bd21e9e949958a27!208ca19915!
+0.36%     0.00%   ae::runtime::GameWorld::worldTransform(ae::runtime::ObjectHandle const&, ae::runtime::Transform&) const
+0.35%     0.00%   libcoreclr.so[+30bc2a]
+0.35%     0.00%   libcoreclr.so[+30c0ee]
+0.35%     0.00%   libcoreclr.so[+30f406]
+0.35%     0.35%   ae::renderer::ambientProbeFromGradient(float const*, float const*, float const*, std::__ndk1::array<std::__ndk1::array<float, 4ul>, 9ul>&)
+0.35%     0.01%   ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_5::operator()(ae::scene::AnimatorState const&, float&, bool&, float) const
+0.34%     0.21%   !!!0000!1b1266aafa92892280081dc0701970!208ca19915!
+0.34%     0.04%   JPH::ConvexShape::sCollideConvexVsConvex(JPH::Shape const*, JPH::Shape const*, JPH::Vec3, JPH::Vec3, JPH::Mat44 const&, JPH::Mat44 const&, JPH::SubShapeIDCreator const&, JPH::SubShapeIDCreator const&, JPH::CollideShapeSettings const&, JPH::CollisionCollector<JPH::CollideShapeResult, JPH::CollisionCollectorTraitsCollideShape>&, JPH::ShapeFilter const&)
+0.34%     0.34%   __emutls_get_address
+0.33%     0.04%   ae::runtime::SceneAnimatorGraphs::advance(ae::runtime::GameWorld&, ae::runtime::AnimationLibrary const&, float, float, std::__ndk1::vector<ae::runtime::SceneAnimator::ExternalSample, std::__ndk1::allocator<ae::runtime::SceneAnimator::ExternalSample>>&)::$_3::operator()(ae::scene::AnimatorState const&, float&) const
+0.33%     0.01%   !!!0000!cdf0c6c7745602973542265e4c280f!208ca19915!
+0.32%     0.00%   ae::platform::android::InstancedRenderer::recordLocalShadowPass()
+0.32%     0.24%   !!!0000!a2226ba8e62b1140cb96d7447e2859!208ca19915!
+0.31%     0.17%   $x.cold.0
+0.31%     0.00%   ae::platform::android::InstancedRenderer::recordFsr(unsigned int, ae::platform::FreeCameraState const&)
+0.31%     0.00%   void std::__ndk1::sort[abi:nn180000]<std::__ndk1::__wrap_iter<unsigned int*>, ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_1>(std::__ndk1::__wrap_iter<unsigned int*>, std::__ndk1::__wrap_iter<unsigned int*>, ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_1)
+0.30%     0.30%   void std::__ndk1::__introsort<std::__ndk1::_ClassicAlgPolicy, ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_1&, unsigned int*, false>(unsigned int*, unsigned int*, ae::platform::android::InstancedRenderer::drawFrame(float, ae::platform::FreeCameraState const&, ae::renderer::RuntimeHudState const&)::$_1&, std::__ndk1::iterator_traits<unsigned int*>::difference_type, bool)

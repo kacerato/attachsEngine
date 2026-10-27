@@ -1,0 +1,41 @@
+Cmdline: /system/bin/simpleperf record --app dev.aether.editor.u07 --add-meta-info app_type=profileable --in-app --tracepoint-events /data/local/tmp/tracepoint_events --out-fd 3 --stop-signal-fd 4 -e cpu-clock -f 2000 --call-graph fp --duration 20
+Arch: arm64
+Event: cpu-clock (type 1, config 0)
+Samples: 17308
+Event count: 8654000000
+
+Overhead  Command                Symbol
+10.52%    AstraGame              ae::runtime::SceneAnimator::advance(float, std::__ndk1::function<bool (unsigned int)> const&)
+4.56%     AstraGame              __ioctl
+3.56%     AstraGame              ae::runtime::SceneGraph::collectSubtree(unsigned int, std::__ndk1::vector<unsigned int, std::__ndk1::allocator<unsigned int>>&) const
+2.44%     AstraGame              ae::resources::sampleValidatedAnimationChannel(ae::resources::AnimationChannel const&, float, std::__ndk1::span<float, 18446744073709551615ul>)
+2.27%     AstraGame              ae::runtime::SceneGui::reconcile(ae::runtime::GameWorld&)
+2.08%     AstraGame              libaether_android.so[+10afb2c]
+1.94%     AstraGame              ae::runtime::SceneGraph::activeInHierarchy(unsigned int) const
+1.80%     AstraGame              ae::runtime::localTransformForWorld(float const*, float const*, ae::runtime::Transform&)
+1.78%     AstraGame              libaether_android.so[+10aea54]
+1.72%     AstraGame              @plt
+1.26%     AstraGame              __close
+1.16%     binder:28749_3         __ioctl
+1.14%     AstraGame              __memmove_aarch64_simd
+1.04%     AstraGame              libaether_android.so[+112232c]
+0.99%     AstraGame              !!!0000!35563cdacfc1124681773d04567ac1!208ca19915!
+0.96%     dev.aether.editor.u07  __epoll_pwait
+0.88%     AstraGame              ae::editor::EditorMapScene::extract(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::MapDrawState, std::__ndk1::allocator<ae::renderer::MapDrawState>>&) const
+0.83%     AstraGame              __ppoll
+0.82%     AstraGame              ae::runtime::ScriptBridge::hasScripts(ae::runtime::SceneGraph const&)
+0.81%     AstraGame              ae::runtime::collectSceneLights(ae::runtime::SceneGraph const&, std::__ndk1::vector<ae::renderer::SceneLight, std::__ndk1::allocator<ae::renderer::SceneLight>>&, double)
+0.81%     AstraGame              __aarch64_cas4_acq
+0.79%     AstraGame              ae::runtime::SceneGraph::find(unsigned int) const
+0.78%     AstraGame              ae::runtime::SceneRootMotion::advance(ae::runtime::GameWorld&, float, ae::runtime::ScenePhysics*)
+0.77%     AstraGame              ae::renderer::buildNormalMatrix(float const*, float*)
+0.76%     AstraGame              atan
+0.70%     AstraGame              ae::rotationArc(float const*, float const*, double&, double*, double*)
+0.69%     AstraGame              ae::runtime::SceneAnimator::syncStates(ae::runtime::SceneAnimator::Player&)
+0.69%     binder:28749_4         __ioctl
+0.67%     AstraGame              ae::runtime::SceneTweens::advance(ae::runtime::GameWorld&, double, double)
+0.66%     AstraGame              scudo::Allocator<scudo::AndroidNormalConfig, &scudo_malloc_postinit>::allocate(unsigned long, scudo::Chunk::Origin, unsigned long, bool)
+0.65%     AstraGame              __memset_aarch64
+0.57%     AstraGame              libaether_android.so[+10b3fac]
+0.57%     blastAsyncWork         syscall
+0.54%     AstraGame              ae::editor::EditorMapScene::findClip(ae::resources::AssetGuid const&, ae::runtime::AnimationClipView&) const

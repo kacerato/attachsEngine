@@ -97,7 +97,9 @@ Vector3 integrate(const PhysicalAtmosphereGroundIrradianceInput &input,
       const auto sunDepth=opticalDepth(samplePosition,sunDirection,input.planetRadiusKm,
                                        atmosphereRadius,scaleHeights,LightSteps);
       for(u32 channel=0;channel<3;++channel) {
-        const double extinction=betaRayleigh[channel]*(viewDepth[0]+sunDepth[0])+
+        // Ozônio (Hillaire 2020): só absorve; mesma constante do dirt_road_sky.frag.
+        constexpr double ozone[3]{.000650*1.9,.001881*1.9,.000085*1.9};
+        const double extinction=(betaRayleigh[channel]+ozone[channel])*(viewDepth[0]+sunDepth[0])+
             betaAerosolExtinction[channel]*(viewDepth[1]+sunDepth[1]);
         scattered[channel]+=std::exp(-extinction)*
             (betaRayleigh[channel]*density[0]*rayleighPhase+

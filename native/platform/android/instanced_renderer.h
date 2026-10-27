@@ -457,8 +457,18 @@ public:
   bool fogResolvedLastFrame() const { return fogResolvedThisFrame_; }
   // Candidatas do G1/G2: bloom em cadeia de mips e AO em 1/2. Desligadas por
   // padrão até o A/B; precisam valer antes da criação dos recursos do pós.
-  void setBloomChainEnabled(bool enabled) { bloomChainEnabled_ = enabled; }
-  void setHalfAmbientOcclusionEnabled(bool enabled) { halfAmbientOcclusionEnabled_ = enabled; }
+  // Bloom em cadeia e AO em 1/2 seguem o nível de qualidade (PostSettings);
+  // -1 devolve a decisão ao nível, 0/1 é override de diagnóstico.
+  void setBloomChainOverride(int value) { bloomChainOverride_ = value; }
+  void setHalfAmbientOcclusionOverride(int value) { halfAmbientOcclusionOverride_ = value; }
+  bool bloomChainEnabled() const {
+    return bloomChainOverride_ >= 0 ? bloomChainOverride_ != 0
+                                    : resourceRenderingPolicy_.post.bloomMipChain;
+  }
+  bool halfAmbientOcclusionEnabled() const {
+    return halfAmbientOcclusionOverride_ >= 0 ? halfAmbientOcclusionOverride_ != 0
+                                              : resourceRenderingPolicy_.post.halfResolutionAmbientOcclusion;
+  }
   // Bancada do G2: liga a LUT mesmo no Neutro, para medir o custo da leitura 3D
   // e comparar a imagem com o caminho sem LUT (aceite: até 3/255).
   void setColorGradingForced(bool forced) { colorGradingForced_ = forced; }
@@ -470,6 +480,15 @@ public:
   void setPointLightingSpecializationEnabled(bool enabled) { pointLightingSpecializationEnabled_ = enabled; }
   // G1: máscara por desenho das luzes pontuais que o alcançam (candidata, desligada por padrão).
   void setPunctualLightMaskEnabled(bool enabled) { punctualLightMaskEnabled_ = enabled; }
+  void setShadowDirtyAll(bool enabled) {
+    // Trocar o modo com o app aberto refaz as cascatas (o atlas tinha só estáticos).
+    if (shadowDirtyAll_ != enabled) {shadowDirtyAll_ = enabled;shadowDynamicValid_ = false;invalidateStaticShadowCache();}
+  }
+  // Lado de cada cascata no mapa dinâmico; 0 = automático (2048 com cascata de
+  // 4096, senão até 1024). Vale na próxima criação dos recursos de sombra.
+  void setShadowDynamicResolution(u32 side) { shadowDynamicRequested_ = side; }
+  // Bancada (debug.astra.shadow_dynamic_force): redesenha o mapa dinâmico a cada quadro.
+  void setShadowDynamicForce(bool enabled) { shadowDynamicForce_ = enabled; }
   bool punctualLightMaskEnabled() const { return punctualLightMaskEnabled_; }
   // G1: PCF largo por quatro textureGather; desligado volta às nove buscas filtradas (A/B).
   void setShadowGatherEnabled(bool enabled) { shadowGatherEnabled_ = enabled; }
@@ -794,6 +813,12 @@ private:
   bool createEnvironmentDescriptors();
   bool createSpectralWaterResources();
   bool createSkyPipeline();
+  // G4d: Volumetric Clouds (instanced_volumetric_clouds.inl).
+  bool createVolumetricCloudResources();
+  bool createVolumetricCloudPipeline();
+  void destroyVolumetricCloudResources();
+  bool volumetricCloudsReady() const;
+  void recordVolumetricClouds(const platform::FreeCameraState &camera, float timeSeconds);
   bool createEditorGridPipeline();
   struct ParticleResources;
   ParticleResources *particles_ = nullptr;
@@ -829,6 +854,10 @@ private:
     u32 sourceDrawIndex = 0;
     bool motion = true, hasPrevious = false;
     std::vector<float> previous, previousWeights;
+    // Limites do desenho no último quadro com pose: a sombra suja só as
+    // cascatas onde o corpo estava ou está.
+    std::array<float, 4> shadowBounds{};
+    bool hasShadowBounds = false;
   };
   struct PendingSkin {
     std::shared_ptr<const std::vector<float>> palette, weights;
@@ -1296,8 +1325,8 @@ private:
   VkRenderPass halfAmbientOcclusionRenderPass_ = VK_NULL_HANDLE;
   VkFramebuffer halfAmbientOcclusionFramebuffer_ = VK_NULL_HANDLE;
   VkPipeline halfAmbientOcclusionPipeline_ = VK_NULL_HANDLE;
-  bool bloomChainEnabled_ = false;
-  bool halfAmbientOcclusionEnabled_ = false;
+  int bloomChainOverride_ = -1;
+  int halfAmbientOcclusionOverride_ = -1;
   // PK-5: dois alvos RGBA16F em 1/2 (o resultado termina sempre no 0), o
   // passe e os conjuntos (cena, cena com névoa, cada alvo).
   std::array<rhi::VulkanImage, 2> depthOfFieldTargets_{};
@@ -1410,6 +1439,54 @@ private:
   renderer::ShadowCascade shadowCascades_[renderer::MaximumShadowCascades]{};
   u32 shadowCascadeCount_ = 0;
   u32 shadowCascadeDirtyMask_ = 0xffffffffu;
+  // Limites (centro xyz, raio) de projetores que se moveram neste quadro, antes
+  // e depois: viram cascatas sujas quando as cascatas do quadro existem. Antes
+  // qualquer pose em Play sujava as 4 cascatas e regravava todos os estáticos.
+  std::vector<std::array<float, 4>> shadowMovedBounds_;
+  // Material e push constant da sombra por desenho, uma vez por quadro (não por cascata).
+  struct ShadowDrawPrep {u64 stamp = 0;bool skip = false;std::array<u8, 128> push{};};
+  std::vector<ShadowDrawPrep> shadowDrawPrep_;
+  u64 shadowPrepStamp_ = 0;
+  // Bancada (aether.shadow_dirty_all): movimento volta a sujar todas as cascatas.
+  bool shadowDirtyAll_ = false;
+  // Cached Shadows em dois mapas (como o HDRP e o split das engines mobile):
+  // o atlas das cascatas guarda só projetores que nunca se moveram e é
+  // regravado só por câmera, aparência, cena ou projetor que virou dinâmico
+  // (shadowCascadeDirtyMask_). Um atlas dinâmico recebe só os dinâmicos, em
+  // cada cascata no retângulo justo deles, redesenhado quando um deles se move
+  // (shadowDynamicDirtyMask_); o shader usa o mínimo das duas leituras. Sem
+  // cópia entre mapas. Todas as cascatas: com só as 2 perto, o morador a
+  // 15-30 m saía do atlas estático e não entrava no dinâmico (par congelado de
+  // 25/10, Vila S).
+  static constexpr u32 DynamicShadowCascades = 4;
+  rhi::VulkanImage shadowDynamicAtlas_{};
+  VkRenderPass shadowDynamicRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer shadowDynamicFramebuffer_ = VK_NULL_HANDLE;
+  u32 shadowDynamicResolution_ = 0, shadowDynamicRequested_ = 0;
+  // Retângulo justo (escala xy, deslocamento zw no uv da cascata) e a matriz
+  // remapeada de cada cascata perto; escala zero = cascata sem dinâmicos.
+  float shadowDynamicRect_[DynamicShadowCascades][4]{};
+  float shadowDynamicViewProjection_[DynamicShadowCascades][16]{};
+  void fitDynamicShadowRects();
+  bool shadowDynamicValid_ = false;
+  bool shadowDynamicForce_ = false;
+  float shadowDynamicFlagWritten_ = 0.0f;
+  u32 shadowDynamicDirtyMask_ = 0;
+  std::vector<u8> shadowDynamic_;      // 1: pele ou já se moveu no Play
+  u32 shadowDynamicCount_ = 0;
+  // Limites de projetores que viraram dinâmicos: saem do atlas estático.
+  std::vector<std::array<float, 4>> shadowStaticStaleBounds_;
+  u32 shadowDynamicDrawsWindow_ = 0;
+  // Os dois mapas valem quando há dinâmicos e o atlas pequeno existe; o
+  // shader só lê o dinâmico então (shadowDynamicParameters.y do bloco de ambiente).
+  bool dualShadowActive() const noexcept {
+    return shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ && shadowDynamicAtlas_.isReady();
+  }
+  void markShadowDynamic(u32 drawIndex, const std::array<float, 4> &oldBounds, bool knownBounds);
+  // Telemetria do cache de sombra: cascatas sujas por motivo (0 câmera/ajuste,
+  // 1 poses, 2 ossos, 3 aparência) e cascatas regravadas, por janela de 120 quadros.
+  u32 shadowDirtyReasons_[4]{};
+  u32 shadowRenderedWindow_ = 0, shadowWindowFrames_ = 0;
   bool shadowCacheInitialized_ = false;
   u32 shadowCandidateDraws_ = 0;
   u32 shadowSubmittedDraws_ = 0;
@@ -1464,6 +1541,27 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
+  // G4d: marcha em 1/16 dos pixels, reconstrução em meia resolução e o
+  // histórico dela, e ruídos 3D das Volumetric Clouds.
+  rhi::VulkanImage cloudVolumeTarget_{};
+  rhi::VulkanImage cloudResolveTarget_{};
+  rhi::VulkanImage cloudVolumeHistory_{};
+  rhi::VulkanImage cloudShapeNoise_{};
+  rhi::VulkanImage cloudErosionNoise_{};
+  rhi::VulkanBuffer cloudShapeStaging_{};
+  rhi::VulkanBuffer cloudErosionStaging_{};
+  rhi::VulkanSampler cloudVolumeSampler_{};
+  rhi::VulkanSampler cloudNoiseSampler_{};
+  VkRenderPass cloudVolumeRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudVolumeFramebuffer_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudResolveFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline cloudVolumePipeline_ = VK_NULL_HANDLE;
+  VkPipeline cloudResolvePipeline_ = VK_NULL_HANDLE;
+  // Fase do subpixel da marcha (0..3), um passo por quadro integrado.
+  u32 cloudFrameIndex_ = 0;
+  bool cloudNoiseUploaded_ = false;
+  bool cloudHistoryValid_ = false;
+  bool cloudImagesInitialized_ = false;
   // G4c: molhado, poças e neve acumulada do clima, copiados para o quadro, e
   // os multiplicadores da luz direta e da ambiente do clima.
   float weatherSurface_[4]{};

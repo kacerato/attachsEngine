@@ -999,6 +999,8 @@ void buildCurveEditor(ScreenBuilder &builder,EditorScreenLayout &layout) {
 
 void buildInspectorFor(ScreenBuilder &builder, const UiRect &panel, EditorEntityId target, u64 onlyComponent);
 std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 value);
+std::string componentEnumOptionName(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option);
+bool componentEnumOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option);
 // Inspectors focados (Unity 6000.0 Manual/InspectorFocused) numa janela sobre
 // o viewport: uma aba por Inspector, cada um preso ao seu objeto ou
 // componente; o cabeçalho mostra o caminho completo (o tooltip da aba na
@@ -5903,7 +5905,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
         builder.list.addRect(box,theme.color.raised,theme.radius.control);
         builder.list.addImage(centred(takeRight(box,16),10,10),static_cast<UiImageId>(UiIcon::UiChevronDown),theme.color.textDim);
         std::string label=property.flags?componentMaskLabel(*builder.state.document,property,property.read(*component)):"Inválido";
-        if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+        if(!property.flags) for(u32 option=0;option<property.options.size();++option)
+          if(property.options[option].value==property.read(*component)) label=componentEnumOptionName(*builder.state.document,property,option);
         if(builder.mixed(multiKey(component->instanceId(),property.id))) label="—";
         builder.label(box,label,theme.color.text,theme.type.caption,UiAlign::Center);
         if(property.presentation.isEditable(*component)) builder.router.addRegion(enumHit,widgetId(EditorWidget::ComponentEnumBase)+index+(f.second<<8));
@@ -5991,7 +5994,8 @@ void buildComponentFields(ScreenBuilder &builder,UiRect &content,const EditorEnt
       const auto &property=entry.type->enums[f.index];
       builder.label(takeLeft(slot,slot.width*.38f),property.name,theme.color.textDim,theme.type.caption);
       std::string label=property.flags?componentMaskLabel(*builder.state.document,property,property.read(*component)):"Valor inválido";
-      if(!property.flags) for(const auto &option:property.options) if(option.value==property.read(*component)) label=option.name;
+      if(!property.flags) for(u32 option=0;option<property.options.size();++option)
+        if(property.options[option].value==property.read(*component)) label=componentEnumOptionName(*builder.state.document,property,option);
       if(builder.mixed(multiKey(component->instanceId(),property.id))) label="\xE2\x80\x94";
       // Aparência de lista suspensa: o toque abre as opções, não cicla às cegas.
       const bool editable=property.presentation.isEditable(*component);
@@ -7970,7 +7974,40 @@ void buildContextMenu(ScreenBuilder &builder,EditorScreenLayout &layout) {
 
 // Texto de uma máscara de bits no campo fechado. Camadas de objeto usam os
 // nomes do projeto (Configurações › Camadas); as demais, os rótulos da opção.
+// G7: as ações da Entrada do jogador (máscara e filtro da Conexão de evento)
+// mostram o nome da ação do mapa de entrada da cena, como as camadas acima.
+namespace {
+bool inputActionProperty(const scene::ComponentEnum &property) {
+  return property.options.data()==scene::inputActionOptions.data()||property.options.data()==scene::inputActionFilterOptions.data();
+}
+// Índice da ação (0-based) de uma opção; -1 para "Qualquer ação".
+int inputActionIndex(const scene::ComponentEnum &property,u32 option) {
+  return property.options.data()==scene::inputActionOptions.data()?static_cast<int>(option):static_cast<int>(option)-1;
+}
+} // namespace
+std::string componentEnumOptionName(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option) {
+  if(option>=property.options.size()) return {};
+  if(!inputActionProperty(property)) return property.options[option].name;
+  const int index=inputActionIndex(property,option);
+  const auto &actions=document.inputActions().actions();
+  if(index<0) return property.options[option].name;
+  return static_cast<usize>(index)<actions.size()?actions[static_cast<usize>(index)].id:std::string(property.options[option].name);
+}
+bool componentEnumOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option) {
+  if(!inputActionProperty(property)) return true;
+  const int index=inputActionIndex(property,option);
+  return index<0||static_cast<usize>(index)<document.inputActions().actions().size();
+}
 std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 value) {
+  if(property.options.data()==scene::inputActionOptions.data()) {
+    const auto count=std::min<usize>(document.inputActions().actions().size(),scene::kPlayerInputActionCount);
+    const u32 all=count>=32?~0u:((1u<<count)-1u);
+    if(count&&(value&all)==all) return "Todas";
+    if(!(value&all)) return "Nenhuma";
+    std::string names;u32 shown=0;
+    for(u32 i=0;i<count;++i) if(value&(1u<<i)) {if(shown<3) names+=(shown?", ":"")+componentEnumOptionName(document,property,i);++shown;}
+    return shown>3?"Misto ("+std::to_string(shown)+")":names;
+  }
   if(property.options.data()!=scene::objectLayerOptions.data()) return scene::componentEnumLabel(property,value);
   if(value==scene::kAllObjectLayers) return "Tudo";
   if(!value) return "Nada";
@@ -7985,10 +8022,12 @@ std::string componentMaskLabel(const runtime::SceneGraph &document,const scene::
 // Opções visíveis no seletor de máscara: como no LayerMask da Unity, só as
 // camadas de objeto com nome no projeto. Tudo/Nada continuam cobrindo as 32.
 bool componentMaskOptionShown(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option,u32) {
+  if(inputActionProperty(property)) return componentEnumOptionShown(document,property,option);
   if(property.options.data()!=scene::objectLayerOptions.data()) return true;
   return document.layers().named(option);
 }
 std::string componentMaskOptionName(const runtime::SceneGraph &document,const scene::ComponentEnum &property,u32 option) {
+  if(inputActionProperty(property)) return componentEnumOptionName(document,property,option);
   if(property.options.data()==scene::objectLayerOptions.data() && document.layers().named(option))
     return std::string(document.layers().name(option));
   return property.options[option].name;
@@ -8045,7 +8084,9 @@ void buildEnumPicker(ScreenBuilder &builder) {
     builder.list.popClip();
     return;
   }
-  const float rows=static_cast<float>(property.options.size());
+  u32 shownRows=0;
+  for(u32 i=0;i<property.options.size();++i) shownRows+=componentEnumOptionShown(*state.document,property,i)?1u:0u;
+  const float rows=static_cast<float>(shownRows);
   const float height=std::min(state.surface.height-24,52+rows*44);
   const UiRect sheet=centred(state.surface,std::min(360.f,state.surface.width-24),height);
   builder.list.addRect(sheet,theme.color.surface,theme.radius.card);
@@ -8055,12 +8096,13 @@ void buildEnumPicker(ScreenBuilder &builder) {
   builder.label(takeTop(content,36),property.name,theme.color.text,theme.type.cardName);
   builder.list.pushClip(content);
   for(u32 i=0;i<property.options.size() && content.height>=40;++i) {
+    if(!componentEnumOptionShown(*state.document,property,i)) continue;
     auto row=deflate(takeTop(content,44),UiInsets{0,2,0,2});
     const bool on=property.options[i].value==current;
     builder.list.addRect(row,on?theme.color.raised:theme.color.silhouette,theme.radius.control);
     auto mark=takeLeft(row,32);
     if(on) builder.list.addImage(centred(mark,14,14),static_cast<UiImageId>(UiIcon::UiCheck),theme.color.accent);
-    builder.label(row,property.options[i].name,on?theme.color.text:theme.color.textDim,theme.type.body);
+    builder.label(row,componentEnumOptionName(*state.document,property,i),on?theme.color.text:theme.color.textDim,theme.type.body);
     builder.router.addRegion(row,widgetId(EditorWidget::ComponentEnumOptionBase)+i);
   }
   builder.list.popClip();
@@ -11395,11 +11437,24 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     std::to_string(static_cast<int>(value*100.0f+.5f))+"%";};
   const auto measure=[](float value,float inherited,const char *unit,int digits=1) {return value==inherited?std::string("Do nível"):
     decimalText(value,digits)+unit;};
+  // Nível escolhido é teto, como o URP Asset do Quality: o valor pedido acima
+  // dele aparece com o que roda de fato ("4 → 2 no nível").
+  const bool explicitLevel=draft.preset==renderer::QualityPreset::C||draft.preset==renderer::QualityPreset::B||
+                           draft.preset==renderer::QualityPreset::A||draft.preset==renderer::QualityPreset::S;
+  const auto ceiling=renderer::qualityLevelCeiling(
+      draft.preset==renderer::QualityPreset::C?rhi::DeviceProfile::C:draft.preset==renderer::QualityPreset::B?rhi::DeviceProfile::B:
+      draft.preset==renderer::QualityPreset::A?rhi::DeviceProfile::A:rhi::DeviceProfile::S);
+  const auto capped=[&](std::string value,u32 requested,u32 maximum,const char *unit) {
+    if(explicitLevel&&requested>maximum) value+=" → "+std::to_string(maximum)+unit+" no nível";
+    return value;
+  };
   if(state.qualityTab==0) {
     std::string level=renderer::qualityLevelLabel(draft.preset);
     if(draft.preset==renderer::QualityPreset::Auto&&!state.qualityDetected.empty()) level+=" ("+state.qualityDetected+")";
     row("Nível",level,EditorWidget::QualityLevel);
-    stepper("Escala de renderização",percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
+    stepper("Escala de renderização",explicitLevel&&draft.resolutionScale>ceiling.resolutionScale+1.0e-4f
+            ?percent(draft.resolutionScale,0.0f)+" → "+percent(ceiling.resolutionScale,0.0f)+" no nível"
+            :percent(draft.resolutionScale,0.0f),EditorWidget::QualityScaleDown,EditorWidget::QualityScaleUp);
     // Ampliação temporal mostra um de quatro estados: indisponível com o
     // motivo do aparelho, pendente de Aplicar, ativa (o que o renderer
     // executou no último quadro) ou apenas disponível.
@@ -11431,8 +11486,10 @@ void buildQualityPanel(ScreenBuilder &builder, const UiRect &viewport) {
     row("Escala dinâmica",renderer::featureOverrideLabel(draft.dynamicResolution),EditorWidget::QualityDynamic);
   } else if(state.qualityTab==1) {
     row("Sombras",renderer::shadowQualityLabel(draft.shadows),EditorWidget::QualityShadows);
-    row("Cascatas",draft.shadowCascadeCount?std::to_string(draft.shadowCascadeCount):std::string("Do nível"),EditorWidget::QualityShadowCascades);
-    row("Resolução por cascata",draft.shadowCascadeResolution?std::to_string(draft.shadowCascadeResolution)+" px":std::string("Do nível"),EditorWidget::QualityShadowResolution);
+    row("Cascatas",draft.shadowCascadeCount?capped(std::to_string(draft.shadowCascadeCount),draft.shadowCascadeCount,
+        ceiling.shadowCascadeCount,""):std::string("Do nível"),EditorWidget::QualityShadowCascades);
+    row("Resolução por cascata",draft.shadowCascadeResolution?capped(std::to_string(draft.shadowCascadeResolution)+" px",
+        draft.shadowCascadeResolution,ceiling.shadowCascadeResolution," px"):std::string("Do nível"),EditorWidget::QualityShadowResolution);
     stepper("Distância máxima",measure(draft.shadowMaximumDistance,0.0f," m",0),EditorWidget::QualityShadowDistanceDown,EditorWidget::QualityShadowDistanceUp);
     stepper("Bias constante",measure(draft.shadowDepthBiasConstant,-1.0f,"",1),EditorWidget::QualityShadowBiasDown,EditorWidget::QualityShadowBiasUp);
     stepper("Bias de inclinação",measure(draft.shadowDepthBiasSlope,-1.0f,"",1),EditorWidget::QualityShadowSlopeDown,EditorWidget::QualityShadowSlopeUp);

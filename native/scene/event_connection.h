@@ -16,10 +16,12 @@
 // https://docs.godotengine.org/en/4.5/getting_started/step_by_step/signals.html
 #pragma once
 #include "scene/components.h"
+#include "scene/player_input.h"
 
 #include <array>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <string_view>
 
 namespace ae::scene {
@@ -27,7 +29,7 @@ namespace ae::scene {
 struct EventConnectionEventKey { u32 value; std::string_view type; std::string_view event; };
 struct EventConnectionMethodKey { u32 value; std::string_view type; std::string_view method; };
 
-inline constexpr std::array<EventConnectionEventKey,39> eventConnectionEventKeys{{
+inline constexpr std::array<EventConnectionEventKey,45> eventConnectionEventKeys{{
   {1,"astra.time.timer","elapsed"},
   {2,"astra.tween.transform","completed"},
   {3,"astra.physics.collider","trigger_enter"},
@@ -59,8 +61,13 @@ inline constexpr std::array<EventConnectionEventKey,39> eventConnectionEventKeys
   {36,"astra.ik.interaction_system","picked"},
   {37,"astra.ik.interaction_system","entered"},{38,"astra.ik.interaction_system","left"},
   {39,"astra.effects.particle_system","stopped"},
+  // G7: relógio da Hora do dia (runtime/scene_time_of_day.cpp).
+  {40,"astra.render.time_of_day","hour_changed"},{41,"astra.render.time_of_day","sunrise"},
+  {42,"astra.render.time_of_day","sunset"},{43,"astra.render.time_of_day","day_changed"},
+  // G7: Entrada do jogador (PlayerInput › Invoke Unity Events).
+  {44,"astra.input.player_input","performed"},{45,"astra.input.player_input","canceled"},
 }};
-inline constexpr std::array<ComponentEnumOption,40> eventConnectionEvents{{
+inline constexpr std::array<ComponentEnumOption,46> eventConnectionEvents{{
   {0,"Nenhum"},
   {1,"Timer disparou"},{2,"Tween concluiu"},
   {3,"Sensor 3D: entrou"},{4,"Sensor 3D: saiu"},{5,"Colisão 3D: começou"},{6,"Colisão 3D: terminou"},
@@ -81,8 +88,10 @@ inline constexpr std::array<ComponentEnumOption,40> eventConnectionEvents{{
   {36,"Interação: objeto levantado"},
   {37,"Interação: entrou no gatilho"},{38,"Interação: saiu do gatilho"},
   {39,"Partículas: parou"},
+  {40,"Hora do dia: hora mudou"},{41,"Hora do dia: nascer do sol"},{42,"Hora do dia: pôr do sol"},{43,"Hora do dia: dia mudou"},
+  {44,"Entrada: ação executada"},{45,"Entrada: ação cancelada"},
 }};
-inline constexpr std::array<EventConnectionMethodKey,40> eventConnectionMethodKeys{{
+inline constexpr std::array<EventConnectionMethodKey,44> eventConnectionMethodKeys{{
   {1,"astra.audio.source","play"},
   {2,"astra.audio.source","stop"},
   {3,"astra.audio.source","pause"},
@@ -123,8 +132,13 @@ inline constexpr std::array<EventConnectionMethodKey,40> eventConnectionMethodKe
   {38,"astra.effects.particle_system","stop_and_clear"},
   {39,"astra.effects.particle_system","pause"},
   {40,"astra.effects.particle_system","clear"},
+  // G7: Volume e Mesh Renderer.
+  {41,"astra.render.environment","set_weight"},
+  {42,"astra.render.environment","set_shared_profile"},
+  {43,"astra.render.environment","instantiate_profile"},
+  {44,"astra.render.mesh","set_shared_material"},
 }};
-inline constexpr std::array<ComponentEnumOption,41> eventConnectionMethods{{
+inline constexpr std::array<ComponentEnumOption,45> eventConnectionMethods{{
   {0,"Nenhum"},
   {1,"Áudio: tocar"},{2,"Áudio: parar"},{3,"Áudio: pausar"},{4,"Áudio: retomar"},{5,"Áudio: posicionar"},
   {6,"Timer: iniciar"},{7,"Timer: parar"},{8,"Timer: pausar"},{9,"Timer: retomar"},
@@ -139,6 +153,8 @@ inline constexpr std::array<ComponentEnumOption,41> eventConnectionMethods{{
   {32,"Recuo: disparar"},{33,"Impacto: golpear de frente"},{34,"Personagem: subir/descer"},
   {35,"Sonda de reflexo: capturar agora"},
   {36,"Partículas: tocar"},{37,"Partículas: parar"},{38,"Partículas: parar e limpar"},{39,"Partículas: pausar"},{40,"Partículas: limpar"},
+  {41,"Volume: definir peso"},{42,"Volume: trocar perfil"},{43,"Volume: usar cópia do perfil"},
+  {44,"Malha: trocar material"},
 }};
 inline constexpr std::array<ComponentEnumOption,5> eventConnectionActions{{
   {0,"Desconectado"},{1,"Ativar objeto"},{2,"Desativar objeto"},{3,"Alternar objeto"},{4,"Chamar método"},
@@ -162,7 +178,14 @@ inline bool eventConnectionCarriesObject(u32 event) {return (event>=3 && event<=
 // Métodos com um número de argumento: timer.start (intervalo; zero usa o autorado)
 // audio.seek (segundos), snapshot.transition_to (duração; negativo usa a autorada)
 // recoil.fire (intensidade; 1 usa os valores autorados) e hit_reaction.hit_front (força).
-inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32 || method==33 || method==34;}
+inline bool eventConnectionTakesNumber(u32 method) {return method==5 || method==6 || method==28 || method==32 || method==33 || method==34 || method==41;}
+// G7: métodos que recebem um recurso do projeto (GUID em duas metades
+// inteiras): trocar o perfil do Volume e o material do Mesh Renderer.
+// G7: eventos da Entrada do jogador aceitam filtro pela ação.
+inline bool eventConnectionFiltersAction(u32 event) {return event==44 || event==45;}
+inline bool eventConnectionTakesAsset(u32 method) {return method==42 || method==44;}
+inline bool eventConnectionTakesProfile(u32 method) {return method==42;}
+inline bool eventConnectionTakesMaterial(u32 method) {return method==44;}
 
 class EventConnection final : public ComponentValue {
 public:
@@ -170,21 +193,32 @@ public:
   u32 event=0,action=0,method=0;
   float argument=0,clipTag=-1; // -1: any; exact 24-bit integer code
   u64 receiver=0,otherFilter=0;   // receptor zero: este próprio objeto
+  // v3 (G7): recurso entregue aos métodos com recurso (perfil, material) e
+  // ação da Entrada do jogador que dispara a conexão (0 qualquer, N a N-ésima).
+  resources::AssetGuid asset{};
+  u32 inputAction=0;
   static const ComponentType descriptor;
   const ComponentType &type() const override {return descriptor;}
   std::unique_ptr<ComponentValue> clone() const override {return std::make_unique<EventConnection>(*this);}
   bool valid() const override {
     return (event==0||findEventConnectionEvent(event)) && action<=kEventConnectionCallMethod &&
-           (method==0||findEventConnectionMethod(method)) && std::isfinite(argument) && argument>=0 && argument<=3600 &&
+           (method==0||findEventConnectionMethod(method)) && inputAction<=kPlayerInputActionCount && std::isfinite(argument) && argument>=0 && argument<=3600 &&
            std::isfinite(clipTag)&&clipTag>=-1&&clipTag<=16777215&&std::floor(clipTag)==clipTag&&
            receiver<=std::numeric_limits<u32>::max() && otherFilter<=std::numeric_limits<u32>::max();
   }
   void write(std::ostream &out) const override {
-    out<<enabled<<' '<<event<<' '<<action<<' '<<method<<' '<<argument<<' '<<receiver<<' '<<otherFilter<<' '<<once<<' '<<static_cast<i32>(clipTag);
+    out<<enabled<<' '<<event<<' '<<action<<' '<<method<<' '<<argument<<' '<<receiver<<' '<<otherFilter<<' '<<once<<' '<<static_cast<i32>(clipTag)
+       <<' '<<(asset.valid()?asset.text():std::string("-"))<<' '<<inputAction;
   }
   bool read(std::istream &in,u32 version) override {
-    clipTag=-1;return (version==1||version==2) && static_cast<bool>(in>>enabled>>event>>action>>method>>argument>>receiver>>otherFilter>>once) &&
-      (version<2||static_cast<bool>(in>>clipTag)) && valid();
+    clipTag=-1;asset={};inputAction=0;
+    if(!((version>=1&&version<=3) && static_cast<bool>(in>>enabled>>event>>action>>method>>argument>>receiver>>otherFilter>>once) &&
+         (version<2||static_cast<bool>(in>>clipTag)))) return false;
+    if(version>=3) {
+      std::string token;
+      if(!(in>>token) || (token!="-" && !resources::AssetGuid::parse(token,asset)) || !(in>>inputAction)) return false;
+    }
+    return valid();
   }
 };
 inline const EventConnection &eventConnection(const ComponentValue &v) {return static_cast<const EventConnection &>(v);}
@@ -196,7 +230,7 @@ inline constexpr std::array<ComponentBoolean,2> eventConnectionBooleans{{
   {"once","Uma vez",[](const ComponentValue &v){return eventConnection(v).once;},[](ComponentValue &v,bool b){eventConnection(v).once=b;},
    {"Conexão","","Reage só ao primeiro evento de cada execução de Play",[](const ComponentValue &v){return eventConnection(v).action!=0;}}},
 }};
-inline constexpr std::array<ComponentEnum,3> eventConnectionEnums{{
+inline constexpr std::array<ComponentEnum,4> eventConnectionEnums{{
   {"event","Evento",eventConnectionEvents,[](const ComponentValue &v){return eventConnection(v).event;},[](ComponentValue &v,u32 x){eventConnection(v).event=x;},
    {"Quando","","Emitido por um componente deste objeto; sem o componente, a conexão não dispara"}},
   {"action","Ação",eventConnectionActions,[](const ComponentValue &v){return eventConnection(v).action;},[](ComponentValue &v,u32 x){eventConnection(v).action=x;},
@@ -204,11 +238,16 @@ inline constexpr std::array<ComponentEnum,3> eventConnectionEnums{{
   {"method","Método",eventConnectionMethods,[](const ComponentValue &v){return eventConnection(v).method;},[](ComponentValue &v,u32 x){eventConnection(v).method=x;},
    {"Então","","Chamado no primeiro componente do tipo correspondente no receptor",
     [](const ComponentValue &v){return eventConnection(v).action==kEventConnectionCallMethod;}}},
+  // G7: como o evento por ação do PlayerInput; o Inspector mostra o nome da ação.
+  {"input_action","Ação",inputActionFilterOptions,[](const ComponentValue &v){return eventConnection(v).inputAction;},
+   [](ComponentValue &v,u32 x){eventConnection(v).inputAction=x;},
+   {"Quando","","Ação do mapa de entrada da cena; Qualquer ação aceita todas as observadas pela Entrada do jogador",
+    [](const ComponentValue &v){return eventConnectionFiltersAction(eventConnection(v).event);}}},
 }};
 inline constexpr std::array<ComponentNumber,2> eventConnectionNumbers{{
   {"Valor",0,3600,.05f,[](const ComponentValue &v)->const float &{return eventConnection(v).argument;},
    [](ComponentValue &v)->float *{return &eventConnection(v).argument;},"argument",
-   {"Então","s","Timer: intervalo (zero usa o autorado). Áudio: posição do cursor",
+   {"Então","s","Timer: intervalo (zero usa o autorado). Áudio: posição do cursor. Volume: peso de 0 a 1",
     [](const ComponentValue &v){const auto &c=eventConnection(v);return c.action==kEventConnectionCallMethod&&eventConnectionTakesNumber(c.method);}}},
   {"Código do clipe",-1,16777215,1,[](const ComponentValue &v)->const float &{return eventConnection(v).clipTag;},
    [](ComponentValue &v)->float *{return &eventConnection(v).clipTag;},"clip_tag",
@@ -227,9 +266,25 @@ inline constexpr std::array<ComponentObjectReference,2> eventConnectionReference
    {"Quando","","Opcional: só contatos com este outro objeto",
     [](const ComponentValue &v){return eventConnectionCarriesObject(eventConnection(v).event);}}},
 }};
+// G7: o recurso do método, com o tipo que o método espera; o seletor só
+// aparece para o método que o usa (zero endereços esconde o binding).
+inline constexpr std::array<ComponentResourceBinding,2> eventConnectionResources{{
+  {"argument_profile","Perfil",resources::AssetType::EnvironmentProfile,
+   [](const ComponentValue &v){const auto &c=eventConnection(v);return c.action==kEventConnectionCallMethod&&eventConnectionTakesProfile(c.method)?1u:0u;},
+   [](const ComponentValue &v,u32){return eventConnection(v).asset;},
+   [](ComponentValue &v,u32,resources::AssetGuid value){eventConnection(v).asset=value;return true;},
+   {"Então","","Volume Profile que o Volume do receptor passa a usar (Volume.sharedProfile)",nullptr,nullptr,
+    "render.environment.volumes","runtime/scene_event_connections.cpp"}},
+  {"argument_material","Material",resources::AssetType::Material,
+   [](const ComponentValue &v){const auto &c=eventConnection(v);return c.action==kEventConnectionCallMethod&&eventConnectionTakesMaterial(c.method)?1u:0u;},
+   [](const ComponentValue &v,u32){return eventConnection(v).asset;},
+   [](ComponentValue &v,u32,resources::AssetGuid value){eventConnection(v).asset=value;return true;},
+   {"Então","","Material que o primeiro slot do Mesh Renderer do receptor passa a usar (Renderer.sharedMaterial)",nullptr,nullptr,
+    "render.material.pbr","runtime/scene_event_connections.cpp"}},
+}};
 inline const ComponentType EventConnection::descriptor{
-  "astra.logic.event_connection",2,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<EventConnection>();},
-  eventConnectionNumbers,eventConnectionBooleans,eventConnectionEnums,nullptr,true,eventConnectionReferences
+  "astra.logic.event_connection",3,[]()->std::unique_ptr<ComponentValue>{return std::make_unique<EventConnection>();},
+  eventConnectionNumbers,eventConnectionBooleans,eventConnectionEnums,nullptr,true,eventConnectionReferences,{},eventConnectionResources
 };
 
 } // namespace ae::scene

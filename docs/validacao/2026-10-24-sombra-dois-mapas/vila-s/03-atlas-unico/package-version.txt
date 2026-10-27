@@ -1,0 +1,2 @@
+    versionCode=261024999 minSdk=26 targetSdk=35
+    versionName=0.3.0-dev.261024999-cortes-2100

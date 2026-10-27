@@ -388,6 +388,12 @@ struct ComponentType {
   std::span<const ComponentMethod> methods{};
   std::span<const ComponentEvent> events{};
 };
+// G7: método que recebe um recurso do projeto como GUID em duas metades
+// inteiras (asset_high, asset_low), como o Animator e a Conexão de evento usam.
+inline bool componentMethodTakesAsset(const ComponentMethod &method) {
+  return method.parameters.size()==2&&method.parameters[0].id=="asset_high"&&method.parameters[1].id=="asset_low"&&
+         method.parameters[0].kind==ComponentValueKind::Integer&&method.parameters[1].kind==ComponentValueKind::Integer;
+}
 inline const ComponentMethod *findComponentMethod(const ComponentType &type,std::string_view id) {
   for(const auto &method:type.methods) if(method.id==id) return &method;
   return nullptr;

@@ -1,0 +1,33 @@
+{
+ "title": "Vila Astra S (POCO F7, cortes-0332): sombra dos moradores — atlas único × mapa dinâmico ajustado (1024 e 2048)",
+ "rows": [
+  {
+   "unity": "vila-s/01-atlas-unico/vila-astra/01-S/screen.png",
+   "device": "vila-s/03-dinamico-2048/vila-astra/01-S/screen.png",
+   "unity_caption": "Atlas único · sombra 2,86 ms · GPU 31,80 ms",
+   "device_caption": "Dinâmico 2048 com fit · sombra 0,92 ms · GPU 29,04 ms",
+   "verdict": "Quadro inteiro: a sombra estática é a mesma; sombra na GPU −1,9 ms."
+  },
+  {
+   "unity": "01-atlas-unico-moradores.png",
+   "device": "02-dinamico-1024-moradores.png",
+   "unity_caption": "Moradores · atlas único (4096)",
+   "device_caption": "Moradores · dinâmico 1024 com fit (0,67 ms)",
+   "verdict": "1024 com fit: sombra mais barata (0,67 ms), contraste próximo."
+  },
+  {
+   "unity": "01-atlas-unico-moradores.png",
+   "device": "03-dinamico-2048-moradores.png",
+   "unity_caption": "Moradores · atlas único (4096)",
+   "device_caption": "Moradores · dinâmico 2048 com fit (0,92 ms)",
+   "verdict": "2048 com fit: sombra dos moradores com o mesmo contraste do atlas único, ≤1 ms. Posições diferem: instantes diferentes do Play."
+  },
+  {
+   "unity": "04-atlas-unico-pes.png",
+   "device": "06-dinamico-2048-pes.png",
+   "unity_caption": "Pés e sombras longas · atlas único",
+   "device_caption": "Pés e sombras longas · dinâmico 2048",
+   "verdict": "Ampliado: as sombras longas dos moradores aparecem escuras e definidas nos dois; banco e muro idênticos."
+  }
+ ]
+}

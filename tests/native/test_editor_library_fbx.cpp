@@ -169,7 +169,8 @@ AE_TEST(library_fbx_rig_morph_takes_meshless_editor_extraction_history_and_runti
   resources::ImportProfile profile;profile.generateLods=false;profile.optimizePolygonOrder=false;
   resources::ImportProfile parsed;const auto recipe=resources::serializeImportProfile(profile);
   AE_EXPECT_TRUE(resources::parseImportProfile(recipe,parsed)&&resources::sameImportProfile(parsed,profile),"profile12 round-trip carries actual deformation policy");
-  auto legacy=recipe;const auto schema=legacy.find("\"schema\":12");AE_EXPECT_TRUE(schema!=legacy.npos,"profile12 marker");legacy.replace(schema,11,"\"schema\":11");
+  auto legacy=recipe;const auto marker="\"schema\":"+std::to_string(resources::ImportProfileSchema);
+  const auto schema=legacy.find(marker);AE_EXPECT_TRUE(schema!=legacy.npos,"current profile marker");legacy.replace(schema,marker.size(),"\"schema\":11");
   AE_EXPECT_TRUE(resources::parseImportProfile(legacy,parsed)&&!parsed.fbxDeformation,"legacy recipe retains strict static contract");
   auto alternate=profile;alternate.fbxBakeRate=60;
   AE_EXPECT_TRUE(resources::importCacheKey(hash,session.importLimitsFor(profile))!=resources::importCacheKey(hash,session.importLimitsFor(alternate)),"effective bake rate changes derived cache identity");

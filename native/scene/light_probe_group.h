@@ -176,9 +176,14 @@ inline constexpr std::array<ComponentResourceBinding, 1> lightProbeGroupResource
    {"Sondas", "", "Escrito pelo Assar sondas", nullptr, nullptr, light_probe_detail::capability, light_probe_detail::consumer,
     Invalidate::Probes}}
 }};
+// G7: LightProbeGroup.probePositions.Length pelo script (as posições já são
+// lidas e escritas por slot).
+inline constexpr std::array<ComponentMethod, 1> lightProbeGroupMethods{{
+  {"probe_count", "Quantidade de sondas", "Quantos pontos o grupo tem (probePositions.Length da Unity)", {}, ComponentValueKind::Integer},
+}};
 inline const ComponentType LightProbeGroup::descriptor{
   "astra.render.light_probe_group", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<LightProbeGroup>(); },
   {}, lightProbeGroupBooleans, {}, nullptr, false, {}, {}, lightProbeGroupResources, lightProbeGroupSlotNumbers, {},
-  lightProbeGroupCollections};
+  lightProbeGroupCollections, lightProbeGroupMethods};
 
 } // namespace ae::scene

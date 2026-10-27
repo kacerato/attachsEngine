@@ -58,6 +58,9 @@ private:
 
   std::atomic<bool> stop_{false};
   std::atomic<i64> pendingJobs_{0}; // jobs enfileirados e ainda não concluídos
+  // Jobs ainda nas filas (não retirados). Worker ocioso dorme até isto subir;
+  // antes acordava a cada 1 ms e, com 4 workers, gastava ~0,7 núcleo parado.
+  std::atomic<i64> queuedJobs_{0};
 
   std::mutex wakeMutex_;
   std::condition_variable wakeCv_;

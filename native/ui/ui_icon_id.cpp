@@ -142,6 +142,7 @@ constexpr const char *kNames[] = {
     "component/path-follow",
     "component/penetration-avoidance",
     "component/physics",
+    "component/player-input",
     "component/position-constraint",
     "component/projectile",
     "component/raycast",
