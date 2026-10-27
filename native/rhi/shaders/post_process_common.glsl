@@ -937,8 +937,15 @@ void main() {
     outColor=vec4(sampleScene(sourceUv)*screenSpaceAmbientOcclusion(sourceUv),1.0);
     return;
   }
-  if(any(lessThan(vUv,environment.postViewport.xy)) ||
-     any(greaterThan(vUv,environment.postViewport.xy+environment.postViewport.zw))) {
+  // Um pixel de saída de folga: a borda da vista vem da transformação da
+  // superfície girada (physicalSceneViewport) e cai em fração de pixel. Sem a
+  // folga, a linha logo abaixo da barra do editor tinha o centro fora por uma
+  // fração, ia para o ramo de fundo e saía com a cor crua da cena, sem
+  // exposição nem tonemap: o traço branco sob o Play na Sponza à noite (e mais
+  // escuro na Vila). Dentro da folga a leitura já fica presa à vista.
+  vec2 viewportSlack=fwidth(vUv);
+  if(any(lessThan(vUv,environment.postViewport.xy-viewportSlack)) ||
+     any(greaterThan(vUv,environment.postViewport.xy+environment.postViewport.zw+viewportSlack))) {
     // UI is composited afterwards. Preserve the clear outside the camera;
     // neither reconstruction nor history may spread its edge across panels.
     vec3 background=texture(sceneColor,vUv*post.sourceTransform.xy).rgb;

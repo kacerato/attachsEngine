@@ -24,4 +24,12 @@ inline float clampHalfUv(float uv, u32 internalExtent, u32 halfAllocation) {
   return std::clamp(uv, 0.5f / size, (active - 0.5f) / size);
 }
 
+// Ramo "fora da câmera" do passe principal (mesma regra do shader): o centro
+// do pixel conta como dentro da vista com um pixel de saída de folga. A borda
+// vem da superfície girada e cai em fração de pixel; sem a folga, a linha logo
+// abaixo da barra do editor saía com a cor crua da cena (sem exposição).
+inline bool postPixelInsideViewport(float uv, float viewportStart, float viewportExtent, float outputPixel) {
+  return uv >= viewportStart - outputPixel && uv <= viewportStart + viewportExtent + outputPixel;
+}
+
 } // namespace ae::renderer

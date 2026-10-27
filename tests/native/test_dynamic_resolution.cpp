@@ -177,3 +177,17 @@ AE_TEST(dynamic_resolution_borda_da_tela_nao_le_texel_fora_do_alvo_em_meia) {
                  "o limite antigo (meio texel da cena) puxa o texel nao escrito para a borda");
   AE_EXPECT_EQ(halfActiveExtent(705), 353u, "ceil(interna/2), como o renderer grava o nivel");
 }
+
+AE_TEST(post_linha_sob_a_barra_do_editor_entra_na_vista) {
+  // POCO: 1280 px na direção da barra; a vista começa em 101,6 px (fração da
+  // transformação girada). Todas as linhas desenhadas pela cena (piso do
+  // scissor, 101 em diante) passam pelo pós completo.
+  const float pixel = 1.0f / 1280.0f, start = 101.6f * pixel, extent = (1280.0f - 101.6f) * pixel;
+  for (u32 row = 101; row < 1280; ++row) {
+    const float center = (static_cast<float>(row) + 0.5f) * pixel;
+    AE_EXPECT_TRUE(postPixelInsideViewport(center, start, extent, pixel), "linha da cena tratada como vista");
+  }
+  AE_EXPECT_TRUE(!postPixelInsideViewport(101.5f * pixel, start, extent, 0.0f),
+                 "sem folga a linha 101 caia no ramo de fundo (o traco branco)");
+  AE_EXPECT_TRUE(!postPixelInsideViewport(99.5f * pixel, start, extent, pixel), "a barra continua fora");
+}
