@@ -14597,6 +14597,11 @@ public static class VolumeParameterTable
         "lens_distortion_y_multiplier",
         "lens_distortion_center",
         "lens_distortion_scale",
+        "cloud_thickness",
+        "cloud_type",
+        "cloud_shape_factor",
+        "cloud_erosion",
+        "cloud_steps",
     ];
     public static readonly string[] Aliases =
     [
@@ -14741,10 +14746,15 @@ public static class VolumeParameterTable
         "",
         "",
         "",
+        "",
+        "",
+        "",
+        "",
+        "",
     ];
     public static readonly int[] Groups =
     [
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 13, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 16, 16, 16, 17, 18, 18, 18, 18, 18,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 13, 14, 14, 14, 14, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 16, 16, 16, 17, 18, 18, 18, 18, 18, 5, 5, 5, 5, 5,
     ];
     /// <summary>Propriedade booleana que põe o override no perfil (Add Override), por índice de grupo.</summary>
     public static readonly string[] GroupAddedProperties =
