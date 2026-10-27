@@ -52,7 +52,63 @@ std::string json(const std::string &text) {
 }
 } // namespace
 
+namespace {
+std::vector<const scene::ComponentType *> prefabRegistry() {
+  std::vector<const scene::ComponentType *> types;
+  for (const auto &schema : scene::componentSchemas) types.push_back(schema.type);
+  types.push_back(&scene::ImportLink::descriptor);
+  types.push_back(&scene::PrefabLink::descriptor);
+  return types;
+}
+
+// `--ler-prefab <arquivo.astra.prefab>`: relê um prefab gravado pelo editor (por
+// exemplo, puxado do aparelho) e aponta o objeto que não volta.
+int readPrefabFile(const char *path) {
+  std::ifstream file(utf8Path(path), std::ios::binary);
+  const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+  const auto registry = prefabRegistry();
+  runtime::Prefab prefab;
+  std::string error;
+  if (prefab.read(text, registry, error)) { std::cout << "prefab ok\n"; return 0; }
+  std::cout << "prefab recusado: " << error << "\n";
+  std::istringstream lines(text);
+  std::string line;
+  std::getline(lines, line);
+  for (u32 n = 2; std::getline(lines, line); ++n) {
+    std::istringstream in(line);
+    in.imbue(std::locale::classic());
+    runtime::SceneObject object;
+    if (!runtime::deserializePrefabObject(in, registry, object, true)) {
+      std::cout << "linha " << n << " recusada (" << line.size() << " bytes): " << line.substr(0, 160) << "\n";
+      // Componentes um a um, no formato da lista com identidades.
+      const auto at = line.find(" \"astra.");
+      if (at != std::string::npos) {
+        std::istringstream rest(line.substr(at));
+        rest.imbue(std::locale::classic());
+        for (;;) {
+          std::string id, payload;
+          u32 version = 0;
+          if (!(rest >> std::quoted(id) >> version >> std::quoted(payload))) break;
+          const scene::ComponentType *type = nullptr;
+          for (const auto *candidate : registry) if (candidate->id == id) type = candidate;
+          auto value = type ? type->create() : nullptr;
+          std::istringstream data(payload);
+          data.imbue(std::locale::classic());
+          const bool ok = value && value->read(data, version) && value->valid();
+          data >> std::ws;
+          std::cout << "    " << id << " v" << version << (ok && data.eof() ? " ok" : " FALHA") << "\n";
+          u64 instance = 0;
+          if (!(rest >> instance)) break;
+        }
+      }
+    }
+  }
+  return 1;
+}
+} // namespace
+
 int main(int argc, char **argv) {
+  if (argc == 3 && std::string_view(argv[1]) == "--ler-prefab") return readPrefabFile(argv[2]);
   if (argc < 3) {
     std::cerr << "uso: aether_unity_coverage <pasta do pacote> <saida.json> [detalhe.txt]\n";
     return 2;

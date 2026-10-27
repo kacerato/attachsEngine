@@ -218,7 +218,10 @@ bool SceneVfx::advance(GameWorld &world, const ScenePhysics &physics, SceneParti
         const bool touched = cast(physics, id, position, translation, 0, hit);
         float end[3];
         for (u32 k = 0; k < 3; ++k) end[k] = touched ? hit.point[k] : position[k] + translation[k];
-        // A Linha do objeto vai do laser ao ponto (em mundo).
+        // A Linha do objeto vai do laser ao ponto (em mundo). Os pacotes deixam a
+        // Linha desligada no prefab e o script a liga ao mirar: o Laser ativo
+        // liga a Linha em Play.
+        world.setProperty(line, "enabled", scene::ComponentPropertyValue{true});
         world.setProperty(line, "world_space", scene::ComponentPropertyValue{true});
         world.setProperty(line, "point_count", scene::ComponentPropertyValue{2.0f});
         static constexpr const char *ids[6]{"point_0_x", "point_0_y", "point_0_z", "point_1_x", "point_1_y", "point_1_z"};
