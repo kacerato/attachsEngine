@@ -23,12 +23,13 @@ inline constexpr float NightMoonSkyFraction = 0.2f;
 // Piso de luz das estrelas e do brilho do ar, em fração do ambiente que o céu
 // tinha no fim do crepúsculo: noite de lua nova fica quase preta, não zero.
 inline constexpr float NightStarlightFraction = 0.003f;
-// Piso absoluto do brilho do ar e das estrelas (lux no plano horizontal): ~1/20
-// do céu sob a Lua padrão de 0,5 lux. O ambiente da meia-noite já chega quase
-// zerado, então só a fração acima deixava a lua nova 11 EV abaixo da cheia: a
-// exposição ia ao piso, as nuvens sumiam no preto e as luminárias estouravam.
-// Com ele as nuvens ficam escuras mas recortadas contra o céu (G4, POCO).
-inline constexpr float NightStarlightFloor = 1.5e-3f;
+// Piso absoluto do brilho do ar e das estrelas, na escala do shader (lux/683,
+// a de lightIntensityForShader): 1/20 do céu sob a Lua padrão de 0,5 lux, o
+// céu de lua nova ~3 magnitudes por segundo de arco² abaixo do de lua cheia. O
+// ambiente da meia-noite já chega quase zerado; só a fração acima deixava a lua
+// nova sem céu. Quem segura a noite escura na imagem é o Limite mínimo da
+// exposição do Volume, como no HDRP (V-2: -6 EV100).
+inline constexpr float NightStarlightFloor = 0.5f / 683.0f * NightMoonSkyFraction / 3.14159265358979f / 20.0f;
 // Brilho do céu visível ao luar sobre a luz difusa que ele manda ao chão.
 // Fisicamente seria ~1,5; os céus noturnos dos vídeos da Unity (sRGB 15-44 no
 // céu) são pintados mais claros que isso. No POCO (Vila, 22 h, exposição -6)

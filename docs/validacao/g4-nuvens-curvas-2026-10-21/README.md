@@ -215,3 +215,44 @@ cada rodada.
 - Suíte: 1725/1725 nativos, 105/105 do ambiente, contratos sem mudança.
 
 Pendência registrada: sombra das nuvens no chão ainda pela camada 2D (v9).
+
+## v12 no POCO (27/10) — a noite volta a ser noite
+
+`prancha-noite.png`, quadros e medidas em `poco-v12/` (APK
+0.3.0-dev.261026999-nuvens-0846; medidas com `tools/validation/measure-night-frames.py`,
+viewport sem a barra do editor). Pedido do dono: a noite da prancha final parecia
+dia nublado claro, a queixa original da V-2.
+
+Causa, nas variantes de captura do G4 (não no motor):
+- a Lua era um clone do Sol com 0,8 na unidade Engine do Sol, ~1100× a Lua da
+  receita (0,5 lux = 7,3e-4 na escala do shader);
+- o Volume mantinha o Limite mínimo −8,26 EV100 herdado da Vila, e a exposição
+  automática levava a noite ao cinza médio (o defeito 01 da V-2);
+- o conversor das variantes gravava a neblina em Cor fixa do dia; a Vila migrada
+  pelo app fica em Acompanhar o céu, que apaga à noite. A cor do dia vezes a
+  exposição da noite virava telhados, copas e o horizonte brancos.
+- O `NightStarlightFloor` do 5f332696 tinha sido calibrado nessa escala errada
+  (1,5e-3, acima do próprio luar); agora é 1/20 do céu sob a Lua de 0,5 lux na
+  escala do shader (`0,5/683 · 0,2/π / 20`), com o teste ajustado.
+
+Variantes refeitas como a receita Sol com dia e noite e a V-2: Lua de 0,5 lux,
+8500 K; Exposição automática com Limite mínimo do Volume da noite; neblina
+Acompanhar o céu. Exposição medida −7,7 EV100 com lua cheia e −10,4 na lua nova,
+segura no limite.
+
+| Limite mínimo | Lua cheia: quadro / céu / chão (sRGB) | abaixo do meio-dia | Lua nova: quadro | abaixo do meio-dia |
+|---|---|---|---|---|
+| −6 (padrão da Astra) | 56 / 79 / 32 | 2,5 EV | 6,2 | 6,9 EV |
+| **−5,5 (final)** | **37 / 55 / 12** | **3,6 EV** | **3,9** | **7,6 EV** |
+| −5 | 21 / 34 / 4 | 5,0 EV | 2,7 | 8,1 EV |
+
+Meio-dia de referência: `poco-v9/meio-dia-1.jpg`, luminância média 0,227. A
+recusada (`poco-v11/noite-lua-20-praca-1444.jpg`) media 0,252, o mesmo que o dia.
+Com −5,5: céu azul-escuro com estrelas, nuvens cinza recortadas, chão legível e
+fraco, postes e janelas acesos; lua nova quase preta, só postes e estrelas.
+A V-2 aprovada (sem nuvens, −6) mede quadro 66: as nuvens cobrem parte do céu
+e o limite −5,5 escurece mais.
+
+Para o ciclo de dia e noite numa cena do usuário vale o mesmo que na Unity: a
+Vila do dono continua com o limite −8,26 herdado; no Volume da noite, Limite
+mínimo perto de −5,5 EV100.
