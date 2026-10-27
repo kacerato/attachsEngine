@@ -2,6 +2,7 @@
 #include "runtime/audio_dsp.h"
 #include "scene/audio.h"
 #include "scene/audio_mixer.h"
+#include "scene/camera.h"
 #include "miniaudio.h"
 #include <algorithm>
 #include <atomic>
@@ -260,7 +261,7 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
   if(d.revision!=world.structuralRevision()){
     d.ids.clear();std::vector<ObjectId> all;world.graph().collectSubtree(world.graph().root(),all);
     for(auto id:all)if(const auto *o=world.graph().find(id))
-      for(usize c=0;c<o->components.size();++c)if(std::string_view(o->components.at(c)->type().id).starts_with("astra.audio.")){d.ids.push_back(id);break;}
+      for(usize c=0;c<o->components.size();++c)if(std::string_view(o->components.at(c)->type().id).starts_with("astra.audio.")||o->components.at(c)->type().id==scene::Camera::descriptor.id){d.ids.push_back(id);break;}
     d.revision=world.structuralRevision();
   }
   // Snapshots marcados para o início entram no primeiro quadro, sem transição.
@@ -283,6 +284,15 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
     if(const auto *c=o->components.find(scene::AudioBus::descriptor)){const auto &b=static_cast<const scene::AudioBus&>(*c);solo|=b.enabled&&b.solo;}
     if(const auto *c=o->components.find(scene::AudioSource::descriptor))hasSources|=static_cast<const scene::AudioSource*>(c)->enabled;
   }
+  // Sem Ouvinte, ouve pela câmera do jogo, como a Unity faz com o AudioListener
+  // que acompanha a Main Camera: marca MainCamera primeiro, depois prioridade.
+  const scene::Camera *hearing=nullptr;bool hearingMain=false;
+  if(!listener)for(auto id:d.ids)if(const auto *o=world.graph().find(id);o&&world.activeInHierarchy(world.handle(id)))
+    if(const auto *c=o->components.find(scene::Camera::descriptor)){
+      const auto *camera=static_cast<const scene::Camera*>(c);const bool main=o->tag==ObjectTags::MainCamera;
+      if(!camera->enabled||(hearing&&(hearingMain>main||(hearingMain==main&&camera->priority<=hearing->priority))))continue;
+      listener=o;hearing=camera;hearingMain=main;
+    }
   if(!hasSources){
     d.voices.clear();d.meters.clear();
     for(auto id:d.ids)if(const auto *o=world.graph().find(id))if(const auto *c=o->components.find(scene::AudioSource::descriptor))
@@ -301,7 +311,7 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
         const auto &s=static_cast<const scene::AudioSource&>(*c);
         const bool active=s.enabled&&world.activeInHierarchy(world.handle(id));
         const auto state=!active?State::Stopped:!s.clip.valid()?State::MissingClip:State::MissingListener;
-        d.diagnostics.push_back({id,c->instanceId(),state,!active?"Inativo":!s.clip.valid()?"Atribua um clipe WAV":"Áudio 3D requer listener ativo",0});
+        d.diagnostics.push_back({id,c->instanceId(),state,!active?"Inativo":!s.clip.valid()?"Atribua um clipe WAV":"Áudio 3D requer câmera ou Ouvinte ativo",0});
       }
       return true;
     }
@@ -435,14 +445,15 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
   float listenerMatrix[16]{};
   const auto validDirection=[](const float *m,u32 column){const float length=std::hypot(m[column],m[column+1],m[column+2]);return std::isfinite(length)&&length>1e-6f;};
   if(listener && worldMatrix(world.graph(),listener->id,listenerMatrix)&&validDirection(listenerMatrix,8)&&validDirection(listenerMatrix,4)){
-    if(d.listenerObject!=listener->id||d.listenerInstance!=listening->instanceId()) d.listenerPositionReady=false;
-    d.listenerObject=listener->id;d.listenerInstance=listening->instanceId();
+    const u64 instance=listening?listening->instanceId():hearing->instanceId();
+    if(d.listenerObject!=listener->id||d.listenerInstance!=instance) d.listenerPositionReady=false;
+    d.listenerObject=listener->id;d.listenerInstance=instance;
     for(u32 k=0;k<3;++k){
       d.listenerVelocity[k]=elapsed>0&&d.listenerPositionReady?float((listenerMatrix[12+k]-d.listenerPosition[k])/elapsed):0;
       d.listenerPosition[k]=listenerMatrix[12+k];d.listenerForward[k]=listenerMatrix[8+k];d.listenerUp[k]=listenerMatrix[4+k];
     }
     d.listenerPositionReady=true;
-  }else {listener=nullptr;listening=nullptr;d.listenerPositionReady=false;}
+  }else {listener=nullptr;listening=nullptr;hearing=nullptr;d.listenerPositionReady=false;}
   ma_engine_set_volume(&d.engine,listening?listening->volume:1);
 
   // ---- Vozes -------------------------------------------------------------
@@ -455,7 +466,7 @@ bool SceneAudio::advance(GameWorld &world,double elapsed){
     const auto issue=[&](State state,std::string message){diagnostic.state=state;diagnostic.message=std::move(message);d.voices.erase(key);d.diagnostics.push_back(diagnostic);};
     if(!source.enabled||!world.activeInHierarchy(world.handle(id))){issue(State::Stopped,"Inativo · cursor reiniciado");continue;}
     if(!source.clip.valid()){issue(State::MissingClip,"Atribua um clipe WAV");continue;}
-    if(source.dimension==scene::AudioDimension::Spatial&&!listener){issue(State::MissingListener,"Áudio 3D requer listener ativo");continue;}
+    if(source.dimension==scene::AudioDimension::Spatial&&!listener){issue(State::MissingListener,"Áudio 3D requer câmera ou Ouvinte ativo");continue;}
     // Ganho estimado do caminho de buses (para prioridade) e validade da rota.
     float routeGain=1;bool busValid=true;
     {std::set<ObjectId> path;ObjectId bus=source.bus;

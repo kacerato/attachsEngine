@@ -284,7 +284,8 @@ inline const CreationValue connectedSensorBody[]{{body,"motion",Static},{body,"s
 inline const CreationValue connectedSensorConnection[]{{physicsConnection,"action",1u}};
 inline const CreationComponent connectedSensor[]{{body,connectedSensorBody},{collider},{physicsConnection,connectedSensorConnection}};
 
-inline const CreationComponent cameraRecipe[]{{camera}};
+// Unity: GameObject > Camera já traz o AudioListener junto da câmera.
+inline const CreationComponent cameraRecipe[]{{camera},{"astra.audio.listener"}};
 inline const CreationComponent followCamera[]{{camera},{follow}};
 inline const CreationValue propulsionBody[]{{body,"motion",Dynamic},{body,"mass",1.f},{body,"gravity_factor",0.f}};
 inline const CreationValue propulsionForce[]{{"astra.physics.constant_force","relative_force_z",4.f}};

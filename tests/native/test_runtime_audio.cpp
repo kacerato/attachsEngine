@@ -1,6 +1,7 @@
 #include "editor/editor_session.h"
 #include "editor/editor_import_transaction.h"
 #include "scene/audio.h"
+#include "scene/camera.h"
 #include "harness.h"
 #include <cmath>
 #include <cstring>
@@ -88,6 +89,10 @@ AE_TEST(audio_source_bus_pause_pitch_spatial_and_lifecycle_use_real_dsp){
   AE_EXPECT_TRUE(std::abs(audio.diagnostic(sourceId,sourceHandle.instance)->cursor-.2)<.02,"2xpitch advancesrealPCMcursor");
   AE_EXPECT_TRUE(world.setProperty(sourceHandle,"dimension",u32(scene::AudioDimension::Spatial))==runtime::WorldStatus::Ok&&audio.advance(world,0)&&audio.diagnostic(sourceId,sourceHandle.instance)->state==runtime::SceneAudio::State::MissingListener,"no spatiallistenerfake");
   runtime::WorldStatus status;
+  // Unity: o AudioListener vem na Main Camera; sem Ouvinte, a câmera do jogo escuta.
+  const auto cameraHandle=world.addComponent(world.handle(bus),scene::Camera::descriptor.id,status);
+  AE_EXPECT_TRUE(status==runtime::WorldStatus::Ok&&audio.advance(world,0)&&audio.diagnostic(sourceId,sourceHandle.instance)->state!=runtime::SceneAudio::State::MissingListener&&audio.renderOffline(pcm)&&mean(pcm)>.03f,"camera hears spatial audio without listener");
+  AE_EXPECT_TRUE(world.setProperty(cameraHandle,"enabled",false)==runtime::WorldStatus::Ok&&audio.advance(world,0)&&audio.diagnostic(sourceId,sourceHandle.instance)->state==runtime::SceneAudio::State::MissingListener,"disabled camera does not hear");
   const auto listenerHandle=world.addComponent(world.handle(bus),scene::AudioListener::descriptor.id,status);
   AE_EXPECT_TRUE(status==runtime::WorldStatus::Ok&&listenerHandle.instance!=0,"worldadd invalidates candidate cache");
   AE_EXPECT_TRUE(audio.advance(world,0)&&audio.renderOffline(pcm)&&mean(pcm)>.03f,"real spatialDSP withlistener");
@@ -120,4 +125,14 @@ AE_TEST(audio_project_import_binding_history_save_reopen_and_play_share_guid){
   AE_EXPECT_TRUE(editor::EditorImportTransaction::read(root/".astra/assets.astra",registry)&&again.loadAssets(std::string_view(reinterpret_cast<const char*>(registry.data()),registry.size())),"shell reloads registry from real project file");
   AE_EXPECT_TRUE(again.assets().find(guid)&&again.loadAudioClip(guid,error),"registryreload");
   fs::remove(root/"Audio/test.wav",ec);
+}
+AE_TEST(unity_starter_camera_hears_and_leaves_no_history){
+  // Projeto vazio novo nasce como a cena nova da Unity: Main Camera com Ouvinte.
+  editor::EditorSession session;
+  const auto id=session.addStarterCamera();
+  const auto *camera=session.document().find(id);
+  AE_EXPECT_TRUE(camera&&std::string_view(camera->name)=="Main Camera"&&camera->tag=="MainCamera","starter camera named and tagged");
+  AE_EXPECT_TRUE(camera&&camera->components.find(scene::Camera::descriptor)&&camera->components.find(scene::AudioListener::descriptor),"camera carries listener");
+  AE_EXPECT_TRUE(camera&&camera->transform.position[1]==1&&camera->transform.position[2]==-10,"unity default pose");
+  AE_EXPECT_TRUE(!session.history().canUndo(),"starter camera is not an undo step");
 }

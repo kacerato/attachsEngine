@@ -53,22 +53,56 @@ Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 - comportamentos de efeito mantendo a identidade numa lista gravada;
 - Distorção.
 
-A suíte inteira roda no fechamento do bloco.
+Suíte inteira (`aether_tests`) no fechamento, sobre a base 64d8ece0: **1756/1756**.
 
-## Aparelho
+## Aparelho (POCO, 26–27/10)
 
-Ainda não validado no aparelho. Em 25/10 às 21:30 o POCO não aparecia no adb.
-Faltam três coisas:
+Os dois pacotes entraram pelo ☰ › Biblioteca de pacotes num projeto de teste:
+1034 itens, 144 prefabs. O seletor já abre em `Astra/Pacotes`. Cada efeito foi
+convertido para prefab Astra, colocado numa cena limpa e executado no Play.
 
-- a importação pela Biblioteca de pacotes;
-- a conversão de cerca de 8 efeitos e 3 climas;
-- a prancha Unity × POCO.
+| Família | Resultado no Play |
+|---|---|
+| Laser | Feixe contínuo com textura correndo pelo comprimento e camada de ruído; fica uma emenda fina entre pedaços de 2 m |
+| Aura (2 efeitos) | Executam |
+| Cura | Executa |
+| Explosão de energia | Executa |
+| Meteoro com impacto | Executa |
+| Círculo mágico | Executa |
+| Clarão e Acerto | Disparo único de 1 s, sem repetição, como na Unity. No host emitem 19 e 45 partículas aos 0,1 s e se apagam em ~1 s. No POCO, a leitura veio depois da rajada (0 vivas); falta captura no instante do disparo |
+| Raio | Não capturado (o toque abriu outro item da lista) |
+| 2 efeitos | Conversão recusada no aparelho: "Registro mudou no disco; reabra antes de converter" |
+| Chuva e neve (UniStorm) | Os prefabs nascem 32 m acima (seguem o jogador) e ficam fora da vista |
+| Neve forte | "Fonte Unity ou meta ausente/inválida" |
 
-As referências da Unity serão quadros de vídeo com link e timestamp, porque as
-prévias do pacote saem vazias para partículas.
+Correções que vieram do aparelho:
+
+- Textura com `alphaUsage: 2` (alfa a partir do cinza) passou a ser lida do
+  `.meta`: perfil de textura schema 6, fonte de alfa. Antes o Laser tinha uma
+  faixa preta.
+- A Linha desenha pedaços de até 2 m com U contínuo. Antes era um quad por
+  ladrilho, que parecia recortado; a fita única somia atrás da câmera.
+- A Linha v2 ganhou ruído: escala, força e rolagem.
+- Os comportamentos de efeito mantêm a identidade da instância.
+- O Laser ativo liga a Linha no Play.
+
+Som: os efeitos com AudioSource 3D ficavam mudos porque a cena de teste não tinha
+Ouvinte. A Unity também exige um AudioListener, que vem na Main Camera de toda
+cena nova. Com isso:
+
+- sem Ouvinte, o Play passa a ouvir pela câmera do jogo: primeiro a marcada
+  MainCamera, depois a de maior prioridade;
+- a Câmera do menu já traz Ouvinte;
+- o projeto vazio novo nasce com "Main Camera" em (0, 1, -10).
+
+O áudio não foi conferido de ouvido, porque a captura de tela não grava som.
+
+Prancha Unity × POCO: fica na evidência interna, com os quadros dos vídeos
+oficiais (link e timestamp). Os quadros da Unity mostram os efeitos maiores, sobre
+fundo escuro e com bloom. As capturas do POCO são de longe, sobre chão claro, e
+por isso a comparação é de forma e movimento, não de brilho.
 
 ## Conceito × implementado × testado
-
 - **Implementado:**
   - partícula de malha, alinhamentos e eixos 3D;
   - colisão Mundo;
@@ -79,4 +113,5 @@ prévias do pacote saem vazias para partículas.
   - mistura Distorção, com cópia da cena em meia resolução e mapa normal do Material;
   - importadores do RPG e do UniStorm.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.
-- **Não testado no aparelho:** tudo o que é visual (a Distorção depende do passe de pós dedicado e de blit linear no formato da cena).
+- **Testado no aparelho:** importação dos dois pacotes, Laser, auras, cura, explosão, meteoro e círculo mágico no Play.
+- **Não testado no aparelho:** captura do Clarão/Acerto no instante do disparo, raio, chuva/neve do UniStorm, Distorção isolada e o som de ouvido.

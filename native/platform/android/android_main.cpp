@@ -1175,6 +1175,8 @@ void recoverProjectScene(AndroidShell &shell) {
       std::fclose(legacy);
       if(!shell.editorSession.load(legacyPath.c_str(),shell.editorPackageFingerprint))
         __android_log_print(ANDROID_LOG_WARN,LogTag,"[Editor] Arquivo legado invalido; original preservado.");
+    } else if(shell.editorEmpty && !shell.editorSession.addStarterCamera()) {
+      __android_log_print(ANDROID_LOG_WARN,LogTag,"[Editor] Main Camera inicial nao foi criada.");
     }
     if(!shell.editorSession.save(shell.editorSavePath.c_str(),shell.editorPackageFingerprint))
       __android_log_print(ANDROID_LOG_ERROR,LogTag,"[Editor] Falha ao criar cena no projeto: %s",shell.editorSavePath.c_str());

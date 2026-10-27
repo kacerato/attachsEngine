@@ -16,12 +16,14 @@
 #include "resources/unity_material_import.h"
 #include "resources/unity_prefab_import.h"
 #include "resources/unity_yaml.h"
+#include "runtime/scene_particles.h"
 #include "runtime/unity_prefab.h"
 #include "scene/component_schema.h"
 #include "scene/import_link.h"
 #include "scene/prefab_link.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -195,6 +197,18 @@ int main(int argc, char **argv) {
     const bool ok = readUnityYaml(readFile(path), document, error) && convertUnityPrefab(document, imported, error, &context) &&
                     runtime::buildUnityPrefab(imported, assetGuidFromSeed("coverage-prefab:" + relative), resolve, nullptr, prefab,
                                               identities, error, &effects);
+    // G6_SIMULAR=<trecho do caminho>: simula as partículas do prefab convertido
+    // por meio segundo e conta as vivas (diagnóstico de efeito que não emite).
+    if (const char *only = std::getenv("G6_SIMULAR"); ok && only && relative.find(only) != std::string::npos) {
+      runtime::SceneParticles particles;
+      particles.advance(prefab.graph(), 0);
+      std::cout << relative << ": " << particles.emitterCount() << " emissores";
+      for (u32 frame = 1; frame <= 15; ++frame) {
+        particles.advance(prefab.graph(), 1.0f / 30);
+        if (frame % 3 == 0) std::cout << " t" << frame << "=" << particles.aliveTotal();
+      }
+      std::cout << "\n";
+    }
     if (!ok) {
       ++refused;
       detail << "RECUSADO " << relative << " :: " << error << "\n";

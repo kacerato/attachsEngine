@@ -6084,6 +6084,21 @@ bool EditorSession::dropAssetOnField(u32 field, u32 assetIndex) {
   return false;
 }
 
+EditorEntityId EditorSession::addStarterCamera() {
+  u32 index=0;
+  if(!findCreationRecipe("basic.camera",&index)) return kInvalidEntity;
+  const auto id=createRecipe(index,document_.root());
+  if(id==kInvalidEntity) return kInvalidEntity;
+  auto values=*document_.find(id);
+  std::snprintf(values.name,sizeof(values.name),"%s","Main Camera");
+  values.tag=std::string(runtime::ObjectTags::MainCamera);
+  values.transform.position[0]=0;values.transform.position[1]=1;values.transform.position[2]=-10;
+  std::fill(values.transform.rotationDegrees,values.transform.rotationDegrees+3,0.f);
+  if(!document_.applyEntityValues(id,values)) return kInvalidEntity;
+  history_.clear();
+  return id;
+}
+
 EditorEntityId EditorSession::createRecipe(u32 index, EditorEntityId parent) {
   if(index>=editorCreationCatalog.size() || !editorCreationCatalog[index].composed()) return kInvalidEntity;
   const auto &recipe=editorCreationCatalog[index];

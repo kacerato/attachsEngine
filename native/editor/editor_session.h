@@ -1234,6 +1234,9 @@ public:
   // histórico. Recusa sem efeito quando a composição, um valor inicial ou a
   // hierarquia física não são válidos; o motivo vai para o status.
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
+  // Cena nova como a da Unity: "Main Camera" (câmera + Ouvinte, marca
+  // MainCamera) em (0,1,-10) olhando +Z, sem entrada no histórico.
+  EditorEntityId addStarterCamera();
   bool prepareCharacterConversion(EditorEntityId visual,EditorEntity &root,EditorEntity &child,std::string &error) const;
   EditorEntityId convertToCharacter(EditorEntityId visual);
   resources::AssetGuid createPrefab(EditorEntityId root,std::string &error);
