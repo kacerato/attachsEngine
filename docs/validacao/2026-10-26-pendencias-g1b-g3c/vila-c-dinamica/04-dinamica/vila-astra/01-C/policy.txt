@@ -1,0 +1,12 @@
+[PunctualLightMask] por desenho
+[ShadowGather] gather 4
+[RenderPolicy] features: vulkan1_3=1 descriptor_indexing=1 nonuniform=1 ray_query=0 mesh_shader=0 vrs=0 memoryless=0 -> perfil=1
+[RenderPolicy] preset=c perfil=0 sombras=on(2 cascatas @1024, 9/9 taps, cache=static margem=1.05 blend=0.10 fade=0.12) ambiente=hemisferio+especular+split-sum pos=passe+bloom malha_agua=low(88 seg) textura_mip_bias=0 aniso=8.0 escala=0.85 dinamica=on[0.55,0.85] clamps=4
+[RenderPolicy] nivel teto=on ao=off ao_meia=1 bloom_cadeia=1 luzes_por_objeto=4 luzes_quadro=8
+[RenderPolicy] resolutionScale reduzido por quality.
+[RenderPolicy] shadows.cascadeCount reduzido por quality.
+[RenderPolicy] shadows.cascadeResolution reduzido por quality.
+[RenderPolicy] shadows.filterTaps reduzido por quality.
+[RenderPolicy] lod=on erro_solido=4.00px erro_coverage=6.00px histerese=0.70 normal_ate=60.0 specular_ate=120.0 mr_ate=90.0 emissive_ate=120.0 variantes_material=off aa=fxaa bloom=1 sharpen=0.40 contraste=1.04 saturacao=1.03
+[PostChain] bloom em cadeia=1 AO em meia resolucao=0.
+[PostFogResolve] n├®voa resolvida por texel antes do p├│s (704x1520).

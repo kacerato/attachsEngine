@@ -1,0 +1,6 @@
+importação: 408.155 s, 405 desenhos, 2525348 vértices, UV2 em 405 desenhos (55977 ilhas)
+bake: 69.3892 s, 308 receptores, 686017 texels (129300 descartados dentro de parede), 300103131 raios, 2 páginas
+paridade na vista (8513 pixels): tempo real difuso com sombra 0.00224541 · sem sombra 0.00241384 · especular GGX 0.000113521 · assado (lightmap + Mista) 0.00515115 · albedo médio 0.943064
+  razão assado/tempo real (com sombra) 2.29408 · com especular 2.18368 · sem sombra 2.13401
+  difuso direto: Lambert 0.00224541 · Burley do shader 0.00190535 (x0.848556) · Burley renormalizado 0.00136639 (x0.608527)
+  parede esquerda, canal verde: tempo real 0.00512838 · assado 0.00860734
