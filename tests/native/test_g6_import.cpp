@@ -261,7 +261,17 @@ AE_TEST(g6a_line_renderer_draws_stretched_segments_through_the_particle_pass) {
   line->tileLength = .5f;
   frame.clear();
   runtime::appendLineRenderers(graph, kCamera, frame);
-  AE_EXPECT_TRUE(frame.instances.size() == 6, "Repetir a cada 0,5 m: seis trechos");
+  // Uma faixa contínua; a imagem repete pelo U (6 repetições), sem emendas.
+  AE_EXPECT_TRUE(frame.instances.size() == 1 && std::abs(frame.instances[0].frame - 6) < 1e-4f && frame.instances[0].rotation == 0,
+                 "Repetir a cada 0,5 m: uma faixa, U de 0 a 6");
+  // Dois trechos: o U do segundo continua de onde o primeiro parou.
+  line->pointCount = 3;
+  line->points[6] = 2; line->points[7] = 0; line->points[8] = 3;
+  frame.clear();
+  runtime::appendLineRenderers(graph, kCamera, frame);
+  AE_EXPECT_TRUE(frame.instances.size() == 2 && std::abs(frame.instances[1].rotation - 6) < 1e-4f &&
+                 std::abs(frame.instances[1].frame - 4) < 1e-4f, "U contínuo entre os trechos");
+  line->pointCount = 2;
   scene::LineRenderer back;
   AE_EXPECT_TRUE(roundTrip(*line, back) && back.tileLength == .5f && back.points[5] == 3, "Linha ida e volta");
   scene::Projectile projectile, projectileBack;

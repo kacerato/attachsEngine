@@ -47,31 +47,25 @@ u32 appendLineRenderers(const SceneGraph &graph, const float (&camera)[3], rende
     ParticleBatch batch;
     batch.firstInstance = static_cast<u32>(out.instances.size());
     u32 segments = 0;
+    // Uma faixa contínua por trecho. U corre pelo comprimento: em Repetir, em
+    // metros/repetição (a imagem se repete sem costura, como a Unity com
+    // Texture Mode Tile); em Esticar, de 0 a 1 na linha inteira. O início vai
+    // no giro e a extensão no quadro da instância (sem uso no esticado).
+    const float uPerMeter = line.tileLength > 0 ? 1.0f / line.tileLength : 1.0f / total;
     for (usize i = 1; i < points.size() && segments < kMaximumLineSegments; ++i) {
       const float length = along[i] - along[i - 1];
       if (!(length > 1e-6f)) continue;
-      // Repetir: um trecho por repetição; o último fica com o que sobra.
-      const u32 pieces = line.tileLength > 0 ? std::max(1u, static_cast<u32>(std::ceil(length / line.tileLength - 1e-4f))) : 1u;
-      for (u32 piece = 0; piece < pieces && segments < kMaximumLineSegments; ++piece) {
-        const float t0 = static_cast<float>(piece) / static_cast<float>(pieces);
-        const float t1 = line.tileLength > 0 ? std::min(1.0f, (static_cast<float>(piece) + 1) * line.tileLength / length)
-                                             : static_cast<float>(piece + 1) / static_cast<float>(pieces);
-        const float a = line.tileLength > 0 ? std::min(1.0f, static_cast<float>(piece) * line.tileLength / length) : t0;
-        float from[3], to[3];
-        for (u32 k = 0; k < 3; ++k) {
-          from[k] = lerp(points[i - 1][k], points[i][k], a);
-          to[k] = lerp(points[i - 1][k], points[i][k], t1);
-        }
-        const float middle = (along[i - 1] + length * (a + t1) * .5f) / total;
-        ParticleInstance instance;
-        std::copy(to, to + 3, instance.position);
-        for (u32 k = 0; k < 3; ++k) instance.velocity[k] = to[k] - from[k];
-        instance.size = std::max(0.0f, lerp(line.widthStart, line.widthEnd, middle));
-        instance.sizeYZ[0] = instance.sizeYZ[1] = instance.size;
-        for (u32 k = 0; k < 4; ++k) instance.color[k] = floatToHalf(std::max(0.0f, lerp(line.colorStart[k], line.colorEnd[k], middle)));
-        instance.random = static_cast<u32>(id) * 2654435761u + segments;
-        if (instance.size > 0) { out.instances.push_back(instance); ++segments; }
-      }
+      const float middle = (along[i - 1] + length * .5f) / total;
+      ParticleInstance instance;
+      std::copy(points[i].begin(), points[i].end(), instance.position);
+      for (u32 k = 0; k < 3; ++k) instance.velocity[k] = points[i][k] - points[i - 1][k];
+      instance.size = std::max(0.0f, lerp(line.widthStart, line.widthEnd, middle));
+      instance.sizeYZ[0] = instance.sizeYZ[1] = instance.size;
+      for (u32 k = 0; k < 4; ++k) instance.color[k] = floatToHalf(std::max(0.0f, lerp(line.colorStart[k], line.colorEnd[k], middle)));
+      instance.rotation = along[i - 1] * uPerMeter;
+      instance.frame = length * uPerMeter;
+      instance.random = static_cast<u32>(id) * 2654435761u + segments;
+      if (instance.size > 0) { out.instances.push_back(instance); ++segments; }
     }
     batch.instanceCount = static_cast<u32>(out.instances.size()) - batch.firstInstance;
     if (!batch.instanceCount) continue;

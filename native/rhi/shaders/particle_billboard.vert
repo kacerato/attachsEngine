@@ -98,15 +98,17 @@ void main() {
       orthographic ? (view.z - nearPlane) / (farPlane - nearPlane)
                    : (farPlane * view.z - nearPlane * farPlane) / (farPlane - nearPlane), clipW);
   vUv = vec2(corner.x * 0.5 + 0.5, 0.5 - corner.y * 0.5);
-  // Linha (G6a): U do início (cauda) ao fim (cabeça) do trecho, V atravessa.
-  if((batch.layers.w & 256u) != 0u) vUv = vec2(corner.y * 0.5 + 0.5, corner.x * 0.5 + 0.5);
+  // Linha (G6a): U corre da cauda à cabeça do trecho, contínuo na linha
+  // inteira (início no giro, extensão no quadro); V atravessa a faixa.
+  if((batch.layers.w & 256u) != 0u)
+    vUv = vec2(inVelocityRotation.w + (corner.y * 0.5 + 0.5) * inFrame, corner.x * 0.5 + 0.5);
   vColor = inColor;
   vNoiseOffset = vec2(float(inRandom & 0xffffu), float(inRandom >> 16u)) * (1.0 / 65535.0);
   vViewDepth = view.z;
   // Quadro N da grade: da esquerda para a direita, de cima para baixo, como a
   // Texture Sheet Animation da Unity.
   vec2 tiles = max(batch.sheet.xy, vec2(1.0));
-  float frame = floor(inFrame + 0.5);
+  float frame = (batch.layers.w & 256u) != 0u ? 0.0 : floor(inFrame + 0.5);
   float column = mod(frame, tiles.x);
   float row = min(floor(frame / tiles.x), tiles.y - 1.0);
   vSheetUv = (vec2(column, row) + vUv) / tiles;

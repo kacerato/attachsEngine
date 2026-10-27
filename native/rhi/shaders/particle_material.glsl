@@ -65,7 +65,8 @@ void main() {
     noise = sampleTile(batch.layers.y, uv * batch.noise.x + batch.scroll.zw * time + vNoiseOffset, true).r;
     uv += (noise - 0.5) * batch.noise.z;
   }
-  bool scrolls = batch.scroll.x != 0.0 || batch.scroll.y != 0.0 || (hasNoise && batch.noise.z > 0.0);
+  // Linha: U passa de 1 (repetição pelo comprimento), então a imagem repete.
+  bool scrolls = batch.scroll.x != 0.0 || batch.scroll.y != 0.0 || (hasNoise && batch.noise.z > 0.0) || (batch.layers.w & 256u) != 0u;
   vec4 shape;
 #ifdef PARTICLE_PROJECT_TEXTURES
   if((batch.layers.w & 8u) != 0u)
