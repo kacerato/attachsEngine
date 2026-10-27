@@ -95,7 +95,15 @@ cena nova. Com isso:
 - a Câmera do menu já traz Ouvinte;
 - o projeto vazio novo nasce com "Main Camera" em (0, 1, -10).
 
-O áudio não foi conferido de ouvido, porque a captura de tela não grava som.
+No POCO (27/10, 20:29), a cena tinha só uma "Main Camera" sem Ouvinte e um efeito
+de aura convertido, cuja fonte de som é 3D. Medição com `dumpsys audio`:
+
+- antes do Play, o app não tinha nenhum tocador ativo;
+- durante o Play, abriu um tocador AAudio estéreo de 48 kHz em `started`;
+- o foco de áudio foi pedido e devolvido a cada ~2 s, no ritmo do som repetido.
+
+Antes desta mudança, essa fonte seria barrada por "Áudio 3D requer listener ativo".
+Não foi conferido de ouvido.
 
 Prancha Unity × POCO: fica na evidência interna, com os quadros dos vídeos
 oficiais (link e timestamp). Os quadros da Unity mostram os efeitos maiores, sobre
@@ -114,4 +122,4 @@ por isso a comparação é de forma e movimento, não de brilho.
   - importadores do RPG e do UniStorm.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.
 - **Testado no aparelho:** importação dos dois pacotes, Laser, auras, cura, explosão, meteoro e círculo mágico no Play.
-- **Não testado no aparelho:** captura do Clarão/Acerto no instante do disparo, raio, chuva/neve do UniStorm, Distorção isolada e o som de ouvido.
+- **Não testado no aparelho:** captura do Clarão/Acerto no instante do disparo, raio, chuva/neve do UniStorm, Distorção isolada e o som conferido de ouvido.
