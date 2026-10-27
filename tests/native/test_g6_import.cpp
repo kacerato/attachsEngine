@@ -256,21 +256,23 @@ AE_TEST(g6a_line_renderer_draws_stretched_segments_through_the_particle_pass) {
   line->points[3] = 0; line->points[4] = 0; line->points[5] = 3;
   line->widthStart = .2f; line->widthEnd = .2f;
   renderer::particles::ParticleFrame frame;
-  AE_EXPECT_TRUE(runtime::appendLineRenderers(graph, kCamera, frame) == 1 && frame.instances.size() == 1, "um trecho esticado");
-  AE_EXPECT_TRUE(std::abs(frame.instances[0].velocity[2] - 3) < 1e-4f && frame.batches[0].material.lineUv, "trecho de 3 m, U pelo comprimento");
+  AE_EXPECT_TRUE(runtime::appendLineRenderers(graph, kCamera, frame) == 1 && frame.instances.size() == 2, "3 m em dois pedaços");
+  AE_EXPECT_TRUE(std::abs(frame.instances[0].velocity[2] - 1.5f) < 1e-4f && frame.batches[0].material.lineUv &&
+                 std::abs(frame.instances[1].rotation - .5f) < 1e-4f, "Esticar: U de 0 a 1 pela linha inteira");
   line->tileLength = .5f;
   frame.clear();
   runtime::appendLineRenderers(graph, kCamera, frame);
-  // Uma faixa contínua; a imagem repete pelo U (6 repetições), sem emendas.
-  AE_EXPECT_TRUE(frame.instances.size() == 1 && std::abs(frame.instances[0].frame - 6) < 1e-4f && frame.instances[0].rotation == 0,
-                 "Repetir a cada 0,5 m: uma faixa, U de 0 a 6");
-  // Dois trechos: o U do segundo continua de onde o primeiro parou.
+  // 3 m em pedaços de até 2 m (dois de 1,5 m); a imagem repete pelo U contínuo
+  // (0 a 3, depois 3 a 6), sem espremer nem emendar.
+  AE_EXPECT_TRUE(frame.instances.size() == 2 && std::abs(frame.instances[0].frame - 3) < 1e-4f && frame.instances[0].rotation == 0 &&
+                 std::abs(frame.instances[1].rotation - 3) < 1e-4f, "Repetir a cada 0,5 m: U de 0 a 6 contínuo");
+  // Segundo trecho (2 m): o U continua de onde o primeiro parou.
   line->pointCount = 3;
   line->points[6] = 2; line->points[7] = 0; line->points[8] = 3;
   frame.clear();
   runtime::appendLineRenderers(graph, kCamera, frame);
-  AE_EXPECT_TRUE(frame.instances.size() == 2 && std::abs(frame.instances[1].rotation - 6) < 1e-4f &&
-                 std::abs(frame.instances[1].frame - 4) < 1e-4f, "U contínuo entre os trechos");
+  AE_EXPECT_TRUE(frame.instances.size() == 3 && std::abs(frame.instances[2].rotation - 6) < 1e-4f &&
+                 std::abs(frame.instances[2].frame - 4) < 1e-4f, "U contínuo entre os trechos");
   line->pointCount = 2;
   scene::LineRenderer back;
   AE_EXPECT_TRUE(roundTrip(*line, back) && back.tileLength == .5f && back.points[5] == 3, "Linha ida e volta");
