@@ -83,19 +83,20 @@ layout(location=1) out vec4 outHistory;
 
 float luma(vec3 value) { return dot(value, vec3(0.2126, 0.7152, 0.0722)); }
 
-// Leitura da cena presa aos texels que a vista desenhou. A borda da vista vem
-// da superfície girada (physicalSceneViewport) e cai em fração de texel (ex.:
-// 100,6 logo abaixo da barra do editor). A rasterização só cobre texels com o
-// centro dentro dela; o texel 100 fica com o fundo da câmera. O limite antigo
-// (borda + meio texel = 101,1) misturava 40% dele na primeira linha: a emenda
-// escura sob o Play, branca quando o fundo é o céu da noite. O limite agora é
-// o centro do primeiro e do último texel desenhados (post_sample_bounds.h).
+// Leitura da cena presa aos texels que a vista desenhou por inteiro. A borda
+// da vista vem da superfície girada (physicalSceneViewport) e cai em fração de
+// texel logo abaixo da barra do editor; o texel da borda fica com o fundo da
+// câmera, e o limite antigo (borda + meio texel) misturava ~45% dele na linha
+// sob o Play: emenda escura de dia, branca com o céu da noite. O centro do
+// "primeiro texel com o centro dentro" ainda saiu escuro no POCO (27/10): o
+// fundo e a geometria arredondam a borda de jeitos diferentes. O limite fica
+// um texel inteiro para dentro da borda (post_sample_bounds.h).
 vec2 clampSourceUv(vec2 uv) {
   vec2 size=1.0/max(post.texelFlags.xy,vec2(1.0e-8));
   vec2 start=environment.postViewport.xy*post.sourceTransform.xy*size;
   vec2 end=(environment.postViewport.xy+environment.postViewport.zw)*post.sourceTransform.xy*size;
-  vec2 lower=(ceil(start-0.5)+0.5)*post.texelFlags.xy;
-  vec2 upper=(floor(end-0.5)+0.5)*post.texelFlags.xy;
+  vec2 lower=(ceil(start)+0.5)*post.texelFlags.xy;
+  vec2 upper=(floor(end)-0.5)*post.texelFlags.xy;
   return clamp(uv,lower,max(lower,upper));
 }
 

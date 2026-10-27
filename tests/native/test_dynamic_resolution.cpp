@@ -186,7 +186,9 @@ AE_TEST(post_primeira_linha_da_vista_nao_mistura_o_fundo) {
   for (float start : {101.6f, 100.0f, 100.4f, 0.0f}) {
     for (float background : {0.0f, 8.0f}) {
       std::vector<float> column(1280);
-      for (u32 i = 0; i < 1280; ++i) column[i] = static_cast<float>(i) + 0.5f >= start ? 1.0f : background;
+      // Pior caso do aparelho: o texel cortado pela borda fica com o fundo,
+      // tenha ele o centro dentro ou não.
+      for (u32 i = 0; i < 1280; ++i) column[i] = static_cast<float>(i) >= start ? 1.0f : background;
       const auto read = [&](float texel, bool newBounds) {
         const float lower = newBounds ? firstDrawnTexelCenter(start) : start + 0.5f;
         const float upper = newBounds ? lastDrawnTexelCenter(1280.0f) : 1280.0f - 0.5f;
@@ -194,7 +196,7 @@ AE_TEST(post_primeira_linha_da_vista_nao_mistura_o_fundo) {
         const auto at = [&](int i) { return column[static_cast<usize>(std::clamp(i, 0, 1279))]; };
         return at(static_cast<int>(base)) * (1.0f - f) + at(static_cast<int>(base) + 1) * f;
       };
-      for (u32 row = static_cast<u32>(std::ceil(start - 0.5f)); row < 1280; ++row)
+      for (u32 row = static_cast<u32>(std::floor(start)); row < 1280; ++row)
         AE_EXPECT_TRUE(std::fabs(read(static_cast<float>(row) + 0.5f, true) - 1.0f) < 1.0e-5f,
                        "toda linha desenhada le so a cena, sem o fundo da camera");
       if (start == 101.6f)
@@ -202,4 +204,27 @@ AE_TEST(post_primeira_linha_da_vista_nao_mistura_o_fundo) {
                        "o limite antigo (borda + meio texel) misturava o fundo na primeira linha");
     }
   }
+}
+
+AE_TEST(post_vista_em_pixels_inteiros_alinha_geometria_fundo_e_pos) {
+  // Borda depois da rotação da superfície: 100,6 px de 1280 (logo abaixo da
+  // barra do editor), fim em 1280. Arredondada, a vista começa num pixel
+  // inteiro; a geometria, o fundo (scissor) e o ramo "dentro da vista" do pós
+  // cobrem as mesmas linhas, e a leitura presa começa na primeira delas.
+  for (float edge : {100.6f, 100.4f, 100.5f, 0.0f, 33.3f}) {
+    const auto span = snapViewportToPixels(edge / 1280.0f, (1280.0f - edge) / 1280.0f, 1280);
+    AE_EXPECT_EQ(span.first, static_cast<u32>(std::round(edge)), "borda no pixel mais proximo");
+    AE_EXPECT_EQ(span.first + span.count, 1280u, "fim no ultimo pixel");
+    const float start = static_cast<float>(span.first), end = static_cast<float>(span.first + span.count);
+    for (u32 row = 0; row < 1280; ++row) {
+      const float center = static_cast<float>(row) + 0.5f;
+      const bool geometry = center >= start && center < end;          // rasterização pelo centro
+      const bool background = row >= span.first && row < span.first + span.count;  // scissor inteiro
+      AE_EXPECT_TRUE(geometry == background, "geometria e fundo cobrem as mesmas linhas");
+    }
+    AE_EXPECT_EQ(firstDrawnTexelCenter(start), start + 0.5f, "a leitura comeca no centro da primeira linha desenhada");
+    AE_EXPECT_EQ(lastDrawnTexelCenter(end), end - 0.5f, "e termina no centro da ultima");
+  }
+  const auto tiny = snapViewportToPixels(0.5f, 0.0f, 100);
+  AE_EXPECT_TRUE(tiny.count >= 1, "vista degenerada ainda tem um pixel");
 }
