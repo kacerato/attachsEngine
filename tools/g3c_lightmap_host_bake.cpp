@@ -55,11 +55,20 @@ int main(int argc, char **argv) {
   if (!resources::parseImportProfile(readText(root / ".astra/imports" / (guid + ".profile")), profile)) fail("perfil recusado");
   resources::GltfImport model;
   resources::GltfImportProgress progress;
-  progress.externalFile = [](void *, std::string_view, u64, std::vector<u8> &) { return false; };
+  // As imagens de uma fonte em pasta continuam por URI (gltf_package.h): sem
+  // este leitor o host importava sem nenhuma textura e assava com a cor base
+  // do material (albedo 0,94 na Sponza). Mesmo leitor da importação do editor.
+  progress.context = const_cast<std::filesystem::path *>(&sourceDir);
+  progress.externalFile = [](void *context, std::string_view uri, u64 prefix, std::vector<u8> &bytes) {
+    std::string relative, refusal;
+    return resources::gltfRelativeUri(uri, relative, refusal) &&
+           resources::readGltfFolderFile(*static_cast<std::filesystem::path *>(context), relative, bytes,
+                                         resources::GltfFolderMaximumFileBytes, prefix);
+  };
   auto limits = resources::applyImportProfile(resources::GltfImportLimits{}, profile);
   const auto importStart = std::chrono::steady_clock::now();
   // A importação com UV2 é a parte lenta: guardada ao lado da saída e reaproveitada.
-  const std::string cachePath = std::string(argv[4]) + ".aic", cacheKey = "g3c-host-" + resources::serializeImportProfile(profile);
+  const std::string cachePath = std::string(argv[4]) + ".aic", cacheKey = "g3c-host-texturas-" + resources::serializeImportProfile(profile);
   {
     const auto cached = readText(cachePath);
     if (cached.empty() || !resources::readImportCache({reinterpret_cast<const u8 *>(cached.data()), cached.size()}, cacheKey, model)) {
