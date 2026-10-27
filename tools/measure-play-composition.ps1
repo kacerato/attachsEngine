@@ -6,7 +6,7 @@ param(
     [ValidateSet('A','B')][string[]]$Order=@('A','B','B','A'),
     [float]$RenderScale=.75,
     [float]$TargetFps=120,
-    [ValidateRange(0,5)][int]$GpuIsolation=0,
+    [ValidateRange(0,6)][int]$GpuIsolation=0,
     [ValidateSet('Composition','OpaqueNoClip','FullDetailSampling','Combined','Lighting','PointLighting')][string]$Experiment='Composition'
 )
 $ErrorActionPreference='Stop'
@@ -81,7 +81,7 @@ try {
         if($Experiment -in @('FullDetailSampling','Lighting','PointLighting') -and !$capture.context.opaque_no_clip) {
             throw 'A bancada de material requer a família opaca ativa nas duas variantes.'
         }
-        $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow')[$GpuIsolation]
+        $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow','no-direct-specular')[$GpuIsolation]
         if($capture.context.gpu_isolation -ne $expectedIsolation) {
             throw 'A variante de atribuição GPU não foi aplicada.'
         }

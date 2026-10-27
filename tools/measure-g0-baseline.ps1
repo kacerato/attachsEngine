@@ -22,7 +22,7 @@ param(
     [ValidateRange(0,31)][int]$PostIsolation=0,
     # Diagnóstico do opaco (renderer::GpuCostIsolation): 0 completo, 1 sem normal map,
     # 2 sem IBL especular, 3 só cor base, 4 sem luzes pontuais, 5 sem sombra do sol.
-    [ValidateRange(0,5)][int]$GpuIsolation=0,
+    [ValidateRange(0,6)][int]$GpuIsolation=0,
     # Candidata do G1: névoa resolvida por texel antes do pós (aether.post_fog_resolve).
     [switch]$FogResolve,
     # Candidatas do G1/G2: bloom em cadeia de mips e AO em meia resolução.
@@ -188,7 +188,7 @@ try {
             $capture=Get-FrameProfileCapture -Windows $windows -Contexts $contexts -MinimumSeconds 15 -Scene $scene
             if(!$capture) { throw "Captura curta demais: $project/$tier." }
             $capture | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $run 'capture.json')
-            $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow')[$GpuIsolation]
+            $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow','no-direct-specular')[$GpuIsolation]
             if($capture.context.gpu_isolation -ne $expectedIsolation) {
                 throw "Isolamento de GPU executado ($($capture.context.gpu_isolation)) difere do pedido ($expectedIsolation)."
             }

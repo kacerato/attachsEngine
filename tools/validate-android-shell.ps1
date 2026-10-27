@@ -35,7 +35,7 @@ param(
     [double]$AdpfTargetRatio = 0.0,
     [switch]$EnableSwappy,
     [switch]$DisableSwappy,
-    [ValidateSet('full', 'no-normal', 'no-ibl', 'base-color', 'no-punctual', 'no-directional-shadow')]
+    [ValidateSet('full', 'no-normal', 'no-ibl', 'base-color', 'no-punctual', 'no-directional-shadow', 'no-direct-specular')]
     [string]$GpuIsolation = 'full',
     [ValidateSet('auto', 'c', 'b', 'a', 's', 'custom')]
     [string]$QualityPreset = 'auto',
@@ -573,6 +573,7 @@ function Start-AetherActivity {
         'base-color' { 3 }
         'no-punctual' { 4 }
         'no-directional-shadow' { 5 }
+        'no-direct-specular' { 6 }
     }
     $arguments += @('--ei', 'aether.gpu_isolation', [string]$gpuIsolationValue)
     $arguments += @('--es', 'aether.quality_preset', $QualityPreset)
