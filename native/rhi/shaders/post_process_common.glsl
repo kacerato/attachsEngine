@@ -83,10 +83,19 @@ layout(location=1) out vec4 outHistory;
 
 float luma(vec3 value) { return dot(value, vec3(0.2126, 0.7152, 0.0722)); }
 
+// Leitura da cena presa aos texels que a vista desenhou. A borda da vista vem
+// da superfície girada (physicalSceneViewport) e cai em fração de texel (ex.:
+// 100,6 logo abaixo da barra do editor). A rasterização só cobre texels com o
+// centro dentro dela; o texel 100 fica com o fundo da câmera. O limite antigo
+// (borda + meio texel = 101,1) misturava 40% dele na primeira linha: a emenda
+// escura sob o Play, branca quando o fundo é o céu da noite. O limite agora é
+// o centro do primeiro e do último texel desenhados (post_sample_bounds.h).
 vec2 clampSourceUv(vec2 uv) {
-  vec2 lower=environment.postViewport.xy*post.sourceTransform.xy+post.texelFlags.xy*0.5;
-  vec2 upper=(environment.postViewport.xy+environment.postViewport.zw)*
-      post.sourceTransform.xy-post.texelFlags.xy*0.5;
+  vec2 size=1.0/max(post.texelFlags.xy,vec2(1.0e-8));
+  vec2 start=environment.postViewport.xy*post.sourceTransform.xy*size;
+  vec2 end=(environment.postViewport.xy+environment.postViewport.zw)*post.sourceTransform.xy*size;
+  vec2 lower=(ceil(start-0.5)+0.5)*post.texelFlags.xy;
+  vec2 upper=(floor(end-0.5)+0.5)*post.texelFlags.xy;
   return clamp(uv,lower,max(lower,upper));
 }
 
@@ -937,15 +946,8 @@ void main() {
     outColor=vec4(sampleScene(sourceUv)*screenSpaceAmbientOcclusion(sourceUv),1.0);
     return;
   }
-  // Um pixel de saída de folga: a borda da vista vem da transformação da
-  // superfície girada (physicalSceneViewport) e cai em fração de pixel. Sem a
-  // folga, a linha logo abaixo da barra do editor tinha o centro fora por uma
-  // fração, ia para o ramo de fundo e saía com a cor crua da cena, sem
-  // exposição nem tonemap: o traço branco sob o Play na Sponza à noite (e mais
-  // escuro na Vila). Dentro da folga a leitura já fica presa à vista.
-  vec2 viewportSlack=fwidth(vUv);
-  if(any(lessThan(vUv,environment.postViewport.xy-viewportSlack)) ||
-     any(greaterThan(vUv,environment.postViewport.xy+environment.postViewport.zw+viewportSlack))) {
+  if(any(lessThan(vUv,environment.postViewport.xy)) ||
+     any(greaterThan(vUv,environment.postViewport.xy+environment.postViewport.zw))) {
     // UI is composited afterwards. Preserve the clear outside the camera;
     // neither reconstruction nor history may spread its edge across panels.
     vec3 background=texture(sceneColor,vUv*post.sourceTransform.xy).rgb;

@@ -178,16 +178,28 @@ AE_TEST(dynamic_resolution_borda_da_tela_nao_le_texel_fora_do_alvo_em_meia) {
   AE_EXPECT_EQ(halfActiveExtent(705), 353u, "ceil(interna/2), como o renderer grava o nivel");
 }
 
-AE_TEST(post_linha_sob_a_barra_do_editor_entra_na_vista) {
-  // POCO: 1280 px na direção da barra; a vista começa em 101,6 px (fração da
-  // transformação girada). Todas as linhas desenhadas pela cena (piso do
-  // scissor, 101 em diante) passam pelo pós completo.
-  const float pixel = 1.0f / 1280.0f, start = 101.6f * pixel, extent = (1280.0f - 101.6f) * pixel;
-  for (u32 row = 101; row < 1280; ++row) {
-    const float center = (static_cast<float>(row) + 0.5f) * pixel;
-    AE_EXPECT_TRUE(postPixelInsideViewport(center, start, extent, pixel), "linha da cena tratada como vista");
+AE_TEST(post_primeira_linha_da_vista_nao_mistura_o_fundo) {
+  // Coluna de 1280 texels; a vista começa em fração (101,6 logo abaixo da barra)
+  // e termina em 1280. Texels com centro dentro valem 1 (cena); os de fora, o
+  // fundo da câmera (0 de dia, 8 no céu da noite). Cada pixel lê a cena no
+  // próprio centro, preso aos limites, com bilinear.
+  for (float start : {101.6f, 100.0f, 100.4f, 0.0f}) {
+    for (float background : {0.0f, 8.0f}) {
+      std::vector<float> column(1280);
+      for (u32 i = 0; i < 1280; ++i) column[i] = static_cast<float>(i) + 0.5f >= start ? 1.0f : background;
+      const auto read = [&](float texel, bool newBounds) {
+        const float lower = newBounds ? firstDrawnTexelCenter(start) : start + 0.5f;
+        const float upper = newBounds ? lastDrawnTexelCenter(1280.0f) : 1280.0f - 0.5f;
+        const float p = std::clamp(texel, lower, upper) - 0.5f, base = std::floor(p), f = p - base;
+        const auto at = [&](int i) { return column[static_cast<usize>(std::clamp(i, 0, 1279))]; };
+        return at(static_cast<int>(base)) * (1.0f - f) + at(static_cast<int>(base) + 1) * f;
+      };
+      for (u32 row = static_cast<u32>(std::ceil(start - 0.5f)); row < 1280; ++row)
+        AE_EXPECT_TRUE(std::fabs(read(static_cast<float>(row) + 0.5f, true) - 1.0f) < 1.0e-5f,
+                       "toda linha desenhada le so a cena, sem o fundo da camera");
+      if (start == 101.6f)
+        AE_EXPECT_TRUE(std::fabs(read(101.5f, false) - 1.0f) > .3f,
+                       "o limite antigo (borda + meio texel) misturava o fundo na primeira linha");
+    }
   }
-  AE_EXPECT_TRUE(!postPixelInsideViewport(101.5f * pixel, start, extent, 0.0f),
-                 "sem folga a linha 101 caia no ramo de fundo (o traco branco)");
-  AE_EXPECT_TRUE(!postPixelInsideViewport(99.5f * pixel, start, extent, pixel), "a barra continua fora");
 }
