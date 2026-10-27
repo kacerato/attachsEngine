@@ -1,0 +1,105 @@
+[
+  {
+    "run": "01-travada\\vila-astra\\01-C",
+    "changes": [],
+    "windows": 0,
+    "windowsOverBudget": 0,
+    "scaleMean": null,
+    "scaleMin": null,
+    "scaleMax": null
+  },
+  {
+    "run": "02-dinamica\\vila-astra\\01-C",
+    "changes": [
+      {
+        "t": 51168.018,
+        "scale": 0.782,
+        "render": "1000x2168",
+        "gpuMs": 16.443,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51168.184,
+        "scale": 0.732,
+        "render": "936x2024",
+        "gpuMs": 15.631,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51168.342,
+        "scale": 0.682,
+        "render": "872x1888",
+        "gpuMs": 15.403,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51169.059,
+        "scale": 0.55,
+        "render": "704x1520",
+        "gpuMs": 21.488,
+        "budgetMs": 14.667
+      }
+    ],
+    "windows": 0,
+    "windowsOverBudget": 0,
+    "scaleMean": null,
+    "scaleMin": null,
+    "scaleMax": null
+  },
+  {
+    "run": "03-travada\\vila-astra\\01-C",
+    "changes": [],
+    "windows": 0,
+    "windowsOverBudget": 0,
+    "scaleMean": null,
+    "scaleMin": null,
+    "scaleMax": null
+  },
+  {
+    "run": "04-dinamica\\vila-astra\\01-C",
+    "changes": [
+      {
+        "t": 51302.16,
+        "scale": 0.784,
+        "render": "1000x2168",
+        "gpuMs": 16.383,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51302.32,
+        "scale": 0.734,
+        "render": "936x2032",
+        "gpuMs": 15.565,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51302.481,
+        "scale": 0.684,
+        "render": "872x1888",
+        "gpuMs": 15.371,
+        "budgetMs": 14.667
+      },
+      {
+        "t": 51303.178,
+        "scale": 0.55,
+        "render": "704x1520",
+        "gpuMs": 21.808,
+        "budgetMs": 14.667
+      }
+    ],
+    "windows": 0,
+    "windowsOverBudget": 0,
+    "scaleMean": null,
+    "scaleMin": null,
+    "scaleMax": null
+  },
+  {
+    "run": "05-travada\\vila-astra\\01-C",
+    "changes": [],
+    "windows": 0,
+    "windowsOverBudget": 0,
+    "scaleMean": null,
+    "scaleMin": null,
+    "scaleMax": null
+  }
+]

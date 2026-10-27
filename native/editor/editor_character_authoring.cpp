@@ -65,6 +65,7 @@ bool EditorSession::prepareCharacterConversion(EditorEntityId id,EditorEntity &r
   character->radius=std::sqrt(radiusSquared);
   character->halfHeight=std::max(.01f,(high[1]-low[1])*.5f-character->radius);
   character->eyeHeight=std::max(character->radius+.01f,1.65f*(character->halfHeight+character->radius));
+  character->faceMovement=true; // personagem convertido anda como player: vira para o movimento
   if(!character->valid()) return fail("A geometria excede os limites da cápsula Character; ajuste a escala antes de converter.");
   root.active=source->active;root.layer=source->layer;root.tag=source->tag;root.groups=source->groups;
   assignEntityName(root,std::string(source->name)+" Character");

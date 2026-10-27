@@ -72,6 +72,9 @@ AE_TEST(Gpu_cost_isolation_is_explicit_and_fails_to_full_quality) {
                "zero is production quality");
   AE_EXPECT_EQ(sanitizeGpuCostIsolation(2), GpuCostIsolation::NoSpecularEnvironment,
                "known diagnostic mode");
+  AE_EXPECT_EQ(sanitizeGpuCostIsolation(6), GpuCostIsolation::NoDirectSpecular,
+               "isolamento 6 tira so o especular direto");
+  AE_EXPECT_EQ(std::string_view(gpuCostIsolationName(GpuCostIsolation::NoDirectSpecular)), std::string_view("no-direct-specular"), "nome do contexto");
   AE_EXPECT_EQ(sanitizeGpuCostIsolation(99), GpuCostIsolation::Full,
                "unknown input cannot reduce quality");
   AE_EXPECT_TRUE(std::string_view(gpuCostIsolationName(GpuCostIsolation::BaseColorOnly)) ==

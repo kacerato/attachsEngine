@@ -2208,6 +2208,8 @@ AE_TEST(animation_templates_build_with_real_components_and_work_in_play) {
   {
     TemporaryProject project;EditorSession s;AE_EXPECT_TRUE(s.setProjectDirectory(project.path.string().c_str())&&withCube(s),"project with the authoring cube");
     AE_EXPECT_TRUE(s.createSceneTemplate(indexOf("personagem_jogavel")),s.screen().status.c_str());
+    {const auto *body=s.document().find(find(s.document(),"Personagem"));const auto *c=body?static_cast<const scene::Character*>(body->components.find(scene::Character::descriptor)):nullptr;
+     AE_EXPECT_TRUE(c&&c->faceMovement&&c->cameraRelative,"receita de player vira para o movimento, relativo a camera");}
     AE_EXPECT_TRUE(s.startPlay(),(std::string("playable character plays: ")+s.screen().status).c_str());play(s,60);
     const auto &g=s.playScene().document();
     const auto y=at(g,find(g,"Personagem"))[1];

@@ -83,10 +83,20 @@ layout(location=1) out vec4 outHistory;
 
 float luma(vec3 value) { return dot(value, vec3(0.2126, 0.7152, 0.0722)); }
 
+// Leitura da cena presa aos texels que a vista desenhou por inteiro. A borda
+// da vista vem da superfície girada (physicalSceneViewport) e cai em fração de
+// texel logo abaixo da barra do editor; o texel da borda fica com o fundo da
+// câmera, e o limite antigo (borda + meio texel) misturava ~45% dele na linha
+// sob o Play: emenda escura de dia, branca com o céu da noite. O centro do
+// "primeiro texel com o centro dentro" ainda saiu escuro no POCO (27/10): o
+// fundo e a geometria arredondam a borda de jeitos diferentes. O limite fica
+// um texel inteiro para dentro da borda (post_sample_bounds.h).
 vec2 clampSourceUv(vec2 uv) {
-  vec2 lower=environment.postViewport.xy*post.sourceTransform.xy+post.texelFlags.xy*0.5;
-  vec2 upper=(environment.postViewport.xy+environment.postViewport.zw)*
-      post.sourceTransform.xy-post.texelFlags.xy*0.5;
+  vec2 size=1.0/max(post.texelFlags.xy,vec2(1.0e-8));
+  vec2 start=environment.postViewport.xy*post.sourceTransform.xy*size;
+  vec2 end=(environment.postViewport.xy+environment.postViewport.zw)*post.sourceTransform.xy*size;
+  vec2 lower=(ceil(start)+0.5)*post.texelFlags.xy;
+  vec2 upper=(floor(end)-0.5)*post.texelFlags.xy;
   return clamp(uv,lower,max(lower,upper));
 }
 
@@ -302,12 +312,28 @@ float screenSpaceAmbientOcclusion(vec2 uv) {
   return pow(visibility,max(environment.sceneAo.w,0.1));
 }
 
+// Alvos em 1/2 (bloom, DoF, AO): com a resolução dinâmica abaixo do teto só o
+// canto (ceil(interna/2)) é escrito neste quadro; o resto da alocação guarda
+// um quadro em escala maior ou lixo. A leitura da cena se prende ao retângulo
+// com meio texel DA CENA, mas meio texel do alvo em 1/2 são dois da cena: na
+// última coluna e linha o bilinear puxava metade do texel não escrito e o
+// bloom acendia uma faixa branca na borda da tela. Limites em uv do alvo, meio
+// texel dele para dentro (renderer/post_sample_bounds.h, testado no host).
+vec2 halfActiveExtent() {
+  vec2 internal=floor(post.sourceTransform.xy/max(post.texelFlags.xy,vec2(1.0e-8))+0.5);
+  return max(floor((internal+1.0)*0.5),vec2(1.0));
+}
+vec2 clampHalfUv(vec2 uv,vec2 size) {
+  vec2 written=min(halfActiveExtent(),size);
+  return clamp(uv,vec2(0.5)/size,(written-0.5)/size);
+}
 // AO calculada em 1/2 (bit 2048) e reconstruída aqui com as quatro amostras
 // do filtro bilinear, ponderadas pela profundidade para não vazar em bordas.
 float upsampledAmbientOcclusion(vec2 uv) {
   if(environment.sceneAo.x<0.5 || postFlag(128.0)) return 1.0;
   vec2 size=vec2(textureSize(halfAmbientOcclusion,0));
-  vec2 pixel=uv*size-0.5;
+  // A partir da última coluna ativa o peso dos texels de fora é zero.
+  vec2 pixel=clamp(uv*size-0.5,vec2(0.0),min(halfActiveExtent(),size)-1.0);
   vec2 base=floor(pixel);
   vec2 f=pixel-base;
   vec4 ao=textureGather(halfAmbientOcclusion,(base+1.0)/size,0); // (0,1)(1,1)(1,0)(0,0)
@@ -383,8 +409,11 @@ vec3 sampleFxaa(vec2 uv, out vec3 unfiltered, out vec3 crossAverage) {
 const float kBloomLevels=5.0;
 // Bloom › High Quality Filtering: B-spline cúbica em 4 leituras bilineares
 // (Sigg e Hadwiger, GPU Gems 2 cap. 20), como o SampleTexture2DBicubic da URP.
-vec4 sampleBicubic(sampler2D source,vec2 uv) {
+// As quatro leituras também ficam no retângulo ativo do alvo em 1/2 (a pegada
+// 4x4 passa 1,5 texel da borda).
+vec4 sampleHalfBicubic(sampler2D source,vec2 uv) {
   vec2 size=vec2(textureSize(source,0));
+  uv=clampHalfUv(uv,size);
   vec2 pixel=uv*size-0.5;
   vec2 f=fract(pixel);
   vec2 base=floor(pixel);
@@ -393,12 +422,13 @@ vec4 sampleBicubic(sampler2D source,vec2 uv) {
   vec2 w2=(1.0/6.0)*(1.0+3.0*f+3.0*f*f-3.0*f*f*f);
   vec2 w3=(1.0/6.0)*f*f*f;
   vec2 g0=w0+w1,g1=w2+w3;
-  vec2 h0=(w1/g0-1.0+base+0.5)/size,h1=(w3/g1+1.0+base+0.5)/size;
+  vec2 h0=clampHalfUv((w1/g0-1.0+base+0.5)/size,size),h1=clampHalfUv((w3/g1+1.0+base+0.5)/size,size);
   return g0.y*(g0.x*texture(source,vec2(h0.x,h0.y))+g1.x*texture(source,vec2(h1.x,h0.y)))+
          g1.y*(g0.x*texture(source,vec2(h0.x,h1.y))+g1.x*texture(source,vec2(h1.x,h1.y)));
 }
 vec3 sampleBloomChain(vec2 uv) {
-  return environment.postBloomDetail.z<0.5?texture(bloomChain,uv).rgb:sampleBicubic(bloomChain,uv).rgb;
+  return environment.postBloomDetail.z<0.5?texture(bloomChain,clampHalfUv(uv,vec2(textureSize(bloomChain,0)))).rgb:
+                                           sampleHalfBicubic(bloomChain,uv).rgb;
 }
 vec3 bloomNeighborhood(vec2 uv) {
   if (mod(post.texelFlags.z,2.0) < 0.5 || post.bloom.y <= 0.0) return vec3(0.0);
@@ -729,11 +759,11 @@ vec3 applyDepthOfField(vec3 color,vec2 sourceUv,vec2 halfUv) {
   float coc=circleOfConfusion(viewDistanceFromDepth(effectRawDepth(sourceUv)));
   if(environment.postDof.x<1.5) {
     // High Quality Sampling: a leitura bicúbica tira o serrilhado da meia resolução.
-    vec3 blurred=environment.postDofDetail.z>0.5?sampleBicubic(depthOfFieldResult,halfUv).rgb:
-                                                 texture(depthOfFieldResult,halfUv).rgb;
+    vec3 blurred=environment.postDofDetail.z>0.5?sampleHalfBicubic(depthOfFieldResult,halfUv).rgb:
+        texture(depthOfFieldResult,clampHalfUv(halfUv,vec2(textureSize(depthOfFieldResult,0)))).rgb;
     return mix(color,blurred,coc);
   }
-  vec4 dof=texture(depthOfFieldResult,halfUv);
+  vec4 dof=texture(depthOfFieldResult,clampHalfUv(halfUv,vec2(textureSize(depthOfFieldResult,0))));
   float texel=1.0/max(float(textureSize(sceneColor,0).y),1.0);
   float farAlpha=smoothstep(texel*2.0,texel*4.0,coc);
   return mix(color,dof.rgb,farAlpha+dof.a-farAlpha*dof.a);

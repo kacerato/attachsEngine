@@ -15,7 +15,10 @@ enum class GpuCostIsolation : u32 {
   BaseColorOnly = 3,
   NoPunctualLights = 4,
   NoDirectionalShadow = 5,
-  Count = 6,
+  // Sem o lóbulo especular das luzes diretas (o lightmap não o guarda, como
+  // na Unity): A/B de brilho tempo real x assado.
+  NoDirectSpecular = 6,
+  Count = 7,
 };
 
 inline constexpr GpuCostIsolation sanitizeGpuCostIsolation(u32 value) noexcept {
@@ -32,6 +35,7 @@ inline constexpr const char *gpuCostIsolationName(GpuCostIsolation mode) noexcep
     case GpuCostIsolation::BaseColorOnly: return "base-color";
     case GpuCostIsolation::NoPunctualLights: return "no-punctual";
     case GpuCostIsolation::NoDirectionalShadow: return "no-directional-shadow";
+    case GpuCostIsolation::NoDirectSpecular: return "no-direct-specular";
     case GpuCostIsolation::Count: break;
   }
   return "full";

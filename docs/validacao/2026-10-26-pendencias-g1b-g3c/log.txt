@@ -1,0 +1,22 @@
+13:58:19 trava pegada (medicao) em adb-53e1eb7-cDkkst (2)._adb-tls-connect._tcp
+13:58:20 antes: vila 2e2e996841f1f0eb5af1572c68dec3fc sponza 91ce9ac97720d0a64872efe6aa373115
+13:58:22 backup do cache da Sponza: cbd58d3069527781676a81358e94f457 906a848b1c2cc261517f075f3192f1ea 
+13:58:30     versionName=0.3.0-dev.261026999-pend-1141
+== Sponza passo 1/5: antes -NoQualityCeiling
+== Sponza passo 2/5: depois -ProductDefaults
+== Sponza passo 3/5: antes -NoQualityCeiling
+== Sponza passo 4/5: depois -ProductDefaults
+== Sponza passo 5/5: antes -NoQualityCeiling
+== Sponza passo 1/5: antes -NoQualityCeiling
+== Sponza passo 2/5: depois -ProductDefaults
+== Sponza passo 3/5: antes -NoQualityCeiling
+== Sponza passo 4/5: depois -ProductDefaults
+== Sponza passo 5/5: antes -NoQualityCeiling
+== Vila Astra passo 1/5: travada -ProductDefaults -NativePanel
+== Vila Astra passo 2/5: dinamica -ProductDefaults -NativePanel -DynamicResolution
+== Vila Astra passo 3/5: travada -ProductDefaults -NativePanel
+== Vila Astra passo 4/5: dinamica -ProductDefaults -NativePanel -DynamicResolution
+== Vila Astra passo 5/5: travada -ProductDefaults -NativePanel
+14:17:03 rodada completa
+14:17:07 devolvidas: vila 2e2e996841f1f0eb5af1572c68dec3fc sponza 91ce9ac97720d0a64872efe6aa373115 cache/assets cbd58d3069527781676a81358e94f457 906a848b1c2cc261517f075f3192f1ea 
+14:17:08 POCO solto

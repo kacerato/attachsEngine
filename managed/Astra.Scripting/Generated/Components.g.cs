@@ -8130,11 +8130,37 @@ public readonly partial struct Character : IComponentFacade<Character>
         get => Component.GetFloat("turn_rate");
         set => Component.SetFloat("turn_rate", value);
     }
+    /// <summary>Velocidade do giro (°/s). Giro máximo do corpo ao seguir a direção do movimento.</summary>
+    /// <remarks>Faixa válida: 30 a 1440.</remarks>
+    public float FaceTurnSpeed
+    {
+        get => Component.GetFloat("face_turn_speed");
+        set => Component.SetFloat("face_turn_speed", value);
+    }
+    /// <summary>Suavização do giro (s). Tempo para alcançar a direção nova (RotationSmoothTime da Unity). Zero vira na hora, limitado pela velocidade do giro.</summary>
+    /// <remarks>Faixa válida: 0 a 1.</remarks>
+    public float RotationSmoothTime
+    {
+        get => Component.GetFloat("rotation_smooth_time");
+        set => Component.SetFloat("rotation_smooth_time", value);
+    }
     /// <summary>Impulso ao sair. Conserva X/Z da superfície no ar; desligar remove apenas esse impulso, sem recriar a cápsula.</summary>
     public bool InheritPlatformHorizontal
     {
         get => Component.GetBool("inherit_platform_horizontal");
         set => Component.SetBool("inherit_platform_horizontal", value);
+    }
+    /// <summary>Girar para a direção do movimento. O corpo vira suavemente para onde o personagem anda; parado, mantém a última direção. No modo Dirigir o giro é o do veículo.</summary>
+    public bool FaceMovement
+    {
+        get => Component.GetBool("face_movement");
+        set => Component.SetBool("face_movement", value);
+    }
+    /// <summary>Relativo à câmera. Frente é para onde a câmera olha. Desligado, frente é +Z do mundo (o comando ignora a câmera).</summary>
+    public bool CameraRelative
+    {
+        get => Component.GetBool("camera_relative");
+        set => Component.SetBool("camera_relative", value);
     }
     public enum ControlSourceOption : uint
     {

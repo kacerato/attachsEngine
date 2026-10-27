@@ -45,6 +45,16 @@ std::string readText(const std::filesystem::path &p) {
   std::ifstream in(p, std::ios::binary);
   return {std::istreambuf_iterator<char>(in), {}};
 }
+// "luzes=tempo-real": as lanternas saem em Tempo real. Com Iluminação global
+// assada ligada o bake ainda gera o lightmap, só com o céu e a visibilidade
+// dele -- o par "tempo real" da Unity (luz Realtime + ambiente do lightmap) em
+// vez de "tempo real" = cena nunca assada, que vê o céu sem oclusão.
+bool realtimeLanterns = false;
+// "sombras=0": lanternas sem sombra dos dois lados do par. O atlas de sombra
+// local tem 16 tiles e uma pontual usa 6: em tempo real só 2 das 8 lanternas
+// fazem sombra, e o assado faz das 8 -- a luz das outras 6 atravessa paredes
+// só no tempo real. Sem sombra nos dois, o par compara só a energia.
+bool shadowlessLanterns = false;
 EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *name, float x, float y, float z, u32 mode,
                        const float *color = nullptr) {
   const auto id = doc.createEntity(parent, EditorEntityKind::Folder, name);
@@ -60,8 +70,8 @@ EditorEntityId lantern(EditorDocument &doc, EditorEntityId parent, const char *n
   // a 1-2 m da luz estouravam e o par ficava duro (validação de 24/10).
   light->intensity = 1200.0f;
   light->range = 8.0f;
-  light->shadowMode = 2;
-  light->lightmapMode = mode;
+  light->shadowMode = shadowlessLanterns ? 0 : 2;
+  light->lightmapMode = realtimeLanterns ? 0 : mode;
   if (!light->valid() || !doc.applyEntityValues(id, values)) fail(std::string("lanterna recusada: ") + name);
   return id;
 }
@@ -97,11 +107,13 @@ int main(int argc, char **argv) {
     // "ambiente=0": tira o céu dos dois lados do par (Indirect Diffuse e
     // Specular do Ambiente) -- sobra só a energia das lanternas.
     else if (a.rfind("ambiente=", 0) == 0) { ambient = std::stof(a.substr(9)); ambientSet = true; }
+    else if (a == "luzes=tempo-real") realtimeLanterns = true;
+    else if (a == "sombras=0") shadowlessLanterns = true;
     else args.push_back(argv[i]);
   }
   argc = static_cast<int>(args.size());
   argv = args.data();
-  if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia] [ev=EV100]\n"; return 1; }
+  if (argc < 3 || argc > 5) { std::cerr << "uso: g3c_lightmap_scene_author <projeto-copiado> <saida> [hora] [minutos-por-dia] [ev=EV100] [ambiente=K] [luzes=tempo-real] [sombras=0]\n"; return 1; }
   const std::filesystem::path root = std::filesystem::absolute(argv[1]), output = std::filesystem::absolute(argv[2]);
   // "generico": qualquer projeto (a Vila) -- só Static + GI, as Configurações
   // e a UV2 no perfil; as luzes locais existentes passam a Misto (rebote assado).
@@ -302,7 +314,8 @@ int main(int argc, char **argv) {
       std::ofstream(output / ".astra/imports" / profilePath.filename(), std::ios::binary) << resources::serializeImportProfile(profile);
       ++profiles;
     }
-  std::cout << "Static: " << statics << (generic ? " · luzes locais em Misto" : " · luzes: 7 assadas com sombra (3 coloridas) + 1 mista · estandartes: 3 · sondas: 50")
+  std::cout << "Static: " << statics << (generic ? " · luzes locais em Misto" : (realtimeLanterns ? " · luzes: 8 em tempo real com sombra (3 coloridas) · estandartes: 3 · sondas: 50"
+                                                : " · luzes: 7 assadas com sombra (3 coloridas) + 1 mista · estandartes: 3 · sondas: 50"))
             << " · perfis com UV de lightmap: " << profiles
             << " · hora " << hour << '\n';
   return 0;

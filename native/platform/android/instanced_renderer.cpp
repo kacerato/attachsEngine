@@ -1,5 +1,6 @@
 #include "platform/android/instanced_renderer.h"
 #include "platform/android/android_texture_loader.h"
+#include "renderer/post_sample_bounds.h"
 #include "renderer/procedural_sky.h"
 #include "renderer/environment_ambient.h"
 #include "scene/components.h"
@@ -2449,8 +2450,18 @@ ui::UiRect InstancedRenderer::physicalSceneViewport() const {
                 std::abs(transform.xy)*sceneViewport_.height;
   const float h=std::abs(transform.yx)*sceneViewport_.width+
                 std::abs(transform.yy)*sceneViewport_.height;
-  return {(transform.xx*x+transform.xy*y+1-w)*.5f,
-          (transform.yx*x+transform.yy*y+1-h)*.5f,w,h};
+  // Depois da rotação da superfície a borda caía em fração de pixel (100,6
+  // logo abaixo da barra do editor): o fundo e a geometria cobriam linhas
+  // diferentes e a primeira linha da vista saía com o fundo misturado. A vista
+  // vai para pixels inteiros da swapchain; todos os consumidores (câmera,
+  // jitter, pós, HZB, exposição, FSR, movimento) leem este retângulo.
+  const ui::UiRect rect{(transform.xx*x+transform.xy*y+1-w)*.5f,(transform.yx*x+transform.yy*y+1-h)*.5f,w,h};
+  const u32 width=swapchain_->width(),height=swapchain_->height();
+  if(width==0||height==0) return rect;
+  const auto spanX=renderer::snapViewportToPixels(rect.x,rect.width,width);
+  const auto spanY=renderer::snapViewportToPixels(rect.y,rect.height,height);
+  return {static_cast<float>(spanX.first)/static_cast<float>(width),static_cast<float>(spanY.first)/static_cast<float>(height),
+          static_cast<float>(spanX.count)/static_cast<float>(width),static_cast<float>(spanY.count)/static_cast<float>(height)};
 }
 
 void InstancedRenderer::setUiGuiAtlas(std::span<const u8> rgba,u32 size,u64 revision) {
@@ -6545,7 +6556,8 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         __android_log_print(ANDROID_LOG_INFO, LogTag,
             "[DynamicResolution] scale=%.3f render=%ux%u gpu=%.3fms budget=%.3fms.",
             static_cast<double>(resolution.scale), renderWidth(), renderHeight(),
-            gpuTimings.frameMs, static_cast<double>(dynamicResolution_.targetGpuMilliseconds()));
+            static_cast<double>(dynamicResolution_.decisionGpuMilliseconds()),
+            static_cast<double>(dynamicResolution_.targetGpuMilliseconds()));
       }
     }
   }
@@ -6765,6 +6777,20 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
     frame->postViewport[1]=postViewport.y;
     frame->postViewport[2]=postViewport.width;
     frame->postViewport[3]=postViewport.height;
+    // Borda da vista em texels da cena (superfície girada): a emenda sob a
+    // barra do editor depende da fração destes números. Só quando mudam.
+    {
+      static float lastViewport[4]{-1,-1,-1,-1};static u32 lastExtent[2]{};
+      const float now[4]{postViewport.x,postViewport.y,postViewport.width,postViewport.height};
+      if(!std::equal(now,now+4,lastViewport)||lastExtent[0]!=renderWidth()||lastExtent[1]!=renderHeight()) {
+        std::copy(now,now+4,lastViewport);lastExtent[0]=renderWidth();lastExtent[1]=renderHeight();
+        __android_log_print(ANDROID_LOG_INFO,LogTag,
+            "[ViewportEdge] fisica=%.6f,%.6f,%.6f,%.6f render=%ux%u alvo=%ux%u texels x=[%.3f,%.3f] y=[%.3f,%.3f]",
+            postViewport.x,postViewport.y,postViewport.width,postViewport.height,renderWidth(),renderHeight(),
+            renderTargetWidth(),renderTargetHeight(),postViewport.x*renderWidth(),(postViewport.x+postViewport.width)*renderWidth(),
+            postViewport.y*renderHeight(),(postViewport.y+postViewport.height)*renderHeight());
+      }
+    }
     const auto look=effectiveSceneLook();
     const auto &mapDescription=dirtRoadResources_.environmentMapDescription();
     const bool editorFog=!editorBackground_||(editorSceneEffects_&&editorSceneFog_);
@@ -7330,18 +7356,21 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   viewport.height = static_cast<float>(renderHeight());
   viewport.minDepth = 0.0f;
   viewport.maxDepth = 1.0f;
+  // Vista em texels inteiros do alvo: geometria (viewport) e fundo (scissor)
+  // cobrem exatamente as mesmas linhas, sem texel meio coberto na borda. O
+  // pós arredonda igual (clampSourceUv); ver renderer::snapViewportToPixels.
   const auto physicalViewport=physicalSceneViewport();
-  viewport.x=physicalViewport.x*renderWidth();
-  viewport.y=physicalViewport.y*renderHeight();
-  viewport.width*=physicalViewport.width;
-  viewport.height*=physicalViewport.height;
+  const auto spanX=renderer::snapViewportToPixels(physicalViewport.x,physicalViewport.width,renderWidth());
+  const auto spanY=renderer::snapViewportToPixels(physicalViewport.y,physicalViewport.height,renderHeight());
+  viewport.x=static_cast<float>(spanX.first);
+  viewport.y=static_cast<float>(spanY.first);
+  viewport.width=static_cast<float>(spanX.count);
+  viewport.height=static_cast<float>(spanY.count);
   vkCmdSetViewport(commandBuffer_, 0, 1, &viewport);
 
   VkRect2D scissor{};
-  scissor.offset = {static_cast<i32>(std::max(0.0f, std::floor(viewport.x))),
-                    static_cast<i32>(std::max(0.0f, std::floor(viewport.y)))};
-  scissor.extent = {std::min(renderWidth() - static_cast<u32>(scissor.offset.x), static_cast<u32>(std::ceil(viewport.width))),
-                    std::min(renderHeight() - static_cast<u32>(scissor.offset.y), static_cast<u32>(std::ceil(viewport.height)))};
+  scissor.offset = {static_cast<i32>(spanX.first),static_cast<i32>(spanY.first)};
+  scissor.extent = {spanX.count,spanY.count};
   vkCmdSetScissor(commandBuffer_, 0, 1, &scissor);
   if(cameraSolid && sceneBackgroundPartial_ && scissor.extent.width && scissor.extent.height) {
     VkClearAttachment fill{};fill.aspectMask=VK_IMAGE_ASPECT_COLOR_BIT;fill.colorAttachment=0;

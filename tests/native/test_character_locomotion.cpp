@@ -109,7 +109,7 @@ AE_TEST(character_version_5_scenes_keep_their_behavior) {
   AE_EXPECT_TRUE(legacy.read(in,5)&&legacy.acceleration==0&&legacy.braking==0&&legacy.airControl==1&&legacy.movementMode==0,"v5 reads with instant response and ground mode");
   scene::Character v6;v6.acceleration=3;v6.movementMode=2;std::ostringstream o6;v6.write(o6);
   scene::Character back;std::istringstream i6(o6.str());
-  AE_EXPECT_TRUE(back.read(i6,6)&&back.acceleration==3&&back.movementMode==2,"v6 round trip");
+  AE_EXPECT_TRUE(back.read(i6,scene::Character::descriptor.version)&&back.acceleration==3&&back.movementMode==2,"current version round trip");
 }
 
 AE_TEST(character_drive_mode_turns_with_speed_and_never_strafes) {
@@ -127,4 +127,79 @@ AE_TEST(character_drive_mode_turns_with_speed_and_never_strafes) {
   AE_EXPECT_TRUE(std::abs(yaw)>30,"vehicle heading turned while moving");
   AE_EXPECT_TRUE(pos(w,c.actor,0)>x0+.3f,"path curves toward the steering side");
   p.stop();
+}
+
+namespace {
+float bodyYawDegrees(const GameWorld &w,ObjectId id) {float m[16];worldMatrix(w.graph(),id,m);return std::atan2(m[8],m[10])*57.2957795f;}
+void steer(GameWorld &w,ScenePhysics &p,ObjectId id,float right,float forward,float cameraYaw,u32 frames=1) {
+  for(u32 i=0;i<frames;++i) {p.beginScriptInputFrame();p.setCharacterScriptMove(id,right,forward,cameraYaw);w.beginFrame(1/60.);
+    if(!p.advance(1/60.,w)) {AE_EXPECT_TRUE(false,p.error().c_str());return;}}
+}
+}
+
+// Starter Assets ThirdPersonController (Unity): o corpo gira suavemente para a
+// direcao do comando somada ao yaw da camera (RotationSmoothTime 0,12 s).
+AE_TEST(character_faces_the_movement_direction_relative_to_the_camera) {
+  Course c([](scene::Character &ch){ch.faceMovement=true;ch.rotationSmoothTime=.12f;ch.faceTurnSpeed=720;});
+  GameWorld w;w.load(c.g);ScenePhysics p;AE_EXPECT_TRUE(p.start(w),p.error().c_str());
+  drive(w,p,c.actor,0,20);
+  AE_EXPECT_TRUE(std::abs(bodyYawDegrees(w,c.actor))<.01f,"parado o corpo nao gira");
+  steer(w,p,c.actor,1,0,0);
+  const float first=bodyYawDegrees(w,c.actor);
+  AE_EXPECT_TRUE(first>.5f&&first<30,"o primeiro passo gira pouco: suavizado, sem salto");
+  steer(w,p,c.actor,1,0,0,60);
+  AE_EXPECT_TRUE(std::abs(bodyYawDegrees(w,c.actor)-90)<1,"direita com a camera em +Z: o corpo olha para +X");
+  // Camera girada 90 graus: "frente" do comando vira +X do mundo.
+  steer(w,p,c.actor,0,1,3.14159265f,60);
+  AE_EXPECT_TRUE(std::abs(std::abs(bodyYawDegrees(w,c.actor))-180)<1,"frente com a camera virada para -Z: o corpo olha para -Z");
+  const float facing=bodyYawDegrees(w,c.actor);
+  steer(w,p,c.actor,0,0,0,30);
+  AE_EXPECT_TRUE(std::abs(bodyYawDegrees(w,c.actor)-facing)<.01f,"ao soltar o comando o corpo fica na ultima direcao");
+  p.stop();
+}
+
+AE_TEST(character_facing_takes_the_short_way_and_follows_a_circle) {
+  Course c([](scene::Character &ch){ch.faceMovement=true;ch.rotationSmoothTime=.12f;ch.faceTurnSpeed=720;ch.speed=2;});
+  GameWorld w;w.load(c.g);ScenePhysics p;AE_EXPECT_TRUE(p.start(w),p.error().c_str());
+  drive(w,p,c.actor,0,20);
+  steer(w,p,c.actor,0,1,3.0f,60);   // ~172 graus
+  const float before=bodyYawDegrees(w,c.actor);
+  steer(w,p,c.actor,0,1,-3.0f,1);   // ~-172 graus: 16 graus pelo lado de 180, nao 344 pelo zero
+  const float after=bodyYawDegrees(w,c.actor);
+  const float travelled=std::remainder(after-before,360.0f);
+  AE_EXPECT_TRUE(travelled>0&&travelled<16.5f,"cruza 180 graus pelo caminho curto");
+  // Andando em circulo (camera girando 90 graus/s), o corpo acompanha com atraso pequeno.
+  float cameraYaw=0,worst=0;
+  for(u32 i=0;i<240;++i) {
+    cameraYaw+=1.5707963f/60;steer(w,p,c.actor,0,1,cameraYaw);
+    if(i>60)worst=std::max(worst,std::abs(std::remainder(bodyYawDegrees(w,c.actor)-cameraYaw*57.2957795f,360.0f)));
+  }
+  AE_EXPECT_TRUE(worst<20,"no circulo o corpo segue a direcao com atraso menor que 20 graus");
+  p.stop();
+}
+
+AE_TEST(character_facing_off_and_world_reference_keep_their_meaning) {
+  Course off;GameWorld w;w.load(off.g);ScenePhysics p;AE_EXPECT_TRUE(p.start(w),p.error().c_str());
+  drive(w,p,off.actor,0,20);steer(w,p,off.actor,1,0,0,60);
+  AE_EXPECT_TRUE(std::abs(bodyYawDegrees(w,off.actor))<.01f,"desligado o corpo nao gira (comportamento anterior)");
+  AE_EXPECT_TRUE(pos(w,off.actor,0)>1,"e continua andando para a direita");
+  p.stop();
+  Course world([](scene::Character &ch){ch.cameraRelative=false;});
+  GameWorld w2;w2.load(world.g);ScenePhysics p2;AE_EXPECT_TRUE(p2.start(w2),p2.error().c_str());
+  drive(w2,p2,world.actor,0,20);const float x0=pos(w2,world.actor,0),z0=pos(w2,world.actor,2);
+  steer(w2,p2,world.actor,0,1,1.5707963f,40);
+  AE_EXPECT_TRUE(pos(w2,world.actor,2)-z0>1&&std::abs(pos(w2,world.actor,0)-x0)<.05f,"sem camera, frente e +Z mesmo com a camera virada");
+  p2.stop();
+}
+
+AE_TEST(character_version_6_scenes_read_without_facing) {
+  scene::Character current;std::ostringstream out;
+  for(u32 i=0;i<19;++i)out<<scene::Character::descriptor.numbers[i].read(current)<<' ';
+  out<<0<<' '<<0<<' '<<0;
+  scene::Character legacy;legacy.faceMovement=true;legacy.cameraRelative=false;std::istringstream in(out.str());
+  AE_EXPECT_TRUE(legacy.read(in,6)&&!legacy.faceMovement&&legacy.cameraRelative&&legacy.rotationSmoothTime==.12f,"v6 le sem giro e relativo a camera");
+  scene::Character v7;v7.faceMovement=true;v7.cameraRelative=false;v7.rotationSmoothTime=.3f;v7.faceTurnSpeed=360;std::ostringstream o7;v7.write(o7);
+  scene::Character back;std::istringstream i7(o7.str());
+  AE_EXPECT_TRUE(back.read(i7,7)&&back.faceMovement&&!back.cameraRelative&&back.rotationSmoothTime==.3f&&back.faceTurnSpeed==360,"v7 ida e volta");
+  AE_EXPECT_TRUE(scene::Character::descriptor.version==7,"Personagem v7");
 }

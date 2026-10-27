@@ -8,3 +8,5 @@
   float airControl = 1;
   float swimSpeed = .6f;
   float turnRate = 90;
+  float faceTurnSpeed = 720;
+  float rotationSmoothTime = .12f;
