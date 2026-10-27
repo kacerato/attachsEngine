@@ -1,8 +1,10 @@
 #include "harness.h"
 #include "renderer/dynamic_resolution.h"
+#include "renderer/post_sample_bounds.h"
 
 #include <cmath>
 #include <limits>
+#include <vector>
 
 using namespace ae;
 using namespace ae::renderer;
@@ -137,4 +139,41 @@ AE_TEST(dynamic_resolution_extent_alinha_sem_estourar) {
   AE_EXPECT_EQ(scaledRenderExtent(0, 0.75f), 1u, "zero falha seguro");
   AE_EXPECT_EQ(scaledRenderExtent(100, std::numeric_limits<float>::quiet_NaN()), 100u,
                "escala invalida usa cheio");
+}
+
+namespace {
+// Linha da tela lendo o bloom em 1/2 como o passe principal: uv da cena presa
+// com meio texel da cena (clampSourceUv) e, com a correção, também ao canto
+// ativo do alvo em 1/2. Fora do canto, o alvo guarda um quadro antigo (1000).
+float brightestBloomRead(u32 target, float scale, bool halfClamp) {
+  const u32 internal = scaledRenderExtent(target, scale);
+  const u32 allocation = (target + 1) / 2;
+  std::vector<float> half(allocation, 1000.0f);
+  for (u32 i = 0; i < halfActiveExtent(internal) && i < allocation; ++i) half[i] = 1.0f;
+  const auto texel = [&](int i) { return half[static_cast<usize>(std::clamp(i, 0, static_cast<int>(allocation) - 1))]; };
+  const float active = static_cast<float>(internal) / static_cast<float>(target);
+  float brightest = 0.0f;
+  for (u32 x = 0; x < target; ++x) {
+    float uv = (static_cast<float>(x) + 0.5f) / static_cast<float>(target) * active;
+    uv = std::clamp(uv, 0.5f / static_cast<float>(target), active - 0.5f / static_cast<float>(target));
+    if (halfClamp) uv = clampHalfUv(uv, internal, allocation);
+    const float p = uv * static_cast<float>(allocation) - 0.5f, base = std::floor(p), f = p - base;
+    const float value = texel(static_cast<int>(base)) * (1.0f - f) + texel(static_cast<int>(base) + 1) * f;
+    brightest = std::max(brightest, value);
+  }
+  return brightest;
+}
+}
+
+AE_TEST(dynamic_resolution_borda_da_tela_nao_le_texel_fora_do_alvo_em_meia) {
+  // 2772 x 1280 do POCO: as duas dimensões, nas escalas que o nível C usa.
+  for (u32 target : {2772u, 1280u}) {
+    for (float scale : {1.0f, 0.85f, 0.7f, 0.55f}) {
+      AE_EXPECT_EQ(brightestBloomRead(target, scale, true), 1.0f,
+                   "com o limite do alvo em 1/2 a borda nao muda com a escala");
+    }
+  }
+  AE_EXPECT_TRUE(brightestBloomRead(1280, 0.55f, false) > 1.5f,
+                 "o limite antigo (meio texel da cena) puxa o texel nao escrito para a borda");
+  AE_EXPECT_EQ(halfActiveExtent(705), 353u, "ceil(interna/2), como o renderer grava o nivel");
 }
