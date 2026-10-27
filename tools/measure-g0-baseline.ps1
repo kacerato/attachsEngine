@@ -22,7 +22,7 @@ param(
     [ValidateRange(0,31)][int]$PostIsolation=0,
     # Diagnóstico do opaco (renderer::GpuCostIsolation): 0 completo, 1 sem normal map,
     # 2 sem IBL especular, 3 só cor base, 4 sem luzes pontuais, 5 sem sombra do sol.
-    [ValidateRange(0,5)][int]$GpuIsolation=0,
+    [ValidateRange(0,6)][int]$GpuIsolation=0,
     # Candidata do G1: névoa resolvida por texel antes do pós (aether.post_fog_resolve).
     [switch]$FogResolve,
     # Candidatas do G1/G2: bloom em cadeia de mips e AO em meia resolução.
@@ -42,6 +42,10 @@ param(
     [switch]$NoQualityCeiling,
     # Resolução dinâmica do nível (C) em vez de travada; a escala de cada quadro entra no log.
     [switch]$DynamicResolution,
+    # Nível C no painel inteiro do POCO, sem a área de referência: a escala do nível (≤0,85)
+    # e a faixa da resolução dinâmica valem sobre 2772x1280. Com a referência 1600x720 a
+    # escala já sai 0,57 e a faixa dinâmica [0,55; 0,57] não tem onde trabalhar.
+    [switch]$NativePanel,
     # Culling Mode forçado em todos os Animators (-1 respeita a cena; 1 só o tempo, 2 parado).
     [ValidateRange(-1,2)][int]$AnimatorCulling=-1,
     # Composição de animação na thread do jogo (aether.animation_parallel=false) para o A/B do pool.
@@ -135,7 +139,7 @@ try {
             if($ShadowDynamicResolution -gt 0) { $launch+=@('--ei','aether.shadow_dynamic_resolution',[string]$ShadowDynamicResolution) }
             if($AnimatorCulling -ge 0) { $launch+=@('--ei','aether.animator_culling',[string]$AnimatorCulling) }
             $launch+=@('--ez','aether.post_grading_force',$(if($GradingLut){'true'}else{'false'}))
-            if($tier -eq 'C') { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
+            if($tier -eq 'C' -and !$NativePanel) { $launch+=@('--es','aether.reference_resolution',$ReferenceResolution) }
             else { $launch+=@('--ef','aether.resolution_scale','1') }
             # Guarda do POCO antes do am start: Astra ou Launcher na frente, sem ligação.
             Assert-PocoFree -Adb $Adb -Package $Package -AllowLauncher
@@ -172,7 +176,7 @@ try {
             if(!($policy -match "\[RenderPolicy\] preset=$($tier.ToLowerInvariant()) ")) {
                 throw "O nível pedido não foi aplicado ($project/$tier); veja policy.txt."
             }
-            if($tier -eq 'C' -and !($policy -match '\[ReferenceResolution\] superficie=')) {
+            if($tier -eq 'C' -and !$NativePanel -and !($policy -match '\[ReferenceResolution\] superficie=')) {
                 throw "O APK instalado não aplicou aether.reference_resolution ($project/C): instale um build com o G0."
             }
             $sample=[regex]::Match($logText,'\[FrameProfile\] (\{[^\r\n]*\})')
@@ -184,7 +188,7 @@ try {
             $capture=Get-FrameProfileCapture -Windows $windows -Contexts $contexts -MinimumSeconds 15 -Scene $scene
             if(!$capture) { throw "Captura curta demais: $project/$tier." }
             $capture | ConvertTo-Json -Depth 8 | Set-Content (Join-Path $run 'capture.json')
-            $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow')[$GpuIsolation]
+            $expectedIsolation=@('full','no-normal','no-ibl','base-color','no-punctual','no-directional-shadow','no-direct-specular')[$GpuIsolation]
             if($capture.context.gpu_isolation -ne $expectedIsolation) {
                 throw "Isolamento de GPU executado ($($capture.context.gpu_isolation)) difere do pedido ($expectedIsolation)."
             }
@@ -216,6 +220,8 @@ try {
             }
             # Cena do projeto recusada abre vazia: a rodada mediria céu e chão.
             if($logText -match '\[Editor\] Cena salva invalida') { throw "Cena do projeto recusada pelo APK ($project/$tier)." }
+            # Resolução dinâmica: cada troca de escala fica no log com a mediana da GPU que a decidiu.
+            $resolutionChanges=@([regex]::Matches($logText,'\[DynamicResolution\] scale=([0-9.]+)') | ForEach-Object { [double]$_.Groups[1].Value })
             $shadowLine=@($policy | Where-Object { $_ -match '^\[RenderPolicy\] preset=' }) | Select-Object -Last 1
             $row=[ordered]@{project=$project;round=$index+1;tier=$tier;postIsolation=$PostIsolation;gpuIsolation=$GpuIsolation;fogResolve=$fogResolved;gradingLut=$gradingRan
                 lightMask=$lightMasked;bloomChain=$bloomChained;halfAo=$halfAoRan;level=$levelLine
@@ -224,7 +230,11 @@ try {
                 continuous=$state.continuous;internalFps=$capture.presentFps
                 width=$capture.context.width;height=$capture.context.height
                 attribution=$capture.gpuPassAttribution;thermal=$capture.pressure.thermalPressure
-                dominantPressure=$capture.pressure.dominant}
+                dominantPressure=$capture.pressure.dominant
+                dynamicResolution=[bool]$DynamicResolution;nativePanel=[bool]$NativePanel
+                resolutionChanges=$resolutionChanges.Count
+                resolutionScaleLowest=if($resolutionChanges.Count){($resolutionChanges | Measure-Object -Minimum).Minimum}else{$null}
+                resolutionScaleLast=if($resolutionChanges.Count){$resolutionChanges[-1]}else{$null}}
             foreach($metric in $FrameProfileMetricNames) {
                 if($capture.metrics -and $capture.metrics.Contains($metric)) { $row[$metric]=$capture.metrics[$metric].mean }
             }

@@ -1,0 +1,18 @@
+{
+  "source": "SurfaceFlinger FrameTracker actualPresentTime",
+  "interpretation": "tracked layer frames made visible; capture window is independent from engine profile windows",
+  "frames": 1113,
+  "elapsedSeconds": 39.963026964,
+  "displayedFps": 27.82572003371331,
+  "minimumRollingSecondFps": 0,
+  "firstPresentNs": 81384523197440,
+  "lastPresentNs": 81424486224404,
+  "intervalMs": {
+    "p50": 33.302448,
+    "p95": 33.302605,
+    "p99": 33.302707,
+    "max": 10290.479423
+  },
+  "continuous": false,
+  "polls": 96
+}

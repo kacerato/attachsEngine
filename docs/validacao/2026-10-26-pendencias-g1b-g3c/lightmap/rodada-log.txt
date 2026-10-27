@@ -1,0 +1,25 @@
+10:48:34 trava pegada (lightmap) em adb-53e1eb7-cDkkst (2)._adb-tls-connect._tcp
+10:48:36 antes: vila 2e2e996841f1f0eb5af1572c68dec3fc sponza 91ce9ac97720d0a64872efe6aa373115
+10:48:38 backup do cache da Sponza: cbd58d3069527781676a81358e94f457 906a848b1c2cc261517f075f3192f1ea 
+10:48:40     versionName=0.3.0-dev.261026999-pend-0925
+10:58:46 v0 carregada
+10:59:48 captura v0-1-tempo-real-sem-lightmap
+11:00:03 captura v0-janela
+11:00:07 bake v0 iniciado
+11:06:46 captura v0-janela-depois
+11:06:48 captura v0-2-assado
+11:08:20 v1 carregada
+11:09:17 captura v1-1-tempo-real-sem-lightmap
+11:09:36 captura v1-janela
+11:09:48 bake v1 iniciado
+11:14:46 captura v1-janela-depois
+11:14:49 captura v1-2-tempo-real-com-ceu-assado
+11:15:30 v2 carregada
+11:16:19 captura v2-1-tempo-real-sem-lightmap
+11:16:32 captura v2-janela
+11:16:36 bake v2 iniciado
+11:20:08 captura v2-janela-depois
+11:20:11 captura v2-2-assado
+11:20:12 rodada completa
+11:20:18 devolvidas: vila 2e2e996841f1f0eb5af1572c68dec3fc sponza 91ce9ac97720d0a64872efe6aa373115 cache/assets cbd58d3069527781676a81358e94f457 906a848b1c2cc261517f075f3192f1ea 
+11:20:20 POCO solto

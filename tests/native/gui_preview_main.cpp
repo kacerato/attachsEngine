@@ -32,6 +32,7 @@ static std::vector<u8> read(const std::filesystem::path &path) {
 #include "u07_authoring_fixture.h"
 #include "animation_package_project_fixture.h"
 #include "kyle_carry_project_fixture.h"
+#include "playable_facing_project_fixture.h"
 static editor::EditorEntityId bodyOwnerFixture(editor::EditorSession &s,bool rendered) {
   auto &g=s.document();const auto root=g.createEntity(g.root(),runtime::ObjectKind::Folder,"SharedBody");auto object=*g.find(root);
   auto *body=static_cast<scene::PhysicsBody*>(object.components.add(scene::PhysicsBody::descriptor));body->motion=scene::BodyMotion::Static;
@@ -68,6 +69,10 @@ int main(int argc,char **argv) {
   if(std::string_view(argv[1])=="write-kyle-umotion") {
     if(argc!=6)return 180;
     return test::writeKyleUMotionProject(std::filesystem::absolute(argv[2]),std::filesystem::absolute(argv[3]),std::filesystem::absolute(argv[4]),std::filesystem::absolute(argv[5]));
+  }
+  if(std::string_view(argv[1])=="write-playable-facing") {
+    if(argc!=3)return 180;
+    return test::writePlayableFacingProject(std::filesystem::absolute(argv[2]));
   }
   if(std::string_view(argv[1])=="write-kyle-carry") {
     if(argc!=4)return 180;

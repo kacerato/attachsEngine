@@ -42,6 +42,8 @@ bool applySceneTemplateComponents(const SceneTemplate &model,std::span<const Edi
     case K::Character: {
       auto *c=static_cast<scene::Character*>(values.components.add(scene::Character::descriptor));if(!c)return false;
       c->speed=4;c->acceleration=12;c->braking=16;c->airControl=.4f;
+      // Receita de player: o corpo vira para onde anda, relativo a camera (ThirdPersonController).
+      c->faceMovement=true;
       break;
     }
     case K::FollowCamera: {

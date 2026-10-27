@@ -195,7 +195,9 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
     highp float nhb=max(dot(n,hb),0.0);
     highp float lobe=pow(nhb,aetherBlinnExponent)*(aetherBlinnExponent+8.0)/(8.0*PI)*aetherHighlightWeight;
     highp vec3 incoming=vec3(radiance)*nl;
-    mediump vec3 specularTerm=vec3(min(vec3(f0)*lobe*incoming,vec3(AETHER_MEDIUMP_MAX)));
+    // Isolamento 6 (diagnóstico): sem o lóbulo especular das luzes diretas, a
+    // parte que o lightmap não guarda (A/B tempo real x assado, 27/10).
+    mediump vec3 specularTerm=GPU_COST_ISOLATION==6u?vec3(0.0):vec3(min(vec3(f0)*lobe*incoming,vec3(AETHER_MEDIUMP_MAX)));
     aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
     return min(vec3(base/PI)*incoming+vec3(specularTerm),vec3(AETHER_MEDIUMP_MAX));
   }
@@ -212,7 +214,8 @@ mediump vec3 directLight(mediump vec3 n,mediump vec3 v,mediump vec3 l,mediump ve
   // lóbulo fica em highp e só desce para mediump já limitado.
   highp float lobe=f90>0.0?distributionGGXStable(hn,h,nh,alpha)*visibility(nv,nl,alpha):0.0;
   // PK-9: Specular Highlights desligado tira só o lóbulo direto.
-  mediump vec3 specularTerm=vec3(min(lobe*vec3(f)*aetherHighlightWeight*vec3(radiance)*nl,vec3(AETHER_MEDIUMP_MAX)));
+  mediump vec3 specularTerm=GPU_COST_ISOLATION==6u?vec3(0.0):
+      vec3(min(lobe*vec3(f)*aetherHighlightWeight*vec3(radiance)*nl,vec3(AETHER_MEDIUMP_MAX)));
   aetherSpecularSum=min(aetherSpecularSum+specularTerm,vec3(AETHER_MEDIUMP_MAX));
   return min((1-f)*(1-metal)*base*fd*radiance*float(nl)+specularTerm,vec3(AETHER_MEDIUMP_MAX));
 }

@@ -25,7 +25,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
      * só passa o que a bancada usa, nunca qualquer "aether.*".
      */
     private static final String[] BOOLEAN_MEASUREMENT_OPTIONS = {
-        "aether.disable_dynamic_resolution", "aether.lock_camera", "aether.start_play",
+        "aether.disable_dynamic_resolution", "aether.dynamic_resolution", "aether.lock_camera", "aether.start_play",
         "aether.disable_post_ui_fusion", "aether.hzb_occlusion", "aether.disable_spatial_geometry",
         "aether.spatial_geometry", "aether.editor_scene_reuse", "aether.disable_editor_scene_reuse",
         "aether.lock_rendering_quality", "aether.play_post_ui_fusion", "aether.opaque_no_clip",
@@ -36,7 +36,7 @@ public final class AstraShellActivity extends Activity implements ShellView.List
     private static final String[] FLOAT_MEASUREMENT_OPTIONS = {
         "aether.resolution_scale", "aether.target_fps", "aether.camera_x", "aether.camera_y",
         "aether.camera_z", "aether.camera_yaw", "aether.camera_pitch", "aether.post_sharpen",
-        "aether.taa_history_weight"
+        "aether.taa_history_weight", "aether.dynamic_resolution_min_scale"
     };
     private static final String[] STRING_MEASUREMENT_OPTIONS = {
         "aether.anti_aliasing", "aether.upscaling", "aether.temporal_quality",

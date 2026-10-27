@@ -687,8 +687,18 @@ bool ScenePhysics::advance(double elapsed,GameWorld &world,bool (*beforeStep)(vo
       if(!active)c.control.clear();
       const auto intent=c.control.resolve(settings->control,controlFocused_&&active);
       if(intent.jump)c.motor->jump(c.jumpSpeed);
-      if(!c.motor->update(intent.right,intent.forward,intent.yaw,static_cast<float>(fixed))) return false;
+      // Relativo a camera: o yaw da intencao (camera do jogador) gira o comando; desligado, frente e +Z do mundo.
+      const float referenceYaw=settings->cameraRelative?intent.yaw:0.f;
+      if(!c.motor->update(intent.right,intent.forward,referenceYaw,static_cast<float>(fixed))) return false;
       if(settings->movementMode==3)setCharacterYaw(c.id,c.motor->heading());
+      else if(settings->faceMovement) {
+        // Parado (ou girado por script), a direcao volta a ser a do transform.
+        if(!c.facing.known||intent.right*intent.right+intent.forward*intent.forward<.0025f) {
+          c.facing.yaw=std::atan2(c.world[8],c.world[10]);c.facing.known=true;
+        }
+        if(physics::stepCharacterFacing(c.facing,intent.right,intent.forward,referenceYaw,settings->rotationSmoothTime,
+                                        settings->faceTurnSpeed,static_cast<float>(fixed)))setCharacterYaw(c.id,c.facing.yaw);
+      } else c.facing.known=false;
       if(!characterHit) continue;
       const auto total=AetherPhysics_GetCharacterContactsV1(c.motor->physicsWorld(),c.motor->handle(),nullptr,0);
       if(total<=0) continue;

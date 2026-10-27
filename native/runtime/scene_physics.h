@@ -12,6 +12,7 @@
 #include "runtime/scene_components.h"
 #include "physics/jolt_bridge.h"
 #include "physics/character_motor.h"
+#include "physics/character_facing.h"
 #include <functional>
 #include "runtime/physics_field_sample.h"
 #include "runtime/motor_control.h"
@@ -261,6 +262,7 @@ private:
     float eyeHeight;
     float jumpSpeed = 0;
     bool headingKnown=false;
+    physics::CharacterFacing facing;
     MotorControlState control;
   };
   std::vector<CharacterBinding> characters_;

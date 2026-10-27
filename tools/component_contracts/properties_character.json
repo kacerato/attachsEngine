@@ -364,6 +364,52 @@
           "default": {
             "cpp": "90"
           }
+        },
+        {
+          "id": "face_turn_speed",
+          "label": "Velocidade do giro",
+          "member": "faceTurnSpeed",
+          "min": {
+            "cpp": "30"
+          },
+          "max": {
+            "cpp": "1440"
+          },
+          "presentation": {
+            "group": "Direção",
+            "unit": "°/s",
+            "visible": {
+              "cpp": "characterFacesMovement"
+            },
+            "help": "Giro máximo do corpo ao seguir a direção do movimento.",
+            "consumer": "runtime/scene_physics.cpp → transform do personagem"
+          },
+          "default": {
+            "cpp": "720"
+          }
+        },
+        {
+          "id": "rotation_smooth_time",
+          "label": "Suavização do giro",
+          "member": "rotationSmoothTime",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "group": "Direção",
+            "unit": "s",
+            "visible": {
+              "cpp": "characterFacesMovement"
+            },
+            "help": "Tempo para alcançar a direção nova (RotationSmoothTime da Unity). Zero vira na hora, limitado pela velocidade do giro.",
+            "consumer": "runtime/scene_physics.cpp → transform do personagem"
+          },
+          "default": {
+            "cpp": ".12f"
+          }
         }
       ],
       "defaults": {
@@ -383,6 +429,29 @@
           "id": "inherit_platform_horizontal",
           "label": "Impulso ao sair",
           "member": "inheritPlatformHorizontal"
+        },
+        {
+          "id": "face_movement",
+          "label": "Girar para a direção do movimento",
+          "member": "faceMovement",
+          "presentation": {
+            "group": "Direção",
+            "help": "O corpo vira suavemente para onde o personagem anda; parado, mantém a última direção. No modo Dirigir o giro é o do veículo.",
+            "consumer": "runtime/scene_physics.cpp → transform do personagem"
+          }
+        },
+        {
+          "id": "camera_relative",
+          "label": "Relativo à câmera",
+          "member": "cameraRelative",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Direção",
+            "help": "Frente é para onde a câmera olha. Desligado, frente é +Z do mundo (o comando ignora a câmera).",
+            "consumer": "runtime/scene_physics.cpp → motor do personagem"
+          }
         }
       ],
       "defaults": {
@@ -456,14 +525,18 @@
         "characterNumbers/braking",
         "characterNumbers/air_control",
         "characterNumbers/swim_speed",
-        "characterNumbers/turn_rate"
+        "characterNumbers/turn_rate",
+        "characterNumbers/face_turn_speed",
+        "characterNumbers/rotation_smooth_time"
       ]
     },
     {
       "name": "character_Character_fields2",
       "type": "Character",
       "properties": [
-        "characterBooleans/inherit_platform_horizontal"
+        "characterBooleans/inherit_platform_horizontal",
+        "characterBooleans/face_movement",
+        "characterBooleans/camera_relative"
       ]
     }
   ]
