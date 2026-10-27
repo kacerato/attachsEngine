@@ -4212,7 +4212,7 @@ void buildTextureViewer(ScreenBuilder &builder,UiRect content) {
   }
   // Importação (só texturas do projeto): todo o perfil de uma vez, sem páginas.
   if(!source) {
-    constexpr u32 editable=10;
+    constexpr u32 editable=11;
     const float cell=textureFieldHeight(true),gap=6;
     const u32 rows=(editable+1)/2;
     textureCard(cards,column,detail::TextureCardImport,UiIcon::UiSettings,"Importação",rows*cell+(rows-1)*gap,body,
@@ -10113,7 +10113,7 @@ void buildMultiAssetInspector(ScreenBuilder &builder,UiRect content) {
   }
   // Importação comum às texturas: igual mostra o valor, diferente mostra "—".
   if(textures) {
-    constexpr u32 fields=10;
+    constexpr u32 fields=11;
     const float cell=textureFieldHeight(true),gap=6;
     const u32 rows=(fields+1)/2;
     const std::string note=view.pending?std::to_string(view.pending)+" não aplicada"+(view.pending==1?"":"s"):std::string();

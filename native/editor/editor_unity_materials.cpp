@@ -115,27 +115,51 @@ resources::AssetGuid EditorSession::importUnityMaterial(const std::string &path,
       scene::materialExtraPublicationBinding(texture.binding-scene::MaterialExtraTextureBindingBase):texture.binding;
     profile.interpretation=publication==1?resources::TextureInterpretationNormal:
       (publication==0||publication==3?resources::TextureInterpretationColor:resources::TextureInterpretationData);
+    // Fonte do alfa do importador da Unity (`alphaUsage` no .meta da textura):
+    // 0 nenhum, 1 do arquivo, 2 tons de cinza (trilhas e brilhos em RGB puro).
+    {
+      std::filesystem::path metaPath;std::vector<u8> metaBytes;
+      if(EditorImportTransaction::safePath(root,texturePath+".meta",metaPath)&&EditorImportTransaction::read(metaPath,metaBytes,64u*1024u)) {
+        const auto meta=text(metaBytes);const auto at=meta.find("alphaUsage: ");
+        if(at!=std::string::npos&&at+12<meta.size()&&meta[at+12]>='0'&&meta[at+12]<='2')
+          profile.alphaSource=static_cast<u8>(meta[at+12]-'0');
+      }
+    }
     const auto textureHash=Sha256::hex(encoded);
     textureSources.push_back({texturePath,textureHash});
     const auto *known=nextAssets.findByPath(texturePath);
     resources::AssetGuid guid=known?known->guid:resources::assetGuidFromSeed("unity-texture:"+packageScope+texture.unityGuid.text());
+    // Prepara a imagem com o perfil e grava o cache da textura.
+    const auto cook=[&](const resources::TextureProfile &settings) {
+      resources::PreparedTextureImport prepared;
+      if(!resources::prepareTextureImport(encoded,settings,true,EditorMapScene::DefaultTextureSampler,limits,nullptr,prepared)) {
+        diagnostic=texturePath+": "+prepared.diagnostic;return false;
+      }
+      std::vector<u8> cache;std::filesystem::path cached;
+      if(!resources::writeTextureAssetCache(prepared,cache)||!EditorImportTransaction::safePath(root,resources::textureAssetCachePath(guid),cached)) {
+        diagnostic="Cache da textura inválido.";return false;
+      }
+      std::error_code error;std::filesystem::create_directories(cached.parent_path(),error);
+      return !error&&EditorImportTransaction::write(cached,cache,&diagnostic);
+    };
     if(known) {
       resources::TextureProfile saved;
       if(known->type!=resources::AssetType::Texture||known->contentHash!=textureHash||
           !resources::parseTextureProfile(known->importerParameters,saved)||saved.interpretation!=profile.interpretation) {
         diagnostic="Conflito na textura já registrada: "+texturePath+". Reimporte-a com interpretação compatível antes do material.";return {};
       }
+      // Registrada antes da fonte de alfa (perfil < 6): só o alfa muda, o resto
+      // do perfil salvo fica; a imagem é repreparada e o registro atualizado.
+      if(saved.alphaSource!=profile.alphaSource) {
+        saved.alphaSource=profile.alphaSource;
+        if(!cook(saved)) return {};
+        if(!nextAssets.publishImport(guid,textureHash,resources::TextureAssetImporterRevision,resources::serializeTextureProfile(saved),
+                                     known->derived,known->dependencies)) {
+          diagnostic="Registro recusou a fonte de alfa da textura: "+texturePath;return {};
+        }
+      }
     } else {
-      resources::PreparedTextureImport prepared;
-      if(!resources::prepareTextureImport(encoded,profile,true,EditorMapScene::DefaultTextureSampler,limits,nullptr,prepared)) {
-        diagnostic=texturePath+": "+prepared.diagnostic;return {};
-      }
-      std::vector<u8> cache;std::filesystem::path cached;
-      if(!resources::writeTextureAssetCache(prepared,cache)||!EditorImportTransaction::safePath(root,resources::textureAssetCachePath(guid),cached)) {
-        diagnostic="Cache da textura inválido.";return {};
-      }
-      std::error_code error;std::filesystem::create_directories(cached.parent_path(),error);
-      if(error||!EditorImportTransaction::write(cached,cache,&diagnostic)) return {};
+      if(!cook(profile)) return {};
       resources::AssetRecord record;record.guid=guid;record.type=resources::AssetType::Texture;
       record.path=record.source=texturePath;record.contentHash=textureHash;
       record.importerVersion=resources::TextureAssetImporterRevision;record.importerParameters=resources::serializeTextureProfile(profile);

@@ -1520,3 +1520,36 @@ AE_TEST(lightmap_external_binding_persists_resolves_and_publishes_indirect_irrad
   const auto pickedTexture=effectiveMaterial(session,object).lightmapTexture;
   AE_EXPECT_TRUE(pickedTexture!=scene::MaterialTextureKeep && pickedTexture!=renderer::InvalidMapTexture,"picker result reaches material extraction");
 }
+
+// G6: fonte do alfa do importador da Unity. Trilhas e brilhos de VFX vêm em RGB
+// puro com "alfa dos tons de cinza"; sem isso o preto da imagem cobre a cena.
+AE_TEST(g6_texture_alpha_source_from_gray_none_and_input) {
+  EditorSession session;
+  resources::TextureImportLimits limits;
+  limits.projectMaximumDimension = session.importLimits().maximumTextureDimension;
+  limits.image = session.importLimits().image;
+  const auto source = png(4, 4, 200);  // (200, 64, 32) opaco
+  const auto prepare = [&](u8 alpha, resources::PreparedTextureImport &out) {
+    resources::TextureProfile profile;
+    profile.interpretation = resources::TextureInterpretationColor;
+    profile.alphaSource = alpha;
+    return resources::prepareTextureImport(source, profile, true, EditorMapScene::DefaultTextureSampler, limits, nullptr, out);
+  };
+  resources::PreparedTextureImport gray, none, input;
+  AE_EXPECT_TRUE(prepare(resources::TextureAlphaFromGray, gray) && gray.sourceHasAlpha, "tons de cinza geram alfa (luma 101)");
+  AE_EXPECT_TRUE(prepare(resources::TextureAlphaNone, none) && !none.sourceHasAlpha, "nenhum: opaco");
+  AE_EXPECT_TRUE(prepare(resources::TextureAlphaFromInput, input) && !input.sourceHasAlpha, "do arquivo: o alfa opaco do PNG");
+  AE_EXPECT_TRUE(gray.cacheKey != input.cacheKey, "a fonte do alfa muda o cozimento");
+  resources::TextureProfile profile;
+  profile.alphaSource = resources::TextureAlphaFromGray;
+  resources::TextureProfile back;
+  AE_EXPECT_TRUE(resources::parseTextureProfile(resources::serializeTextureProfile(profile), back) &&
+                 back.alphaSource == resources::TextureAlphaFromGray, "perfil v6 guarda a fonte do alfa");
+  AE_EXPECT_TRUE(resources::parseTextureProfile("{\"schema\":5,\"interpretation\":0,\"maximumDimension\":0,\"mipmaps\":1,"
+                                                "\"dilateEdges\":0,\"anisotropy\":1,\"invertNormalGreen\":0,"
+                                                "\"preserveAlphaCoverage\":0,\"alphaCoverageCutoff\":500,\"streamingMipmaps\":1,"
+                                                "\"streamingPriority\":0,\"tiffUndefinedExtra\":0,\"tiffQuantize16\":0,"
+                                                "\"tiffIgnoreColorProfile\":0}", back) &&
+                 back.alphaSource == resources::TextureAlphaFromInput, "perfil v5 abre com o alfa do arquivo");
+}
+

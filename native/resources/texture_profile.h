@@ -21,13 +21,16 @@ namespace ae::resources {
 // escolher por textura, extraia a imagem para o projeto.
 // 4 (S2): streaming de mipmaps e prioridade, do Texture Importer da Unity.
 // 5: decisões explícitas de fonte TIFF. Leitores1–4 migram com recusa estrita.
-inline constexpr u32 TextureProfileSchema = 5;
+inline constexpr u32 TextureProfileSchema = 6;
 // Faixa da prioridade de streaming da Unity (Texture Importer > Priority).
 inline constexpr i32 TextureStreamingPriorityMinimum = -128, TextureStreamingPriorityMaximum = 127;
 // Interpretação: pelo uso (cor base e emissão em sRGB, os demais lineares), cor
 // (sRGB sempre) ou dado (linear sempre).
 inline constexpr u8 TextureInterpretationUse = 0, TextureInterpretationColor = 1,
                     TextureInterpretationData = 2, TextureInterpretationNormal = 3;
+// Fonte do alfa (Unity TextureImporter.alphaSource): o canal do arquivo, nenhum
+// (opaco) ou os tons de cinza da cor — trilhas e brilhos de VFX em RGB puro.
+inline constexpr u8 TextureAlphaNone = 0, TextureAlphaFromInput = 1, TextureAlphaFromGray = 2;
 // Maior lado residente. Zero segue o teto do projeto e do aparelho; nunca sobe acima dele.
 inline constexpr std::array<u32, 6> TextureDimensionSteps{0, 256, 512, 1024, 2048, 4096};
 
@@ -56,6 +59,8 @@ struct TextureProfile {
   u8 tiffUndefinedExtra = 0;
   bool tiffQuantize16 = false;
   bool tiffIgnoreColorProfile = false;
+  // Schema 6: de onde vem o alfa (TextureAlpha*). Cozinha bytes.
+  u8 alphaSource = TextureAlphaFromInput;
 };
 // Igualdade só do que muda os bytes preparados (o streaming fica de fora).
 bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) noexcept;

@@ -633,6 +633,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
         else if(is(EditorWidget::TextureProfileAnisotropy)) profile.anisotropy=!profile.anisotropy;
         else if(is(EditorWidget::TextureProfileNormalGreen)) profile.invertNormalGreen=!profile.invertNormalGreen;
         else if(is(EditorWidget::TextureProfileCoverage)) profile.preserveAlphaCoverage=!profile.preserveAlphaCoverage;
+        else if(is(EditorWidget::TextureProfileAlphaSource)) profile.alphaSource=static_cast<u8>((profile.alphaSource+2u)%3u);
         else if(is(EditorWidget::TextureTiffExtra)&&state_.textureImportTiffUndefinedExtra)
           profile.tiffUndefinedExtra=static_cast<u8>((profile.tiffUndefinedExtra+1)%3);
         else if(is(EditorWidget::TextureTiffPrecision)&&state_.textureImportTiffBits==16)profile.tiffQuantize16=!profile.tiffQuantize16;
@@ -931,7 +932,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
                      key!=widgetId(EditorWidget::TextureInspectorBase)+detail::TextureInspectorExpandClose) ||
                     (key>=widgetId(EditorWidget::TextureUserBase) && key<widgetId(EditorWidget::TextureUserBase)+0x10000u) ||
                     within(EditorWidget::TextureViewerChannel,EditorWidget::TextureViewerBackground) ||
-                    within(EditorWidget::TextureProfileInterpretation,EditorWidget::TextureProfileStreamingPriority);
+                    within(EditorWidget::TextureProfileInterpretation,EditorWidget::TextureProfileAlphaSource);
     if(card && !state_.textureViewerExpanded) {
       const float limit=std::max(0.0f,layout_.textureInspectorContent-layout_.textureInspectorWindow);
       state_.textureInspectorScroll=std::clamp(state_.textureInspectorScroll-routing.stepDelta.y,0.0f,limit);
@@ -1845,7 +1846,7 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
       return true;
     }
     // R4: perfil da textura aberta no visualizador.
-    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileStreamingPriority) &&
+    if(key>=widgetId(EditorWidget::TextureProfileInterpretation) && key<=widgetId(EditorWidget::TextureProfileAlphaSource) &&
        state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
       auto &profile=state_.textureProfileDraft;
       stepTextureProfileField(profile,key-widgetId(EditorWidget::TextureProfileInterpretation));

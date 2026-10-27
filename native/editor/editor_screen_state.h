@@ -229,7 +229,7 @@ struct EditorScreenState final {
     std::vector<Group> groups;
     std::vector<Item> items;
     std::string title,note;
-    std::array<std::string,10> fields;  // "Rótulo: valor", "Rótulo: —" quando difere
+    std::array<std::string,11> fields;  // "Rótulo: valor", "Rótulo: —" quando difere (TextureProfileFields)
     u16 mixed=0;
     u32 pending=0;                      // texturas cujo rascunho difere do aplicado
   };
@@ -1174,7 +1174,7 @@ struct EditorScreenState final {
   // R4: perfil da textura (interpretação, tamanho, mips, bordas, anisotropia) e residência.
   // Três páginas de quatro: as duas últimas da terceira são leitura do
   // streaming (mip carregado e o que a tela pede), sem toque.
-  std::string textureProfileLabels[12],textureResidencyLabel;
+  std::string textureProfileLabels[13],textureResidencyLabel;
   resources::TextureProfile textureProfileDraft{},textureProfileSaved{};
   bool textureProfileDirty=false;
   u32 textureProfilePage=0;

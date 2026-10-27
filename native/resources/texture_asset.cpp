@@ -298,6 +298,14 @@ bool prepareTextureImport(std::span<const u8> source, const TextureProfile &sett
     if(!decodeTiffRgba8(source,limits.image,policy,image,out.knownLosses,out.diagnostic,cancel))return false;
   } else if (!decodeImageRgba8(source, limits.image, image, out.diagnostic)) return false;
   out.sourceWidth = image.width; out.sourceHeight = image.height;
+  // Fonte do alfa, antes de tudo que lê o alfa: tons de cinza da cor (luma
+  // Rec. 601 sobre os valores do arquivo) ou opaco.
+  if (settings.alphaSource != TextureAlphaFromInput)
+    for (usize pixel = 0; pixel < image.rgba.size() / 4u; ++pixel) {
+      u8 *texel = &image.rgba[pixel * 4u];
+      texel[3] = settings.alphaSource == TextureAlphaNone ? u8{255}
+          : static_cast<u8>((299u * texel[0] + 587u * texel[1] + 114u * texel[2] + 500u) / 1000u);
+    }
   for (usize pixel = 0; pixel < image.rgba.size() / 4u; ++pixel)
     out.sourceHasAlpha |= image.rgba[pixel * 4u + 3u] != 255u;
   if (settings.dilateEdges) {

@@ -6,7 +6,7 @@
 #include "ui/ui_icon_id.h"
 
 namespace ae::editor::session_detail {
-inline constexpr u32 TextureProfileFields=10;
+inline constexpr u32 TextureProfileFields=11;
 struct FileKind {const char *label,*plural;ui::UiIcon icon;};
 inline constexpr FileKind fileKinds[]{
   {"textura","Texturas",ui::UiIcon::AssetsTexture},{"material","Materiais",ui::UiIcon::AssetsMaterial},

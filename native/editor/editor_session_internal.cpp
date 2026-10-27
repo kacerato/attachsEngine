@@ -33,7 +33,11 @@ std::string textureProfileFieldText(const resources::TextureProfile &profile,u32
     case 6: return profile.preserveAlphaCoverage?"Cobertura alfa: preservar":"Cobertura alfa: desligada";
     case 7: return "Corte da cobertura: "+std::to_string(static_cast<u32>(std::lround(profile.alphaCoverageCutoff*100.0f)))+"%";
     case 8: return profile.streamingMipmaps?"Streaming de mips: sim":"Streaming de mips: não";
-    default: return "Prioridade: "+std::to_string(profile.streamingPriority);
+    case 9: return "Prioridade: "+std::to_string(profile.streamingPriority);
+    default: {
+      static constexpr const char *sources[]{"Alfa: nenhum (opaco)","Alfa: do arquivo","Alfa: tons de cinza"};
+      return sources[std::min<u32>(profile.alphaSource,2u)];
+    }
   }
 }
 void copyTextureProfileField(resources::TextureProfile &to,const resources::TextureProfile &from,u32 field) {
@@ -47,7 +51,8 @@ void copyTextureProfileField(resources::TextureProfile &to,const resources::Text
     case 6: to.preserveAlphaCoverage=from.preserveAlphaCoverage;break;
     case 7: to.alphaCoverageCutoff=from.alphaCoverageCutoff;break;
     case 8: to.streamingMipmaps=from.streamingMipmaps;break;
-    default: to.streamingPriority=from.streamingPriority;break;
+    case 9: to.streamingPriority=from.streamingPriority;break;
+    default: to.alphaSource=from.alphaSource;break;
   }
 }
 void setTextureProfileToggle(resources::TextureProfile &profile,u32 field,bool on) {

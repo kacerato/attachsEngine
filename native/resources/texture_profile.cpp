@@ -11,7 +11,7 @@ bool sameTexturePreparation(const TextureProfile &a, const TextureProfile &b) no
          a.invertNormalGreen == b.invertNormalGreen && a.preserveAlphaCoverage == b.preserveAlphaCoverage &&
          std::fabs(a.alphaCoverageCutoff-b.alphaCoverageCutoff)<.0005f &&
          a.tiffUndefinedExtra==b.tiffUndefinedExtra && a.tiffQuantize16==b.tiffQuantize16 &&
-         a.tiffIgnoreColorProfile==b.tiffIgnoreColorProfile;
+         a.tiffIgnoreColorProfile==b.tiffIgnoreColorProfile && a.alphaSource==b.alphaSource;
 }
 
 bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexcept {
@@ -20,7 +20,7 @@ bool sameTextureProfile(const TextureProfile &a, const TextureProfile &b) noexce
 }
 
 bool validTextureProfile(const TextureProfile &profile) noexcept {
-  return profile.interpretation <= TextureInterpretationNormal && profile.tiffUndefinedExtra<=2 &&
+  return profile.interpretation <= TextureInterpretationNormal && profile.tiffUndefinedExtra<=2 && profile.alphaSource<=TextureAlphaFromGray &&
          profile.streamingPriority >= TextureStreamingPriorityMinimum &&
          profile.streamingPriority <= TextureStreamingPriorityMaximum &&
          std::isfinite(profile.alphaCoverageCutoff) && profile.alphaCoverageCutoff >= 0 && profile.alphaCoverageCutoff <= 1 &&
@@ -38,7 +38,8 @@ std::string serializeTextureProfile(const TextureProfile &profile) {
          ",\"streamingPriority\":" + std::to_string(profile.streamingPriority) +
          ",\"tiffUndefinedExtra\":" + std::to_string(profile.tiffUndefinedExtra) +
          ",\"tiffQuantize16\":" + (profile.tiffQuantize16?"1":"0") +
-         ",\"tiffIgnoreColorProfile\":" + (profile.tiffIgnoreColorProfile?"1":"0") + "}\n";
+         ",\"tiffIgnoreColorProfile\":" + (profile.tiffIgnoreColorProfile?"1":"0") +
+         ",\"alphaSource\":" + std::to_string(profile.alphaSource) + "}\n";
 }
 
 bool parseTextureProfile(std::string_view text, TextureProfile &out) {
@@ -67,6 +68,7 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   const auto extra=schema>=5?document.index(root,"tiffUndefinedExtra"):0;
   const auto precision=schema>=5?document.index(root,"tiffQuantize16"):0;
   const auto icc=schema>=5?document.index(root,"tiffIgnoreColorProfile"):0;
+  const auto alpha=schema>=6?document.index(root,"alphaSource"):TextureAlphaFromInput;
   // O valor 3 só passou a significar mapa normal no schema 2. Aceitá-lo em um
   // perfil v1 mudaria o sentido de dados antigos/corrompidos durante a migração.
   if (interpretation < 0 || interpretation > 255 ||
@@ -75,7 +77,7 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
       !flag(anisotropy) || !flag(invertNormalGreen) || !flag(preserveAlphaCoverage) ||
       alphaCoverageCutoff < 0 || alphaCoverageCutoff > 1000 || !flag(streamingMipmaps) ||
       streamingPriority < TextureStreamingPriorityMinimum || streamingPriority > TextureStreamingPriorityMaximum ||
-      extra<0 || extra>2 || !flag(precision) || !flag(icc)) return false;
+      extra<0 || extra>2 || !flag(precision) || !flag(icc) || alpha<0 || alpha>TextureAlphaFromGray) return false;
   TextureProfile parsed;
   parsed.interpretation = static_cast<u8>(interpretation);
   parsed.maximumDimension = static_cast<u32>(std::min<i64>(dimension, 1 << 20));
@@ -88,6 +90,7 @@ bool parseTextureProfile(std::string_view text, TextureProfile &out) {
   parsed.streamingMipmaps = streamingMipmaps == 1;
   parsed.streamingPriority = static_cast<i32>(streamingPriority);
   parsed.tiffUndefinedExtra=static_cast<u8>(extra);parsed.tiffQuantize16=precision==1;parsed.tiffIgnoreColorProfile=icc==1;
+  parsed.alphaSource=static_cast<u8>(alpha);
   if (!validTextureProfile(parsed)) return false;
   out = parsed;
   return true;

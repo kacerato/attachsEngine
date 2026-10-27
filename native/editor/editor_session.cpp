@@ -2492,7 +2492,9 @@ void EditorSession::stepTextureProfileField(resources::TextureProfile &profile,u
       if(profile.alphaCoverageCutoff>1.0f) profile.alphaCoverageCutoff=0;
       break;
     case 8: profile.streamingMipmaps=!profile.streamingMipmaps;break;
-    default: profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);break;
+    case 9: profile.streamingPriority=nextStreamingPriority(profile.streamingPriority);break;
+    // Do arquivo → tons de cinza → nenhum → do arquivo.
+    default: profile.alphaSource=static_cast<u8>((profile.alphaSource+2u)%3u);break;
   }
 }
 
@@ -4522,11 +4524,11 @@ bool EditorSession::refreshTextureViewerImage() {
     // O que o renderer do aparelho tem desta textura agora (S2); no host, sem GPU, diz isso.
     const auto streaming=textureStreamingLevelsOf(texture.guid);
     if(!streaming.known) {
-      state_.textureProfileLabels[10]="Carregado: sem renderer";
-      state_.textureProfileLabels[11]="Tela pede: —";
+      state_.textureProfileLabels[11]="Carregado: sem renderer";
+      state_.textureProfileLabels[12]="Tela pede: —";
     } else {
-      state_.textureProfileLabels[10]="Carregado: mip "+std::to_string(streaming.loaded)+" · "+std::to_string(streaming.loadedWidth)+" px";
-      state_.textureProfileLabels[11]="Tela pede: mip "+std::to_string(streaming.desired);
+      state_.textureProfileLabels[11]="Carregado: mip "+std::to_string(streaming.loaded)+" · "+std::to_string(streaming.loadedWidth)+" px";
+      state_.textureProfileLabels[12]="Tela pede: mip "+std::to_string(streaming.desired);
     }
     const auto residency=textureResidencyOf(texture.guid);
     if(residency.empty()) state_.textureResidencyLabel="Na GPU: não usada";
@@ -7384,8 +7386,8 @@ void EditorSession::setTextureStreamingLevels(std::span<const u32> desired,std::
   if(state_.textureViewer && state_.textureViewerIndex<textures_.size()) {
     const auto levels=textureStreamingLevelsOf(textures_[state_.textureViewerIndex].guid);
     if(levels.known) {
-      state_.textureProfileLabels[10]="Carregado: mip "+std::to_string(levels.loaded)+" · "+std::to_string(levels.loadedWidth)+" px";
-      state_.textureProfileLabels[11]="Tela pede: mip "+std::to_string(levels.desired);
+      state_.textureProfileLabels[11]="Carregado: mip "+std::to_string(levels.loaded)+" · "+std::to_string(levels.loadedWidth)+" px";
+      state_.textureProfileLabels[12]="Tela pede: mip "+std::to_string(levels.desired);
     }
   }
 }

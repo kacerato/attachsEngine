@@ -299,7 +299,9 @@ enum class EditorWidget : u32 {
   TextureProfileInterpretation, TextureProfileDimension, TextureProfileMipmaps, TextureProfileEdges, TextureProfileAnisotropy,
   TextureProfileNormalGreen, TextureProfileCoverage, TextureProfileCoverageCutoff,
   // S2: Stream Mipmap Levels e Priority, na mesma sequência (índice + página).
-  TextureProfileStreaming, TextureProfileStreamingPriority, TextureProfileApply, TextureProfileRevert,
+  TextureProfileStreaming, TextureProfileStreamingPriority,
+  // G6: fonte do alfa, último campo da sequência do perfil.
+  TextureProfileAlphaSource, TextureProfileApply, TextureProfileRevert,
   TextureProfilePrevious, TextureProfileNext,
   TextureManagerClose, TextureSearch, TextureManagerPrevious, TextureManagerNext,
   TextureSamplingUv, TextureSamplingWrap, TextureSamplingFilter, TextureUvReset,
