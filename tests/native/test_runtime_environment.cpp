@@ -387,7 +387,8 @@ AE_TEST(auto_exposure_migrates_scene_v10_and_profile_v6_disabled) {
   AE_EXPECT_TRUE(fields.size()>12,"perfil v7 gerado");
   // v7..v13 acrescentaram no fim: 11 de exposição (v12; eram 9 na v7) + energia
   // da neblina (v8), 31 de gradação (v9), 5 dos corpos celestes (v10), 16 das nuvens (v11),
-  // 10 de Color Adjustments/Bloom (v12) e 21 da janela Lighting (v13).
+  // 10 de Color Adjustments/Bloom (v12) e 21 da janela Lighting (v13); o
+  // profileAsV13 já tirou o pós completo (v14) e as nuvens volumétricas (v15).
   fields[1]="6";fields.resize(fields.size()-95);
   std::ostringstream legacy;
   for(const auto &field:fields) legacy<<field<<' ';

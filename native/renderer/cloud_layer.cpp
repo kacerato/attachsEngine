@@ -133,11 +133,34 @@ CloudLayerRows packCloudLayer(const CloudLayer &clouds, bool environmentActive, 
   for (u32 channel = 0; channel < 3; ++channel) rows.tint[channel] = clouds.tint[channel] * exposure;
   rows.tint[3] = clouds.ambientDimmer;
   rows.shadow[0] = clouds.castShadows ? clouds.shadowMultiplier : 0.0f;
+  rows.shadow[1] = clouds.thicknessMeters;
+  rows.shadow[2] = clouds.type == 1 ? 1.0f : 0.0f;
+  rows.shadow[3] = clouds.steps;
+  rows.volume[0] = clouds.shapeFactor;
+  rows.volume[1] = clouds.erosion;
   return rows;
+}
+
+float cloudShellDistance(float heightMeters, float viewSine) noexcept {
+  // Em quilômetros, como o shader: |R²y²| ~ 4e7 cabe no float com folga.
+  const double r = CloudPlanetRadiusMeters * 0.001, h = std::max(heightMeters, 0.0f) * 0.001;
+  const double y = std::clamp(static_cast<double>(viewSine), -1.0, 1.0);
+  const double c = 2.0 * r * h + h * h;
+  const double root = std::sqrt(r * r * y * y + c);
+  // t = -R y + sqrt(...) reescrito como c / (R y + sqrt(...)) para y >= 0.
+  const double t = y >= 0.0 ? c / (r * y + root) : root - r * y;
+  return static_cast<float>(t * 1000.0);
 }
 
 float cloudSkyOcclusion(const CloudLayer &clouds) noexcept {
   if (!clouds.enabled || clouds.opacity <= 0.0f) return 0.0f;
+  // Volumetric Clouds: o ruído 3D recorta a mancha, e a fração de céu coberta
+  // cresce bem mais devagar que a cobertura (0,5 cobre ~25%; 0,68 ~70%; 0,9
+  // fecha o céu), medida no emulador do cloud_volume.frag.
+  if (clouds.type == 1) {
+    const float t = saturate((clouds.coverage - 0.35f) / 0.45f);
+    return t * t * (3.0f - 2.0f * t) * clouds.opacity;
+  }
   // Área média coberta pela regra de cobertura acima, aproximada pela própria
   // cobertura (o mapa tem média 0,5 e o limiar é linear nela), mais o véu.
   const float cumulus = saturate(clouds.coverage * 1.05f - 0.02f);

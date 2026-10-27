@@ -36,8 +36,8 @@ struct ImageDesc {
   VkImageAspectFlags aspectMask = 0;
   MemoryClass memoryClass = MemoryClass::Texture;
   u32 mipLevels = 1;
-  // Profundidade > 1 cria uma imagem 3D amostrável (LUT de gradação do G2):
-  // sem mips, sem anexo e sem transitório.
+  // Profundidade > 1 cria uma imagem 3D amostrável (LUT de gradação do G2,
+  // ruídos das nuvens do G4d, estes com mips): sem anexo e sem transitório.
   u32 depth = 1;
   // Anexo que nunca precisa existir fora do render pass. Numa GPU TBDR ele vive
   // na memória do tile e o driver pode não dar lastro em DRAM nenhum. O

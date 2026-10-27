@@ -3208,7 +3208,10 @@
           },
           "presentation": {
             "unit": "",
-            "help": "Véu fino e alto, em faixas"
+            "help": "Véu fino e alto, em faixas",
+            "visible": {
+              "cpp": "environmentUsesCloudLayer"
+            }
           }
         },
         {
@@ -3406,6 +3409,87 @@
             "help": "Shadow Multiplier: escuridão da sombra no chão",
             "visible": {
               "cpp": "environmentUsesCloudShadows"
+            }
+          }
+        },
+        {
+          "id": "cloud_thickness",
+          "label": "Espessura",
+          "member": "values.clouds.thicknessMeters",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "5000"
+          },
+          "step": {
+            "cpp": "10"
+          },
+          "presentation": {
+            "unit": "m",
+            "help": "Altura dos cúmulos acima da base: base reta, topo alto; 0 é folha plana"
+          }
+        },
+        {
+          "id": "cloud_shape_factor",
+          "label": "Fator de forma",
+          "member": "values.clouds.shapeFactor",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Shape Factor: quanto o ruído 3D recorta a cobertura (mais alto, nuvens mais separadas)",
+            "visible": {
+              "cpp": "environmentUsesVolumetricClouds"
+            }
+          }
+        },
+        {
+          "id": "cloud_erosion",
+          "label": "Erosão",
+          "member": "values.clouds.erosion",
+          "min": {
+            "cpp": "0"
+          },
+          "max": {
+            "cpp": "1"
+          },
+          "step": {
+            "cpp": ".01f"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Erosion Factor: corrói as bordas em rolos finos",
+            "visible": {
+              "cpp": "environmentUsesVolumetricClouds"
+            }
+          }
+        },
+        {
+          "id": "cloud_steps",
+          "label": "Passos",
+          "member": "values.clouds.steps",
+          "min": {
+            "cpp": "8"
+          },
+          "max": {
+            "cpp": "64"
+          },
+          "step": {
+            "cpp": "1"
+          },
+          "presentation": {
+            "unit": "",
+            "help": "Num Primary Steps: amostras por raio; mais custa mais GPU",
+            "visible": {
+              "cpp": "environmentUsesVolumetricClouds"
             }
           }
         }

@@ -3,6 +3,8 @@
 #include "editor/editor_creation_catalog.h"
 #include "editor/editor_session.h"
 #include "renderer/cloud_layer.h"
+#include "renderer/cloud_noise.h"
+#include "rhi/memory_allocator.h"
 #include "renderer/scene_environment.h"
 #include "resources/environment_profile.h"
 #include "runtime/scene_environment.h"
@@ -10,6 +12,8 @@
 #include "environment_legacy_lines.h"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 #include <iterator>
 #include <locale>
 #include <sstream>
@@ -128,8 +132,8 @@ AE_TEST(cloud_layer_round_trips_in_environment_v16_and_old_scenes_have_no_clouds
   AE_EXPECT_TRUE(authored.valid(), "nuvens autorais válidas");
   std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
   scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
-  AE_EXPECT_EQ(scene::Environment::descriptor.version, 19u, "Ambiente v19");
-  AE_EXPECT_TRUE(reread.read(in, 19), "relido");
+  AE_EXPECT_EQ(scene::Environment::descriptor.version, 20u, "Ambiente v20");
+  AE_EXPECT_TRUE(reread.read(in, 20), "relido");
   AE_EXPECT_TRUE(reread.values.clouds == clouds && !reread.overrideClouds, "todos os campos atravessam");
 
   // Arquivo v15: o mesmo texto sem os 3 interruptores das nuvens (depois da
@@ -229,4 +233,125 @@ AE_TEST(cloud_volume_recipe_creates_a_global_cloud_layer_above_the_scene_environ
   AE_EXPECT_TRUE(runtime::collectSceneEnvironment(graph, look), "cena resolvida");
   AE_EXPECT_TRUE(look.clouds.enabled && look.sky == renderer::SkyModel::PhysicalAtmosphere,
                  "céu físico da cena com as nuvens do volume");
+}
+
+AE_TEST(cloud_layer_follows_the_planet_curvature_and_v19_scenes_get_volume) {
+  // Casca esférica: zênite na altitude, horizonte a ~sqrt(2Rh), não no infinito.
+  AE_EXPECT_TRUE(std::abs(renderer::cloudShellDistance(2000.0f, 1.0f) - 2000.0f) < 0.5f, "zênite: a própria altitude");
+  const float horizon = renderer::cloudShellDistance(2000.0f, 0.0f);
+  const float expected = std::sqrt(2.0f * renderer::CloudPlanetRadiusMeters * 2000.0f);
+  AE_EXPECT_TRUE(std::abs(horizon - expected) / expected < 0.01f, "horizonte: ~160 km a 2 km de altura");
+  const float plane30 = 2000.0f / std::sin(30.0f * 0.0174533f);
+  AE_EXPECT_TRUE(std::abs(renderer::cloudShellDistance(2000.0f, 0.5f) - plane30) / plane30 < 0.01f,
+                 "30° acima do horizonte a curvatura quase não pesa");
+  float previous = 0.0f;
+  for (float sine = 1.0f; sine >= 0.0f; sine -= 0.05f) {
+    const float distance = renderer::cloudShellDistance(2000.0f, sine);
+    AE_EXPECT_TRUE(distance > previous, "mais rasante, mais longe");
+    previous = distance;
+  }
+  // Base e topo: a camada tem espessura, e a espessura vai para a GPU.
+  renderer::CloudLayer clouds;clouds.enabled = true;clouds.thicknessMeters = 1200.0f;
+  AE_EXPECT_EQ(renderer::packCloudLayer(clouds, true, 0.0).shadow[1], 1200.0f, "espessura no bloco");
+  clouds.thicknessMeters = 6000.0f;
+  AE_EXPECT_TRUE(!clouds.valid(), "espessura acima de 5 km recusada");
+  // Cena v19 (sem a espessura nem as Volumetric Clouds): ganha a espessura padrão.
+  scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.thicknessMeters = 300.0f;
+  std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
+  scene::Environment old;std::istringstream in(environment_legacy::componentAsV19(out.str()));in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(in, 19), "cena v19 abre");
+  AE_EXPECT_TRUE(old.values.clouds.enabled && old.values.clouds.thicknessMeters == renderer::CloudLayer{}.thicknessMeters,
+                 "v19 mantém as nuvens e recebe a espessura padrão");
+  resources::EnvironmentProfile profile;profile.guid = resources::assetGuidFromSeed("perfil-espesso");profile.name = "Espesso";
+  profile.values.clouds = authored.values.clouds;profile.values.clouds.type = 1;
+  resources::EnvironmentProfile reread, v13;
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(profile.serialize(), reread) &&
+                 reread.values.clouds == profile.values.clouds, "perfil v15 guarda espessura e tipo");
+  AE_EXPECT_TRUE(resources::EnvironmentProfile::deserialize(environment_legacy::profileAsV14(profile.serialize()), v13) &&
+                 v13.values.clouds.type == 0 && v13.values.clouds.thicknessMeters == renderer::CloudLayer{}.thicknessMeters,
+                 "perfil v14 abre como camada 2D com a espessura padrão");
+}
+
+AE_TEST(volumetric_clouds_noise_tiles_and_v19_scenes_keep_the_2d_layer) {
+  // Ruído 3D de Schneider: repetível nos três eixos e com contraste útil.
+  std::vector<u8> shape, erosion;
+  AE_EXPECT_TRUE(renderer::buildCloudShapeNoise(renderer::CloudShapeNoiseSize, 7u, shape), "forma 64³");
+  AE_EXPECT_TRUE(renderer::buildCloudErosionNoise(renderer::CloudErosionNoiseSize, 13u, erosion), "erosão 32³");
+  const u32 n = renderer::CloudShapeNoiseSize;
+  AE_EXPECT_EQ(shape.size(), static_cast<usize>(n) * n * n * 4, "RGBA8");
+  u32 low = 255, high = 0;
+  for (usize i = 0; i < shape.size(); i += 4) { low = std::min<u32>(low, shape[i]); high = std::max<u32>(high, shape[i]); }
+  AE_EXPECT_TRUE(high - low > 150, "Perlin-Worley com contraste");
+  AE_EXPECT_TRUE(std::abs(renderer::tileableWorley(0.001f, 0.3f, 0.6f, 4, 1u) -
+                          renderer::tileableWorley(1.001f, 0.3f, 0.6f, 4, 1u)) < 1e-4f, "Worley repete em X");
+  AE_EXPECT_TRUE(std::abs(renderer::tileableWorley(0.2f, 0.3f, 0.0005f, 8, 1u) -
+                          renderer::tileableWorley(0.2f, 0.3f, 1.0005f, 8, 1u)) < 1e-4f, "Worley repete em Z");
+  // Mips dos ruídos (sem eles o ruído longe vira moiré): cadeia até 1³, média preservada.
+  std::vector<u8> chain;
+  AE_EXPECT_TRUE(renderer::buildCloudNoiseMips(shape, n, chain), "mips da forma");
+  usize expected = 0;
+  for (u32 side = n; side >= 1; side /= 2) expected += static_cast<usize>(side) * side * side * 4;
+  AE_EXPECT_EQ(chain.size(), expected, "níveis 64³..1³");
+  AE_EXPECT_EQ(renderer::cloudNoiseMipCount(n), 7u, "7 níveis");
+  double mean = 0;
+  for (usize i = 0; i < shape.size(); i += 4) mean += shape[i];
+  mean /= static_cast<double>(shape.size() / 4);
+  AE_EXPECT_TRUE(std::abs(static_cast<double>(chain[chain.size() - 4]) - mean) < 3.0, "1³ é a média do volume");
+  rhi::ImageDesc volume{};
+  volume.width = volume.height = volume.depth = n;volume.mipLevels = renderer::cloudNoiseMipCount(n);
+  volume.format = VK_FORMAT_R8G8B8A8_UNORM;volume.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  volume.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  AE_EXPECT_TRUE(rhi::isImageDescValid(volume), "imagem 3D amostrável com mips");
+  volume.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  AE_EXPECT_TRUE(!rhi::isImageDescValid(volume), "3D continua sem anexo");
+  // Tipo volumétrico vai para a GPU; cena v19 abre como camada 2D.
+  renderer::CloudLayer clouds;clouds.enabled = true;clouds.type = 1;clouds.steps = 32.0f;clouds.shapeFactor = 0.7f;
+  const auto rows = renderer::packCloudLayer(clouds, true, 0.0);
+  AE_EXPECT_TRUE(rows.shadow[2] == 1.0f && rows.shadow[3] == 32.0f && rows.volume[0] == 0.7f, "tipo, passos e forma no bloco");
+  // O ambiente escurece pela fração de céu realmente coberta pelos cúmulos.
+  clouds.coverage = 0.5f;
+  AE_EXPECT_TRUE(renderer::cloudSkyOcclusion(clouds) < 0.3f, "0,5 volumétrico cobre pouco céu");
+  clouds.coverage = 0.95f;
+  AE_EXPECT_TRUE(renderer::cloudSkyOcclusion(clouds) > 0.95f, "0,95 volumétrico fecha o céu");
+  clouds.type = 2;AE_EXPECT_TRUE(!clouds.valid(), "tipo desconhecido recusado");
+  scene::Environment authored;authored.values.clouds.enabled = true;authored.values.clouds.type = 1;
+  std::ostringstream out;out.imbue(std::locale::classic());authored.write(out);
+  scene::Environment reread;std::istringstream in(out.str());in.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(reread.read(in, 20) && reread.values.clouds.type == 1, "v20 guarda o tipo volumétrico");
+  scene::Environment old;std::istringstream oldIn(environment_legacy::componentAsV19(out.str()));oldIn.imbue(std::locale::classic());
+  AE_EXPECT_TRUE(old.read(oldIn, 19) && old.values.clouds.type == 0 && old.values.clouds.enabled, "v19 continua camada 2D");
+  bool typeEnum = false;
+  for (const auto &item : scene::environmentEnums) if (item.id == std::string_view("cloud_type")) typeEnum = true;
+  AE_EXPECT_TRUE(typeEnum, "Inspector: Tipo Camada 2D / Volumétricas");
+}
+
+// Cached Shadows (G1b) e nuvens dividem o bloco de ambiente. O G1b gravava o
+// flag do atlas dinâmico em cloudShadow.y, que é a espessura da camada: a cada
+// quadro com sombra dinâmica a camada caía de 1200 m para max(1, 200) m e as
+// nuvens viravam recortes chapados, sem volume nem autossombra. O flag mora em
+// shadowDynamicParameters.y; a espessura empacotada é a que chega ao shader.
+AE_TEST(cached_shadow_flag_keeps_the_cloud_thickness) {
+  renderer::CloudLayer clouds;
+  clouds.enabled = true;
+  clouds.type = 1;
+  clouds.thicknessMeters = 1200.0f;
+  const auto rows = renderer::packCloudLayer(clouds, true, 10.0);
+  AE_EXPECT_EQ(rows.shadow[1], 1200.0f, "a espessura vai em cloudShadow.y");
+#ifdef AETHER_REPOSITORY_ROOT
+  const auto text = [](const char *relative) {
+    std::ifstream in(std::filesystem::path(AETHER_REPOSITORY_ROOT) / relative, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), {});
+  };
+  const auto renderer = text("native/platform/android/instanced_renderer.cpp");
+  const auto lighting = text("native/rhi/shaders/environment_lighting.glsl");
+  AE_EXPECT_TRUE(!renderer.empty() && !lighting.empty(), "fontes do renderer e do shader");
+  AE_EXPECT_TRUE(renderer.find("cloudShadow[1] =") == std::string::npos &&
+                 renderer.find("cloudShadow[1]=") == std::string::npos,
+                 "o renderer não grava nada por cima da espessura");
+  AE_EXPECT_TRUE(renderer.find("frame->shadowDynamicParameters[1] =") != std::string::npos,
+                 "o flag do atlas dinâmico vai em shadowDynamicParameters.y");
+  AE_EXPECT_TRUE(lighting.find("cloudShadow.y>0.5") == std::string::npos &&
+                 lighting.find("shadowDynamicParameters.y>0.5") != std::string::npos,
+                 "a sombra lê o flag no lugar dele");
+#endif
 }

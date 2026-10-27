@@ -82,7 +82,7 @@ u32 applyTimeOfDay(const SceneGraph &graph, double sceneSeconds,
     if (aimLightAt(graph, id, sun.toSun, write)) ++rotated;
     // V-2: a Lua referenciada gira junto, para a lua da mesma hora.
     if (time->moonLight != 0 && time->moonLight != id && directionalLight(graph, time->moonLight) &&
-        aimLightAt(graph, time->moonLight, renderer::evaluateMoon(sun).toMoon, write)) ++rotated;
+        aimLightAt(graph, time->moonLight, renderer::evaluateMoon(input, sun).toMoon, write)) ++rotated;
   }
   return rotated;
 }

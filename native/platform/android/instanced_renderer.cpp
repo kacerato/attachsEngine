@@ -4,6 +4,9 @@
 #include "renderer/environment_ambient.h"
 #include "scene/components.h"
 #include "renderer/cloud_layer.h"
+#include "renderer/cloud_noise.h"
+#include "rhi/shaders/cloud_resolve_spirv.h"
+#include "rhi/shaders/cloud_volume_spirv.h"
 #include "renderer/time_of_day.h"
 #include "renderer/night_sky.h"
 #include "renderer/water_detail_texture.h"
@@ -221,9 +224,17 @@ struct DirtRoadFrameUniform {
   // texel do atlas dinâmico (x).
   float shadowDynamicRect[4][4]{};
   float shadowDynamicParameters[4]{};
+  // G4d, Volumetric Clouds: fator de forma, erosão, histórico válido e fase do
+  // subpixel 0..3 do bloco 2x2 (cloud_volume.frag, cloud_resolve.frag).
+  float cloudVolume[4]{};
+  // G4d: sol fora da atmosfera para o céu físico (dirt_road_sky.frag):
+  // rgb desfaz a cor da Hora do dia, w a atenuação dela pela massa de ar.
+  float skySunExtraterrestrial[4]{1,1,1,1};
 };
-static_assert(sizeof(DirtRoadFrameUniform) == 4832);
+static_assert(sizeof(DirtRoadFrameUniform) == 4864);
 static_assert(offsetof(DirtRoadFrameUniform, shadowDynamicRect) == 4752);
+static_assert(offsetof(DirtRoadFrameUniform, cloudVolume) == 4832);
+static_assert(offsetof(DirtRoadFrameUniform, skySunExtraterrestrial) == 4848);
 static_assert(offsetof(DirtRoadFrameUniform, postLensAxis) == 4256);
 static_assert(offsetof(DirtRoadFrameUniform, postBloomDirt) == 4384);
 static_assert(offsetof(DirtRoadFrameUniform, postBokeh) == 4400);
@@ -593,6 +604,7 @@ bool InstancedRenderer::createRenderPass() {
 #include "platform/android/instanced_post_chain.inl"
 #include "platform/android/instanced_depth_of_field.inl"
 #include "platform/android/instanced_color_grading.inl"
+#include "platform/android/instanced_volumetric_clouds.inl"
 #include "platform/android/instanced_skinning.inl"
 #include "platform/android/instanced_particles.inl"
 
@@ -1172,8 +1184,8 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   std::memcpy(environmentUniform_.mappedData(), &initialFrame, sizeof(initialFrame));
   if (!memoryAllocator_->flushBuffer(environmentUniform_)) return false;
 
-  // Até 15 da água espectral, o subpasse da água e as 7 fixas (16..19, 24..26).
-  VkDescriptorSetLayoutBinding bindings[23]{};
+  // Até 15 da água espectral, o subpasse da água e as fixas (16..27).
+  VkDescriptorSetLayoutBinding bindings[28]{};
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
@@ -1216,6 +1228,11 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   bindings[bindingCount++]={18,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // Cached Shadows: atlas dinâmico das cascatas, com o sampler de compare.
   bindings[bindingCount++]={19,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
+  // G4d: Volumetric Clouds — histórico da reconstrução (20), ruídos 3D de forma
+  // (21) e erosão (22), a marcha em 1/4 da resolução (23, lida pela
+  // reconstrução) e a reconstrução em meia resolução (27, o céu lê).
+  for(u32 binding:{20u,21u,22u,23u,27u})
+    bindings[bindingCount++]={binding,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   // PK-6: sondas (probe_lighting.glsl) — registro por desenho e atlas de reflexo.
   bindings[bindingCount++]={24,VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
   bindings[bindingCount++]={25,VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,1,VK_SHADER_STAGE_FRAGMENT_BIT,nullptr};
@@ -1226,7 +1243,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   if (vkCreateDescriptorSetLayout(device_, &layout, nullptr, &environmentSetLayout_) != VK_SUCCESS) return false;
   VkDescriptorPoolSize sizes[4] = {{VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1},
                                    {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 5u},  // 17, 18, 19, 25, 26
+                                    (spectralWaterCount_>0 ? 9u : (waterSubpassActive_ ? 5u : 4u)) + 10u},  // 17..23, 25..27
                                    {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1},
                                    {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                                     (spectralWaterCount_>0 ? 4u : 0u) + (waterSubpassActive_ ? 1u : 0u) + 2u}};
@@ -1271,7 +1288,7 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
       break;
     }
   }
-  VkWriteDescriptorSet writes[19]{};
+  VkWriteDescriptorSet writes[25]{};
   VkDescriptorBufferInfo rippleBuffer{};
   VkDescriptorBufferInfo uvTransforms{materialUvTransformBuffer_.handle(), 0, materialUvTransformBuffer_.sizeBytes()};
   VkDescriptorImageInfo spectralImages[4]{};
@@ -1407,6 +1424,26 @@ bool InstancedRenderer::createEnvironmentDescriptors() {
   writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
   writes[writeCount].pImageInfo = &dynamicShadow;
   ++writeCount;
+  if (!createVolumetricCloudResources()) {
+    __android_log_print(ANDROID_LOG_ERROR, LogTag, "[Clouds] recursos das nuvens volumétricas recusados.");
+    return false;
+  }
+  const VkDescriptorImageInfo cloudVolumeInfos[5]{
+    {cloudVolumeSampler_.handle(), cloudVolumeHistory_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudNoiseSampler_.handle(), cloudShapeNoise_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudNoiseSampler_.handle(), cloudErosionNoise_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudVolumeSampler_.handle(), cloudVolumeTarget_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+    {cloudVolumeSampler_.handle(), cloudResolveTarget_.view(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}};
+  constexpr u32 cloudVolumeBindings[5]{20, 21, 22, 23, 27};
+  for (u32 index = 0; index < 5; ++index) {
+    writes[writeCount].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[writeCount].dstSet = environmentSet_;
+    writes[writeCount].dstBinding = cloudVolumeBindings[index];
+    writes[writeCount].descriptorCount = 1;
+    writes[writeCount].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[writeCount].pImageInfo = &cloudVolumeInfos[index];
+    ++writeCount;
+  }
   vkUpdateDescriptorSets(device_, writeCount, writes, 0, nullptr);
   // PK-6: o atlas e o registro por desenho (o buffer se reescreve no binding 24
   // sozinho ao crescer). Sem sondas o shader cai exatamente no céu de antes.
@@ -1574,6 +1611,9 @@ bool InstancedRenderer::createSkyPipeline() {
     pipeline.renderPass = renderPass_; pipeline.subpass = 0;
     ok = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipeline, nullptr, &skyPipeline_) == VK_SUCCESS;
   }
+  // Mesmo layout e vértice do céu; sem ele as nuvens caem na camada 2D.
+  if (ok && !createVolumetricCloudPipeline())
+    __android_log_print(ANDROID_LOG_WARN, LogTag, "[Clouds] pipeline volumétrico recusado; nuvens 2D.");
   vkDestroyShaderModule(device_, vert, nullptr);
   vkDestroyShaderModule(device_, frag, nullptr);
   return ok;
@@ -1794,6 +1834,15 @@ void publishNightSky(DirtRoadFrameUniform &frame,std::span<const renderer::Scene
     float direction[3];renderer::detail::normalized(moon->direction,direction);
     for(u32 axis=0;axis<3;++axis) frame.skyMoon[axis]=-direction[axis];
     frame.skyMoon[3]=1.0f;
+  } else {
+    // Sem direcional Lua, o disco segue a efeméride do sol da Hora do dia, e
+    // não a conta antiga do shader (lua no plano vertical do sol).
+    for(const auto &light:lights) {
+      const float *m=light.celestialToMoon;
+      if(light.celestialBody!=renderer::CelestialLightBody::Sun||m[0]*m[0]+m[1]*m[1]+m[2]*m[2]<0.25f) continue;
+      std::copy_n(m,3,frame.skyMoon);frame.skyMoon[3]=1.0f;
+      break;
+    }
   }
   for(const auto &light:lights) {
     if(light.celestialBody==renderer::CelestialLightBody::None) continue;
@@ -2047,6 +2096,7 @@ bool applySceneEnvironmentLook(
   // V-2: quanto o céu procedural/físico ilumina agora, em fração do meio-dia.
   float skyDaylight=1.0f;
   std::fill(std::begin(frame.skySun),std::end(frame.skySun),0.0f);
+  std::fill(std::begin(frame.skySunExtraterrestrial),std::end(frame.skySunExtraterrestrial),1.0f);
   std::fill(std::begin(frame.skyMoon),std::end(frame.skyMoon),0.0f);
   for(auto &row:frame.skyStarRotation) std::fill(std::begin(row),std::end(row),0.0f);
   std::fill(std::begin(frame.skyNight),std::end(frame.skyNight),0.0f);
@@ -2058,6 +2108,11 @@ bool applySceneEnvironmentLook(
       frame.environment.sunColorAngularRadius[axis]=sun->color[axis];
     }
     frame.environment.sunDirectionIntensity[3]=sun->intensity;
+    // G4d: a cena recebe o sol já tingido pela Hora do dia; o céu físico
+    // aplica a própria transmitância e recebe o sol de fora da atmosfera.
+    // Sem isso o ar avermelhava duas vezes e o zênite do poente ia a (40,0,0).
+    for(u32 axis=0;axis<3;++axis) frame.skySunExtraterrestrial[axis]=1.0f/std::max(sun->atmosphereTint[axis],1e-3f);
+    frame.skySunExtraterrestrial[3]=1.0f/std::max(sun->atmosphereDimming,1e-3f);
     // G4: TimeOfDay no sol dita a fase da lua do céu.
     if(sun->moonPhase>=0.0f) frame.celestialParameters[1]=sun->moonPhase;
     // V-2: a Lua só é a luz principal com o sol apagado; o céu, a neblina e o
@@ -2093,8 +2148,8 @@ bool applySceneEnvironmentLook(
     input.aerosolScaleHeightKm=look.aerosolScaleHeightKm;
     input.atmosphereHeightKm=look.atmosphereHeightKm;
     std::copy_n(frame.skySun,3,input.sunDirection);
-    std::copy_n(frame.environment.sunColorAngularRadius,3,input.sunColor);
-    input.sunIntensity=frame.skySun[3];
+    for(u32 axis=0;axis<3;++axis) input.sunColor[axis]=frame.environment.sunColorAngularRadius[axis]*frame.skySunExtraterrestrial[axis];
+    input.sunIntensity=frame.skySun[3]*frame.skySunExtraterrestrial[3];
     if(!groundCache.resolve(input,frame.atmosphereGroundIrradiance)) return false;
   }
   // Brilho do céu visível e dos reflexos: Exposure do procedural, EV do HDRI.
@@ -2195,6 +2250,7 @@ bool applySceneEnvironmentLook(
   std::copy_n(clouds.shape,4,frame.cloudShape);
   std::copy_n(clouds.tint,4,frame.cloudTint);
   std::copy_n(clouds.shadow,4,frame.cloudShadow);
+  std::copy_n(clouds.volume,4,frame.cloudVolume);
   const float occlusion=look.active?renderer::cloudSkyOcclusion(look.clouds):0.0f;
   if(occlusion>0.0f) {
     // Céu nublado é cinza-azulado (~7000 K), não cinza neutro: com o cinza puro
@@ -5705,6 +5761,7 @@ void InstancedRenderer::shutdown() {
   baseTexture_.reset();
   waterDetailSampler_.shutdown();waterDetailTexture_.reset();
   cloudMapSampler_.shutdown();cloudMapTexture_.reset();
+  destroyVolumetricCloudResources();
   routeVertices_.reset();routeIndices_.reset();authoredWaterLayers_.clear();authoredWaterFlowDepth_.clear();authoredWaterTime_=-1;
   dummySampler_.shutdown();
   dummyTexture_.reset();
@@ -6750,6 +6807,12 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
       frame->sceneAoDetail[3]=look.indirectSpecular;
     }
     if(!bindEnvironmentSpecular()) return rhi::SwapchainStatus::FatalError;
+    // Volumetric Clouds: sem pipeline, a camada 2D desenha no lugar; o
+    // histórico só vale depois de um quadro integrado.
+    if (!volumetricCloudsReady()) frame->cloudShadow[2] = 0.0f;
+    frame->cloudVolume[2] = cloudHistoryValid_ ? 1.0f : 0.0f;
+    // Contador de quadros integrados (a fase do subpixel é & 3 no shader).
+    frame->cloudVolume[3] = static_cast<float>(cloudFrameIndex_ & 4095u);
     // Diagnóstico de custo do pós (setPostIsolation): neblina e AO são lidas do bloco de ambiente.
     if(postIsolation_&1u) frame->sceneFog[0]=0.0f;
     if(postIsolation_&2u) frame->sceneAo[0]=0.0f;
@@ -7096,9 +7159,11 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
         frame->shadowWorldUnitsPerTexel[cascade] = shadowCascades_[cascade].worldUnitsPerTexel;
       }
       frame->shadowParameters[1] = static_cast<float>(shadowCascadeCount_);
-      // Cached Shadows: o shader soma a leitura do atlas dinâmico.
-      frame->cloudShadow[1] = dualShadowActive() && shadowDynamicValid_ ? 1.0f : 0.0f;
-      shadowDynamicFlagWritten_ = frame->cloudShadow[1];
+      // Cached Shadows: o shader soma a leitura do atlas dinâmico. O flag mora
+      // em shadowDynamicParameters.y: cloudShadow.y é a espessura das nuvens
+      // (renderer/cloud_layer.cpp), e o flag 0/1 ali achatava a camada em 200 m.
+      frame->shadowDynamicParameters[1] = dualShadowActive() && shadowDynamicValid_ ? 1.0f : 0.0f;
+      shadowDynamicFlagWritten_ = frame->shadowDynamicParameters[1];
     }
     if (!memoryAllocator_->flushBuffer(environmentUniform_))
       return rhi::SwapchainStatus::FatalError;
@@ -7202,6 +7267,10 @@ rhi::SwapchainStatus InstancedRenderer::drawFrame(float timeSeconds,
   // mesmo estagio, e atribui-lo a outra classe falsearia a medicao das duas.
   recordDrawCompactDispatch();
   endGpuRegion(GpuPassClass::Culling);
+  // G4d: Volumetric Clouds em 1/16 dos pixels, antes da cena (o céu compõe).
+  beginGpuRegion(GpuPassClass::Clouds);
+  recordVolumetricClouds(camera, timeSeconds);
+  endGpuRegion(GpuPassClass::Clouds);
 
   VkClearValue clearValues[4]{};
   clearValues[0].color = editorBackground_ ? VkClearColorValue{{0.028f,0.032f,0.039f,1.0f}} : VkClearColorValue{{0.02f,0.02f,0.05f,1.0f}};

@@ -88,9 +88,12 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
         const auto sun = renderer::evaluateTimeOfDay(input);
         for (u32 axis = 0; axis < 3; ++axis) entry.color[axis] *= sun.sunColor[axis];
         entry.intensity *= sun.sunIntensity;
+        std::copy_n(sun.atmosphereTint, 3, entry.atmosphereTint);
+        entry.atmosphereDimming = sun.atmosphereDimming;
         entry.moonPhase = sun.moonPhase;
         entry.celestialBody = renderer::CelestialLightBody::Sun;
         std::copy_n(sun.toSun, 3, entry.celestialToSun);
+        std::copy_n(renderer::evaluateMoon(input, sun).toMoon, 3, entry.celestialToMoon);
         renderer::celestialSphereRows(input, entry.celestialSphere);
       }
       // V-2: a Lua. A cor é a autoral (fria, como a Moon das cenas da Unity);
@@ -99,7 +102,7 @@ bool collectSceneLights(const SceneGraph &graph, std::vector<renderer::SceneLigh
         if (moonId != id) continue;
         const auto input = timeInput(*time);
         const auto sun = renderer::evaluateTimeOfDay(input);
-        entry.intensity *= renderer::evaluateMoon(sun).intensity;
+        entry.intensity *= renderer::evaluateMoon(input, sun).intensity;
         entry.moonPhase = sun.moonPhase;
         entry.celestialBody = renderer::CelestialLightBody::Moon;
         std::copy_n(sun.toSun, 3, entry.celestialToSun);

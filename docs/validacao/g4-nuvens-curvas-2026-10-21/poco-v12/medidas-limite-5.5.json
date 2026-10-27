@@ -1,0 +1,122 @@
+[
+  {
+    "arquivo": "lua-20-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.01829,
+      "srgb_medio": 36.8,
+      "cor_srgb": [
+        32.2,
+        34.8,
+        60.2
+      ],
+      "azul_vermelho": 3.12,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 88.6
+    },
+    "ceu": {
+      "luminancia": 0.03866,
+      "srgb_medio": 55.3,
+      "cor_srgb": [
+        42.7,
+        54.4,
+        86.9
+      ],
+      "azul_vermelho": 3.98,
+      "sombra_srgb": 4.0,
+      "p99_srgb": 87.7
+    },
+    "chao": {
+      "luminancia": 0.00388,
+      "srgb_medio": 12.6,
+      "cor_srgb": [
+        23.4,
+        5.8,
+        25.9
+      ],
+      "azul_vermelho": 1.16,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 51.6
+    }
+  },
+  {
+    "arquivo": "lua-00-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.01785,
+      "srgb_medio": 36.2,
+      "cor_srgb": [
+        31.5,
+        34.3,
+        59.7
+      ],
+      "azul_vermelho": 3.17,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 87.8
+    },
+    "ceu": {
+      "luminancia": 0.03783,
+      "srgb_medio": 54.7,
+      "cor_srgb": [
+        42.0,
+        53.7,
+        86.3
+      ],
+      "azul_vermelho": 4.05,
+      "sombra_srgb": 4.1,
+      "p99_srgb": 87.7
+    },
+    "chao": {
+      "luminancia": 0.00365,
+      "srgb_medio": 11.9,
+      "cor_srgb": [
+        22.6,
+        5.4,
+        25.1
+      ],
+      "azul_vermelho": 1.17,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 51.6
+    }
+  },
+  {
+    "arquivo": "lua-nova-00-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.00118,
+      "srgb_medio": 3.9,
+      "cor_srgb": [
+        8.9,
+        2.6,
+        1.5
+      ],
+      "azul_vermelho": 0.16,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 35.3
+    },
+    "ceu": {
+      "luminancia": 0.00029,
+      "srgb_medio": 1.0,
+      "cor_srgb": [
+        1.5,
+        0.9,
+        0.4
+      ],
+      "azul_vermelho": 0.25,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 0.0
+    },
+    "chao": {
+      "luminancia": 0.00142,
+      "srgb_medio": 4.7,
+      "cor_srgb": [
+        10.9,
+        2.9,
+        3.7
+      ],
+      "azul_vermelho": 0.34,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 51.6
+    }
+  }
+]

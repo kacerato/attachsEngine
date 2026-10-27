@@ -1,0 +1,202 @@
+[
+  {
+    "arquivo": "lua-20-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.03981,
+      "srgb_medio": 56.2,
+      "cor_srgb": [
+        51.8,
+        54.2,
+        81.4
+      ],
+      "azul_vermelho": 2.44,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 114.4
+    },
+    "ceu": {
+      "luminancia": 0.07771,
+      "srgb_medio": 78.8,
+      "cor_srgb": [
+        65.9,
+        78.1,
+        111.3
+      ],
+      "azul_vermelho": 2.94,
+      "sombra_srgb": 25.1,
+      "p99_srgb": 114.1
+    },
+    "chao": {
+      "luminancia": 0.01421,
+      "srgb_medio": 31.7,
+      "cor_srgb": [
+        44.3,
+        24.9,
+        44.5
+      ],
+      "azul_vermelho": 1.01,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 60.5
+    }
+  },
+  {
+    "arquivo": "lua-00-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.03894,
+      "srgb_medio": 55.6,
+      "cor_srgb": [
+        51.3,
+        53.5,
+        80.7
+      ],
+      "azul_vermelho": 2.44,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 114.3
+    },
+    "ceu": {
+      "luminancia": 0.07647,
+      "srgb_medio": 78.1,
+      "cor_srgb": [
+        65.2,
+        77.5,
+        110.7
+      ],
+      "azul_vermelho": 2.97,
+      "sombra_srgb": 25.8,
+      "p99_srgb": 114.1
+    },
+    "chao": {
+      "luminancia": 0.01374,
+      "srgb_medio": 31.0,
+      "cor_srgb": [
+        44.0,
+        24.1,
+        43.8
+      ],
+      "azul_vermelho": 0.99,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 59.6
+    }
+  },
+  {
+    "arquivo": "lua-nova-00-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.00188,
+      "srgb_medio": 6.2,
+      "cor_srgb": [
+        16.2,
+        3.3,
+        1.5
+      ],
+      "azul_vermelho": 0.09,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 48.9
+    },
+    "ceu": {
+      "luminancia": 0.00036,
+      "srgb_medio": 1.2,
+      "cor_srgb": [
+        1.9,
+        1.1,
+        0.5
+      ],
+      "azul_vermelho": 0.26,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 0.0
+    },
+    "chao": {
+      "luminancia": 0.00263,
+      "srgb_medio": 8.7,
+      "cor_srgb": [
+        23.8,
+        2.9,
+        3.7
+      ],
+      "azul_vermelho": 0.13,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 51.6
+    }
+  },
+  {
+    "arquivo": "08-22h-final-ceu60-limite-6.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.05387,
+      "srgb_medio": 65.6,
+      "cor_srgb": [
+        62.4,
+        64.3,
+        85.0
+      ],
+      "azul_vermelho": 1.87,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 110.4
+    },
+    "ceu": {
+      "luminancia": 0.08295,
+      "srgb_medio": 81.3,
+      "cor_srgb": [
+        60.5,
+        81.6,
+        119.4
+      ],
+      "azul_vermelho": 4.04,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 96.7
+    },
+    "chao": {
+      "luminancia": 0.03388,
+      "srgb_medio": 51.6,
+      "cor_srgb": [
+        68.1,
+        46.7,
+        39.5
+      ],
+      "azul_vermelho": 0.36,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 106.0
+    }
+  },
+  {
+    "arquivo": "lua-20-praca.png",
+    "recorte": "0,102,2772,1280",
+    "quadro": {
+      "luminancia": 0.2516,
+      "srgb_medio": 137.4,
+      "cor_srgb": [
+        125.9,
+        137.5,
+        164.7
+      ],
+      "azul_vermelho": 1.8,
+      "sombra_srgb": 7.3,
+      "p99_srgb": 214.3
+    },
+    "ceu": {
+      "luminancia": 0.42378,
+      "srgb_medio": 174.1,
+      "cor_srgb": [
+        165.9,
+        173.9,
+        197.1
+      ],
+      "azul_vermelho": 1.47,
+      "sombra_srgb": 109.5,
+      "p99_srgb": 214.3
+    },
+    "chao": {
+      "luminancia": 0.12101,
+      "srgb_medio": 97.6,
+      "cor_srgb": [
+        81.6,
+        98.0,
+        129.3
+      ],
+      "azul_vermelho": 2.64,
+      "sombra_srgb": 0.0,
+      "p99_srgb": 139.9
+    }
+  }
+]

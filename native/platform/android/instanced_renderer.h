@@ -813,6 +813,12 @@ private:
   bool createEnvironmentDescriptors();
   bool createSpectralWaterResources();
   bool createSkyPipeline();
+  // G4d: Volumetric Clouds (instanced_volumetric_clouds.inl).
+  bool createVolumetricCloudResources();
+  bool createVolumetricCloudPipeline();
+  void destroyVolumetricCloudResources();
+  bool volumetricCloudsReady() const;
+  void recordVolumetricClouds(const platform::FreeCameraState &camera, float timeSeconds);
   bool createEditorGridPipeline();
   struct ParticleResources;
   ParticleResources *particles_ = nullptr;
@@ -1472,7 +1478,7 @@ private:
   std::vector<std::array<float, 4>> shadowStaticStaleBounds_;
   u32 shadowDynamicDrawsWindow_ = 0;
   // Os dois mapas valem quando há dinâmicos e o atlas pequeno existe; o
-  // shader só lê o dinâmico então (cloudShadow.y do bloco de ambiente).
+  // shader só lê o dinâmico então (shadowDynamicParameters.y do bloco de ambiente).
   bool dualShadowActive() const noexcept {
     return shadowDynamicCount_ > 0 && shadowCascadeCount_ > 0 && !shadowDirtyAll_ && shadowDynamicAtlas_.isReady();
   }
@@ -1535,6 +1541,27 @@ private:
   rhi::VulkanSampler cloudMapSampler_{};
   // Relógio do vento das nuvens: o mesmo do quadro, também para a prévia.
   double cloudTimeSeconds_ = 0.0;
+  // G4d: marcha em 1/16 dos pixels, reconstrução em meia resolução e o
+  // histórico dela, e ruídos 3D das Volumetric Clouds.
+  rhi::VulkanImage cloudVolumeTarget_{};
+  rhi::VulkanImage cloudResolveTarget_{};
+  rhi::VulkanImage cloudVolumeHistory_{};
+  rhi::VulkanImage cloudShapeNoise_{};
+  rhi::VulkanImage cloudErosionNoise_{};
+  rhi::VulkanBuffer cloudShapeStaging_{};
+  rhi::VulkanBuffer cloudErosionStaging_{};
+  rhi::VulkanSampler cloudVolumeSampler_{};
+  rhi::VulkanSampler cloudNoiseSampler_{};
+  VkRenderPass cloudVolumeRenderPass_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudVolumeFramebuffer_ = VK_NULL_HANDLE;
+  VkFramebuffer cloudResolveFramebuffer_ = VK_NULL_HANDLE;
+  VkPipeline cloudVolumePipeline_ = VK_NULL_HANDLE;
+  VkPipeline cloudResolvePipeline_ = VK_NULL_HANDLE;
+  // Fase do subpixel da marcha (0..3), um passo por quadro integrado.
+  u32 cloudFrameIndex_ = 0;
+  bool cloudNoiseUploaded_ = false;
+  bool cloudHistoryValid_ = false;
+  bool cloudImagesInitialized_ = false;
   // G4c: molhado, poças e neve acumulada do clima, copiados para o quadro, e
   // os multiplicadores da luz direta e da ambiente do clima.
   float weatherSurface_[4]{};

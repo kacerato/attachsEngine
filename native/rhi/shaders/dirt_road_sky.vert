@@ -5,6 +5,9 @@ layout(set=0,binding=0,std140) uniform SkyTemporalFrame {
   layout(offset=592) vec4 shadowFilterParameters;
 } skyFrame;
 layout(location=0) out vec3 vDirection;
+// UV de tela (0..1, y para baixo): o céu lê as nuvens volumétricas que o passe
+// de 1/16 dos pixels desenhou com este mesmo vértice.
+layout(location=1) out vec2 vScreen;
 void main() {
   vec2 positions[3]=vec2[3](vec2(-1,-1),vec2(3,-1),vec2(-1,3));
   vec2 ndc=positions[gl_VertexIndex];
@@ -20,5 +23,6 @@ void main() {
                                            -cameraNdc.y/focal,1.0);
   if(uintBitsToFloat(frame.textureIndices.w)>0.0)
     vDirection=dirtRoadCameraRotation(frame.materialFactors.x)*vec3(0,0,1);
+  vScreen=ndc*0.5+0.5;
   gl_Position=vec4(ndc,1,1);
 }

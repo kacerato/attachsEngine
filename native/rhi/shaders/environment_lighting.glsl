@@ -81,7 +81,8 @@ layout(set=1,binding=17) uniform sampler2DShadow localShadowAtlas;
 // Mapa de nuvens repetível (renderer/cloud_layer.cpp), o mesmo do céu.
 layout(set=1,binding=18) uniform mediump sampler2D cloudMap;
 // Cached Shadows: só os projetores dinâmicos de cada cascata, num atlas
-// menor com a mesma grade; cloudShadow.y = 1 quando ele vale (instanced_renderer).
+// menor com a mesma grade; shadowDynamicParameters.y = 1 quando ele vale
+// (instanced_renderer; cloudShadow.y é a espessura das nuvens).
 layout(set=1,binding=19) uniform sampler2DShadow dynamicShadowAtlas;
 #include "cloud_layer.glsl"
 
@@ -348,7 +349,7 @@ mediump float directionalCascadeShadow(highp vec3 worldPosition, mediump vec3 no
     visibility=mix(visibility,1.0,smoothstep(start,intervalEnd,viewDepth));
   }
   // Cached Shadows: a sombra dos dinâmicos é o mínimo com a do atlas estático.
-  if(environment.cloudShadow.y>0.5)
+  if(environment.shadowDynamicParameters.y>0.5)
     visibility=min(visibility,sampleDynamicShadowCascade(worldPosition,normal,cascade,cascadeCount));
   // Força da sombra da Luz principal (Strength do Light Inspector): abaixo de
   // 1 a luz do sol vaza pelo oclusor.

@@ -108,6 +108,9 @@ std::string EnvironmentProfile::serialize() const {
      <<' '<<values.lensDistortionCenter[0]<<' '<<values.lensDistortionCenter[1]<<' '<<values.lensDistortionScale;
   renderer::writeColorCurves(out,values);
   renderer::writeVolumeOverrides(out,overrides);
+  // v15 (G4c/G4d): espessura das nuvens e Volumetric Clouds.
+  out<<' '<<values.clouds.thicknessMeters<<' '<<values.clouds.type<<' '<<values.clouds.shapeFactor
+     <<' '<<values.clouds.erosion<<' '<<values.clouds.steps;
   out<<'\n';
   return out.str();
 }
@@ -232,6 +235,10 @@ bool EnvironmentProfile::deserialize(std::string_view text,EnvironmentProfile &o
     candidate.overrides=renderer::volumeOverridesFromLegacyGroups(renderer::EnvironmentOverrideAll);
   }
   x.syncEffectSwitches();
+  if(version>=15) {
+    auto &c=candidate.values.clouds;
+    if(!(in>>c.thicknessMeters>>c.type>>c.shapeFactor>>c.erosion>>c.steps)) return false;
+  }
   in>>std::ws;if(!in.eof()||!candidate.valid()) return false;
   out=std::move(candidate);return true;
 }

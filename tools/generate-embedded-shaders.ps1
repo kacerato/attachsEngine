@@ -19,6 +19,8 @@ if ($All) {
     if ($OutputHeader) { throw '-OutputHeader não pode ser usado com -All.' }
     $embeddedShaders = [ordered]@{
         astc_encode = @('comp')
+        cloud_resolve = @('frag')
+        cloud_volume = @('frag')
         dirt_road_coverage_fallback = @('frag')
         dirt_road_coverage = @('frag')
         dirt_road_coverage_shade_fallback = @('frag')

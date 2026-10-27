@@ -28,10 +28,15 @@ inline bool environmentNumberSinceV19(std::string_view id) {
          id=="chromatic_aberration"||id.starts_with("lens_distortion");
 }
 
+// G4c/G4d: espessura da camada e Volumetric Clouds, a partir da v20.
+inline bool environmentNumberSinceV20(std::string_view id) {
+  return id=="cloud_thickness"||id=="cloud_shape_factor"||id=="cloud_erosion"||id=="cloud_steps";
+}
+
 class Environment final : public ComponentValue {
 public:
   Environment() { values.active = true; values.syncEffectSwitches(); }
-  static constexpr u32 CurrentVersion = 19;
+  static constexpr u32 CurrentVersion = 20;
   renderer::SceneEnvironment values{};
   renderer::EnvironmentVolumeShape shape=renderer::EnvironmentVolumeShape::Global;
 
@@ -96,7 +101,7 @@ public:
         << (v.skybox.valid()?v.skybox.text():"-") << ' ' << v.vignetteRounded << ' ' << v.bloomHighQualityFiltering << ' '
         << (v.bloomDirt.valid()?v.bloomDirt.text():"-") << ' ' << static_cast<u32>(v.depthOfField) << ' '
         << static_cast<u32>(v.depthOfFieldQuality) << ' ' << v.gaussianHighQuality << ' '
-        << static_cast<u32>(v.motionBlurQuality);
+        << static_cast<u32>(v.motionBlurQuality) << ' ' << v.clouds.type;
     renderer::writeVolumeOverrides(out,volumeOverrides());
     renderer::writeColorCurves(out,v);
     for (const auto &property : descriptor.numbers) out << ' ' << property.read(*this);
@@ -104,7 +109,7 @@ public:
   bool read(std::istream &in, u32 version) override {
     loadedVersion = version;legacyLayer=0;legacyProfileCopy=false;
     if(version<1||version>CurrentVersion) return false;
-    if(version>=19) return readV19(in);
+    if(version>=19) return readV19(in,version);
     return readLegacy(in,version);
   }
   // Versão em que esta instância foi lida (não é gravada): a migração de
@@ -126,7 +131,7 @@ private:
     guid={};
     return token=="-"||resources::AssetGuid::parse(token,guid);
   }
-  bool readV19(std::istream &in) {
+  bool readV19(std::istream &in,u32 version) {
     auto &v=values;
     u32 sky=0,tone=0,mode=0,exposure=0,metering=0,adaptation=0,sun=0,ambient=0,fogMode=0,fogColor=0,dof=0,dofQuality=0,blur=0;
     if(!(in>>v.active>>v.fog>>v.post>>sky>>tone>>mode) || sky>2 || tone>4 || mode>2 || !readGuid(in,profile) ||
@@ -135,6 +140,9 @@ private:
        exposure>2 || metering>2 || adaptation>1 || sun>2 || ambient>2 || fogMode>2 || fogColor>1 ||
        !readGuid(in,v.skybox) || !(in>>v.vignetteRounded>>v.bloomHighQualityFiltering) || !readGuid(in,v.bloomDirt) ||
        !(in>>dof>>dofQuality>>v.gaussianHighQuality>>blur) || dof>2 || dofQuality>2 || blur>2) return false;
+    // v20 (G4d): tipo Volumetric Clouds. Cena v19 continua na camada 2D.
+    v.clouds.type=0;
+    if(version>=20 && (!(in>>v.clouds.type) || v.clouds.type>1)) return false;
     v.sky=static_cast<renderer::SkyModel>(sky);v.toneMapper=static_cast<renderer::ToneMapper>(tone);
     shape=static_cast<renderer::EnvironmentVolumeShape>(mode);
     v.exposureMode=static_cast<renderer::ExposureMode>(exposure);
@@ -148,7 +156,11 @@ private:
     renderer::VolumeOverrides next;
     if(!renderer::readVolumeOverrides(in,next) || !renderer::readColorCurves(in,v)) return false;
     setVolumeOverrides(next);
-    for (const auto &property : descriptor.numbers) if (!(in >> *property.write(*this))) return false;
+    for (const auto &property : descriptor.numbers) {
+      // v19: sem a espessura nem as Volumetric Clouds; ficam os padrões.
+      if(version<20 && environmentNumberSinceV20(property.id)) continue;
+      if (!(in >> *property.write(*this))) return false;
+    }
     v.syncEffectSwitches();
     return valid();
   }
@@ -262,7 +274,7 @@ private:
       values.starIntensity=defaults.starIntensity;
     }
     for (const auto &property : descriptor.numbers) {
-      if(environmentNumberSinceV19(property.id)) continue;
+      if(environmentNumberSinceV19(property.id) || environmentNumberSinceV20(property.id)) continue;
       if(version<18 && environmentNumberSinceV18(property.id)) continue;
       if(version<16 && property.id.starts_with("cloud_")) continue;
       if(version<17 && environmentNumberSinceV17(property.id)) continue;
@@ -355,6 +367,14 @@ inline bool environmentUsesPhysicalAtmosphere(const ComponentValue &value) {
 }
 inline bool environmentUsesClouds(const ComponentValue &value) {
   return static_cast<const Environment &>(value).values.clouds.enabled;
+}
+inline bool environmentUsesVolumetricClouds(const ComponentValue &value) {
+  const auto &clouds=static_cast<const Environment &>(value).values.clouds;
+  return clouds.enabled&&clouds.type==1;
+}
+inline bool environmentUsesCloudLayer(const ComponentValue &value) {
+  const auto &clouds=static_cast<const Environment &>(value).values.clouds;
+  return clouds.enabled&&clouds.type==0;
 }
 inline bool environmentUsesCloudShadows(const ComponentValue &value) {
   const auto &clouds=static_cast<const Environment &>(value).values.clouds;
@@ -512,13 +532,15 @@ inline constexpr std::array<ComponentEnumOption,2> exposureAdaptationOptions{{{0
 inline constexpr std::array<ComponentEnumOption,3> exposureMidGreyOptions{{{0,"Cinza 12,5%"},{1,"Cinza 14%"},{2,"Cinza 18%"}}};
 inline constexpr std::array<ComponentEnumOption,3> dofModeOptions{{{0,"Desligado"},{1,"Gaussiano"},{2,"Bokeh"}}};
 inline constexpr std::array<ComponentEnumOption,3> postQualityOptions{{{0,"Baixa"},{1,"Média"},{2,"Alta"}}};
-inline constexpr std::array<ComponentEnum, 14> environmentEnums{{
+inline constexpr std::array<ComponentEnumOption,2> cloudTypeOptions{{{0,"Camada 2D"},{1,"Volumétricas"}}};
+inline constexpr std::array<ComponentEnum, 15> environmentEnums{{
   {"sky", "Shader do céu", skyOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sky);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sky=static_cast<renderer::SkyModel>(n);}, {"Céu","","Procedural, Panorâmico (HDRI) ou Físico, como o shader do Material do céu",nullptr,environmentSkyIsLocal,"render.environment.atmosphere","rhi/shaders/dirt_road_sky.frag",Invalidate::Draw}},
   {"sun_disk","Sol",sunDiskOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.sunDisk);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.sunDisk=static_cast<renderer::SunDiskMode>(n);},{"Céu","","Disco do sol no céu procedural: nenhum, simples ou alta qualidade",environmentUsesAtmosphere,environmentSkyIsLocal,"render.environment.atmosphere","rhi/shaders/sky_procedural.glsl",Invalidate::Draw}},
   {"ambient_source","Fonte",ambientSourceOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.ambientSource);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.ambientSource=static_cast<renderer::AmbientSource>(n);},{"Luz ambiente","","De onde vem a luz ambiente: do céu, de um gradiente ou de uma cor",nullptr,nullptr,"render.ambient.hemispheric","renderer/environment_ambient.cpp",Invalidate::Draw}},
   {"fog_mode","Modo",fogModeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.fogMode);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.fogMode=static_cast<renderer::FogMode>(n);},{"Neblina","","Linear entre Início e Fim, ou exponencial pela densidade",environmentUsesFog,nullptr,"render.environment.fog","rhi/shaders/post_process_common.glsl",Invalidate::Draw}},
   {"fog_color_mode","Modo de cor",fogColorModeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.fogColorMode);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.fogColorMode=static_cast<renderer::FogColorMode>(n);},{"Neblina","","A cor escolhida (o céu fica limpo), ou a mesma cor cobrindo o céu e apagando à noite",environmentUsesFog,nullptr,"render.environment.fog","platform/android/instanced_renderer.cpp",Invalidate::Draw}},
   {"tone_mapper", "Tonemapping", toneOptions, [](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.toneMapper);}, [](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.toneMapper=static_cast<renderer::ToneMapper>(n);}, {"Tonemapping","","Curva aplicada ao HDR antes da saída",environmentUsesPost,nullptr,"render.post.tonemap","rhi/shaders/post_process_common.glsl",Invalidate::Policy}},
+  {"cloud_type","Tipo",cloudTypeOptions,[](const ComponentValue &v){return static_cast<const Environment&>(v).values.clouds.type;},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.clouds.type=n;},{"Nuvens","","Camada 2D (Cloud Layer, barata) ou Volumétricas (Volumetric Clouds: cúmulos com volume)",environmentUsesClouds,nullptr,"render.environment.clouds","rhi/shaders/cloud_volume.frag",Invalidate::Draw}},
   {"volume_shape","Modo",environmentShapeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).shape);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).shape=static_cast<renderer::EnvironmentVolumeShape>(n);},{"Volume","","Global afeta toda vista; formas usam o Transform do objeto",nullptr,nullptr,"render.environment.volumes","runtime/scene_environment.cpp",Invalidate::Draw}},
   {"exposure_mode","Modo",exposureModeOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureMode);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureMode=static_cast<renderer::ExposureMode>(n);},{"Exposição","","Fixa usa o EV100 informado; as automáticas medem a luminância da câmera a cada quadro",environmentUsesPost,nullptr,"render.post.auto_exposure","platform/android/instanced_auto_exposure.inl",Invalidate::Policy}},
   {"exposure_metering","Medição",exposureMeteringOptions,[](const ComponentValue &v){return static_cast<u32>(static_cast<const Environment&>(v).values.exposureMetering);},[](ComponentValue &v,u32 n){static_cast<Environment&>(v).values.exposureMetering=static_cast<renderer::ExposureMetering>(n);},{"Exposição","","Quais pixels pesam na média: a imagem toda, um círculo no centro ou peso que cai até a borda",environmentUsesAutoExposure,nullptr,"render.post.auto_exposure","rhi/shaders/exposure_histogram.comp",Invalidate::Policy}},

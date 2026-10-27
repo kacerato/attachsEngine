@@ -145,7 +145,7 @@ AE_TEST(environment_v18_scene_migrates_group_overrides_and_effect_switches) {
   AE_EXPECT_EQ(restored.loadedVersion,18u,"versão lida");
   // Regravar e reler: a v19 guarda as caixas por parâmetro.
   scene::Environment again;std::istringstream v19(written(restored));v19.imbue(std::locale::classic());
-  AE_EXPECT_TRUE(again.read(v19,19)&&again.volumeOverrides()==migrated,"v19 ida e volta");
+  AE_EXPECT_TRUE(again.read(v19,scene::Environment::CurrentVersion)&&again.volumeOverrides()==migrated,"v19 ida e volta");
 }
 
 AE_TEST(environment_v19_roundtrips_every_post_effect_and_curve) {
@@ -168,7 +168,7 @@ AE_TEST(environment_v19_roundtrips_every_post_effect_and_curve) {
   overrides.active&=~(1u<<static_cast<u32>(renderer::VolumeGroup::Fog));
   source.setVolumeOverrides(overrides);
   scene::Environment restored;std::istringstream in(written(source));in.imbue(std::locale::classic());
-  AE_EXPECT_TRUE(restored.read(in,19),"v19 relida");
+  AE_EXPECT_TRUE(restored.read(in,scene::Environment::CurrentVersion),"versão atual relida");
   in>>std::ws;AE_EXPECT_TRUE(in.eof(),"consumiu a linha inteira");
   bool same=true;
   for(const auto &parameter:renderer::volumeParameters())

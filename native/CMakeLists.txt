@@ -440,6 +440,7 @@ add_library(aether_renderer STATIC
   renderer/procedural_sky.cpp
   renderer/environment_ambient.cpp
   renderer/cloud_layer.cpp
+  renderer/cloud_noise.cpp
   renderer/physical_atmosphere.cpp
   renderer/frame_graph.cpp
   renderer/frustum_visibility.cpp
