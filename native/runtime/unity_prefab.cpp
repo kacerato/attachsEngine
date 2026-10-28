@@ -8,6 +8,7 @@
 #include "scene/physics2d_components.h"
 #include "scene/physics_body.h"
 #include "scene/timer.h"
+#include "scene/property_tween.h"
 #include "scene/vfx_behaviors.h"
 #include <algorithm>
 #include <cmath>
@@ -220,6 +221,18 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
     auto *timer=static_cast<scene::Timer*>(add(scene::Timer::descriptor));if(!timer)return false;
     timer->intervalSeconds=*object.despawnSeconds;timer->repeat=false;timer->enabled=true;timer->autoStart=true;
     timer->elapsedAction=2;timer->elapsedTarget=local(object.fileId);
+  }
+  if(object.lightOffSeconds) {
+    auto *timer=static_cast<scene::Timer*>(add(scene::Timer::descriptor));if(!timer)return false;
+    timer->intervalSeconds=*object.lightOffSeconds;timer->repeat=false;timer->enabled=true;timer->autoStart=true;
+    timer->elapsedAction=2;timer->elapsedTarget=local(object.fileId);
+  }
+  if(object.lightFlicker&&object.light) {
+    // Fogo: a intensidade desce 60% e volta, sem parar.
+    auto *flicker=static_cast<scene::PropertyTween*>(add(scene::PropertyTween::descriptor));if(!flicker)return false;
+    flicker->componentType="astra.render.light";flicker->property="intensity";
+    flicker->relative=true;flicker->destination=-.6f*object.light->intensity;
+    flicker->pingpong=true;flicker->duration=.18f;flicker->loops=100000;flicker->autoplay=true;flicker->enabled=true;
   }
   if(object.rotator) {
     auto *rotator=static_cast<scene::Rotator*>(add(scene::Rotator::descriptor));if(!rotator)return false;

@@ -324,6 +324,35 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
         // UniStorm: devolve o objeto ao pool (SetActive false) depois de
         // Seconds; na Astra, um Temporizador que desativa o próprio objeto.
         value.despawnSeconds=std::clamp(num(node,"Seconds",3),.05f,3600.0f);
+      } else if(name=="FadeParticleEffect") {
+        // A emissão vira a curva do script no tempo × multiplicador e não volta:
+        // um sistema sem laço com duração 1/multiplicador e essa curva de taxa.
+        if(!value.particle){loss("FadeParticleEffect sem Particle System no objeto.");continue;}
+        const float multiplier=std::clamp(num(node,"FadeMultipler",1),.001f,100.0f);
+        auto &settings=value.particle->settings;
+        settings.looping=false;settings.duration=std::clamp(1.0f/multiplier,.05f,3600.0f);
+        settings.emissionRate.mode=scene::ParticleCurveMode::Curve;
+        settings.emissionRate.curveMax=unityAnimationCurve(node.get("ParticleCurve"),1);
+        settings.emissionRate.multiplier=1;
+        approximate("FadeParticleEffect vira a curva de taxa de um sistema sem laço.");
+      } else if(name=="FadeLightEffect") {
+        // A intensidade segue a curva e cai a zero no fim: a luz desliga quando a
+        // curva passa da metade do primeiro valor.
+        if(!value.light){loss("FadeLightEffect sem Light no objeto.");continue;}
+        const float multiplier=std::clamp(num(node,"FadeMultipler",1),.001f,100.0f);
+        const auto fade=unityAnimationCurve(node.get("LightCurve"),1);
+        float off=1;
+        if(!fade.keys.empty())
+          for(usize k=1;k<fade.keys.size();++k) {
+            const auto &a=fade.keys[k-1],&b=fade.keys[k];const float half=fade.keys.front().value*.5f;
+            if(b.value<half&&a.value>=half){off=a.time+(b.time-a.time)*(a.value-half)/std::max(a.value-b.value,1e-6f);break;}
+          }
+        value.lightOffSeconds=std::clamp(off/multiplier,.05f,3600.0f);
+        approximate("FadeLightEffect vira desligar a luz quando a curva cai.");
+      } else if(name=="FireLight") {
+        if(!value.light){loss("FireLight sem Light no objeto.");continue;}
+        value.lightFlicker=true;
+        approximate("FireLight: o ruído Perlin da intensidade vira ida e volta; o tremor de posição fica de fora.");
       } else if(name=="ProjectileMover"||name=="ProjectileMover2D") {
         UnityPrefabProjectile projectile;projectile.twoD=name=="ProjectileMover2D";
         projectile.speed=std::max(0.f,num(node,"speed",15));projectile.hitOffset=num(node,"hitOffset",0);

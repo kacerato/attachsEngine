@@ -746,4 +746,6 @@ bool convertUnityParticleSystem(const Node &system, const Node *renderer, UnityP
   return true;
 }
 
+scene::ScriptCurve unityAnimationCurve(const UnityYamlNode *node, float scale) { return curve(node, scale); }
+
 } // namespace ae::resources

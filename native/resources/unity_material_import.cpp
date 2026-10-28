@@ -72,6 +72,17 @@ constexpr HovlShader hovlShaders[]{
   {"builtin:200","Particles/Additive","_MainTex",UnityParticleFamily::Additive,false},
   {"builtin:202","Particles/Additive (Soft)","_MainTex",UnityParticleFamily::Additive,false},
   {"builtin:203","Particles/Alpha Blended","_MainTex",UnityParticleFamily::AlphaBlend,false},
+  // Legacy restantes: Additive-Multiply soma; Premultiply, VertexLit Blended e
+  // Anim Alpha Blended misturam por alfa (a luz por vértice e a folha animada
+  // do embutido ficam com a mistura da Astra).
+  {"builtin:201","Particles/~Additive-Multiply","_MainTex",UnityParticleFamily::Additive,true},
+  {"builtin:207","Particles/Alpha Blended Premultiply","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"builtin:208","Particles/VertexLit Blended","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"builtin:209","Particles/Anim Alpha Blended","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  // Multiply escurece o fundo; sem mistura multiplicativa nas partículas da
+  // Astra, vira mistura alfa da cor escura (fumaça escura fica escura).
+  {"builtin:205","Particles/Multiply","_MainTex",UnityParticleFamily::AlphaBlend,true},
+  {"builtin:206","Particles/Multiply (Double)","_MainTex",UnityParticleFamily::AlphaBlend,true},
   {"builtin:210","Particles/Standard Surface","_MainTex",UnityParticleFamily::AlphaBlend,true},
   {"builtin:211","Particles/Standard Unlit","_MainTex",UnityParticleFamily::AlphaBlend,false},
 };

@@ -52,5 +52,7 @@ bool convertUnityParticleSystem(const UnityYamlNode &system, const UnityYamlNode
 // sRGB (o seletor de cor da Unity) para linear, como a Unity faz num projeto
 // linear antes de desenhar.
 float unityLinearFromSrgb(float value);
+// AnimationCurve serializado (m_Curve) como curva da Astra, tempo em 0..1.
+scene::ScriptCurve unityAnimationCurve(const UnityYamlNode *node, float scale);
 
 } // namespace ae::resources

@@ -94,6 +94,10 @@ struct UnityPrefabObject {
   std::optional<std::array<float, 3>> followCamera;
   // DespawnObjectUniStorm: some (desativa) depois destes segundos.
   std::optional<float> despawnSeconds;
+  // FadeLightEffect: a luz se apaga (o objeto desativa) neste instante.
+  std::optional<float> lightOffSeconds;
+  // FireLight: intensidade em ida e volta, como o Perlin do script.
+  bool lightFlicker = false;
 };
 // Cobertura de um prefab (G6a, relatório por prefab). Suportado: nada ficou
 // de fora. Parcial: abre, com perdas visíveis ou aproximações listadas.

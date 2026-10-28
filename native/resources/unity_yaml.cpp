@@ -200,7 +200,17 @@ public:
     if(!name.empty()&&(name.front()=='\''||name.front()=='"')){if(!quoted(name,key)||!trim(name).empty())return fail("chave inválida.");}else key=std::string(name);
     if(key.empty()||key=="<<"||std::any_of(map.members.begin(),map.members.end(),[&](const auto &entry){return entry.first==key;}))return fail("chave vazia, duplicada ou merge não suportado.");
     UnityYamlNode child;const auto remainder=trim(body.substr(split+1));
-    if(!remainder.empty()){if(!value(remainder,child,depth+1))return false;}
+    if(!remainder.empty()) {
+      if(!value(remainder,child,depth+1))return false;
+      // Escalar puro em várias linhas: a Unity quebra textos longos (caminhos,
+      // nomes de tipo) e continua mais indentado; as linhas se juntam com espaço.
+      const char lead=remainder.front();
+      if(child.kind==UnityYamlNode::Kind::Scalar&&lead!='\''&&lead!='"')
+        while(at<lines.size()&&lines[at].indent>indent&&!lines[at].body.starts_with("---")) {
+          if(child.scalar.size()+lines[at].body.size()>65536)return fail("escalar em várias linhas acima do limite.");
+          child.scalar+=' ';child.scalar+=lines[at++].body;
+        }
+    }
     else if(at<lines.size()&&(lines[at].indent>indent||(lines[at].indent==indent&&sequence(lines[at].body)))) {
       if(!block(child,lines[at].indent,depth+1))return false;
     }

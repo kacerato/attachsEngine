@@ -19,6 +19,8 @@
 #include "scene/component_schema.h"
 #include "scene/light.h"
 #include "scene/particle_system.h"
+#include "scene/property_tween.h"
+#include "scene/timer.h"
 #include "scene/vfx_behaviors.h"
 
 #include <cmath>
@@ -491,6 +493,75 @@ AE_TEST(g6a_hovl_material_becomes_particle_family_with_component_hints) {
   const auto &look = converted.particle;
   AE_EXPECT_TRUE(look.family == resources::UnityParticleFamily::Additive && look.emission == 3 && look.noise && look.centerGlow &&
                  std::abs(look.scroll[0] - .1f) < 1e-6f && std::abs(look.noiseScroll[0] + .3f) < 1e-6f, "brilho, ruído e rolagem para o componente");
+}
+
+AE_TEST(g6b_unistorm_fire_scripts_become_native_timers_tweens_and_curves) {
+  // Lightning Strike Fire do UniStorm: esmaecer partículas e luz, luz de fogo
+  // tremendo e devolver ao pool, todos no mesmo objeto (fixture sintética).
+  const auto guid = [](const char *name) { return resources::assetGuidFromSeed(std::string("script:") + name); };
+  std::string yaml = particleYaml(0, 0, 0, "{fileID: 2100000, guid: 11111111111111111111111111111111, type: 2}");
+  const auto at = yaml.find("  - component: {fileID: 40}\n") + std::string("  - component: {fileID: 40}\n").size();
+  yaml.insert(at, "  - component: {fileID: 50}\n  - component: {fileID: 61}\n  - component: {fileID: 62}\n  - component: {fileID: 63}\n"
+                  "  - component: {fileID: 64}\n");
+  yaml += "--- !u!108 &50\nLight:\n  m_GameObject: {fileID: 10}\n  m_Enabled: 1\n  m_Type: 2\n  m_Color: {r: 1, g: 0.6, b: 0.2, a: 1}\n"
+          "  m_Intensity: 2\n  m_Range: 6\n";
+  const auto behaviour = [&](int id, const char *name, const std::string &body) {
+    yaml += "--- !u!114 &" + std::to_string(id) + "\nMonoBehaviour:\n  m_GameObject: {fileID: 10}\n  m_Enabled: 1\n  m_Script: {fileID: 11500000, guid: " +
+            guid(name).text() + ", type: 3}\n" + body;
+  };
+  const std::string fade = "    serializedVersion: 2\n    m_Curve:\n    - serializedVersion: 3\n      time: 0\n      value: 4\n      inSlope: 0\n"
+                           "      outSlope: 0\n    - serializedVersion: 3\n      time: 0.9\n      value: 4\n      inSlope: 0\n      outSlope: 0\n"
+                           "    - serializedVersion: 3\n      time: 1\n      value: 0\n      inSlope: 0\n      outSlope: 0\n";
+  behaviour(61, "FadeParticleEffect", "  ParticleCurve:\n" + fade + "  FadeMultipler: 0.25\n");
+  behaviour(62, "FadeLightEffect", "  LightCurve:\n" + fade + "  FadeMultipler: 0.2\n");
+  behaviour(63, "FireLight", "");
+  // Caminho longo que a Unity quebra em duas linhas (escalar puro contínuo).
+  behaviour(64, "DespawnObjectUniStorm", "  Seconds: 3\n  FilePath: Assets/UniStorm Weather System/Resources/UniStorm\n    Data.asset\n");
+  resources::UnityYamlDocument document;
+  std::string error;
+  AE_EXPECT_TRUE(resources::readUnityYaml(yaml, document, error), error.c_str());
+  const auto *despawn = document.find(64);
+  const auto *path = despawn ? despawn->value.get("FilePath") : nullptr;
+  AE_EXPECT_TRUE(path && path->scalar == "Assets/UniStorm Weather System/Resources/UniStorm Data.asset", "escalar em duas linhas vira um só");
+  resources::UnityPrefabContext context;
+  context.scriptName = [&](const resources::AssetGuid &id) {
+    for (const char *name : {"FadeParticleEffect", "FadeLightEffect", "FireLight", "DespawnObjectUniStorm"})
+      if (id == guid(name)) return std::string(name);
+    return std::string();
+  };
+  resources::UnityPrefabImport imported;
+  AE_EXPECT_TRUE(resources::convertUnityPrefab(document, imported, error, &context), error.c_str());
+  AE_EXPECT_TRUE(imported.coverage.losses.empty(), "os quatro scripts têm equivalente");
+  const runtime::UnityPrefabResolver resolve = [](const resources::UnityObjectReference &reference, resources::AssetType type,
+                                                  std::vector<resources::AssetGuid> &ids, std::string &) {
+    ids.push_back(resources::assetGuidFromSeed(reference.guid.text() + ":" + std::to_string(static_cast<u32>(type))));
+    return true;
+  };
+  runtime::Prefab prefab;
+  runtime::UnityPrefabIdentityMap identities;
+  AE_EXPECT_TRUE(runtime::buildUnityPrefab(imported, resources::assetGuidFromSeed("prefab:fogo-do-raio"), resolve, nullptr, prefab, identities,
+                                           error), error.c_str());
+  const auto *root = prefab.graph().find(prefab.root());
+  const auto *system = root ? static_cast<const scene::ParticleSystem *>(root->components.find(scene::ParticleSystem::descriptor)) : nullptr;
+  AE_EXPECT_TRUE(system && !system->looping && std::abs(system->duration - 4) < 1e-4f &&
+                 system->emissionRate.mode == scene::ParticleCurveMode::Curve && system->emissionRate.curveMax.keys.front().value == 4,
+                 "esmaecer partículas: sem laço, 1/multiplicador, curva de taxa do script");
+  u32 timers = 0;
+  float despawnSeconds = 0, lightOff = 0;
+  const scene::PropertyTween *flicker = nullptr;
+  for (usize k = 0; root && k < root->components.size(); ++k) {
+    const auto *component = root->components.at(k);
+    if (&component->type() == &scene::Timer::descriptor) {
+      const auto &timer = static_cast<const scene::Timer &>(*component);
+      ++timers;
+      AE_EXPECT_TRUE(timer.elapsedAction == 2 && timer.elapsedTarget == prefab.root() && !timer.repeat, "Temporizador desativa o próprio objeto");
+      (timer.intervalSeconds == 3 ? despawnSeconds : lightOff) = timer.intervalSeconds;
+    }
+    if (&component->type() == &scene::PropertyTween::descriptor) flicker = &scene::propertyTween(*component);
+  }
+  AE_EXPECT_TRUE(timers == 2 && despawnSeconds == 3 && lightOff > .9f / .2f && lightOff < 1 / .2f, "devolver ao pool e apagar a luz");
+  AE_EXPECT_TRUE(flicker && flicker->componentType == "astra.render.light" && flicker->property == "intensity" && flicker->pingpong &&
+                 flicker->relative && flicker->destination < 0, "luz de fogo em ida e volta");
 }
 
 AE_TEST(g6a_prefab_with_vfx_scripts_builds_native_components) {

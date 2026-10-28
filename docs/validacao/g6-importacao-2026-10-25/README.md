@@ -15,7 +15,7 @@ leitura. A medição abaixo já inclui a correção.
 | Pacote | Prefabs | Abrem | Suportados | Sem perda visível | Parciais | Recusados | Razão sem perda |
 |---|---|---|---|---|---|---|---|
 | RPG VFX Bundle 5.0.0 | 217 | 217 | 30 | 187 | 0 | 0 | **100%** (meta ≥ 95%) |
-| UniStorm (prefabs de partícula) | 27 | 19 | 2 | 16 | 1 | 8 | 66,7% |
+| UniStorm (prefabs de partícula) | 27 | 19 | 2 | 17 | 0 | 8 | 70,4% (todos os que abrem) |
 
 UniStorm (dados): 33 Weather Types e 3 perfis de nuvem convertidos, 0 recusados.
 Os 9 prefabs recusados do UniStorm são sistema/UI do próprio pacote, mais um
@@ -53,7 +53,7 @@ Detalhe por motivo: `cobertura-rpg.json` e `cobertura-unistorm.json`.
 - comportamentos de efeito mantendo a identidade numa lista gravada;
 - Distorção.
 
-Suíte inteira (`aether_tests`) no fechamento, sobre a base 64d8ece0: **1757/1757**; `aether_particle_tests` 38/38.
+Suíte inteira (`aether_tests`) no fechamento, sobre a base 64d8ece0: **1758/1758**; `aether_particle_tests` 39/39.
 
 ## Aparelho (POCO, 26–27/10)
 
@@ -192,6 +192,33 @@ build e uma ida ao POCO (APK 0.3.0-dev.261026999-g6-1001).
   - Os 8 recusados são o sistema e a UI do pacote (System, Canvas, Sun/Moon,
     Auroras) e o marcador do raio, que usa recursos embutidos da Unity.
 
+## Quinta passada (28/10): Lightning Strike Fire e leitor YAML
+
+- **Scripts do UniStorm passam a ter equivalente nativo:**
+  - `FadeParticleEffect`: sistema sem laço com duração 1/multiplicador e a curva
+    do script como taxa de emissão;
+  - `FadeLightEffect`: um Temporizador desliga a luz quando a curva cai à
+    metade;
+  - `FireLight`: um Tween de propriedade faz a intensidade da luz ir e voltar;
+    o tremor de posição fica de fora, como aproximação.
+- **Shaders embutidos legados:**
+  - `Particles/VertexLit Blended`, `Alpha Blended Premultiply` e
+    `Anim Alpha Blended` misturam por alfa;
+  - `~Additive-Multiply` soma;
+  - `Particles/Multiply` e `Multiply (Double)` viram mistura alfa da cor
+    escura.
+- **Leitor YAML Unity:** aceita escalar puro em várias linhas (a Unity quebra
+  caminhos e nomes de tipo longos). Os prefabs de sistema do UniStorm agora são
+  lidos e param só em componentes de verdade: WindZone e UI.
+- **Resultado:** Lightning Strike Fire sem perda visível; todos os 19 prefabs do
+  UniStorm que abrem estão sem perda visível. Os 8 recusados são sistema/UI do
+  pacote (3 sistemas com WindZone, Canvas de UI, Sol, Lua e Auroras com shaders
+  próprios) e o marcador do raio feito de malhas embutidas da Unity.
+- **Aparelho:** a cópia do UniStorm na Biblioteca do POCO é outra versão do
+  pacote, sem Lightning Strike Fire/Effect. A busca "Fire.prefab" só traz o
+  Rain Fire. Esses dois ficam validados no host (teste com fixture sintética
+  dos quatro scripts e cobertura).
+
 Prancha Unity × POCO: fica na evidência interna, com os quadros dos vídeos
 oficiais (link e timestamp). Os quadros da Unity mostram os efeitos maiores, sobre
 fundo escuro e com bloom. As capturas do POCO são de longe, sobre chão claro, e
@@ -210,4 +237,4 @@ por isso a comparação é de forma e movimento, não de brilho.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.
 - **Testado no aparelho:** importação dos dois pacotes; no Play: Laser, auras, cura, explosão, meteoro, círculo mágico, Debuff 1, Dragon punch, raio, Distorção, Acerto e Clarão (vídeo); climas Clear, Rain e Snow do UniStorm; prefab Rain do UniStorm seguindo a câmera.
 - **Som:** conferido de ouvido pelo dono no POCO em 28/10 (Buff 3 com Ouvinte na cena), além do `dumpsys audio`.
-- **Limitações:** Lightning Strike Fire (UniStorm) parcial (3 scripts de esmaecer e um shader embutido sem conversor); 8 prefabs de sistema/UI do UniStorm fora do escopo.
+- **Limitações:** 8 prefabs de sistema/UI do UniStorm fora do escopo (dados de clima, sem scripts nem UI); Lightning Strike Fire/Effect validados só no host (ausentes na cópia do pacote no POCO).
