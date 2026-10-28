@@ -1657,6 +1657,14 @@ bool EditorSession::handlePointerNow(const UiPointerEvent &event) {
     }
     // G3a: um bloco da auditoria filtra os materiais daquela classe; o mesmo
     // bloco de novo volta a mostrar todos.
+    // Pacote incluído: já importado abre filtrado; senão o shell extrai do APK
+    // (uma vez, na pasta de pacotes do app) e importa como uma pasta de pacote.
+    if(key>=widgetId(EditorWidget::LibraryBundledBase)&&key<widgetId(EditorWidget::LibraryBundledBase)+state_.bundledPackages.size()) {
+      const auto index=key-widgetId(EditorWidget::LibraryBundledBase);const auto &bundled=state_.bundledPackages[index];
+      for(const auto &entry:state_.libraryPackages)
+        if(entry.id.valid()&&entry.name==bundled.name) {state_.libraryPackage=entry.id;state_.libraryScroll=0;refreshLibraryRows();return true;}
+      state_.bundledPackageRequest=static_cast<i32>(index);return true;
+    }
     if(key>=widgetId(EditorWidget::LibraryAuditBase)&&key<widgetId(EditorWidget::LibraryAuditBase)+3) {
       const auto chosen=static_cast<u8>(key-widgetId(EditorWidget::LibraryAuditBase)+1);
       state_.libraryAuditFilter=state_.libraryAuditFilter==chosen?0:chosen;

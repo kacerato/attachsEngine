@@ -16,6 +16,7 @@
 #include "editor/editor_water_settings_component.h"
 #include "editor/editor_scene_camera.h"
 #include <cstring>
+#include "platform/android/bundled_packages.h"
 #include "platform/android/android_paths.h"
 #include "platform/android/android_haptics.h"
 #include "platform/android/android_launch_options.h"
@@ -265,6 +266,12 @@ struct AndroidShell final {
     std::shared_ptr<PreparedModel::Staging> staging;
   };
   std::future<PreparedPackage> packageWork;
+  // Pacotes incluídos no APK (índice lido uma vez) e bytes da extração/cópia em
+  // andamento, para a barra de estado.
+  bool bundledPackagesLoaded=false;
+  std::vector<ae::editor::BundledPackage> bundledPackages;
+  std::shared_ptr<std::atomic<ae::u64>> bundledProgress;
+  ae::u64 bundledTotal=0;
   std::optional<PreparedModel> importPreview;
   struct PreparedEnvironment {
     bool batch=false;std::vector<ae::editor::EditorSession::PreparedEnvironmentEdit> edits;
@@ -1327,6 +1334,16 @@ void collectRendererInitialization(AndroidShell &shell, bool cancel) {
         });
     shell.editorSession.initialize(&shell.instancedRenderer.uiFont(),
                                    &shell.instancedRenderer.uiIcons());
+    if(!shell.bundledPackagesLoaded) {
+      shell.bundledPackagesLoaded=true;std::string diagnostic;
+      shell.bundledPackages=ae::platform::android::readBundledPackages(shell.app->activity->assetManager,diagnostic);
+      if(!diagnostic.empty())__android_log_print(ANDROID_LOG_WARN,LogTag,"[Pacotes] %s",diagnostic.c_str());
+    }
+    {
+      std::vector<ae::editor::EditorScreenState::BundledPackageRow> rows;
+      for(const auto &package:shell.bundledPackages)rows.push_back({package.name,package.bytes,static_cast<ae::u32>(package.files.size())});
+      shell.editorSession.setBundledPackages(std::move(rows));
+    }
     if(!shell.guiFontLoaded) {
       std::vector<ae::u8> guiFont;
       auto *asset=AAssetManager_open(shell.app->activity->assetManager,"ui/gui-inter.ttf",AASSET_MODE_BUFFER);
@@ -3307,6 +3324,41 @@ void android_main(android_app *app) {
             return result;
           });
         };
+        // Pacote incluído no APK: extrai uma vez para a pasta de pacotes do app
+        // (Android/data/<pacote>/files/Pacotes/<nome>) e importa a cópia como
+        // uma pasta de pacote, com os mesmos hashes do índice.
+        const auto launchBundledImport=[&](ae::u32 index) {
+          if(index>=shell.bundledPackages.size()||!shell.app->activity->externalDataPath)
+            {session.showImportFailure("Pacote incluído indisponível neste aparelho.");return;}
+          session.beginImportPreparation("Pacote incluído");
+          shell.importCancellation=std::make_shared<std::atomic<bool>>(false);
+          shell.bundledProgress=std::make_shared<std::atomic<ae::u64>>(0);
+          const auto package=shell.bundledPackages[index];
+          shell.bundledTotal=package.bytes*2;
+          const auto cancel=shell.importCancellation;const auto progress=shell.bundledProgress;
+          const auto root=session.codeProjectRoot();const auto epoch=session.sceneVersion().epoch;
+          auto *assets=shell.app->activity->assetManager;
+          const auto library=std::filesystem::path(shell.app->activity->externalDataPath)/"Pacotes"/
+            ae::editor::EditorImportTransaction::fromUtf8(package.name);
+          shell.packageWork=std::async(std::launch::async,[package,assets,library,root,epoch,cancel,progress]() mutable {
+            using Transaction=ae::editor::EditorImportTransaction;AndroidShell::PreparedPackage result;result.epoch=epoch;
+            result.value.project=root;
+            const auto fail=[&](std::string message){result.value.diagnostic=std::move(message);return std::move(result);};
+            const auto cancelled=[cancel](){return cancel->load();};
+            std::string diagnostic;
+            if(!ae::platform::android::extractBundledPackage(assets,package,library,cancelled,*progress,diagnostic))return fail(diagnostic);
+            const std::string relative=".astra/import-staging/library-"+std::to_string(std::chrono::steady_clock::now().time_since_epoch().count());
+            std::filesystem::path staging;std::error_code error;
+            if(!Transaction::safePath(Transaction::fromUtf8(root),relative,staging))return fail("Preparo fora do projeto.");
+            std::filesystem::create_directories(staging,error);if(error)return fail("Não foi possível criar o preparo do pacote.");
+            result.staging=std::make_shared<AndroidShell::PreparedModel::Staging>();result.staging->directory=staging;
+            if(!ae::editor::copyBundledPackageToStaging(library,staging,package,cancelled,*progress,diagnostic))return fail(diagnostic);
+            std::vector<ae::editor::LibrarySourceFile> files;
+            for(const auto &file:package.files)files.push_back({file.relative,file.sha256,file.bytes});
+            result.value=ae::editor::prepareLibraryPackage(root,relative,package.name,std::move(files),cancelled);
+            return result;
+          });
+        };
         const auto launchFolderImport=[&](ae::platform::android::ModelPickerResult picked) {
           if(shell.packageWork.valid()||shell.importWork.valid()||shell.environmentImportWork.valid()||shell.textureImportWork.valid()||shell.importPreview||shell.environmentImportPreview||shell.textureImportPreview)
             {session.setImportStatus("Finalize a importação em andamento.");return;}
@@ -3485,6 +3537,9 @@ void android_main(android_app *app) {
           shell.environmentImportPicker=false;shell.textureImportPicker=false;shell.waveImportPicker=false;
           session.beginImportPreparation("Pacote de biblioteca");ae::platform::android::requestFolderPick(true);
         }
+        if(ae::u32 bundled=0;!importRequestTaken&&importSlotAvailable()&&session.consumeBundledPackageRequest(bundled)) {
+          importRequestTaken=true;launchBundledImport(bundled);
+        }
         if(importSlotAvailable()&&session.consumeWaveImportRequest()) {
           importRequestTaken=true;
           shell.importPickerRoot=session.codeProjectRoot();shell.importPickerEpoch=session.sceneVersion().epoch;
@@ -3615,12 +3670,19 @@ void android_main(android_app *app) {
           }
         }
         if(shell.packageWork.valid()&&shell.packageWork.wait_for(std::chrono::seconds(0))==std::future_status::ready) {
-          auto prepared=shell.packageWork.get();std::string error;session.closeImportPreview();
+          auto prepared=shell.packageWork.get();std::string error;session.closeImportPreview();shell.bundledProgress.reset();shell.bundledTotal=0;
           if(shell.importCancellation->load()||prepared.value.project!=session.codeProjectRoot()||prepared.epoch!=session.sceneVersion().epoch)
             session.setImportStatus("Pacote descartado: cancelado ou projeto alterado.");
           else if(!prepared.value.accepted||!session.importLibraryPackage(prepared.value,error))
             session.showImportFailure(error.empty()?prepared.value.diagnostic:error);
           else session.setImportStatus(prepared.value.diagnostic);
+        }
+        // Pacote incluído: extração e cópia na barra de estado (MB reais).
+        if(shell.bundledProgress&&shell.packageWork.valid()&&shell.bundledTotal) {
+          char text[160];
+          std::snprintf(text,sizeof text,"Preparando pacote incluído · %.0f de %.0f MB",
+                        static_cast<double>(shell.bundledProgress->load())/1048576.0,static_cast<double>(shell.bundledTotal)/1048576.0);
+          session.setWorkStatus(text);
         }
         // S0: cópia da pasta na barra de estado (arquivos e MB reais).
         if(shell.folderCopyToken) if(const auto token=shell.folderCopyToken->load()) {

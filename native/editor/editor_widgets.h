@@ -17,6 +17,8 @@ enum class EditorWidget : u32 {
   // G3a: blocos da auditoria de materiais do pacote (+ 0 completos,
   // 1 aproximados, 2 sem conversão); filtram a grade pela classe.
   LibraryAuditBase=0xCD170000u,
+  // Pacotes incluídos no APK (+ índice): importa ou abre o já importado.
+  LibraryBundledBase=0xCD1C0000u,
   // G3a: origem da rugosidade no cartão Canais do material.
   MaterialRoughnessSourceCycle=0xCD180000u,
   // PK-9: campos do Inspector do Material por shader (editor_material_fields.h):

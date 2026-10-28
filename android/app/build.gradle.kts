@@ -264,7 +264,57 @@ val prepareEngineAssets by tasks.registering(Sync::class) {
         root.resolve("dotnet_build_id.txt").writeText(digest.digest().joinToString("") { "%02x".format(it) })
     }
 }
-tasks.named("preBuild") { dependsOn(prepareEngineAssets) }
+// Pacotes incluídos no APK. `-PastraBundledPackages=<pasta>` aponta para uma pasta
+// local (fora do repositório) com um subdiretório por pacote, já extraído no
+// formato da "Pasta de pacote" (ver tools/release/extract_unitypackage.py). Cada
+// arquivo vira um asset de nome neutro (aapt ignora pastas que começam com "_"
+// e arquivos ocultos), comprimido pelo próprio APK, e o índice guarda o caminho
+// original, o tamanho e o SHA-256. Sem a propriedade, o APK sai sem pacotes.
+val bundledPackagesSource = providers.gradleProperty("astraBundledPackages")
+val bundledPackagesAssets = layout.buildDirectory.dir("generated/bundledPackages")
+val prepareBundledPackages by tasks.registering {
+    val source = bundledPackagesSource.orNull?.let { file(it) }
+    inputs.property("bundledPackagesSource", source?.absolutePath ?: "")
+    if (source != null) inputs.dir(source)
+    outputs.dir(bundledPackagesAssets)
+    doLast {
+        val root = bundledPackagesAssets.get().asFile
+        root.deleteRecursively()
+        if (source == null) return@doLast
+        check(source.isDirectory) { "astraBundledPackages não é uma pasta: $source" }
+        val packages = source.listFiles()!!.filter { it.isDirectory }.sortedBy { it.name }
+        check(packages.isNotEmpty()) { "Nenhum pacote em $source" }
+        val out = root.resolve("bundled-packages")
+        out.mkdirs()
+        val index = StringBuilder("ASTRA_BUNDLED_PACKAGES_1\n")
+        packages.forEachIndexed { packageIndex, directory ->
+            val directoryName = "p$packageIndex"
+            check(!directory.name.contains('\t') && !directory.name.contains('\n')) { "Nome de pacote inválido: ${directory.name}" }
+            index.append("package\t${directory.name}\t$directoryName\n")
+            val files = directory.walkTopDown().filter { it.isFile }
+                .map { it.relativeTo(directory).invariantSeparatorsPath to it }.sortedBy { it.first }.toList()
+            check(files.size in 1..4096) { "${directory.name}: ${files.size} arquivos (1 a 4096)" }
+            files.forEachIndexed { fileIndex, (relative, file) ->
+                check(!relative.contains('\t') && !relative.contains('\n') && !relative.contains(':') && !relative.startsWith(".astra/")) { "Caminho inválido: $relative" }
+                val asset = "f%05d.bin".format(fileIndex)
+                val target = out.resolve("$directoryName/$asset")
+                target.parentFile.mkdirs()
+                file.copyTo(target, overwrite = true)
+                val digest = MessageDigest.getInstance("SHA-256")
+                file.inputStream().use { stream ->
+                    val buffer = ByteArray(1 shl 20)
+                    var count = stream.read(buffer)
+                    while (count >= 0) { digest.update(buffer, 0, count); count = stream.read(buffer) }
+                }
+                val hex = digest.digest().joinToString("") { "%02x".format(it) }
+                index.append("file\t$asset\t${file.length()}\t$hex\t$relative\n")
+            }
+            logger.lifecycle("Pacote incluído: ${directory.name} · ${files.size} arquivos · ${files.sumOf { it.second.length() } / 1048576} MiB")
+        }
+        out.resolve("index.tsv").writeText(index.toString())
+    }
+}
+tasks.named("preBuild") { dependsOn(prepareEngineAssets, prepareBundledPackages) }
 
 android {
     namespace = "dev.aether.editor"
@@ -275,7 +325,7 @@ android {
     }
     ndkVersion = "27.1.12297006"
     androidResources { noCompress += setOf("aetex", "aemap", "aeenv", "aeuf", "aeui") }
-    sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets))
+    sourceSets.getByName("main").assets.setSrcDirs(listOf(generatedAssets, bundledPackagesAssets))
     sourceSets.getByName("main").jniLibs.srcDir("../../native/third_party/openssl")
     // The regression laboratory is not part of the production editor.
     sourceSets.getByName("main").java.srcDir(if (includeLegacyDemos) "src/legacy/java" else "src/editor/java")

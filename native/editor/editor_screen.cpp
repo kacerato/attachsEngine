@@ -12380,6 +12380,36 @@ void buildLibraryWorkspace(ScreenBuilder &builder,UiRect area) {
     list.popClip();
     if(!wide)return;
   }
+  // Pacotes incluídos no APK, na visão de todos os pacotes: importar sem baixar
+  // nada; o já importado mostra o selo e abre a Biblioteca filtrada nele.
+  if(!state.bundledPackages.empty()&&!state.libraryPackage.valid()&&state.libraryQuery.empty()&&state.libraryKind==0&&!state.libraryAuditFilter) {
+    constexpr float rowHeight=56;
+    auto card=takeTop(content,46+rowHeight*static_cast<float>(state.bundledPackages.size()));takeTop(content,8);
+    list.addRect(card,theme.color.surface,theme.radius.card);
+    auto inner=deflate(card,UiInsets::all(8));
+    auto header=takeTop(inner,30);
+    list.addImage({header.x+2,header.y+3,24,24},static_cast<UiImageId>(UiIcon::AssetsSourcePackage),theme.color.accent);
+    builder.label({header.x+34,header.y,std::max(0.f,header.width-34),header.height},"Incluídos com a Astra",theme.color.text,theme.type.cardName);
+    for(u32 i=0;i<state.bundledPackages.size();++i) {
+      const auto &bundled=state.bundledPackages[i];
+      bool imported=false;for(const auto &entry:state.libraryPackages)if(entry.id.valid()&&entry.name==bundled.name)imported=true;
+      const auto row=deflate(takeTop(inner,rowHeight),UiInsets{0,3,0,3});
+      list.addRect(row,theme.color.raised,theme.radius.control);
+      list.addImage({row.x+10,row.y+(row.height-24)*.5f,24,24},static_cast<UiImageId>(UiIcon::AssetsSourcePackage),theme.color.textDim);
+      const UiRect action{row.right()-132,row.y+6,124,row.height-12};
+      const UiRect text{row.x+44,row.y+4,std::max(0.f,action.x-row.x-52),row.height-8};
+      char detail[96];std::snprintf(detail,sizeof detail,"%u arquivos · %.0f MB",bundled.files,static_cast<double>(bundled.bytes)/1048576.0);
+      list.pushClip(text);
+      builder.label({text.x,text.y,text.width,text.height*.55f},fitMiddle(list,bundled.name,text.width,theme.type.body),theme.color.text,theme.type.body);
+      builder.label({text.x,text.y+text.height*.52f,text.width,text.height*.48f},detail,theme.color.textMuted,theme.type.caption);
+      list.popClip();
+      list.addRect(action,imported?theme.color.silhouette:withAlpha(theme.color.accent,.18f),theme.radius.control);
+      list.addImage({action.x+8,action.y+(action.height-18)*.5f,18,18},static_cast<UiImageId>(imported?UiIcon::UiCheck:UiIcon::AssetsImport),
+        imported?theme.color.accent:theme.color.text);
+      builder.label({action.x+30,action.y,action.width-34,action.height},imported?"Importado":"Importar",imported?theme.color.textDim:theme.color.text,theme.type.body);
+      router.addRegion(row,widgetId(EditorWidget::LibraryBundledBase)+i);
+    }
+  }
   // G3a: auditoria dos materiais Unity do pacote. Três blocos (completos,
   // aproximados, sem conversão) com o ícone da classe e a contagem; tocar num
   // bloco filtra a grade por ele, e o detalhe de cada material lista o motivo.

@@ -1000,6 +1000,13 @@ public:
     if(requested) {state_.importEnvironment=false;state_.importTexture=false;}
     return requested;
   }
+  // Pacotes incluídos no APK: o shell informa a lista e consome o pedido.
+  void setBundledPackages(std::vector<EditorScreenState::BundledPackageRow> rows) {state_.bundledPackages=std::move(rows);}
+  bool consumeBundledPackageRequest(u32 &index) {
+    if(state_.bundledPackageRequest<0)return false;
+    index=static_cast<u32>(std::exchange(state_.bundledPackageRequest,-1));
+    return index<state_.bundledPackages.size();
+  }
   void refreshLibraryRows();
   bool openLibraryItem(resources::AssetGuid item,std::string &diagnostic);
   // Pedido de importação levantado pela interface, consumido pelo shell. O

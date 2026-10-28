@@ -157,6 +157,11 @@ struct EditorScreenState final {
   struct LibraryPackageRow {resources::AssetGuid id{};std::string name;};
   std::vector<LibraryRow> libraryRows;
   std::vector<LibraryPackageRow> libraryPackages;
+  // Pacotes incluídos no APK (bundled-packages/index.tsv), na ordem do índice.
+  // Tocar num ainda não importado pede a importação (bundledPackageRequest).
+  struct BundledPackageRow {std::string name;u64 bytes=0;u32 files=0;};
+  std::vector<BundledPackageRow> bundledPackages;
+  i32 bundledPackageRequest=-1;
   resources::AssetGuid libraryPackage{};
   resources::AssetGuid libraryDetailItem{};
   bool libraryConflict=false,libraryCanInstantiate=false,libraryCanAssignController=false,libraryCanReimport=false;

@@ -687,6 +687,7 @@ add_library(aether_editor STATIC
   editor/editor_unity_materials.cpp
   editor/editor_material_shading.cpp
   editor/editor_library.cpp
+  editor/editor_bundled_packages.cpp
   editor/editor_unity_import.cpp
   editor/editor_unistorm_import.cpp
   editor/editor_audio_assets.cpp
@@ -839,6 +840,7 @@ if(ANDROID)
     platform/android/material_preview_resources.cpp
     platform/android/dotnet_host.cpp
     platform/android/dotnet_assets.cpp
+    platform/android/bundled_packages.cpp
     platform/android/astc_encode_probe.cpp
     platform/android/water_spectral_probe.cpp
   )
@@ -944,6 +946,7 @@ endif()
 if(NOT ANDROID)
   add_executable(aether_tests
     ../tests/native/test_atomic_asset_file.cpp
+    ../tests/native/test_editor_bundled_packages.cpp
     ../tests/native/test_camera_route.cpp
     ../tests/native/test_free_camera_controller.cpp
     ../tests/native/test_first_person_controller.cpp
@@ -1263,7 +1266,7 @@ if(NOT ANDROID)
   if(MINGW)
     target_compile_options(aether_probe_family_tests PRIVATE -Wa,-mbig-obj)
   endif()
-  add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_material_shading_pk9.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
+  add_executable(aether_unity_material_tests ../tests/native/family_base_main.cpp ../tests/native/test_unity_material_import.cpp ../tests/native/test_material_shading_pk9.cpp ../tests/native/test_library_index.cpp ../tests/native/test_editor_library.cpp ../tests/native/test_editor_bundled_packages.cpp ../tests/native/test_tga_validation.cpp ../tests/native/test_tiff_decode.cpp ../tests/native/test_editor_library_texture.cpp ../tests/native/test_fbx_import.cpp ../tests/native/test_editor_import_metadata.cpp ../tests/native/test_editor_library_fbx.cpp ../tests/native/test_editor_library_unity.cpp ../tests/native/test_unity_humanoid.cpp)
   # PK-7 Câmera: modelo v4, lente física, máscara, pilha por prioridade e os
   # cenários existentes de câmera virtual, sem o catálogo inteiro.
   add_executable(aether_camera_tests ../tests/native/family_base_main.cpp
