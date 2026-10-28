@@ -209,4 +209,5 @@ por isso a comparação é de forma e movimento, não de brilho.
   - importadores do RPG e do UniStorm.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.
 - **Testado no aparelho:** importação dos dois pacotes; no Play: Laser, auras, cura, explosão, meteoro, círculo mágico, Debuff 1, Dragon punch, raio, Distorção, Acerto e Clarão (vídeo); climas Clear, Rain e Snow do UniStorm; prefab Rain do UniStorm seguindo a câmera.
-- **Limitações:** som 3D medido pelo `dumpsys audio`, não conferido de ouvido; Lightning Strike Fire (UniStorm) parcial (3 scripts de esmaecer e um shader embutido sem conversor); 8 prefabs de sistema/UI do UniStorm fora do escopo.
+- **Som:** conferido de ouvido pelo dono no POCO em 28/10 (Buff 3 com Ouvinte na cena), além do `dumpsys audio`.
+- **Limitações:** Lightning Strike Fire (UniStorm) parcial (3 scripts de esmaecer e um shader embutido sem conversor); 8 prefabs de sistema/UI do UniStorm fora do escopo.
