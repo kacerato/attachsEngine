@@ -27,6 +27,9 @@ struct UniStormWeather {
   std::string name;
   scene::Weather weather;
   UnityObjectReference effect, additionalEffect, sound, cloudProfile;
+  // ParticleEffectVector e AdditionalParticleEffectVector: onde o UniStorm põe
+  // cada efeito em relação ao jogador (eixos da Unity, Z ainda não espelhado).
+  float effectOffset[3]{0, 28, 0}, additionalOffset[3]{0, 28, 0};
   bool useSound = false;
   float soundVolume = 1;
   std::vector<std::string> approximations;

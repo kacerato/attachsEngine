@@ -2575,6 +2575,12 @@
       "name": "rotator",
       "dark_ui_ready": true,
       "generation": "component-v1"
+    },
+    "component/follow-camera": {
+      "category": "component",
+      "name": "follow-camera",
+      "dark_ui_ready": true,
+      "generation": "component-v1"
     }
   },
   "unmapped": []

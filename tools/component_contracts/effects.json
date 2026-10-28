@@ -75,6 +75,21 @@
    "apiName": "Rotator"
   },
   {
+   "type": "FollowCamera",
+   "name": "Seguir câmera",
+   "description": "Mantém o objeto na posição da câmera do jogo mais um deslocamento em eixos do mundo, como a chuva do UniStorm presa ao jogador",
+   "consumer": "runtime/scene_vfx.cpp → posição do objeto sobre a câmera da cena",
+   "capability": "render.effects.follow_camera",
+   "invalidates": {
+    "cpp": "Invalidate::Draw"
+   },
+   "subfamily": "Comportamentos",
+   "icon": "component/follow-camera",
+   "searchTerms": "FollowCamera Seguir câmera PositionConstraint Constraint UniStorm Chuva Neve Precipitação Weather Effect Clima",
+   "reference": "https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html",
+   "apiName": "FollowCamera"
+  },
+  {
    "type": "ParticleCollisionSpawn",
    "name": "Instanciar ao colidir",
    "description": "Cada toque de partícula cria um prefab no ponto (respingo, faísca, explosão)",

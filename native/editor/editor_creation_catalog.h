@@ -401,7 +401,7 @@ inline const CreationChild sparkChildren[]{{"Luz modelo",sparkLight,particleSyst
 // um efeito, som que se repete).
 inline constexpr std::string_view lineType="astra.render.line",laserType="astra.effects.laser",
   projectileType="astra.effects.projectile",collisionSpawnType="astra.effects.collision_spawn",effectSoundType="astra.audio.effect_sound",
-  rotatorType="astra.effects.rotator";
+  rotatorType="astra.effects.rotator",followCameraType="astra.effects.follow_camera";
 inline const CreationValue lineValues[]{{lineType,"world_space",false},{lineType,"point_1_z",3.f},{lineType,"width_start",.12f},
   {lineType,"width_end",.04f},{lineType,"color_end_a",.25f}};
 inline const CreationComponent line[]{{lineType,lineValues}};
@@ -434,6 +434,9 @@ inline const CreationValue rotatorRingValues[]{{particleSystem,"shape_type",u32{
   {particleSystem,"material_blend",u32{1}}};
 inline const CreationValue rotatorValues[]{{rotatorType,"speed_y",45.f}};
 inline const CreationComponent rotator[]{{particleSystem,rotatorRingValues},{rotatorType,rotatorValues}};
+// Objeto que acompanha a câmera do jogo, 10 m acima: ponha a chuva ou a neve como filha.
+inline const CreationValue followCameraValues[]{{followCameraType,"offset_y",10.f}};
+inline const CreationComponent followCameraEffect[]{{followCameraType,followCameraValues}};
 } // namespace recipe
 
 inline constexpr const char *creationCategories[]{"Básicos","Geometria","Água","Física","Luzes","Gameplay","Áudio","Física 2D","Navegação","Personagem","Volume e céu","Efeitos"};
@@ -447,7 +450,7 @@ static_assert(std::size(creationCategoryIcons)==std::size(creationCategories));
 // de LookAt); só disponíveis quando a seleção resolve um esqueleto.
 inline constexpr unsigned kCharacterCreationCategory=9;
 inline constexpr unsigned kEffectsCreationCategory=11;
-inline const std::array<EditorCreationEntry,115> editorCreationCatalog{{
+inline const std::array<EditorCreationEntry,116> editorCreationCatalog{{
   {"field2d.gravity",EditorWidget::None,7,"Campo de gravidade 2D","Área de gravidade local no plano XY.",ui::UiIcon::PhysicsFieldGravity2d,runtime::ObjectKind::Folder,recipe::fieldGravity2D,CreationPose::ViewTarget,0,{},{},"Area2D Gravity"},
   {"field2d.wind",EditorWidget::None,7,"Campo de vento 2D","Vento sobre massa real de corpos Box2D.",ui::UiIcon::PhysicsFieldWind2d,runtime::ObjectKind::Folder,recipe::fieldWind2D,CreationPose::ViewTarget,0,{},{},"Area2D Wind"},
   {"field2d.drag",EditorWidget::None,7,"Campo de arrasto 2D","Amortecimento local linear e angular.",ui::UiIcon::PhysicsFieldDrag2d,runtime::ObjectKind::Folder,recipe::fieldDrag2D,CreationPose::ViewTarget,0,{},{},"Area2D Damp"},
@@ -495,6 +498,9 @@ inline const std::array<EditorCreationEntry,115> editorCreationCatalog{{
   {"effect.rotator",EditorWidget::None,kEffectsCreationCategory,"Girar","Anel de partículas que gira em volta do eixo Y.",
     ui::UiIcon::ComponentRotator,runtime::ObjectKind::Folder,recipe::rotator,CreationPose::ViewTarget,1.f,{},{},
     "Rotator Rotate Girar Rodar Spin Circulo magico",scene::PrimitiveType::Count,false,{},recipe::rotatorType},
+  {"effect.follow_camera",EditorWidget::None,kEffectsCreationCategory,"Seguir câmera","Acompanha a câmera do jogo no Play, 10 m acima; filhos vão junto.",
+    ui::UiIcon::ComponentFollowCamera,runtime::ObjectKind::Folder,recipe::followCameraEffect,CreationPose::ViewTarget,0,{},{},
+    "FollowCamera Seguir camera PositionConstraint UniStorm Chuva Neve Precipitacao",scene::PrimitiveType::Count,false,{},recipe::followCameraType},
   {"light.directional",EditorWidget::None,4,"Luz direcional","Ilumina a cena na direção do objeto.",ui::UiIcon::LightDirectional,
     runtime::ObjectKind::Light,recipe::directional,CreationPose::ViewTargetTilted,0,{},{},"Directional Light Sol"},
   {"light.day_night",EditorWidget::None,4,"Sol com dia e noite","Sol e Lua movidos pela hora, data e latitude; à noite a Lua ilumina e projeta sombra sob as estrelas.",ui::UiIcon::LightingTimeOfDay,

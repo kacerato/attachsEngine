@@ -2330,6 +2330,116 @@
           "type": "Rotator"
         }
       ]
+    },
+    {
+      "name": "followCameraBooleans",
+      "kind": "Boolean",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "enabled",
+          "label": "Ativo",
+          "member": "enabled",
+          "default": {
+            "cpp": "true"
+          },
+          "presentation": {
+            "group": "Seguir",
+            "unit": "",
+            "help": "Desligado, o objeto fica onde está",
+            "capability": "render.effects.follow_camera",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "FollowCamera"
+        }
+      ]
+    },
+    {
+      "name": "followCameraNumbers",
+      "kind": "Number",
+      "template": false,
+      "constexpr": true,
+      "items": [
+        {
+          "id": "offset_x",
+          "label": "Deslocamento X",
+          "member": "offset[0]",
+          "min": {
+            "cpp": "-10000.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Seguir",
+            "unit": "m",
+            "help": "Distância da câmera no eixo X do mundo",
+            "capability": "render.effects.follow_camera",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "FollowCamera"
+        },
+        {
+          "id": "offset_y",
+          "label": "Deslocamento Y",
+          "member": "offset[1]",
+          "min": {
+            "cpp": "-10000.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Seguir",
+            "unit": "m",
+            "help": "Distância da câmera no eixo Y do mundo",
+            "capability": "render.effects.follow_camera",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "FollowCamera"
+        },
+        {
+          "id": "offset_z",
+          "label": "Deslocamento Z",
+          "member": "offset[2]",
+          "min": {
+            "cpp": "-10000.0f"
+          },
+          "max": {
+            "cpp": "10000.0f"
+          },
+          "step": {
+            "cpp": "0.1f"
+          },
+          "presentation": {
+            "group": "Seguir",
+            "unit": "m",
+            "help": "Distância da câmera no eixo Z do mundo",
+            "capability": "render.effects.follow_camera",
+            "consumer": "runtime/scene_vfx.cpp",
+            "invalidates": {
+              "cpp": "Invalidate::Draw"
+            }
+          },
+          "type": "FollowCamera"
+        }
+      ]
     }
   ],
   "field_groups": [
@@ -2409,6 +2519,13 @@
       "type": "Rotator",
       "properties": [
         "rotatorBooleans/enabled"
+      ]
+    },
+    {
+      "name": "vfx_behaviors_FollowCamera_fields0",
+      "type": "FollowCamera",
+      "properties": [
+        "followCameraBooleans/enabled"
       ]
     }
   ]

@@ -1,4 +1,5 @@
 #include "editor/editor_session.h"
+#include "editor/editor_session_internal.h"
 #include "editor/editor_animation_pose_selection.h"
 #include "resources/unity_animation_import.h"
 #include "resources/unity_animation_merge.h"
@@ -8,6 +9,7 @@
 #include "runtime/transform_math.h"
 #include "runtime/unity_prefab.h"
 #include "resources/unity_material_import.h"
+#include "resources/unistorm_import.h"
 #include "resources/model_import.h"
 #include "scene/import_link.h"
 #include "scene/prefab_link.h"
@@ -108,6 +110,9 @@ private:
   static bool particleLook(EditorSession &,const std::string &,const UnityObjectReference &,UnityParticleLook &);
   static bool particleMesh(EditorSession &,const std::string &,const UnityObjectReference &,Dependency &,std::string &);
   static const LibraryItem *sourceItem(EditorSession &,const std::string &origin,const AssetGuid &guid);
+  // G6b: o prefab é o efeito de um Weather Type do UniStorm do mesmo pacote?
+  // Então o sistema o prende ao jogador nessa distância (eixos da Astra).
+  static bool uniStormEffectOffset(EditorSession &,const std::string &origin,std::array<float,3> &offset);
   static bool publish(EditorSession &,const Snapshot &,Snapshot &,std::string &);
 };
 
@@ -118,6 +123,26 @@ const LibraryItem *UnityPackageImporter::sourceItem(EditorSession &session,const
   const LibraryItem *found=nullptr;
   for(const auto &item:scope->items)if(item.sourceIdentity=="unity:"+guid.text()){if(found)return nullptr;found=&item;}
   return found;
+}
+
+bool UnityPackageImporter::uniStormEffectOffset(EditorSession &session,const std::string &origin,std::array<float,3> &offset) {
+  const LibraryPackage *scope=nullptr;const LibraryItem *self=nullptr;
+  for(const auto &package:session.library_.packages())for(const auto &item:package.items)if(item.path==origin){scope=&package;self=&item;}
+  if(!scope||!self||!self->sourceIdentity.starts_with("unity:"))return false;
+  AssetGuid guid;if(!AssetGuid::parse(std::string_view(self->sourceIdentity).substr(6),guid))return false;
+  const auto root=EditorImportTransaction::fromUtf8(session.files_.rootPath());
+  for(const auto &item:scope->items) {
+    if(!item.path.ends_with(".asset"))continue;
+    std::string encoded,error,script;UnityYamlDocument document;UniStormWeather weather;
+    if(!read(root,item.path,encoded,256u*1024u)||!readUnityYaml(encoded,document,error)||!uniStormScript(document,script)||
+       script!=UniStormWeatherTypeScript||!readUniStormWeather(document,weather,error))continue;
+    const float *vector=weather.effect.guid==guid?weather.effectOffset:weather.additionalEffect.guid==guid?weather.additionalOffset:nullptr;
+    if(!vector)continue;
+    // Unity → Astra espelha o Z, como o resto do prefab.
+    offset={vector[0],vector[1],-vector[2]};
+    return true;
+  }
+  return false;
 }
 
 bool UnityPackageImporter::particleLook(EditorSession &session,const std::string &origin,const UnityObjectReference &reference,UnityParticleLook &out) {
@@ -254,8 +279,9 @@ bool UnityPackageImporter::publish(EditorSession &session,const Snapshot &expect
   if(expected.record) {
     if(!read(root,identity.path,disk)||hash(disk)!=current->contentHash||!sameNative(expected.text,disk,identity.type,error))return fail("Saída Unity mudou no disco; nada publicado.");
   } else if(std::filesystem::exists(absolute,ec)||ec)return fail("Destino Unity ocupado.");
-  std::string persisted;
-  if(session.assets_.size()&&(!read(root,".astra/assets.astra",persisted,32u<<20)||persisted!=session.assets_.serialize()))return fail("Registro mudou no disco; reabra antes de converter.");
+  // Reabrir o projeto atualiza o registro na memória e só grava no próximo
+  // salvamento: disco atrás da memória é esperado; divergente, recusa.
+  if(session.assets_.size()&&!session_detail::persistedRegistry(root,session.assets_,session.assetRegistryDirty_))return fail("Registro mudou no disco; reabra antes de converter.");
   auto nextAssets=session.assets_;auto clips=session.animationClipAssets_;auto controllers=session.animatorControllers_;
   const auto guid=identity.guid;
   std::erase_if(clips,[&](const auto &value){return value.guid==guid;});
@@ -516,6 +542,12 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
       return item&&item->path.ends_with(".cs")?std::filesystem::path(item->path).stem().string():std::string();
     };
     UnityPrefabImport imported;if(!convertUnityPrefab(document,imported,error,&context))return {};
+    if(std::array<float,3> offset;uniStormEffectOffset(session,path,offset))
+      for(auto &object:imported.objects)if(!object.parentTransform) {
+        object.followCamera=offset;
+        imported.transformations.push_back("Efeito de clima do UniStorm: Seguir câmera a "+std::to_string(int(offset[1]))+" m acima, como o sistema prende o efeito ao jogador.");
+        break;
+      }
     runtime::UnityPrefabIdentityMap previous,identities;
     if(existing){previous.nextObject=static_cast<u32>(oldRecipe.nextIdentity);for(const auto &[file,id]:oldRecipe.identities)previous.entries.push_back({file,static_cast<u32>(id)});}
     const runtime::UnityPrefabResolver resolver=[&](const UnityObjectReference &reference,AssetType type,std::vector<AssetGuid> &ids,std::string &diagnostic) {

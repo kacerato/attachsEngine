@@ -22,11 +22,16 @@ class SceneVfx final {
 public:
   using PrefabLoader = std::function<bool(resources::AssetGuid, Prefab &, std::string &)>;
   struct Report {
-    u32 projectiles = 0, lasers = 0, sounds = 0, rotators = 0, spawned = 0, refused = 0;
+    u32 projectiles = 0, lasers = 0, sounds = 0, rotators = 0, followers = 0, spawned = 0, refused = 0;
     std::string lastError;
   };
   void reset();
   void setPrefabLoader(PrefabLoader loader) { loader_ = std::move(loader); }
+  // Câmera do jogo neste quadro (mundo), para o Seguir câmera; nula sem câmera.
+  void setCamera(const float *position) {
+    camera_ = position != nullptr;
+    for (u32 k = 0; k < 3; ++k) cameraPosition_[k] = position ? position[k] : 0.0f;
+  }
   // Depois da física e antes das partículas: projéteis andam e acertam, lasers
   // miram, sons tocam no tempo deles.
   bool advance(GameWorld &world, const ScenePhysics &physics, SceneParticles &particles, SceneAudio &audio, float elapsed);
@@ -51,6 +56,8 @@ private:
   std::map<resources::AssetGuid, Prefab> prefabs_;
   u32 random_ = 0x9e3779b9u;
   Report report_;
+  float cameraPosition_[3]{};
+  bool camera_ = false;
 };
 
 } // namespace ae::runtime

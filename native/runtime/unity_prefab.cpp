@@ -219,6 +219,10 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
     auto *rotator=static_cast<scene::Rotator*>(add(scene::Rotator::descriptor));if(!rotator)return false;
     for(u32 k=0;k<3;++k)rotator->speed[k]=std::clamp((*object.rotator)[k],-36000.0f,36000.0f);
   }
+  if(object.followCamera) {
+    auto *follow=static_cast<scene::FollowCamera*>(add(scene::FollowCamera::descriptor));if(!follow)return false;
+    for(u32 k=0;k<3;++k)follow->offset[k]=std::clamp((*object.followCamera)[k],-10000.0f,10000.0f);
+  }
   if(object.effectSound) {
     const auto &source=*object.effectSound;
     if(!object.audio) note("Som repetido sem Audio Source: "+object.name+" fica sem ele.");

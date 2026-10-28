@@ -12,6 +12,8 @@
 #include "resources/unity_prefab_import.h"
 #include "runtime/scene_lines.h"
 #include "runtime/scene_particles.h"
+#include "runtime/scene_vfx.h"
+#include "runtime/transform_math.h"
 #include "runtime/unity_prefab.h"
 #include "scene/audio.h"
 #include "scene/component_schema.h"
@@ -376,6 +378,45 @@ AE_TEST(g6a_rotator_and_eight_sub_emitters) {
                  "oito sub-emissores de nascimento");
 }
 
+AE_TEST(g6b_follow_camera_keeps_the_effect_over_the_game_camera) {
+  scene::FollowCamera follow;
+  follow.offset[1] = 28;
+  follow.offset[2] = -1;
+  scene::FollowCamera back;
+  AE_EXPECT_TRUE(roundTrip(follow, back) && back.offset[1] == 28 && back.offset[2] == -1 && back.enabled, "Seguir câmera na ida e volta");
+  // No Play, a chuva vai para a câmera + deslocamento; o giro do autor fica.
+  runtime::SceneGraph graph;
+  const auto parent = graph.createEntity(graph.root(), runtime::ObjectKind::Folder, "Pai");
+  const auto rain = graph.createEntity(parent, runtime::ObjectKind::Folder, "Chuva");
+  auto values = *graph.find(parent);
+  values.transform.position[0] = 5;
+  AE_EXPECT_TRUE(graph.applyEntityValues(parent, values), "pai deslocado");
+  values = *graph.find(rain);
+  values.transform.position[1] = 32;
+  values.transform.rotationDegrees[1] = 30;
+  auto *added = static_cast<scene::FollowCamera *>(values.components.add(scene::FollowCamera::descriptor));
+  AE_EXPECT_TRUE(added != nullptr, "componente na lista");
+  std::copy(follow.offset, follow.offset + 3, added->offset);
+  AE_EXPECT_TRUE(graph.applyEntityValues(rain, values), "objeto com Seguir câmera");
+  runtime::GameWorld world;
+  runtime::ScenePhysics physics;
+  runtime::SceneParticles particles;
+  runtime::SceneAudio audio;
+  runtime::SceneVfx vfx;
+  AE_EXPECT_TRUE(world.load(graph) && physics.start(world), "mundo do Play");
+  const float camera[3]{1, 2, 3};
+  vfx.setCamera(camera);
+  AE_EXPECT_TRUE(world.beginFrame(1.0 / 60), "quadro aberto");
+  AE_EXPECT_TRUE(vfx.advance(world, physics, particles, audio, 1.0f / 60), vfx.report().lastError.c_str());
+  AE_EXPECT_EQ(vfx.report().followers, 1u, "um seguidor");
+  float matrix[16];
+  AE_EXPECT_TRUE(runtime::worldMatrix(world.graph(), rain, matrix) && std::abs(matrix[12] - 1) < 1e-4f && std::abs(matrix[13] - 30) < 1e-4f &&
+                 std::abs(matrix[14] - 2) < 1e-4f, "posição de mundo = câmera + deslocamento, sob um pai deslocado");
+  AE_EXPECT_TRUE(std::abs(world.graph().find(rain)->transform.rotationDegrees[1] - 30) < 1e-3f, "giro do autor preservado");
+  vfx.setCamera(nullptr);
+  AE_EXPECT_TRUE(vfx.advance(world, physics, particles, audio, 1.0f / 60) && vfx.report().followers == 0, "sem câmera, fica onde está");
+}
+
 AE_TEST(g6a_distortion_blend_reaches_the_batch_with_its_strength) {
   scene::ParticleSystem source;
   source.materialBlend = scene::ParticleBlend::Distortion;
@@ -513,6 +554,7 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
       "%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Enabled: 1\n"
       "  m_Script: {fileID: 11500000, guid: e4ec900128fbff24683f8f2aac8c2192, type: 3}\n  m_Name: Tempestade\n"
       "  WeatherTypeName: Thunderstorm\n  FogDensity: 0.005\n  WindIntensity: 1\n  ParticleEffectAmount: 1000\n"
+      "  ParticleEffectVector: {x: 0, y: 28, z: 1}\n"
       "  PrecipitationWeatherType: 0\n  UseLightning: 0\n  TemperatureType: 1\n  CloudLevel: 4\n  ShaderControl: 0\n"
       "  UseWeatherEffect: 0\n  UseWeatherSound: 0\n  WeatherVolume: 0.8\n"
       "  WeatherSound: {fileID: 8300000, guid: 44444444444444444444444444444444, type: 3}\n";
@@ -523,6 +565,8 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
   AE_EXPECT_TRUE(parsed.name == "Thunderstorm" && parsed.weather.kind == scene::WeatherKind::Storm && parsed.weather.lightning &&
                  parsed.weather.intensity == 1 && std::abs(parsed.weather.fogDensity - .045f) < 1e-4f && parsed.weather.rainRate == 7000 &&
                  parsed.weather.surfaceWetness == 1 && parsed.useSound && parsed.soundVolume == .8f, "Thunderstorm vira Tempestade");
+  AE_EXPECT_TRUE(parsed.effectOffset[1] == 28 && parsed.effectOffset[2] == 1 && parsed.additionalOffset[1] == 28,
+                 "posição do efeito sobre o jogador");
   const std::string cloud =
       "%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Enabled: 1\n"
       "  m_Script: {fileID: 11500000, guid: e61fb300c8082e942917c8b932209ad4, type: 3}\n  m_Name: Limpo\n"
@@ -541,7 +585,8 @@ AE_TEST(g6a_vfx_components_keep_their_identity_in_a_saved_list) {
   // não pode trocar a identidade pela do temporário (zero).
   scene::Components list;
   for (const auto *type : {&scene::LineRenderer::descriptor, &scene::Laser::descriptor, &scene::Projectile::descriptor,
-                           &scene::ParticleCollisionSpawn::descriptor, &scene::EffectSound::descriptor, &scene::Rotator::descriptor})
+                           &scene::ParticleCollisionSpawn::descriptor, &scene::EffectSound::descriptor, &scene::Rotator::descriptor,
+                           &scene::FollowCamera::descriptor})
     AE_EXPECT_TRUE(list.add(*type) != nullptr, std::string(type->id).c_str());
   std::vector<const scene::ComponentType *> registry;
   for (const auto &schema : scene::componentSchemas) registry.push_back(schema.type);
@@ -551,7 +596,7 @@ AE_TEST(g6a_vfx_components_keep_their_identity_in_a_saved_list) {
   std::istringstream in(out.str());
   in.imbue(std::locale::classic());
   scene::Components back;
-  AE_EXPECT_TRUE(back.read(in, registry, scene::UnknownComponentPolicy::Reject, true) && back.valid() && back.size() == 6,
+  AE_EXPECT_TRUE(back.read(in, registry, scene::UnknownComponentPolicy::Reject, true) && back.valid() && back.size() == 7,
                  "lista relida e válida");
   bool same = true;
   for (usize k = 0; k < back.size(); ++k) same = same && back.at(k)->instanceId() == list.at(k)->instanceId() && back.at(k)->instanceId() != 0;

@@ -1,9 +1,11 @@
 #pragma once
 // Shared implementation details for the session and its input action dispatcher.
 #include "editor/editor_document.h"
+#include "resources/asset_registry.h"
 #include "resources/material_asset.h"
 #include "resources/texture_profile.h"
 #include "ui/ui_icon_id.h"
+#include <filesystem>
 
 namespace ae::editor::session_detail {
 inline constexpr u32 TextureProfileFields=11;
@@ -15,6 +17,8 @@ inline constexpr FileKind fileKinds[]{
   {"cena","Cenas",ui::UiIcon::SceneObject},{"arquivo","Outros arquivos",ui::UiIcon::AssetsFile}};
 
 std::string baseName(const std::string &path);
+// Registro em disco atrás da memória (pendente até salvar) é aceito; divergente, nunca.
+bool persistedRegistry(const std::filesystem::path &root,const resources::AssetRegistry &expected,bool pending=false);
 bool textureProfileToggle(u32 field);
 std::string textureProfileFieldText(const resources::TextureProfile &profile,u32 field);
 void copyTextureProfileField(resources::TextureProfile &to,const resources::TextureProfile &from,u32 field);

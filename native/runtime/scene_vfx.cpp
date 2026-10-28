@@ -137,7 +137,7 @@ ObjectHandle SceneVfx::spawn(GameWorld &world, resources::AssetGuid asset, const
 }
 
 bool SceneVfx::advance(GameWorld &world, const ScenePhysics &physics, SceneParticles &particles, SceneAudio &audio, float elapsed) {
-  report_.projectiles = report_.lasers = report_.sounds = 0;
+  report_.projectiles = report_.lasers = report_.sounds = report_.followers = 0;
   const auto &graph = world.graph();
   std::vector<ObjectId> objects;
   graph.collectSubtree(graph.root(), objects);
@@ -274,6 +274,22 @@ bool SceneVfx::advance(GameWorld &world, const ScenePhysics &physics, SceneParti
         }
         world.setLocalTransform(handle, local);
         ++report_.rotators;
+      }
+    }
+    // --- Seguir câmera -----------------------------------------------------
+    if (const auto *value = object->components.find(scene::FollowCamera::descriptor)) {
+      const auto &follow = static_cast<const scene::FollowCamera &>(*value);
+      float matrix[16], parent[16];
+      Transform local;
+      if (follow.enabled && camera_ && worldMatrix(graph, id, matrix) && parentWorldMatrix(graph, id, parent)) {
+        for (u32 k = 0; k < 3; ++k) matrix[12 + k] = cameraPosition_[k] + follow.offset[k];
+        Transform next;
+        if (localTransformForWorld(matrix, parent, local) && world.localTransform(handle, next) == WorldStatus::Ok) {
+          // Só a posição: o giro e a escala continuam os do autor.
+          for (u32 k = 0; k < 3; ++k) next.position[k] = local.position[k];
+          world.setLocalTransform(handle, next);
+          ++report_.followers;
+        }
       }
     }
     // --- Som repetido -----------------------------------------------------

@@ -15608,6 +15608,37 @@ public readonly partial struct Rotator : IComponentFacade<Rotator>
     }
 }
 
+/// <summary>Seguir câmera: Mantém o objeto na posição da câmera do jogo mais um deslocamento em eixos do mundo, como a chuva do UniStorm presa ao jogador. Família Efeitos · Comportamentos.</summary>
+/// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
+public readonly partial struct FollowCamera : IComponentFacade<FollowCamera>
+{
+    public static string TypeId => "astra.effects.follow_camera";
+    public static FollowCamera Wrap(Component component) => new(component);
+    public Component Component { get; }
+    public FollowCamera(Component component)
+    {
+        if (component.TypeId != TypeId) throw new WorldException(WorldStatus.InvalidArgument, "tipo " + component.TypeId);
+        Component = component;
+    }
+    public ulong InstanceId => Component.InstanceId;
+    public GameObject Object => Component.Object;
+    public bool IsAlive => Component.IsAlive;
+    /// <summary>Remove a instância pelo ciclo nativo; dependências e ownership podem recusar.</summary>
+    public void Remove() => Component.Remove();
+    /// <summary>Deslocamento</summary>
+    public Vector3 Offset
+    {
+        get => new(Component.GetFloat("offset_x"), Component.GetFloat("offset_y"), Component.GetFloat("offset_z"));
+        set => Component.SetVector3("offset", value);
+    }
+    /// <summary>Ativo. Desligado, o objeto fica onde está</summary>
+    public bool Enabled
+    {
+        get => Component.GetBool("enabled");
+        set => Component.SetBool("enabled", value);
+    }
+}
+
 /// <summary>Instanciar ao colidir: Cada toque de partícula cria um prefab no ponto (respingo, faísca, explosão). Família Efeitos · Comportamentos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/ScriptReference/MonoBehaviour.OnParticleCollision.html</remarks>
 public readonly partial struct ParticleCollisionSpawn : IComponentFacade<ParticleCollisionSpawn>

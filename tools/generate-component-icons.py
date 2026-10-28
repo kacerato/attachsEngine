@@ -600,6 +600,14 @@ ICONS["component/rotator"] = (
     f'<path d="M30 40a40 14 0 0 1 68 0" {stroke(5, ACCENT)}/>'
     f'<path d="M98 40l-14-4M98 40l-4 13" {stroke(5, ACCENT)}/>'
     f'<circle cx="64" cy="64" r="6" fill="{ACCENT}"/>')
+# Seguir câmera: nuvem com gotas presa por um elo lima à câmera abaixo dela.
+ICONS["component/follow-camera"] = (
+    f'<path d="M36 44a14 14 0 0 1 4-27 20 20 0 0 1 38-2 14 14 0 0 1 14 29Z" {stroke(5)}/>'
+    f'<path d="M46 54l-4 10M64 54l-4 10M82 54l-4 10" {stroke(4, extra='opacity=".7"')}/>'
+    f'<path d="M64 70v14" {stroke(5, ACCENT)}/><circle cx="64" cy="70" r="4" fill="{ACCENT}"/>'
+    f'<rect x="30" y="88" width="52" height="28" rx="6" {stroke(5)}/>'
+    f'<path d="M82 96l18-8v28l-18-8" {stroke(5)}/>'
+    f'<circle cx="56" cy="102" r="6" fill="{ACCENT}"/>')
 # Som repetido: alto-falante e a seta de repetição em lima.
 ICONS["audio/effect-sound"] = (
     f'<path d="M12 50h18l24-20v68L30 78H12Z" {stroke(5)}/>'

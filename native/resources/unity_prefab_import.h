@@ -89,6 +89,9 @@ struct UnityPrefabObject {
   std::optional<UnityPrefabLaser> laser;
   // Girar: graus por segundo, já refletidos para a Astra.
   std::optional<std::array<float, 3>> rotator;
+  // Seguir câmera: deslocamento em eixos da Astra (o efeito de um Weather Type
+  // do UniStorm, que o sistema prende ao jogador).
+  std::optional<std::array<float, 3>> followCamera;
 };
 // Cobertura de um prefab (G6a, relatório por prefab). Suportado: nada ficou
 // de fora. Parcial: abre, com perdas visíveis ou aproximações listadas.

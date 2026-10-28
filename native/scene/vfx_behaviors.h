@@ -255,6 +255,28 @@ public:
   }
 };
 
+// --- Seguir câmera ----------------------------------------------------------
+// Em Play, o objeto fica na posição da câmera do jogo mais o Deslocamento, em
+// eixos do mundo: a precipitação do UniStorm presa ao jogador, ou o Position
+// Constraint da Unity com a câmera como fonte. Giro e escala ficam do autor.
+class FollowCamera final : public ComponentValue {
+public:
+#include "scene/generated/vfx_behaviors_FollowCamera_fields0.inc"
+  float offset[3]{0, 0, 0};
+  static const ComponentType descriptor;
+  const ComponentType &type() const override { return descriptor; }
+  std::unique_ptr<ComponentValue> clone() const override { return std::make_unique<FollowCamera>(*this); }
+  bool valid() const override { return detail::validVfxTables(*this); }
+  void write(std::ostream &out) const override { detail::writeVfxTables(*this, out); }
+  bool read(std::istream &in, u32 version) override {
+    FollowCamera candidate;
+    if (version != 1 || !detail::readVfxTables(candidate, in) || !candidate.valid()) return false;
+    static_cast<ComponentValue &>(candidate) = static_cast<const ComponentValue &>(*this);
+    *this = candidate;
+    return true;
+  }
+};
+
 inline bool effectSoundRepeats(const ComponentValue &v) { return static_cast<const EffectSound &>(v).repeating; }
 inline bool effectSoundRandom(const ComponentValue &v) { return static_cast<const EffectSound &>(v).randomVolume; }
 
@@ -273,6 +295,8 @@ inline bool effectSoundRandom(const ComponentValue &v) { return static_cast<cons
 #include "scene/generated/vfx_behaviors_effectSoundBooleans.inc"
 #include "scene/generated/vfx_behaviors_rotatorNumbers.inc"
 #include "scene/generated/vfx_behaviors_rotatorBooleans.inc"
+#include "scene/generated/vfx_behaviors_followCameraNumbers.inc"
+#include "scene/generated/vfx_behaviors_followCameraBooleans.inc"
 
 inline constexpr std::array<ComponentTriple, 10> lineTriples{{
   {"point_0", "Ponto 1", {"point_0_x", "point_0_y", "point_0_z"}},
@@ -370,5 +394,11 @@ inline constexpr std::array<ComponentTriple, 1> rotatorTriples{{
 inline const ComponentType Rotator::descriptor{
   "astra.effects.rotator", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<Rotator>(); },
   rotatorNumbers, rotatorBooleans, {}, nullptr, false, {}, rotatorTriples};
+
+inline constexpr std::array<ComponentTriple, 1> followCameraTriples{{
+  {"offset", "Deslocamento", {"offset_x", "offset_y", "offset_z"}}}};
+inline const ComponentType FollowCamera::descriptor{
+  "astra.effects.follow_camera", 1, []() -> std::unique_ptr<ComponentValue> { return std::make_unique<FollowCamera>(); },
+  followCameraNumbers, followCameraBooleans, {}, nullptr, false, {}, followCameraTriples};
 
 } // namespace ae::scene

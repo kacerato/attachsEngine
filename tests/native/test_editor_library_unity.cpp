@@ -88,6 +88,12 @@ AE_TEST(library_unity_exact_references_native_prefab_clip_controller_and_transac
   EditorSession::ModelImportReport report;
   AE_EXPECT_TRUE(session.commitModelImport(mesh,converted,modelItem.path,digest(test::FbxTriangle),report,ImportAmbiguityPolicy::Refuse,{}, {}, {}, {},&profile),report.diagnostic.c_str());
   const auto material=session.importUnityMaterial(materialItem.path,error);AE_EXPECT_TRUE(material.valid(),error.c_str());
+  // Reabrir o projeto deixa o registro pendente na memória até salvar: o disco
+  // fica atrás dela. Converter não pode pedir "reabra" nesse estado (G6, POCO).
+  {AE_EXPECT_TRUE(EditorImportTransaction::writeText(project.root/"Notas.txt","x"),"unrelated file");
+   EditorSession::ResourceChangeReport moved;AE_EXPECT_TRUE(session.moveResource("Notas.txt","Notas2.txt",moved),moved.diagnostic.c_str());
+   AssetRegistry behind;AE_EXPECT_TRUE(AssetRegistry::deserialize(contents(project.root/".astra/assets.astra"),behind)&&behind.remove(material)&&
+     EditorImportTransaction::writeText(project.root/".astra/assets.astra",behind.serialize()),"disk registry behind memory");}
   AE_EXPECT_TRUE(session.openLibraryItem(prefabItem.id,error),error.c_str());
   const auto prefabResolution=session.library().resolve(prefabItem.id,session.assets());
   AE_EXPECT_TRUE(prefabResolution.output&&prefabResolution.state==LibraryResolutionState::Registered,"Library command publishes native prefab");

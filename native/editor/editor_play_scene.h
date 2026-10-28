@@ -528,6 +528,8 @@ private:
   // G6a: Projétil, Laser e Som repetido, antes das partículas (que leem a pose
   // nova do impacto do laser no mesmo quadro).
   bool advanceEffects(float elapsed) {
+    const auto camera=resolveSceneCamera(world_.graph());
+    vfx_.setCamera(camera.entity?camera.position:nullptr);
     return vfx_.advance(world_,physics_,particles_,audio_,elapsed) && drainCommands();
   }
   const runtime::SceneVfx &vfx() const noexcept {return vfx_;}

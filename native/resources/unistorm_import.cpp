@@ -91,6 +91,10 @@ bool readUniStormWeather(const UnityYamlDocument &document, UniStormWeather &out
   if (yes(n, "OverrideFogColor", false) || yes(n, "OverrideCloudColor", false))
     result.approximations.push_back("Gradientes de cor da neblina e das nuvens pela hora ficam com as cores do Clima.");
   if (const auto *node = n.get("WeatherEffect")) unityObjectReference(*node, result.effect);
+  if (const auto *node = n.get("ParticleEffectVector"))
+    for (u32 k = 0; k < 3; ++k) result.effectOffset[k] = num(*node, std::string_view(&"xyz"[k], 1), result.effectOffset[k]);
+  if (const auto *node = n.get("AdditionalParticleEffectVector"))
+    for (u32 k = 0; k < 3; ++k) result.additionalOffset[k] = num(*node, std::string_view(&"xyz"[k], 1), result.additionalOffset[k]);
   if (const auto *node = n.get("AdditionalWeatherEffect")) unityObjectReference(*node, result.additionalEffect);
   if (const auto *node = n.get("WeatherSound")) unityObjectReference(*node, result.sound);
   if (const auto *node = n.get("CloudProfileComponent")) unityObjectReference(*node, result.cloudProfile);

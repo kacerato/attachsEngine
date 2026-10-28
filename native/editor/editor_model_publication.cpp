@@ -1,10 +1,12 @@
 #include "editor/editor_session.h"
+#include "editor/editor_session_internal.h"
 #include "renderer/authoring_texture.h"
 #include "editor/editor_texture_history.h"
 #include "resources/model_import.h"
 #include <limits>
 
 namespace ae::editor {
+using session_detail::persistedRegistry;
 namespace {
 using OptionalText=std::optional<std::string>;
 bool readMetadata(const std::filesystem::path &root,const std::string &relative,usize maximum,OptionalText &out) {
@@ -45,21 +47,6 @@ bool applyLibraryItem(std::string &encoded,const std::string &path,const std::op
   }
   if(!found)return false;
   encoded=index.serialize();return !encoded.empty();
-}
-// Registros pendentes (textura extraida, material criado) ainda nao foram
-// gravados: o disco pode estar atras da memoria, mas nunca divergir dela.
-bool persistedRegistry(const std::filesystem::path &root,const resources::AssetRegistry &expected,bool pending=false) {
-  std::error_code error;const auto path=root/".astra/assets.astra";std::vector<u8> bytes;resources::AssetRegistry actual;
-  if(!std::filesystem::exists(path,error))return !error&&(pending||expected.size()==0);
-  if(error||!EditorImportTransaction::read(path,bytes,32u<<20)||
-     !resources::AssetRegistry::deserialize(std::string(bytes.begin(),bytes.end()),actual))return false;
-  if(actual.serialize()==expected.serialize())return true;
-  if(!pending)return false;
-  for(const auto &record:actual.records()) {
-    const auto *mine=expected.find(record.guid);
-    if(!mine||mine->type!=record.type||mine->path!=record.path)return false;
-  }
-  return true;
 }
 template<class T>u64 storage(const std::vector<T> &values) {return static_cast<u64>(values.capacity())*sizeof(T);}
 }
@@ -291,5 +278,20 @@ bool EditorSession::commitModelImport(std::span<const u8> bytes,const resources:
   if(!transaction.commit(bytes,assets_.serialize(),{},&report.diagnostic,text)) {restore();return false;}
   history_.end();assetRegistryDirty_=false;loadLibraryIndex(report.diagnostic);files_.rebuildTree();state_.selectedFile=path;
   settleModelPublication();state_.status=report.reimported?"Recurso reimportado; instâncias preservadas":"Recurso registrado; pronto para instanciar";return true;
+}
+// Registros pendentes (textura extraida, material criado) ainda nao foram
+// gravados: o disco pode estar atras da memoria, mas nunca divergir dela.
+bool session_detail::persistedRegistry(const std::filesystem::path &root,const resources::AssetRegistry &expected,bool pending) {
+  std::error_code error;const auto path=root/".astra/assets.astra";std::vector<u8> bytes;resources::AssetRegistry actual;
+  if(!std::filesystem::exists(path,error))return !error&&(pending||expected.size()==0);
+  if(error||!EditorImportTransaction::read(path,bytes,32u<<20)||
+     !resources::AssetRegistry::deserialize(std::string(bytes.begin(),bytes.end()),actual))return false;
+  if(actual.serialize()==expected.serialize())return true;
+  if(!pending)return false;
+  for(const auto &record:actual.records()) {
+    const auto *mine=expected.find(record.guid);
+    if(!mine||mine->type!=record.type||mine->path!=record.path)return false;
+  }
+  return true;
 }
 }

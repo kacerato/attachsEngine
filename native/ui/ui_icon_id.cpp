@@ -115,6 +115,7 @@ constexpr const char *kNames[] = {
     "component/event-connection",
     "component/fabrik-root",
     "component/finger-curl",
+    "component/follow-camera",
     "component/foot-grounding",
     "component/full-body-ik",
     "component/grounder",
