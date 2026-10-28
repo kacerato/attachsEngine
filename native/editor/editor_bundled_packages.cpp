@@ -55,7 +55,7 @@ bool parseBundledPackageIndex(std::string_view text,std::vector<BundledPackage> 
       if(!safeRelative(f[1])||!hex64(f[3])||!safeRelative(f[4])||f[4].starts_with(".astra/"))return fail("Arquivo inválido no índice de pacotes incluídos.");
       if(!relatives.insert(std::string(f[4])).second)return fail("Arquivo repetido no pacote incluído: "+std::string(f[4]));
       if(package.files.size()>=EditorImportTransaction::MaximumCompanions)return fail("Pacote incluído com mais de 4096 arquivos.");
-      package.files.push_back({std::string(f[4]),package.directory+"/"+std::string(f[1]),std::string(f[3]),bytes});
+      package.files.push_back({std::string(f[4]),BundledPackageAssetRoot+package.directory+"/"+std::string(f[1]),std::string(f[3]),bytes});
       package.bytes+=bytes;
     } else return fail("Linha inválida no índice de pacotes incluídos.");
     lines.back()+=line;lines.back()+='\n';

@@ -26,7 +26,7 @@ AE_TEST(bundled_package_index_parses_and_rejects_unsafe_entries) {
   std::vector<BundledPackage> packages;std::string diagnostic;
   AE_EXPECT_TRUE(parseBundledPackageIndex(index({{"Assets/Fx/Fogo.prefab","fogo"},{"Assets/Fx/Fogo.prefab.meta","guid: 1"}}),packages,diagnostic),diagnostic.c_str());
   AE_EXPECT_EQ(packages.size(),usize{2},"two packages");
-  AE_EXPECT_TRUE(packages[0].files.size()==2&&packages[0].files[0].asset=="p0/f0.bin"&&packages[0].bytes==11,"assets under the package directory");
+  AE_EXPECT_TRUE(packages[0].files.size()==2&&packages[0].files[0].asset=="bundled-packages/p0/f0.bin"&&packages[0].bytes==11,"assets under the package directory");
   AE_EXPECT_TRUE(packages[0].indexHash.size()==64&&packages[0].indexHash!=packages[1].indexHash,"one marker hash per package");
   for(const char *bad:{"Assets/../x","/abs","C:/x","Assets//x",".astra/x"}) {
     AE_EXPECT_TRUE(!parseBundledPackageIndex(index({{bad,"x"}}),packages,diagnostic)&&packages.empty(),bad);

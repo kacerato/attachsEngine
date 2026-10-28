@@ -14,6 +14,8 @@
 // da "Pasta de pacote": cópia para o preparo do projeto e prepareLibraryPackage.
 namespace ae::editor {
 inline constexpr const char *BundledPackageIndexAsset="bundled-packages/index.tsv";
+// Raiz dos arquivos no AAssetManager; o índice traz só "p0/f00000.bin".
+inline constexpr const char *BundledPackageAssetRoot="bundled-packages/";
 inline constexpr const char *BundledPackageMarker=".astra-incluido";
 
 struct BundledPackageFile {std::string relative,asset,sha256;u64 bytes=0;};
