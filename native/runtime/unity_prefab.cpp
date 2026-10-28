@@ -7,6 +7,7 @@
 #include "scene/particle_system.h"
 #include "scene/physics2d_components.h"
 #include "scene/physics_body.h"
+#include "scene/timer.h"
 #include "scene/vfx_behaviors.h"
 #include <algorithm>
 #include <cmath>
@@ -215,6 +216,11 @@ bool addEffects(const resources::UnityPrefabObject &object,const std::map<i64,Ob
       spawn->destroyEmitter=source.destroyEmitter;spawn->forwardAxis=scene::VfxForwardAxis::NegativeZ;
     }
   }
+  if(object.despawnSeconds) {
+    auto *timer=static_cast<scene::Timer*>(add(scene::Timer::descriptor));if(!timer)return false;
+    timer->intervalSeconds=*object.despawnSeconds;timer->repeat=false;timer->enabled=true;timer->autoStart=true;
+    timer->elapsedAction=2;timer->elapsedTarget=local(object.fileId);
+  }
   if(object.rotator) {
     auto *rotator=static_cast<scene::Rotator*>(add(scene::Rotator::descriptor));if(!rotator)return false;
     for(u32 k=0;k<3;++k)rotator->speed[k]=std::clamp((*object.rotator)[k],-36000.0f,36000.0f);
@@ -260,7 +266,12 @@ bool buildUnityPrefab(const resources::UnityPrefabImport &source,resources::Asse
         const auto found=transforms.find(object.parentTransform);if(found==transforms.end())return fail("Pai Unity ausente.");
         parent=mapping.at(found->second->fileId);if(!graph.exists(parent))continue;
       }
-      if(object.tag!="Untagged"||object.layer)return fail("Tags/camadas Unity exigem mapa explícito do projeto: "+object.name);
+      // A marca e a camada da Unity dependem do TagManager do projeto de origem,
+      // que o pacote não traz: o objeto fica sem marca e na camada Padrão, com aviso.
+      if((object.tag!="Untagged"||object.layer)&&effects&&effects->approximations) {
+        const std::string text="Marca ou camada Unity do projeto de origem fica Untagged/Padrão.";
+        if(std::find(effects->approximations->begin(),effects->approximations->end(),text)==effects->approximations->end())effects->approximations->push_back(text);
+      }
       SceneObject value;value.id=mapping.at(object.fileId);value.parent=parent;
       value.kind=object.renderer?ObjectKind::Mesh:object.particle||object.line?ObjectKind::Effect:object.light?ObjectKind::Light:ObjectKind::Folder;
       assignObjectName(value,object.name);value.active=object.active;value.castShadow=object.castShadows!=0;value.receiveShadow=object.receiveShadow;

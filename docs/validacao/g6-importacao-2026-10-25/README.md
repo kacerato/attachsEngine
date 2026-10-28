@@ -15,7 +15,7 @@ leitura. A medição abaixo já inclui a correção.
 | Pacote | Prefabs | Abrem | Suportados | Sem perda visível | Parciais | Recusados | Razão sem perda |
 |---|---|---|---|---|---|---|---|
 | RPG VFX Bundle 5.0.0 | 217 | 217 | 30 | 187 | 0 | 0 | **100%** (meta ≥ 95%) |
-| UniStorm (prefabs de partícula) | 27 | 18 | 2 | 14 | 2 | 9 | 59,3% |
+| UniStorm (prefabs de partícula) | 27 | 19 | 2 | 16 | 1 | 8 | 66,7% |
 
 UniStorm (dados): 33 Weather Types e 3 perfis de nuvem convertidos, 0 recusados.
 Os 9 prefabs recusados do UniStorm são sistema/UI do próprio pacote, mais um
@@ -164,6 +164,34 @@ Como na Unity, a cena nova (projeto vazio) agora nasce com Main Camera e
 - **Limitação:** os flocos do prefab Snow do UniStorm ficam fracos na vista;
 - O Clarão foi revisto e é fiel ao material Unity: é um impacto de terra escuro.
 
+## Quarta passada (28/10): pendências fechadas
+
+Primeiro uma rodada de diagnóstico no POCO, sem build novo, com variantes da cena
+de chuva e o log `[NightSky]` (noite 0, sol a 0,77, ambiente 0,386). Depois um
+build e uma ida ao POCO (APK 0.3.0-dev.261026999-g6-1001).
+
+- **Chuva escura em cena vazia.** A causa era a névoa: sem ela, céu cinza e
+  traços visíveis; com ela, tudo azul-petróleo. A conversão do UniStorm
+  multiplicava `FogDensity` por 9. A névoa embutida da Unity não cobre o skybox;
+  ampliada, a da Astra engolia o céu inteiro. Agora a densidade é 1:1. No POCO, a
+  Rain mostra céu nublado cinza com os traços. O visual de Chuva da própria Astra
+  (G4c) não mudou.
+- **Emenda do Laser.** Cada trecho de 2 m virava a largura para a câmera a partir
+  do próprio centro, e trechos vizinhos abriam bordas diferentes na junta. O
+  shader agora calcula a largura de cada vértice a partir do ponto 3D da junta.
+  No POCO, o feixe sai contínuo, sem o vão de antes.
+- **Neve do UniStorm.** Com sol e a taxa do tipo, os flocos aparecem na vista,
+  esparsos como na caixa de 70 × 70 m do pacote.
+- **UniStorm: de 18 para 19 abrindo, com 16 sem perda visível.**
+  - `DespawnObjectUniStorm` vira um Temporizador que desativa o próprio objeto
+    depois de `Seconds`, como o pool do pacote.
+  - MeshRenderer sem material não desenha, como na Unity.
+  - Marca e camada da Unity viram Untagged/Padrão, com aviso.
+  - Escala de UV abaixo de 0,01 fica em 0,01.
+  - O shader Lightning Bolt é aditivo.
+  - Os 8 recusados são o sistema e a UI do pacote (System, Canvas, Sun/Moon,
+    Auroras) e o marcador do raio, que usa recursos embutidos da Unity.
+
 Prancha Unity × POCO: fica na evidência interna, com os quadros dos vídeos
 oficiais (link e timestamp). Os quadros da Unity mostram os efeitos maiores, sobre
 fundo escuro e com bloom. As capturas do POCO são de longe, sobre chão claro, e
@@ -181,4 +209,4 @@ por isso a comparação é de forma e movimento, não de brilho.
   - importadores do RPG e do UniStorm.
 - **Testado no host:** os cenários acima e a cobertura dos dois pacotes.
 - **Testado no aparelho:** importação dos dois pacotes; no Play: Laser, auras, cura, explosão, meteoro, círculo mágico, Debuff 1, Dragon punch, raio, Distorção, Acerto e Clarão (vídeo); climas Clear, Rain e Snow do UniStorm; prefab Rain do UniStorm seguindo a câmera.
-- **Limitações:** Chuva da Astra escura em cena vazia; flocos do prefab Snow do UniStorm fracos na vista; som não conferido de ouvido.
+- **Limitações:** som 3D medido pelo `dumpsys audio`, não conferido de ouvido; Lightning Strike Fire (UniStorm) parcial (3 scripts de esmaecer e um shader embutido sem conversor); 8 prefabs de sistema/UI do UniStorm fora do escopo.

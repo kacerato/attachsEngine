@@ -79,8 +79,10 @@ bool readUniStormWeather(const UnityYamlDocument &document, UniStormWeather &out
     if (lightning) result.approximations.push_back("Relâmpago sem chuva (Dry Thunder) só existe na Tempestade da Astra.");
   }
   w.lightning = lightning;
-  // Escala da neblina: a densidade de chuva do pacote (0,005) é a de chuva da Astra (0,045).
-  w.fogDensity = std::clamp(num(n, "FogDensity", .005f) * 9.0f, 0.0f, 0.2f);
+  // Densidade da neblina igual à do pacote. A névoa da Unity (RenderSettings,
+  // Exponencial ao quadrado) não cobre o skybox; ampliada, a da Astra engolia o
+  // céu inteiro e a Rain virava azul-escura numa cena vazia (POCO, 28/10).
+  w.fogDensity = std::clamp(num(n, "FogDensity", .005f), 0.0f, 0.2f);
   w.windInfluence = std::clamp(num(n, "WindIntensity", .25f), 0.0f, 2.0f);
   const float rate = std::clamp(amount * 7.0f, 0.0f, 20000.0f);
   if (w.kind == scene::WeatherKind::Snow) w.snowRate = rate;

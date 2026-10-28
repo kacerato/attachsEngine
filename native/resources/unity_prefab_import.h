@@ -92,6 +92,8 @@ struct UnityPrefabObject {
   // Seguir câmera: deslocamento em eixos da Astra (o efeito de um Weather Type
   // do UniStorm, que o sistema prende ao jogador).
   std::optional<std::array<float, 3>> followCamera;
+  // DespawnObjectUniStorm: some (desativa) depois destes segundos.
+  std::optional<float> despawnSeconds;
 };
 // Cobertura de um prefab (G6a, relatório por prefab). Suportado: nada ficou
 // de fora. Parcial: abre, com perdas visíveis ou aproximações listadas.

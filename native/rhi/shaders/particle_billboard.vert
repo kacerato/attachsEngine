@@ -81,6 +81,17 @@ void main() {
     vec3 side = normalize(cross(axis, toCamera));
     float lengthWorld = max(size * batch.glow.w + length(velocity) * batch.stretch.x, size * 0.25);
     world = center + side * (corner.x * 0.5 * size) + axis * ((corner.y - 1.0) * 0.5 * lengthWorld);
+    // Linha (G6a): a ponta do trecho no ponto 3D da junta e a largura virada
+    // para a câmera a partir dela. Dois trechos vizinhos dividem a junta e a
+    // mesma borda, sem a emenda de quando cada um girava pelo próprio centro.
+    if((batch.layers.w & 256u) != 0u && !orthographic) {
+      float speed = length(velocity);
+      vec3 along = speed > 1.0e-6 ? velocity / speed : axis;
+      vec3 joint = center + along * ((corner.y - 1.0) * 0.5 * lengthWorld);
+      vec3 across = cross(along, normalize(camera - joint));
+      float spread = length(across);
+      world = joint + (spread > 1.0e-4 ? across / spread : side) * (corner.x * 0.5 * size);
+    }
   } else {
     float c = cos(inVelocityRotation.w), s = sin(inVelocityRotation.w);
     vec2 scaled = corner * vec2(size, height) * 0.5;

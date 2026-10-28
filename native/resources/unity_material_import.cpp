@@ -64,6 +64,8 @@ constexpr HovlShader hovlShaders[]{
   {"13a43378542625f489f7c1c85ba6a4c4","Lit_CenterGlow","_MainTex",UnityParticleFamily::AlphaBlend,true},
   {"145bae762d8de8f4c8fb1b284128fae7","DissolveNoise","_MainTex",UnityParticleFamily::AlphaBlend,true},
   {"68f568f887edc9d449e3a18dafbe5027","LightGlow","_MainTex",UnityParticleFamily::Additive,true},
+  // UniStorm Lightning Bolt: 2 · cor · _TintColor · textura com Blend SrcAlpha One, o mesmo do Particles/Additive legado.
+  {"fbd99a259d900874aab3008c875d1dde","Particles/Additive (UniStorm Lightning Bolt)","_MainTex",UnityParticleFamily::Additive,false},
   {"734ad3a5e0f9f384683a822995bcecd3","SmoothSmoke","_MainTex",UnityParticleFamily::AlphaBlend,false},
   // Shaders de partícula embutidos da Unity (fileID do recurso embutido): os
   // Legacy multiplicam a cor por 2; os Standard decidem a mistura pelo _Mode.
@@ -155,7 +157,13 @@ bool readUnityMaterial(std::string_view text,UnityMaterialImport &out) {
           {badTextures.insert(current);texture.unityGuid={};}
       } else if(line.starts_with("m_Scale:")||line.starts_with("m_Offset:")) {
         const char *keys[]{"x","y"};auto *values=line.starts_with("m_Scale:")?texture.sampling.scale:texture.sampling.offset;
-        if(!vector(line,keys,values,2)||!scene::validMaterialSampling(texture.sampling)) return fail("Transformação UV inválida: "+current);
+        if(!vector(line,keys,values,2)) return fail("Transformação UV inválida: "+current);
+        // Escala abaixo do mínimo da Astra (0,01): a imagem esticada ao longo de
+        // um raio, como o Lightning Bolt do UniStorm (0,0075). Fica no mínimo.
+        if(line.starts_with("m_Scale:"))for(u32 k=0;k<2;++k)if(values[k]>0&&values[k]<.01f) {
+          values[k]=.01f;result.approximations.push_back("Escala de UV abaixo de 0,01 fica em 0,01: "+current);
+        }
+        if(!scene::validMaterialSampling(texture.sampling)) return fail("Transformação UV inválida: "+current);
       }
     }
   }

@@ -563,7 +563,7 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
   resources::UniStormWeather parsed;
   AE_EXPECT_TRUE(resources::readUnityYaml(weather, document, error) && resources::readUniStormWeather(document, parsed, error), error.c_str());
   AE_EXPECT_TRUE(parsed.name == "Thunderstorm" && parsed.weather.kind == scene::WeatherKind::Storm && parsed.weather.lightning &&
-                 parsed.weather.intensity == 1 && std::abs(parsed.weather.fogDensity - .045f) < 1e-4f && parsed.weather.rainRate == 7000 &&
+                 parsed.weather.intensity == 1 && std::abs(parsed.weather.fogDensity - .005f) < 1e-4f && parsed.weather.rainRate == 7000 &&
                  parsed.weather.surfaceWetness == 1 && parsed.useSound && parsed.soundVolume == .8f, "Thunderstorm vira Tempestade");
   AE_EXPECT_TRUE(parsed.effectOffset[1] == 28 && parsed.effectOffset[2] == 1 && parsed.additionalOffset[1] == 28,
                  "posição do efeito sobre o jogador");

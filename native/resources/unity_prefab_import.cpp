@@ -66,7 +66,7 @@ void gradientEnds(const Node *gradient,float (&start)[4],float (&end)[4]) {
 
 bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out,std::string &diagnostic,const UnityPrefabContext *context) {
   UnityPrefabImport candidate;std::map<i64,usize> gameObjects;std::map<i64,i64> transforms;
-  std::set<i64> ownedComponents;std::map<i64,std::set<i64>> declaredComponents;
+  std::set<i64> ownedComponents,emptyRenderers;std::map<i64,std::set<i64>> declaredComponents;
   auto &coverage=candidate.coverage;
   const auto loss=[&](std::string text){note(coverage.losses,std::move(text));};
   const auto approximate=[&](std::string text){note(coverage.approximations,std::move(text));};
@@ -149,6 +149,8 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
       if(!cast||!cast->integer(shadows)||shadows<0||shadows>3)return fail(diagnostic,"ShadowCastingMode Unity fora de Off/On/TwoSided/ShadowsOnly.");
       value.castShadows=static_cast<u32>(shadows);value.renderer=true;
       const auto *materials=node.get("m_Materials");
+      // Sem material a Unity não desenha nada com este renderer.
+      if(materials&&materials->kind==Node::Kind::Sequence&&materials->elements.empty()){value.renderer=false;emptyRenderers.insert(value.fileId);break;}
       if(!materials||materials->kind!=Node::Kind::Sequence||materials->elements.empty()||materials->elements.size()>256)
         return fail(diagnostic,"Materiais de MeshRenderer Unity ausentes ou acima do limite.");
       for(const auto &material:materials->elements) {
@@ -318,6 +320,10 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
         if(!value.particle){loss("AutoDestroyPS sem Particle System no objeto.");continue;}
         value.particle->settings.stopAction=scene::ParticleStopAction::Destroy;
         if(value.particle->settings.looping)approximate("AutoDestroyPS num sistema em laço: na Astra o objeto some quando o sistema para.");
+      } else if(name=="DespawnObjectUniStorm") {
+        // UniStorm: devolve o objeto ao pool (SetActive false) depois de
+        // Seconds; na Astra, um Temporizador que desativa o próprio objeto.
+        value.despawnSeconds=std::clamp(num(node,"Seconds",3),.05f,3600.0f);
       } else if(name=="ProjectileMover"||name=="ProjectileMover2D") {
         UnityPrefabProjectile projectile;projectile.twoD=name=="ProjectileMover2D";
         projectile.speed=std::max(0.f,num(node,"speed",15));projectile.hitOffset=num(node,"hitOffset",0);
@@ -371,7 +377,8 @@ bool convertUnityPrefab(const UnityYamlDocument &document,UnityPrefabImport &out
     }
   }
   usize roots=0;
-  for(const auto &value:candidate.objects) {
+  for(auto &value:candidate.objects) {
+    if(emptyRenderers.contains(value.fileId))value.mesh={};
     if(!value.transformId||value.renderer!=bool(value.mesh.fileId))
       return fail(diagnostic,"Prefab Unity contém componente ausente ou MeshFilter/MeshRenderer incompleto.");
     // Todo componente declarado precisa existir no arquivo.
