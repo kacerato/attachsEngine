@@ -65,8 +65,12 @@ bool readUniStormWeather(const UnityYamlDocument &document, UniStormWeather &out
   const float amount = std::max(0.0f, num(n, "ParticleEffectAmount", 200));
   if (precipitation) {
     w.kind = lightning ? scene::WeatherKind::Storm : temperature == 0 ? scene::WeatherKind::Snow : scene::WeatherKind::Rain;
-    // Quantidade de partículas do efeito: 1000 é a chuva forte do pacote.
-    w.intensity = std::clamp(amount / 1000.0f, 0.15f, 1.0f);
+    // Quantidade de partículas do efeito. Na neve, 1000 é a forte do pacote.
+    // Na chuva, 1000 é a Rain comum do UniStorm (céu cinza claro); o topo da
+    // Chuva da Astra é a tempestade azul-petróleo que engole o fundo, então a
+    // chuva do pacote fica no meio da escala (medido no POCO em 27/10).
+    const float full = w.kind == scene::WeatherKind::Rain ? 2000.0f : 1000.0f;
+    w.intensity = std::clamp(amount / full, 0.15f, 1.0f);
   } else {
     constexpr float levels[]{.1f, .3f, .5f, .7f, .9f};
     w.kind = cloudLevel >= 3 && cloudLevel <= 4 ? scene::WeatherKind::Cloudy : scene::WeatherKind::Clear;
@@ -91,6 +95,8 @@ bool readUniStormWeather(const UnityYamlDocument &document, UniStormWeather &out
   if (yes(n, "OverrideFogColor", false) || yes(n, "OverrideCloudColor", false))
     result.approximations.push_back("Gradientes de cor da neblina e das nuvens pela hora ficam com as cores do Clima.");
   if (const auto *node = n.get("WeatherEffect")) unityObjectReference(*node, result.effect);
+  result.effectAmount = amount;
+  result.additionalAmount = std::max(0.0f, num(n, "AdditionalParticleEffectAmount", 0));
   if (const auto *node = n.get("ParticleEffectVector"))
     for (u32 k = 0; k < 3; ++k) result.effectOffset[k] = num(*node, std::string_view(&"xyz"[k], 1), result.effectOffset[k]);
   if (const auto *node = n.get("AdditionalParticleEffectVector"))

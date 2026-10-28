@@ -30,6 +30,9 @@ struct UniStormWeather {
   // ParticleEffectVector e AdditionalParticleEffectVector: onde o UniStorm põe
   // cada efeito em relação ao jogador (eixos da Unity, Z ainda não espelhado).
   float effectOffset[3]{0, 28, 0}, additionalOffset[3]{0, 28, 0};
+  // ParticleEffectAmount e AdditionalParticleEffectAmount: a taxa de emissão
+  // que o sistema escreve no efeito (o prefab vem com 0).
+  float effectAmount = 0, additionalAmount = 0;
   bool useSound = false;
   float soundVolume = 1;
   std::vector<std::string> approximations;

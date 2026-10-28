@@ -112,7 +112,7 @@ private:
   static const LibraryItem *sourceItem(EditorSession &,const std::string &origin,const AssetGuid &guid);
   // G6b: o prefab é o efeito de um Weather Type do UniStorm do mesmo pacote?
   // Então o sistema o prende ao jogador nessa distância (eixos da Astra).
-  static bool uniStormEffectOffset(EditorSession &,const std::string &origin,std::array<float,3> &offset);
+  static bool uniStormEffectOffset(EditorSession &,const std::string &origin,std::array<float,3> &offset,float &amount);
   static bool publish(EditorSession &,const Snapshot &,Snapshot &,std::string &);
 };
 
@@ -125,7 +125,7 @@ const LibraryItem *UnityPackageImporter::sourceItem(EditorSession &session,const
   return found;
 }
 
-bool UnityPackageImporter::uniStormEffectOffset(EditorSession &session,const std::string &origin,std::array<float,3> &offset) {
+bool UnityPackageImporter::uniStormEffectOffset(EditorSession &session,const std::string &origin,std::array<float,3> &offset,float &amount) {
   const LibraryPackage *scope=nullptr;const LibraryItem *self=nullptr;
   for(const auto &package:session.library_.packages())for(const auto &item:package.items)if(item.path==origin){scope=&package;self=&item;}
   if(!scope||!self||!self->sourceIdentity.starts_with("unity:"))return false;
@@ -140,6 +140,7 @@ bool UnityPackageImporter::uniStormEffectOffset(EditorSession &session,const std
     if(!vector)continue;
     // Unity → Astra espelha o Z, como o resto do prefab.
     offset={vector[0],vector[1],-vector[2]};
+    amount=vector==weather.effectOffset?weather.effectAmount:weather.additionalAmount;
     return true;
   }
   return false;
@@ -542,9 +543,15 @@ AssetGuid UnityPackageImporter::import(EditorSession &session,const std::string 
       return item&&item->path.ends_with(".cs")?std::filesystem::path(item->path).stem().string():std::string();
     };
     UnityPrefabImport imported;if(!convertUnityPrefab(document,imported,error,&context))return {};
-    if(std::array<float,3> offset;uniStormEffectOffset(session,path,offset))
+    std::array<float,3> offset{};float amount=0;
+    if(uniStormEffectOffset(session,path,offset,amount))
       for(auto &object:imported.objects)if(!object.parentTransform) {
         object.followCamera=offset;
+        // O prefab vem com taxa 0: o UniStorm escreve a quantidade do tipo.
+        if(object.particle&&amount>0) {
+          auto &rate=object.particle->settings.emissionRate;
+          if(!rate.usesCurves()&&rate.constantMax<=0) {rate.mode=scene::ParticleCurveMode::Constant;rate.constantMin=rate.constantMax=amount;}
+        }
         imported.transformations.push_back("Efeito de clima do UniStorm: Seguir câmera a "+std::to_string(int(offset[1]))+" m acima, como o sistema prende o efeito ao jogador.");
         break;
       }

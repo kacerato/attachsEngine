@@ -135,4 +135,8 @@ AE_TEST(unity_starter_camera_hears_and_leaves_no_history){
   AE_EXPECT_TRUE(camera&&camera->components.find(scene::Camera::descriptor)&&camera->components.find(scene::AudioListener::descriptor),"camera carries listener");
   AE_EXPECT_TRUE(camera&&camera->transform.position[1]==1&&camera->transform.position[2]==-10,"unity default pose");
   AE_EXPECT_TRUE(!session.history().canUndo(),"starter camera is not an undo step");
+  const runtime::SceneObject *sun=nullptr;
+  for(const auto child:session.document().childrenOf(session.document().root()))
+    if(const auto *o=session.document().find(child);o&&std::string_view(o->name)=="Directional Light")sun=o;
+  AE_EXPECT_TRUE(sun&&sun->transform.rotationDegrees[0]==50,"starter scene has a tilted Directional Light like Unity");
 }

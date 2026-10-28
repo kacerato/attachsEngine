@@ -194,7 +194,16 @@ int main(int argc, char **argv) {
     std::vector<std::string> notes, minor;
     effects.notes = &notes;
     effects.approximations = &minor;
-    const bool ok = readUnityYaml(readFile(path), document, error) && convertUnityPrefab(document, imported, error, &context) &&
+    const bool converted = readUnityYaml(readFile(path), document, error) && convertUnityPrefab(document, imported, error, &context);
+    // G6_TAXA: a taxa que o sistema do pacote escreveria (UniStorm) na raiz.
+    if (const char *rate = std::getenv("G6_TAXA"); converted && rate)
+      for (auto &object : imported.objects)
+        if (!object.parentTransform && object.particle) {
+          auto &curve = object.particle->settings.emissionRate;
+          curve.mode = scene::ParticleCurveMode::Constant;
+          curve.constantMin = curve.constantMax = static_cast<float>(std::atof(rate));
+        }
+    const bool ok = converted &&
                     runtime::buildUnityPrefab(imported, assetGuidFromSeed("coverage-prefab:" + relative), resolve, nullptr, prefab,
                                               identities, error, &effects);
     // G6_SIMULAR=<trecho do caminho>: simula as partículas do prefab convertido
@@ -203,11 +212,18 @@ int main(int argc, char **argv) {
       runtime::SceneParticles particles;
       particles.advance(prefab.graph(), 0);
       std::cout << relative << ": " << particles.emitterCount() << " emissores";
-      for (u32 frame = 1; frame <= 15; ++frame) {
+      for (u32 frame = 1; frame <= 90; ++frame) {
         particles.advance(prefab.graph(), 1.0f / 30);
-        if (frame % 3 == 0) std::cout << " t" << frame << "=" << particles.aliveTotal();
+        if (frame % 15 == 0) std::cout << " t" << frame << "=" << particles.aliveTotal();
       }
-      std::cout << "\n";
+      renderer::particles::ParticleFrame built;
+      const float eye[3]{0, 0, 0};
+      particles.build(prefab.graph(), eye, built);
+      float low = 1e9f, high = -1e9f, fall = 0;
+      for (const auto &p : built.instances) { low = std::min(low, p.position[1]); high = std::max(high, p.position[1]); fall += p.velocity[1]; }
+      const float count = built.instances.empty() ? 1.0f : static_cast<float>(built.instances.size());
+      std::cout << " y=[" << low << "," << high << "] vy=" << fall / count
+                << " tamanho=" << (built.instances.empty() ? 0.0f : built.instances.front().size) << "\n";
     }
     if (!ok) {
       ++refused;

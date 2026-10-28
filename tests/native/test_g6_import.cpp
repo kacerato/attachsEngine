@@ -578,6 +578,17 @@ AE_TEST(g6b_unistorm_weather_and_cloud_profiles_become_astra_values) {
                  "perfil de nuvem vira Cloud Layer");
   resources::UniStormWeather notWeather;
   AE_EXPECT_TRUE(!resources::readUniStormWeather(cloudDocument, notWeather, error), "Cloud Profile não é Weather Type");
+  // A Rain comum do pacote (1000 partículas, sem relâmpago) fica no meio da
+  // Chuva da Astra; o topo é a tempestade que engole o fundo (POCO, 27/10).
+  const std::string rain =
+      "%YAML 1.1\n--- !u!114 &11400000\nMonoBehaviour:\n  m_Enabled: 1\n"
+      "  m_Script: {fileID: 11500000, guid: e4ec900128fbff24683f8f2aac8c2192, type: 3}\n  m_Name: Rain\n"
+      "  WeatherTypeName: Rain\n  ParticleEffectAmount: 1000\n  PrecipitationWeatherType: 0\n  UseLightning: 1\n"
+      "  TemperatureType: 1\n  CloudLevel: 4\n";
+  resources::UnityYamlDocument rainDocument;
+  resources::UniStormWeather rainy;
+  AE_EXPECT_TRUE(resources::readUnityYaml(rain, rainDocument, error) && resources::readUniStormWeather(rainDocument, rainy, error) &&
+                 rainy.weather.kind == scene::WeatherKind::Rain && std::abs(rainy.weather.intensity - .5f) < 1e-4f, "Rain no meio da escala");
 }
 
 AE_TEST(g6a_vfx_components_keep_their_identity_in_a_saved_list) {

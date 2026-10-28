@@ -1235,7 +1235,8 @@ public:
   // hierarquia física não são válidos; o motivo vai para o status.
   EditorEntityId createRecipe(u32 index, EditorEntityId parent);
   // Cena nova como a da Unity: "Main Camera" (câmera + Ouvinte, marca
-  // MainCamera) em (0,1,-10) olhando +Z, sem entrada no histórico.
+  // MainCamera) em (0,1,-10) olhando +Z e "Directional Light" em (0,3,0)
+  // inclinada 50°, sem entrada no histórico. Devolve a câmera.
   EditorEntityId addStarterCamera();
   bool prepareCharacterConversion(EditorEntityId visual,EditorEntity &root,EditorEntity &child,std::string &error) const;
   EditorEntityId convertToCharacter(EditorEntityId visual);

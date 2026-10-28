@@ -6095,6 +6095,17 @@ EditorEntityId EditorSession::addStarterCamera() {
   values.transform.position[0]=0;values.transform.position[1]=1;values.transform.position[2]=-10;
   std::fill(values.transform.rotationDegrees,values.transform.rotationDegrees+3,0.f);
   if(!document_.applyEntityValues(id,values)) return kInvalidEntity;
+  // O sol da cena nova: sem direcional, o céu e a neblina que acompanha o céu
+  // ficam sem o sol de verdade (a Chuva escurecia até o azul da noite).
+  if(!findCreationRecipe("light.directional",&index)) return kInvalidEntity;
+  const auto sun=createRecipe(index,document_.root());
+  if(sun==kInvalidEntity) return kInvalidEntity;
+  auto light=*document_.find(sun);
+  std::snprintf(light.name,sizeof(light.name),"%s","Directional Light");
+  light.transform.position[0]=0;light.transform.position[1]=3;light.transform.position[2]=0;
+  light.transform.rotationDegrees[0]=50;light.transform.rotationDegrees[1]=30;light.transform.rotationDegrees[2]=0;
+  if(!document_.applyEntityValues(sun,light)) return kInvalidEntity;
+
   history_.clear();
   return id;
 }
