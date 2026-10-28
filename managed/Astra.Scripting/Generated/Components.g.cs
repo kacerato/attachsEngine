@@ -15608,7 +15608,7 @@ public readonly partial struct Rotator : IComponentFacade<Rotator>
     }
 }
 
-/// <summary>Seguir câmera: Mantém o objeto na posição da câmera do jogo mais um deslocamento em eixos do mundo, como a chuva do UniStorm presa ao jogador. Família Efeitos · Comportamentos.</summary>
+/// <summary>Seguir câmera: Mantém o objeto na posição da câmera do jogo mais um deslocamento em eixos do mundo, como a chuva presa ao jogador. Família Efeitos · Comportamentos.</summary>
 /// <remarks>Referência estudada: https://docs.unity3d.com/6000.0/Documentation/Manual/class-PositionConstraint.html</remarks>
 public readonly partial struct FollowCamera : IComponentFacade<FollowCamera>
 {

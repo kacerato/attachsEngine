@@ -76,7 +76,7 @@ inline constexpr std::array<ComponentSchema, 7> renderingSchemas{{
    .invalidates=Invalidate::Draw,
    .subfamily="Ambiente",
    .icon="lighting/weather",
-   .searchTerms="Weather Clima Chuva Neve Tempestade Rain Snow Storm Lightning Relâmpago UniStorm",
+   .searchTerms="Weather Clima Chuva Neve Tempestade Rain Snow Storm Lightning Relâmpago",
    .reference="https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/create-simple-clouds-cloud-layer.html",
    .apiName="Weather"},
   {.type=&LineRenderer::descriptor,
